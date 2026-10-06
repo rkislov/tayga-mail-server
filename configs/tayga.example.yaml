@@ -1,0 +1,42 @@
+# Tayga Mail Server — example configuration (local development)
+
+server:
+  hostname: mail.example.com
+
+storage:
+  driver: sqlite # sqlite | postgres
+  sqlite:
+    path: ./data/tayga.db
+  postgres:
+    dsn: "postgres://tayga:tayga@localhost:5432/tayga?sslmode=disable"
+
+mailstore:
+  root: ./data/maildir
+
+smtp:
+  # Non-privileged ports for local development
+  mx: ":1025"
+  submission: ":1587"
+  smtps: "" # e.g. ":1465" when TLS certs are set
+  max_size: 26214400 # 25 MiB
+  read_timeout: 60s
+  write_timeout: 60s
+
+tls:
+  cert_file: ""
+  key_file: ""
+
+http:
+  listen: ":8080"
+
+seed:
+  enabled: true
+  tenant: default
+  domain: example.com
+  email: admin@example.com
+  password: changeme
+  name: Admin
+
+log:
+  level: info
+  format: json

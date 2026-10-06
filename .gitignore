@@ -1,0 +1,18 @@
+# Binaries
+/tayga-mail
+/tayga
+*.exe
+
+# Data
+/data/
+*.db
+*.db-*
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+*.swp
+
+# Go
+/vendor/
