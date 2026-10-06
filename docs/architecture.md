@@ -1,10 +1,8 @@
-# Tayga Mail Server — Architecture (Phase 1–2)
+# Tayga Mail Server — Architecture (Phase 1–3)
 
 ## Overview
 
 TMS is a single-binary mail server (`tayga-mail`) built in Go with `CGO_ENABLED=0`.
-This milestone delivers the core process skeleton: configuration, dual-backend storage,
-local authentication, Maildir++ delivery, and a minimal SMTP stack.
 
 ```
 cmd/tayga
@@ -12,33 +10,35 @@ cmd/tayga
   ├─ storage (sqlite | postgres)
   ├─ auth (local Argon2id; LDAP/OIDC stubs)
   ├─ mailstore (Maildir++)
-  ├─ smtp (MX + submission via emersion/go-smtp)
+  ├─ smtp (MX + submission)
+  ├─ imap (go-imap backend)
+  ├─ pop3 (RFC 1939 INBOX)
   └─ httpapi (/healthz, /readyz, /metrics, embedded UI placeholder)
 ```
 
 ## Storage
 
-- Shared schema with `tenant_id` isolation (not separate DB schemas yet).
-- Message **bodies** live on disk under `mailstore.root` (Maildir++).
-- Message **metadata** (UID, flags, path) lives in the `messages` table.
-- Driver selected by `storage.driver`; protocol code only depends on `storage.Driver`.
+- Shared schema with `tenant_id` isolation.
+- Message bodies on disk (Maildir++); metadata in `messages` (UID, flags, path).
 
-## Auth
+## Protocols (dev ports)
 
-- Local users: Argon2id PHC-encoded hashes.
-- `auth.LDAPProvider` / `auth.OIDCProvider` interfaces exist; stubs return unsupported.
-- SMTP AUTH: PLAIN and LOGIN (insecure auth allowed when TLS is not configured).
+| Protocol   | Config              | Default |
+|------------|---------------------|---------|
+| SMTP MX    | `smtp.mx`           | `:1025` |
+| Submission | `smtp.submission`   | `:1587` |
+| IMAP       | `imap.listen`       | `:1143` |
+| POP3       | `pop3.listen`       | `:1110` |
+| HTTP       | `http.listen`       | `:8080` |
 
-## SMTP MVP
+## IMAP MVP
 
-| Listener    | Config key         | Auth required |
-|-------------|--------------------|---------------|
-| MX          | `smtp.mx`          | no            |
-| Submission  | `smtp.submission`  | yes           |
-| SMTPS       | `smtp.smtps`       | yes (+ TLS)   |
+LOGIN, LIST, SELECT, FETCH, STORE, APPEND, SEARCH (basic), COPY, EXPUNGE,
+CREATE/DELETE/RENAME. Auth via local Argon2id. Bodies read from Maildir.
 
-Accepted mail is delivered to the local recipient INBOX. Outbound relay, queues,
-SPF/DKIM/DMARC, and greylisting are out of scope for this milestone.
+## POP3 MVP
+
+USER/PASS, STAT, LIST, RETR, DELE (+QUIT), RSET, UIDL, TOP, CAPA on INBOX.
 
 ## Build
 
@@ -47,7 +47,8 @@ CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o tayga-mail ./cmd/tayga
 ./tayga-mail -config configs/tayga.example.yaml
 ```
 
+Seed user: `admin@example.com` / `changeme`
+
 ## Next milestones
 
-IMAP/POP3/Sieve → multi-tenant LDAP → OIDC/MFA → CalDAV/CardDAV → ActiveSync/EWS →
-WebDAV → ICAP/ThreatFox → backup/migration → full Web UI (street art + nature).
+Sieve/ManageSieve → multi-tenant LDAP → OIDC/MFA → CalDAV/CardDAV → …

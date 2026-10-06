@@ -15,6 +15,8 @@ CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o tayga-mail ./cmd/tayga
 - Metrics: http://127.0.0.1:8080/metrics
 - SMTP submission: `localhost:1587` (seed user `admin@example.com` / `changeme`)
 - SMTP MX: `localhost:1025`
+- IMAP: `localhost:1143`
+- POP3: `localhost:1110`
 
 ## License
 
