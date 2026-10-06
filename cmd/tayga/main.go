@@ -13,8 +13,10 @@ import (
 	"github.com/tayga/tms/internal/auth"
 	"github.com/tayga/tms/internal/config"
 	"github.com/tayga/tms/internal/httpapi"
+	imapserver "github.com/tayga/tms/internal/imap"
 	"github.com/tayga/tms/internal/logging"
 	"github.com/tayga/tms/internal/mailstore"
+	"github.com/tayga/tms/internal/pop3"
 	"github.com/tayga/tms/internal/seed"
 	"github.com/tayga/tms/internal/smtp"
 	"github.com/tayga/tms/internal/storage"
@@ -68,6 +70,16 @@ func run(cfgPath string) error {
 		return fmt.Errorf("smtp: %w", err)
 	}
 
+	imapSrv := imapserver.New(cfg, log, store, authn, ms)
+	if err := imapSrv.Start(ctx); err != nil {
+		return fmt.Errorf("imap: %w", err)
+	}
+
+	pop3Srv := pop3.New(cfg, log, store, authn, ms)
+	if err := pop3Srv.Start(ctx); err != nil {
+		return fmt.Errorf("pop3: %w", err)
+	}
+
 	httpSrv := httpapi.New(cfg.HTTP.Listen, log, store)
 	if err := httpSrv.Start(ctx); err != nil {
 		return fmt.Errorf("http: %w", err)
@@ -83,5 +95,8 @@ func run(cfgPath string) error {
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	return smtpSrv.Shutdown(shutdownCtx)
+	_ = pop3Srv.Shutdown(shutdownCtx)
+	_ = imapSrv.Shutdown(shutdownCtx)
+	_ = smtpSrv.Shutdown(shutdownCtx)
+	return nil
 }
