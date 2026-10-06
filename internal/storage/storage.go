@@ -35,9 +35,19 @@ type Driver interface {
 
 	EnsureMailbox(ctx context.Context, userID int64, name, path string) (*Mailbox, error)
 	GetMailbox(ctx context.Context, userID int64, name string) (*Mailbox, error)
+	ListMailboxes(ctx context.Context, userID int64) ([]*Mailbox, error)
+	CreateMailbox(ctx context.Context, userID int64, name, path string) (*Mailbox, error)
+	DeleteMailbox(ctx context.Context, userID int64, name string) error
+	RenameMailbox(ctx context.Context, userID int64, oldName, newName, newPath string) error
 
 	InsertMessage(ctx context.Context, msg *Message) (*Message, error)
 	GetMessageByID(ctx context.Context, id int64) (*Message, error)
+	GetMessageByUID(ctx context.Context, mailboxID, uid int64) (*Message, error)
+	ListMessages(ctx context.Context, mailboxID int64) ([]*Message, error)
+	UpdateMessageFlags(ctx context.Context, messageID int64, flags string) error
+	UpdateMessagePath(ctx context.Context, messageID int64, filePath string) error
+	DeleteMessage(ctx context.Context, messageID int64) error
+	ExpungeMailbox(ctx context.Context, mailboxID int64) ([]*Message, error) // returns deleted msgs (had \Deleted)
 
 	DB() *sql.DB
 }
