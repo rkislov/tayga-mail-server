@@ -1,0 +1,220 @@
+package storage
+
+import (
+	"context"
+	"strings"
+	"time"
+)
+
+const msgCols = `id, mailbox_id, uid, size, flags, internal_date, file_path, message_id, created_at`
+
+func (s *Store) scanMessage(row interface{ Scan(dest ...any) error }) (*Message, error) {
+	m := &Message{}
+	err := row.Scan(
+		&m.ID, &m.MailboxID, &m.UID, &m.Size, &m.Flags, &m.InternalDate, &m.FilePath, &m.MessageID, &m.CreatedAt,
+	)
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	return m, nil
+}
+
+func (s *Store) ListMailboxes(ctx context.Context, userID int64) ([]*Mailbox, error) {
+	q := s.rebind(`SELECT id, user_id, name, path, uidnext, uidvalidity, created_at
+		FROM mailboxes WHERE user_id = ? ORDER BY name`)
+	rows, err := s.db.QueryContext(ctx, q, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []*Mailbox
+	for rows.Next() {
+		mb := &Mailbox{}
+		if err := rows.Scan(&mb.ID, &mb.UserID, &mb.Name, &mb.Path, &mb.UIDNext, &mb.UIDValidity, &mb.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, mb)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) CreateMailbox(ctx context.Context, userID int64, name, path string) (*Mailbox, error) {
+	return s.EnsureMailbox(ctx, userID, name, path)
+}
+
+func (s *Store) DeleteMailbox(ctx context.Context, userID int64, name string) error {
+	if strings.EqualFold(name, "INBOX") {
+		return ErrUnauthorized
+	}
+	q := s.rebind(`DELETE FROM mailboxes WHERE user_id = ? AND name = ?`)
+	res, err := s.db.ExecContext(ctx, q, userID, name)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (s *Store) RenameMailbox(ctx context.Context, userID int64, oldName, newName, newPath string) error {
+	if strings.EqualFold(oldName, "INBOX") {
+		return ErrUnauthorized
+	}
+	q := s.rebind(`UPDATE mailboxes SET name = ?, path = ? WHERE user_id = ? AND name = ?`)
+	res, err := s.db.ExecContext(ctx, q, newName, newPath, userID, oldName)
+	if err != nil {
+		return mapErr(err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (s *Store) GetMessageByUID(ctx context.Context, mailboxID, uid int64) (*Message, error) {
+	q := s.rebind(`SELECT ` + msgCols + ` FROM messages WHERE mailbox_id = ? AND uid = ?`)
+	return s.scanMessage(s.db.QueryRowContext(ctx, q, mailboxID, uid))
+}
+
+func (s *Store) ListMessages(ctx context.Context, mailboxID int64) ([]*Message, error) {
+	q := s.rebind(`SELECT ` + msgCols + ` FROM messages WHERE mailbox_id = ? ORDER BY uid`)
+	rows, err := s.db.QueryContext(ctx, q, mailboxID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []*Message
+	for rows.Next() {
+		m, err := s.scanMessage(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) UpdateMessageFlags(ctx context.Context, messageID int64, flags string) error {
+	q := s.rebind(`UPDATE messages SET flags = ? WHERE id = ?`)
+	res, err := s.db.ExecContext(ctx, q, flags, messageID)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (s *Store) UpdateMessagePath(ctx context.Context, messageID int64, filePath string) error {
+	q := s.rebind(`UPDATE messages SET file_path = ? WHERE id = ?`)
+	res, err := s.db.ExecContext(ctx, q, filePath, messageID)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (s *Store) DeleteMessage(ctx context.Context, messageID int64) error {
+	q := s.rebind(`DELETE FROM messages WHERE id = ?`)
+	res, err := s.db.ExecContext(ctx, q, messageID)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (s *Store) ExpungeMailbox(ctx context.Context, mailboxID int64) ([]*Message, error) {
+	msgs, err := s.ListMessages(ctx, mailboxID)
+	if err != nil {
+		return nil, err
+	}
+	var deleted []*Message
+	for _, m := range msgs {
+		if !HasFlag(m.Flags, `\Deleted`) {
+			continue
+		}
+		q := s.rebind(`DELETE FROM messages WHERE id = ?`)
+		if _, err := s.db.ExecContext(ctx, q, m.ID); err != nil {
+			return deleted, err
+		}
+		deleted = append(deleted, m)
+	}
+	return deleted, nil
+}
+
+// HasFlag reports whether flags string contains an IMAP flag (case-insensitive).
+func HasFlag(flags, want string) bool {
+	want = strings.ToLower(want)
+	for _, f := range strings.Fields(flags) {
+		if strings.ToLower(f) == want {
+			return true
+		}
+	}
+	return false
+}
+
+// NormalizeFlags joins unique IMAP flags with spaces.
+func NormalizeFlags(flags []string) string {
+	seen := map[string]struct{}{}
+	var out []string
+	for _, f := range flags {
+		f = strings.TrimSpace(f)
+		if f == "" {
+			continue
+		}
+		key := strings.ToLower(f)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, f)
+	}
+	return strings.Join(out, " ")
+}
+
+// ParseFlags splits a flags string into a slice.
+func ParseFlags(flags string) []string {
+	return strings.Fields(flags)
+}
+
+// EnsureRecentFlag is unused helper kept for mailbox RECENT heuristics.
+func MessageIsRecent(m *Message) bool {
+	if m == nil {
+		return false
+	}
+	if HasFlag(m.Flags, `\Seen`) {
+		return false
+	}
+	// Treat messages younger than a session as recent-ish; IMAP Recent is approximate here.
+	return time.Since(m.InternalDate) < 24*time.Hour && strings.Contains(m.FilePath, "/new/")
+}

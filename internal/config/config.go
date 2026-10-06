@@ -14,6 +14,8 @@ type Config struct {
 	Storage   StorageConfig   `yaml:"storage"`
 	Mailstore MailstoreConfig `yaml:"mailstore"`
 	SMTP      SMTPConfig      `yaml:"smtp"`
+	IMAP      IMAPConfig      `yaml:"imap"`
+	POP3      POP3Config      `yaml:"pop3"`
 	TLS       TLSConfig       `yaml:"tls"`
 	HTTP      HTTPConfig      `yaml:"http"`
 	Seed      SeedConfig      `yaml:"seed"`
@@ -49,6 +51,16 @@ type SMTPConfig struct {
 	MaxSize      int64         `yaml:"max_size"` // bytes; 0 = default 25 MiB
 	ReadTimeout  time.Duration `yaml:"read_timeout"`
 	WriteTimeout time.Duration `yaml:"write_timeout"`
+}
+
+type IMAPConfig struct {
+	Listen string `yaml:"listen"`
+	IMAPS  string `yaml:"imaps"`
+}
+
+type POP3Config struct {
+	Listen string `yaml:"listen"`
+	POP3S  string `yaml:"pop3s"`
 }
 
 type TLSConfig struct {
@@ -108,6 +120,8 @@ func Default() *Config {
 			ReadTimeout:  60 * time.Second,
 			WriteTimeout: 60 * time.Second,
 		},
+		IMAP: IMAPConfig{Listen: ":1143"},
+		POP3: POP3Config{Listen: ":1110"},
 		HTTP: HTTPConfig{Listen: ":8080"},
 		Log:  LogConfig{Level: "info", Format: "json"},
 	}
