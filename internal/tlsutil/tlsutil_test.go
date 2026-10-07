@@ -21,24 +21,52 @@ func TestEnsureSelfSignedAndLoad(t *testing.T) {
 			AutoGenerate: true,
 		},
 	}
-	tc, err := Load(cfg)
+	m, err := NewManager(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if tc == nil || len(tc.Certificates) != 1 {
+	if !m.Enabled() {
+		t.Fatal("expected cert")
+	}
+	tc := m.TLSConfig()
+	if tc == nil || tc.GetCertificate == nil {
 		t.Fatalf("tls config: %+v", tc)
 	}
-	// Second load reuses files.
-	tc2, err := Load(cfg)
-	if err != nil || tc2 == nil {
+	got, err := tc.GetCertificate(&tls.ClientHelloInfo{})
+	if err != nil || got == nil {
 		t.Fatal(err)
 	}
-	httpCfg, err := LoadHTTP(cfg)
-	if err != nil || httpCfg == nil {
-		t.Fatal(err)
-	}
+	httpCfg := m.HTTPConfig()
 	if len(httpCfg.NextProtos) == 0 {
 		t.Fatal("expected ALPN")
+	}
+	st := m.Status()
+	if !st.Configured || st.Fingerprint == "" {
+		t.Fatalf("status %+v", st)
+	}
+}
+
+func TestManagerInstallAndGenerate(t *testing.T) {
+	dir := t.TempDir()
+	cfg := &config.Config{
+		Server: config.ServerConfig{Hostname: "mail.test"},
+		TLS: config.TLSConfig{
+			CertFile: filepath.Join(dir, "server.crt"),
+			KeyFile:  filepath.Join(dir, "server.key"),
+		},
+	}
+	m, err := NewManager(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Enabled() {
+		t.Fatal("expected empty")
+	}
+	if err := m.GenerateSelfSigned([]string{"mail.test", "127.0.0.1"}, 30); err != nil {
+		t.Fatal(err)
+	}
+	if !m.Enabled() {
+		t.Fatal("expected cert after generate")
 	}
 }
 
@@ -52,10 +80,11 @@ func TestHTTPSDial(t *testing.T) {
 			CertFile: cert, KeyFile: key, AutoGenerate: true,
 		},
 	}
-	tc, err := Load(cfg)
+	m, err := NewManager(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
+	tc := m.TLSConfig()
 	ln, err := tls.Listen("tcp", "127.0.0.1:0", tc)
 	if err != nil {
 		t.Fatal(err)

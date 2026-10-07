@@ -56,7 +56,7 @@ func TestMeAndAdminQuota(t *testing.T) {
 	}
 
 	ms := mailstore.New(filepath.Join(dir, "mail"))
-	h := httpapi.New(cfg, slog.Default(), store, layer, ms).Handler()
+	h := httpapi.New(cfg, slog.Default(), store, layer, ms, nil).Handler()
 
 	res, err := layer.LoginWithPassword(ctx, "admin@ex.com", "secret")
 	if err != nil || res.Tokens == nil {
