@@ -136,8 +136,9 @@ type TLSConfig struct {
 }
 
 type HTTPConfig struct {
-	Listen    string `yaml:"listen"`
-	PublicURL string `yaml:"public_url"` // e.g. http://127.0.0.1:8080 for OIDC redirects
+	Listen    string   `yaml:"listen"`
+	PublicURL string   `yaml:"public_url"` // e.g. http://127.0.0.1:8080 for OIDC redirects
+	Admins    []string `yaml:"admins"`     // emails allowed to call /api/v1/admin/*
 }
 
 type SeedConfig struct {
@@ -207,8 +208,12 @@ func Default() *Config {
 			},
 		},
 		FlowSync: FlowSyncConfig{Enabled: true},
-		HTTP:     HTTPConfig{Listen: ":8080", PublicURL: "http://127.0.0.1:8080"},
-		Log:      LogConfig{Level: "info", Format: "json"},
+		HTTP: HTTPConfig{
+			Listen:    ":8080",
+			PublicURL: "http://127.0.0.1:8080",
+			Admins:    []string{"admin@example.com"},
+		},
+		Log: LogConfig{Level: "info", Format: "json"},
 	}
 }
 
