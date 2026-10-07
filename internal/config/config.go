@@ -33,9 +33,18 @@ type Config struct {
 	SPF         SPFConfig         `yaml:"spf"`
 	IPRev       IPRevConfig       `yaml:"iprev"`
 	Helo        HeloConfig        `yaml:"helo"`
+	Greylist    GreylistConfig    `yaml:"greylist"`
 	DMARC       DMARCConfig       `yaml:"dmarc"`
 	ARC         ARCConfig         `yaml:"arc"`
 	Log         LogConfig         `yaml:"log"`
+}
+
+// GreylistConfig temporarily defers unknown (ip,from,rcpt) triplets on MX.
+type GreylistConfig struct {
+	Enabled bool          `yaml:"enabled"`
+	Delay   time.Duration `yaml:"delay"`    // min wait before accept (default 5m)
+	PassTTL time.Duration `yaml:"pass_ttl"` // remember after pass (default 36h)
+	IPv4Net int           `yaml:"ipv4_net"` // mask bits for IPv4 key (default 32; e.g. 24)
 }
 
 // IPRevConfig checks PTR + forward-confirmed reverse DNS (RFC 8601 iprev).
@@ -515,6 +524,12 @@ func Default() *Config {
 			Action:      "tag",
 			RequireFQDN: true,
 		},
+		Greylist: GreylistConfig{
+			Enabled: false,
+			Delay:   5 * time.Minute,
+			PassTTL: 36 * time.Hour,
+			IPv4Net: 32,
+		},
 		DMARC: DMARCConfig{
 			Enabled:  false,
 			Action:   "tag",
@@ -864,6 +879,17 @@ func (c *Config) Validate() error {
 		}
 		if c.Helo.AuthservID == "" {
 			c.Helo.AuthservID = c.Server.Hostname
+		}
+	}
+	if c.Greylist.Enabled {
+		if c.Greylist.Delay <= 0 {
+			c.Greylist.Delay = 5 * time.Minute
+		}
+		if c.Greylist.PassTTL <= 0 {
+			c.Greylist.PassTTL = 36 * time.Hour
+		}
+		if c.Greylist.IPv4Net <= 0 || c.Greylist.IPv4Net > 32 {
+			c.Greylist.IPv4Net = 32
 		}
 	}
 	if c.DMARC.Enabled {

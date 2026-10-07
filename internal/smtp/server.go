@@ -42,6 +42,7 @@ type Server struct {
 	spf          *spfPolicy
 	iprev        *iprevPolicy
 	helo         *heloPolicy
+	greylist     *greylistPolicy
 	dmarc        *dmarcPolicy
 	dmarcReport  *dmarcReporter
 	arc          *arcPolicy
@@ -172,6 +173,10 @@ func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth
 		}
 		srv.helo = &heloPolicy{action: action, requireFQDN: cfg.Helo.RequireFQDN, authservID: authserv, log: log}
 		log.Info("smtp helo check enabled", "action", action, "require_fqdn", cfg.Helo.RequireFQDN)
+	}
+	if cfg.Greylist.Enabled {
+		srv.greylist = newGreylistPolicy(cfg.Greylist.Delay, cfg.Greylist.PassTTL, cfg.Greylist.IPv4Net, log)
+		log.Info("smtp greylist enabled", "delay", cfg.Greylist.Delay.String(), "pass_ttl", cfg.Greylist.PassTTL.String(), "ipv4_net", cfg.Greylist.IPv4Net)
 	}
 	if cfg.DMARC.Enabled {
 		authserv := cfg.DMARC.AuthservID
@@ -311,6 +316,7 @@ func (s *Server) Start(ctx context.Context) error {
 			spf:          s.spf,
 			iprev:        s.iprev,
 			helo:         s.helo,
+			greylist:     s.greylist,
 			dmarc:        s.dmarc,
 			arc:          s.arc,
 			out:          out,
@@ -399,6 +405,7 @@ type backend struct {
 	spf          *spfPolicy
 	iprev        *iprevPolicy
 	helo         *heloPolicy
+	greylist     *greylistPolicy
 	dmarc        *dmarcPolicy
 	arc          *arcPolicy
 	out          outboundSender
@@ -586,6 +593,11 @@ func (s *session) deliver(ctx context.Context, rcpt string, data []byte, msgid s
 	}
 	// Inbound mail auth (helo → iprev → SPF → DKIM → ARC verify → DMARC → ARC seal) for unauthenticated MX only.
 	if s.user == nil {
+		if s.backend.greylist != nil {
+			if err := s.backend.greylist.check(stripPort(s.remote), s.from, rcpt); err != nil {
+				return err
+			}
+		}
 		var (
 			spfRes      = spfNoneResult()
 			dkimDomains []string

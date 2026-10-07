@@ -171,8 +171,15 @@ spam:
   # quarantine_above: 6
   # tag_above: 4
 
+# Temporary defer of unknown (ip, MAIL FROM, RCPT) triplets on unauthenticated MX
+greylist:
+  enabled: false
+  delay: 5m
+  pass_ttl: 36h
+  ipv4_net: 32               # e.g. 24 to greylist by /24
+
 # Inbound mail authentication on unauthenticated MX (before virus/spam)
-# Order: helo → iprev → SPF → DKIM → ARC verify → DMARC → ARC seal.
+# Order: greylist → helo → iprev → SPF → DKIM → ARC verify → DMARC → ARC seal.
 helo:
   enabled: false
   action: tag                # tag | reject
