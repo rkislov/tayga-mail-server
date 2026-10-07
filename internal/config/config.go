@@ -78,9 +78,17 @@ type SMTPConfig struct {
 	MaxSize        int64           `yaml:"max_size"` // bytes; 0 = default 25 MiB
 	ReadTimeout    time.Duration   `yaml:"read_timeout"`
 	WriteTimeout   time.Duration   `yaml:"write_timeout"`
-	OutboundDirect bool            `yaml:"outbound_direct"` // MX lookup when relay.host empty
-	Relay          SMTPRelayConfig `yaml:"relay"`
-	DKIM           SMTPDKIMConfig  `yaml:"dkim"`
+	OutboundDirect bool              `yaml:"outbound_direct"` // MX lookup when relay.host empty
+	Relay          SMTPRelayConfig   `yaml:"relay"`
+	DKIM           SMTPDKIMConfig    `yaml:"dkim"`
+	RateLimit      SMTPRateLimitConfig `yaml:"rate_limit"`
+}
+
+// SMTPRateLimitConfig limits accepted messages per remote IP and authenticated user.
+type SMTPRateLimitConfig struct {
+	PerIP       int           `yaml:"per_ip"`       // 0 = off
+	PerUser     int           `yaml:"per_user"`     // 0 = off
+	Window      time.Duration `yaml:"window"`       // default 1m
 }
 
 // SMTPRelayConfig is the outbound smart-host for authenticated external recipients.
@@ -311,6 +319,11 @@ func (c *Config) Validate() error {
 	if c.SMTP.DKIM.Enabled {
 		if c.SMTP.DKIM.Domain == "" || c.SMTP.DKIM.Selector == "" || c.SMTP.DKIM.PrivateKeyFile == "" {
 			return fmt.Errorf("smtp.dkim: domain, selector, and private_key_file required when enabled")
+		}
+	}
+	if c.SMTP.RateLimit.PerIP > 0 || c.SMTP.RateLimit.PerUser > 0 {
+		if c.SMTP.RateLimit.Window <= 0 {
+			c.SMTP.RateLimit.Window = time.Minute
 		}
 	}
 	if c.LDAP.CacheTTL <= 0 {
