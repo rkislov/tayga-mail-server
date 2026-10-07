@@ -193,9 +193,19 @@ type SMTPConfig struct {
 
 // MTASTSConfig enforces recipient MTA-STS policies on direct outbound.
 type MTASTSConfig struct {
-	Enabled  bool          `yaml:"enabled"`
-	Timeout  time.Duration `yaml:"timeout"`   // DNS + HTTPS policy fetch
-	FailOpen bool          `yaml:"fail_open"` // continue if policy fetch fails
+	Enabled  bool                `yaml:"enabled"`
+	Timeout  time.Duration       `yaml:"timeout"`   // DNS + HTTPS policy fetch
+	FailOpen bool                `yaml:"fail_open"` // continue if policy fetch fails
+	Publish  MTASTSPublishConfig `yaml:"publish"`   // serve /.well-known/mta-sts.txt
+}
+
+// MTASTSPublishConfig serves our own MTA-STS policy (RFC 8461) over HTTPS.
+type MTASTSPublishConfig struct {
+	Enabled bool     `yaml:"enabled"`
+	Mode    string   `yaml:"mode"`    // enforce | testing | none
+	ID      string   `yaml:"id"`      // DNS _mta-sts TXT id= (informational in body comment)
+	MaxAge  int      `yaml:"max_age"` // seconds (default 86400)
+	MX      []string `yaml:"mx"`      // policy mx: lines (default: server.hostname)
 }
 
 // TLSRPTConfig sends RFC 8460 aggregate TLS reports for outbound sessions.
@@ -556,6 +566,25 @@ func (c *Config) Validate() error {
 	}
 	if c.SMTP.MTASTS.Enabled && c.SMTP.MTASTS.Timeout <= 0 {
 		c.SMTP.MTASTS.Timeout = 10 * time.Second
+	}
+	if c.SMTP.MTASTS.Publish.Enabled {
+		switch c.SMTP.MTASTS.Publish.Mode {
+		case "", "testing", "enforce", "none":
+			if c.SMTP.MTASTS.Publish.Mode == "" {
+				c.SMTP.MTASTS.Publish.Mode = "testing"
+			}
+		default:
+			return fmt.Errorf("smtp.mta_sts.publish.mode must be enforce, testing, or none")
+		}
+		if c.SMTP.MTASTS.Publish.MaxAge <= 0 {
+			c.SMTP.MTASTS.Publish.MaxAge = 86400
+		}
+		if len(c.SMTP.MTASTS.Publish.MX) == 0 {
+			c.SMTP.MTASTS.Publish.MX = []string{c.Server.Hostname}
+		}
+		if c.SMTP.MTASTS.Publish.ID == "" {
+			c.SMTP.MTASTS.Publish.ID = time.Now().UTC().Format("20060102")
+		}
 	}
 	if c.SMTP.TLSRPT.Enabled {
 		if c.SMTP.TLSRPT.OrgName == "" {

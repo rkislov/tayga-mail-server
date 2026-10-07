@@ -41,6 +41,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", s.handleHealthz)
 	mux.HandleFunc("/readyz", s.handleReadyz)
+	mux.HandleFunc("/.well-known/mta-sts.txt", s.handleMTASTSPolicy)
 	mux.Handle("/metrics", promhttp.Handler())
 
 	mux.HandleFunc("/api/v1/auth/login", s.handleLogin)
