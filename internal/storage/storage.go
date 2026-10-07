@@ -59,6 +59,17 @@ type Driver interface {
 	DeleteSieveScript(ctx context.Context, userID int64, name string) error
 	SetActiveSieveScript(ctx context.Context, userID int64, name string) error // empty name = deactivate all
 
+	GetUserMFA(ctx context.Context, userID int64) (*UserMFA, error)
+	UpsertUserMFA(ctx context.Context, m *UserMFA) error
+	CreateOAuthToken(ctx context.Context, t *OAuthToken) (*OAuthToken, error)
+	GetOAuthTokenByAccess(ctx context.Context, accessToken string) (*OAuthToken, error)
+	GetOAuthTokenByRefresh(ctx context.Context, refreshToken string) (*OAuthToken, error)
+	DeleteOAuthToken(ctx context.Context, id int64) error
+	DeleteOAuthTokensByUser(ctx context.Context, userID int64) error
+	CreateMFAChallenge(ctx context.Context, c *MFAChallenge) error
+	GetMFAChallenge(ctx context.Context, token string) (*MFAChallenge, error)
+	DeleteMFAChallenge(ctx context.Context, token string) error
+
 	DB() *sql.DB
 }
 

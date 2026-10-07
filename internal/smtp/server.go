@@ -163,7 +163,7 @@ type session struct {
 }
 
 func (s *session) AuthMechanisms() []string {
-	return []string{sasl.Plain, sasl.Login}
+	return []string{sasl.Plain, sasl.Login, sasl.OAuthBearer, auth.XOAuth2}
 }
 
 func (s *session) Auth(mech string) (sasl.Server, error) {
@@ -181,6 +181,24 @@ func (s *session) Auth(mech string) (sasl.Server, error) {
 	case sasl.Login:
 		return newLoginServer(func(username, password string) error {
 			u, err := s.backend.authn.Authenticate(context.Background(), username, password)
+			if err != nil {
+				return authFailed
+			}
+			s.user = u
+			return nil
+		}), nil
+	case sasl.OAuthBearer:
+		return sasl.NewOAuthBearerServer(func(opts sasl.OAuthBearerOptions) *sasl.OAuthBearerError {
+			u, err := s.backend.authn.AuthenticateToken(context.Background(), opts.Username, opts.Token)
+			if err != nil {
+				return &sasl.OAuthBearerError{Status: "invalid_token", Schemes: "bearer"}
+			}
+			s.user = u
+			return nil
+		}), nil
+	case auth.XOAuth2:
+		return auth.NewXOAuth2Server(func(username, token string) error {
+			u, err := s.backend.authn.AuthenticateToken(context.Background(), username, token)
 			if err != nil {
 				return authFailed
 			}
