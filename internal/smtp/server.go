@@ -41,6 +41,7 @@ type Server struct {
 	dkimVerify   *dkimVerifyPolicy
 	spf          *spfPolicy
 	iprev        *iprevPolicy
+	helo         *heloPolicy
 	dmarc        *dmarcPolicy
 	dmarcReport  *dmarcReporter
 	arc          *arcPolicy
@@ -159,6 +160,18 @@ func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth
 		}
 		srv.iprev = &iprevPolicy{action: action, failOpen: cfg.IPRev.FailOpen, authservID: authserv, log: log}
 		log.Info("smtp iprev check enabled", "action", action)
+	}
+	if cfg.Helo.Enabled {
+		authserv := cfg.Helo.AuthservID
+		if authserv == "" {
+			authserv = cfg.Server.Hostname
+		}
+		action := cfg.Helo.Action
+		if action == "" {
+			action = "tag"
+		}
+		srv.helo = &heloPolicy{action: action, requireFQDN: cfg.Helo.RequireFQDN, authservID: authserv, log: log}
+		log.Info("smtp helo check enabled", "action", action, "require_fqdn", cfg.Helo.RequireFQDN)
 	}
 	if cfg.DMARC.Enabled {
 		authserv := cfg.DMARC.AuthservID
@@ -297,6 +310,7 @@ func (s *Server) Start(ctx context.Context) error {
 			dkimVerify:   s.dkimVerify,
 			spf:          s.spf,
 			iprev:        s.iprev,
+			helo:         s.helo,
 			dmarc:        s.dmarc,
 			arc:          s.arc,
 			out:          out,
@@ -384,6 +398,7 @@ type backend struct {
 	dkimVerify   *dkimVerifyPolicy
 	spf          *spfPolicy
 	iprev        *iprevPolicy
+	helo         *heloPolicy
 	dmarc        *dmarcPolicy
 	arc          *arcPolicy
 	out          outboundSender
@@ -397,12 +412,14 @@ func (b *backend) NewSession(c *gosmtp.Conn) (gosmtp.Session, error) {
 	return &session{
 		backend: b,
 		remote:  c.Conn().RemoteAddr().String(),
+		helo:    c.Hostname(),
 	}, nil
 }
 
 type session struct {
 	backend  *backend
 	remote   string
+	helo     string
 	user     *storage.User
 	from     string
 	toLocal  []string
@@ -567,7 +584,7 @@ func (s *session) deliver(ctx context.Context, rcpt string, data []byte, msgid s
 			return &gosmtp.SMTPError{Code: 421, EnhancedCode: gosmtp.EnhancedCode{4, 3, 2}, Message: "Not writer for recipient; try later"}
 		}
 	}
-	// Inbound mail auth (iprev → SPF → DKIM → ARC verify → DMARC → ARC seal) for unauthenticated MX only.
+	// Inbound mail auth (helo → iprev → SPF → DKIM → ARC verify → DMARC → ARC seal) for unauthenticated MX only.
 	if s.user == nil {
 		var (
 			spfRes      = spfNoneResult()
@@ -575,6 +592,16 @@ func (s *session) deliver(ctx context.Context, rcpt string, data []byte, msgid s
 			arcCV       = "none"
 			authErr     error
 		)
+		if s.backend.helo != nil {
+			data, authErr = s.backend.helo.apply(s.helo, data)
+			if authErr != nil {
+				var smtpErr *gosmtp.SMTPError
+				if errors.As(authErr, &smtpErr) {
+					return smtpErr
+				}
+				return authErr
+			}
+		}
 		if s.backend.iprev != nil {
 			data, authErr = s.backend.iprev.apply(stripPort(s.remote), data)
 			if authErr != nil {
@@ -586,7 +613,11 @@ func (s *session) deliver(ctx context.Context, rcpt string, data []byte, msgid s
 			}
 		}
 		if s.backend.spf != nil {
-			data, spfRes, authErr = s.backend.spf.apply(stripPort(s.remote), s.backend.hostname, s.from, data)
+			heloName := s.helo
+			if heloName == "" {
+				heloName = s.backend.hostname
+			}
+			data, spfRes, authErr = s.backend.spf.apply(stripPort(s.remote), heloName, s.from, data)
 			if authErr != nil {
 				var smtpErr *gosmtp.SMTPError
 				if errors.As(authErr, &smtpErr) {
