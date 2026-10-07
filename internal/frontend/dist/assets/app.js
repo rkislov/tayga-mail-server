@@ -42,6 +42,13 @@ const I18N = {
     mig_off: "Выкл",
     nav_admin: "Админ",
     nav_monitor: "Мониторинг",
+    nav_maillog: "Лог писем",
+    maillog_lede: "Приём, доставка и исходящая очередь. Поиск по строкам лога.",
+    maillog_search: "Поиск",
+    maillog_find: "Найти",
+    maillog_empty: "Записей пока нет",
+    maillog_scope_global: "Глобальный лог",
+    maillog_scope_domain: "Лог вашего домена",
     nav_tenants: "Домены и пользователи",
     nav_tls: "УЦ",
     nav_xmpp: "XMPP",
@@ -202,6 +209,13 @@ const I18N = {
     mig_off: "Off",
     nav_admin: "Admin",
     nav_monitor: "Monitoring",
+    nav_maillog: "Mail log",
+    maillog_lede: "Accept, delivery, and outbound queue. Search by log line.",
+    maillog_search: "Search",
+    maillog_find: "Find",
+    maillog_empty: "No entries yet",
+    maillog_scope_global: "Global mail log",
+    maillog_scope_domain: "Your domain mail log",
     nav_tenants: "Domains & users",
     nav_tls: "CA",
     nav_xmpp: "XMPP",
@@ -500,7 +514,7 @@ function updateNavUser(email, isAdmin) {
 const APPS = [
   "mail", "calendar", "contacts", "files", "chat",
   "profile", "security", "appearance", "filters", "language", "migration",
-  "monitor", "tenants", "tls", "xmpp", "server",
+  "monitor", "maillog", "tenants", "tls", "xmpp", "server",
 ];
 
 const mailState = { mailboxID: "", messageID: "", mailboxes: [], searchQ: "" };
@@ -532,6 +546,7 @@ const APP_I18N = {
   language: "nav_language",
   migration: "nav_migration",
   monitor: "nav_monitor",
+  maillog: "nav_maillog",
   tenants: "nav_tenants",
   tls: "nav_tls",
   xmpp: "nav_xmpp",
@@ -574,6 +589,7 @@ function showApp(name) {
   if (app === "filters") { refreshSieve(); refreshVacation(); }
   if (app === "monitor") { refreshMonitor(); startMonitorLive(); }
   else stopMonitorLive();
+  if (app === "maillog") refreshMailLog();
   if (app === "tenants") { refreshTenant(); refreshAdminUsers(); }
   if (app === "tls") refreshTLS();
   if (app === "xmpp") refreshXMPP();
@@ -1076,6 +1092,51 @@ $("q-search")?.addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
     e.preventDefault();
     refreshQuarantine();
+  }
+});
+
+let maillogTimer = null;
+
+async function refreshMailLog() {
+  const pre = $("maillog-lines");
+  const msg = $("maillog-msg");
+  const scopeEl = $("maillog-scope");
+  if (!pre) return;
+  const q = ($("maillog-q")?.value || "").trim();
+  try {
+    const params = new URLSearchParams({ limit: "200" });
+    if (q) params.set("q", q);
+    const d = await api("/api/v1/admin/mail-log?" + params.toString());
+    const items = d.items || [];
+    if (scopeEl) {
+      const key = d.scope === "domain" ? "maillog_scope_domain" : "maillog_scope_global";
+      scopeEl.setAttribute("data-i18n", key);
+      scopeEl.textContent = t(key);
+    }
+    if (!items.length) {
+      pre.textContent = t("maillog_empty");
+    } else {
+      pre.textContent = items.map((it) => it.line || "").filter(Boolean).join("\n");
+    }
+    setMsg(msg, items.length ? `${items.length}` : "", items.length ? "ok" : "");
+  } catch (err) {
+    pre.textContent = "";
+    setMsg(msg, err.message, "err");
+  }
+}
+
+function scheduleMailLogSearch() {
+  if (maillogTimer) clearTimeout(maillogTimer);
+  maillogTimer = setTimeout(() => refreshMailLog(), 220);
+}
+
+$("btn-maillog-search")?.addEventListener("click", () => refreshMailLog());
+$("btn-maillog-refresh")?.addEventListener("click", () => refreshMailLog());
+$("maillog-q")?.addEventListener("input", () => scheduleMailLogSearch());
+$("maillog-q")?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    refreshMailLog();
   }
 });
 
