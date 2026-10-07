@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tayga/tms/internal/ha"
 	"github.com/tayga/tms/internal/sieve"
 	"github.com/tayga/tms/internal/storage"
 )
@@ -38,13 +39,24 @@ func defaultQueueConfig(c QueueConfig) QueueConfig {
 
 // OutboundQueue accepts remote mail and retries delivery with DSN on final failure.
 type OutboundQueue struct {
-	store    storage.Driver
-	sender   outboundSender
-	dkim     *dkimSigner
-	sieve    *sieve.Engine
-	hostname string
-	cfg      QueueConfig
-	log      *slog.Logger
+	store        storage.Driver
+	sender       outboundSender
+	dkim         *dkimSigner
+	sieve        *sieve.Engine
+	hostname     string
+	cfg          QueueConfig
+	log          *slog.Logger
+	ha           ha.Gate
+	fenceWriters bool
+}
+
+// SetHA restricts queue drain to the lease holder when fenceWriters is set.
+func (q *OutboundQueue) SetHA(gate ha.Gate, fenceWriters bool) {
+	if q == nil {
+		return
+	}
+	q.ha = gate
+	q.fenceWriters = fenceWriters
 }
 
 func newOutboundQueue(store storage.Driver, sender outboundSender, dkim *dkimSigner, eng *sieve.Engine, hostname string, cfg QueueConfig, log *slog.Logger) *OutboundQueue {
@@ -105,6 +117,9 @@ func (q *OutboundQueue) loop(ctx context.Context, worker int) {
 }
 
 func (q *OutboundQueue) drain(ctx context.Context, worker int) {
+	if q.fenceWriters && q.ha != nil && !q.ha.IsLeader() {
+		return
+	}
 	items, err := q.store.ClaimOutboundDue(ctx, q.cfg.BatchSize)
 	if err != nil {
 		q.log.Warn("outbound claim failed", "worker", worker, "err", err)

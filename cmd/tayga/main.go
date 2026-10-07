@@ -192,7 +192,7 @@ func openObjectStore(cfg *config.Config) (mailstore.Blob, error) {
 	})
 }
 
-func runObjectSyncLoop(ctx context.Context, store storage.Driver, ms *mailstore.Store, blob mailstore.Blob, interval time.Duration, log *slog.Logger) {
+func runObjectSyncLoop(ctx context.Context, store storage.Driver, ms *mailstore.Store, blob mailstore.Blob, interval time.Duration, log *slog.Logger, gate ha.Gate, fenceWriters bool) {
 	t := time.NewTicker(interval)
 	defer t.Stop()
 	for {
@@ -200,6 +200,9 @@ func runObjectSyncLoop(ctx context.Context, store storage.Driver, ms *mailstore.
 		case <-ctx.Done():
 			return
 		case <-t.C:
+			if fenceWriters && gate != nil && !gate.IsLeader() {
+				continue
+			}
 			rep, err := mailstore.SyncObjects(ctx, store, ms, blob, mailstore.SyncOptions{})
 			if err != nil {
 				log.Warn("object store sync failed", "err", err)
@@ -247,20 +250,20 @@ func run(cfgPath string) error {
 
 	authn := auth.NewLayer(store, cfg.LDAP, cfg.MFA, cfg.OIDC)
 	ms := mailstore.New(cfg.Mailstore.Root)
+	var objBlob mailstore.Blob
+	var objSyncInterval time.Duration
 	if cfg.Mailstore.ObjectStore.Enabled {
 		blob, err := openObjectStore(cfg)
 		if err != nil {
 			return fmt.Errorf("object store: %w", err)
 		}
 		ms.SetObjectStore(blob, log)
+		objBlob = blob
+		objSyncInterval = cfg.Mailstore.ObjectStore.SyncInterval
 		log.Info("mailstore object store enabled",
 			"endpoint", cfg.Mailstore.ObjectStore.Endpoint,
 			"bucket", cfg.Mailstore.ObjectStore.Bucket,
 		)
-		if iv := cfg.Mailstore.ObjectStore.SyncInterval; iv > 0 {
-			go runObjectSyncLoop(ctx, store, ms, blob, iv, log)
-			log.Info("mailstore object store sync ticker", "interval", iv.String())
-		}
 	}
 	tlsMgr, err := tlsutil.NewManager(cfg)
 	if err != nil {
@@ -308,7 +311,16 @@ func run(cfgPath string) error {
 				}
 			}
 		}()
-		log.Info("ha active_standby enabled", "lease_ttl", cfg.HA.LeaseTTL.String(), "is_leader", lease.IsLeader())
+		log.Info("ha active_standby enabled",
+			"lease_ttl", cfg.HA.LeaseTTL.String(),
+			"fence", cfg.HA.Fence,
+			"is_leader", lease.IsLeader(),
+		)
+	}
+
+	if objBlob != nil && objSyncInterval > 0 {
+		go runObjectSyncLoop(ctx, store, ms, objBlob, objSyncInterval, log, gate, cfg.HA.FenceWriters())
+		log.Info("mailstore object store sync ticker", "interval", objSyncInterval.String())
 	}
 
 	smtpSrv := smtp.New(cfg, log, store, authn, ms, sieveEng, tlsMgr, gate)
@@ -316,12 +328,12 @@ func run(cfgPath string) error {
 		return fmt.Errorf("smtp: %w", err)
 	}
 
-	imapSrv := imapserver.New(cfg, log, store, authn, ms, imapHub, tlsMgr)
+	imapSrv := imapserver.New(cfg, log, store, authn, ms, imapHub, tlsMgr, gate)
 	if err := imapSrv.Start(ctx); err != nil {
 		return fmt.Errorf("imap: %w", err)
 	}
 
-	pop3Srv := pop3.New(cfg, log, store, authn, ms, tlsMgr)
+	pop3Srv := pop3.New(cfg, log, store, authn, ms, tlsMgr, gate)
 	if err := pop3Srv.Start(ctx); err != nil {
 		return fmt.Errorf("pop3: %w", err)
 	}
