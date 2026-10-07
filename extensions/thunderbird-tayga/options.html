@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Tayga Mail — settings</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 42rem; margin: 2rem auto; padding: 0 1rem; color: #1a1a1a; }
+    label { display: block; margin-top: 0.75rem; font-weight: 600; font-size: 0.85rem; }
+    input, textarea, select { width: 100%; box-sizing: border-box; padding: 0.45rem; margin-top: 0.25rem; }
+    button { margin-top: 1rem; margin-right: 0.5rem; padding: 0.45rem 0.9rem; cursor: pointer; }
+    .hint { color: #555; font-size: 0.85rem; }
+    code { background: #f0f0f0; padding: 0.1rem 0.3rem; }
+    h2 { margin-top: 2rem; border-top: 1px solid #ddd; padding-top: 1rem; }
+  </style>
+</head>
+<body>
+  <h1>Tayga Mail</h1>
+  <p class="hint">Sign in to your Tayga server. Mail accounts are still created via Mozilla Autoconfig
+    (<code>/.well-known/autoconfig/mail/config-v1.1.xml</code>). CalDAV/CardDAV:
+    <code>{base}/dav/</code></p>
+
+  <label>Server base URL</label>
+  <input id="baseUrl" placeholder="https://mail.example.com" />
+  <label>Email</label>
+  <input id="email" type="email" />
+  <label>Password</label>
+  <input id="password" type="password" />
+  <label>Theme</label>
+  <select id="theme">
+    <option value="taiga">Taiga</option>
+    <option value="cosmos">Cosmos</option>
+  </select>
+  <button id="btn-login" type="button">Sign in &amp; save token</button>
+  <button id="btn-theme" type="button">Apply theme</button>
+  <p id="msg" class="hint"></p>
+
+  <h2>Vacation</h2>
+  <label><input type="checkbox" id="vac-on" /> Enable out-of-office</label>
+  <label>Subject</label>
+  <input id="vac-subj" />
+  <label>Body</label>
+  <textarea id="vac-body" rows="4"></textarea>
+  <button id="btn-vac" type="button">Save vacation</button>
+
+  <h2>Sieve</h2>
+  <label>Script name</label>
+  <input id="sieve-name" value="default" />
+  <label>Script</label>
+  <textarea id="sieve-body" rows="8">require ["fileinto"];
+keep;</textarea>
+  <button id="btn-sieve" type="button">Save &amp; activate</button>
+  <button id="btn-sieve-load" type="button">Reload list</button>
+  <pre id="sieve-list" class="hint"></pre>
+
+  <script src="options.js"></script>
+</body>
+</html>

@@ -10,7 +10,7 @@ import (
 )
 
 func (s *Server) handleAdminSettings(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.requireAdmin(w, r); !ok {
+	if _, ok := s.requireGlobalAdmin(w, r); !ok {
 		return
 	}
 	if s.hub == nil {

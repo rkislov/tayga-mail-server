@@ -89,7 +89,7 @@ Privileged ports (<1024) require root or `CAP_NET_BIND_SERVICE`. TLS certs: `tls
 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o tayga-mail ./cmd/tayga
 ./tayga-mail version
 ./tayga-mail -config configs/tayga.example.yaml
-# Cross builds: VERSION=v0.5.2 ./scripts/crossbuild.sh
+# Cross builds: VERSION=v0.6.0 ./scripts/crossbuild.sh
 ```
 
 Seed: `admin@example.com` / `changeme`. UUID schema requires a fresh DB when upgrading from integer IDs.
@@ -108,17 +108,21 @@ Enable: `mfa.webauthn.enabled: true` (RP ID from `http.public_url`).
 
 ## Web UI
 
-Embedded at `/` (`internal/frontend/dist`): app shell with **mail**, **calendar**, **contacts**, **files** (Outlook-style panes), user settings (profile / security / appearance / Sieve / language ru|en), and admin (monitor with live SVG charts / tenants / TLS / server). Unauthenticated users are sent to the login card. Themes via `localStorage` (`tayga.theme`).
+Embedded at `/` (`internal/frontend/dist`): app shell with **mail**, **calendar**, **contacts**, **files** (Outlook-style panes; ≤900px master-detail), user settings (profile / security / appearance / Sieve+vacation / language ru|en), and admin (monitor charts / tenants / TLS / server / CoS). Roles: `global_admin`, `domain_admin`, `user`. Unauthenticated users are sent to the login card. Themes via `localStorage` (`tayga.theme`). Thunderbird companion: `extensions/thunderbird-tayga/`.
 
 ### User apps API
 
 | Endpoint | Role |
 |----------|------|
-| `GET /api/v1/mail/mailboxes` | list mailboxes |
+| `GET /api/v1/mail/mailboxes` | list mailboxes (+ shared) |
+| `GET/PUT/DELETE …/mailboxes/{id}/acl` | folder ACL |
 | `GET /api/v1/mail/mailboxes/{id}/messages` | list messages |
 | `GET/PATCH/DELETE /api/v1/mail/messages/{id}` | read / flags / delete |
 | `POST /api/v1/mail/send` | send (local + outbound queue) |
-| `GET /api/v1/calendar/calendars` | list calendars |
+| `GET/PUT /api/v1/mail/vacation` | out-of-office (Sieve vacation) |
+| `GET/POST/DELETE /api/v1/mail/delegates` | secretary / delegate access |
+| `GET /api/v1/calendar/calendars` | list calendars (+ shared) |
+| `GET/PUT/DELETE …/calendars/{id}/acl` | calendar ACL |
 | `GET/POST /api/v1/calendar/calendars/{id}/events` | list / create events |
 | `GET/DELETE /api/v1/calendar/events/{id}` | read / delete |
 | `GET /api/v1/contacts/books` | list address books |
@@ -128,23 +132,26 @@ Embedded at `/` (`internal/frontend/dist`): app shell with **mail**, **calendar*
 | `GET/PUT /api/v1/files/content?path=` | download / upload |
 | `POST /api/v1/files/mkdir` | create folder |
 | `DELETE /api/v1/files?path=` | remove file or folder |
+| `GET/POST/DELETE /api/v1/files/shares` | create/list/revoke public links |
+| `GET /s/{token}` | anonymous download of a file share |
 
 ### Account / admin API
 
 | Endpoint | Role |
 |----------|------|
-| `GET/PATCH /api/v1/me` | profile + `quota_bytes` / `used_bytes` |
+| `GET/PATCH /api/v1/me` | profile + roles / `admin_scope` / quota |
 | `GET/PUT/DELETE /api/v1/sieve/scripts[/{name}]` | list / save / delete Sieve scripts |
 | `POST /api/v1/sieve/scripts/{name}/activate` | set active script |
 | `GET /api/v1/admin/tenant` | current tenant + domains |
-| `GET/POST /api/v1/admin/domains` | list / add mail domains |
+| `GET/POST /api/v1/admin/domains` | list / add mail domains (`global_admin` to add/delete) |
 | `DELETE /api/v1/admin/domains/{name}` | remove empty domain |
-| `GET /api/v1/admin/users` | list tenant users (admins only) |
+| `GET /api/v1/admin/users` | list users in admin scope |
 | `POST /api/v1/admin/users` | create local user |
 | `PUT /api/v1/admin/users/{uuid}/quota` | set quota (0 = unlimited) |
-| `PATCH /api/v1/admin/users/{uuid}` | enable/disable |
+| `PATCH /api/v1/admin/users/{uuid}` | enable/disable / roles / domain_ids / service_class_id |
 | `PUT /api/v1/admin/users/{uuid}/password` | reset local password (min 8 chars) |
-| `GET /api/v1/admin/tls` | active certificate status |
+| `GET/POST/PUT/DELETE /api/v1/admin/service-classes` | CoS templates (`global_admin` write) |
+| `GET /api/v1/admin/tls` | active certificate status (`global_admin`) |
 | `PUT /api/v1/admin/tls` | install PEM certificate + private key (hot reload) |
 | `POST /api/v1/admin/tls` | generate self-signed cert (`hosts`, `days`) |
 | `GET /api/v1/admin/status` | monitoring snapshot (tenant + server counters) |

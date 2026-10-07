@@ -29,6 +29,8 @@ func (s *Server) handleMail(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == http.MethodGet && len(parts) == 1 && parts[0] == "mailboxes":
 		s.mailListMailboxes(w, r, au)
+	case len(parts) >= 3 && parts[0] == "mailboxes" && parts[2] == "acl":
+		s.handleMailboxACL(w, r, au, parts[1])
 	case r.Method == http.MethodGet && len(parts) == 3 && parts[0] == "mailboxes" && parts[2] == "messages":
 		s.mailListMessages(w, r, au, parts[1])
 	case r.Method == http.MethodGet && len(parts) == 2 && parts[0] == "messages":
@@ -41,6 +43,10 @@ func (s *Server) handleMail(w http.ResponseWriter, r *http.Request) {
 		s.mailDeleteMessage(w, r, au, parts[1])
 	case r.Method == http.MethodPost && len(parts) == 1 && parts[0] == "send":
 		s.mailSend(w, r, au)
+	case parts[0] == "vacation":
+		s.handleVacation(w, r)
+	case parts[0] == "delegates":
+		s.handleDelegates(w, r)
 	default:
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 	}
@@ -79,7 +85,12 @@ func (s *Server) mailListMailboxes(w http.ResponseWriter, r *http.Request, au *a
 		return
 	}
 	out := make([]map[string]any, 0, len(mbs))
-	for _, mb := range mbs {
+	seen := map[string]struct{}{}
+	appendMB := func(mb *storage.Mailbox, shared bool) {
+		if _, ok := seen[mb.ID]; ok {
+			return
+		}
+		seen[mb.ID] = struct{}{}
 		msgs, _ := s.store.ListMessages(ctx, mb.ID)
 		unread := 0
 		for _, m := range msgs {
@@ -87,9 +98,21 @@ func (s *Server) mailListMailboxes(w http.ResponseWriter, r *http.Request, au *a
 				unread++
 			}
 		}
+		name := mb.Name
+		if shared {
+			name = mb.Name + " (shared)"
+		}
 		out = append(out, map[string]any{
-			"id": mb.ID, "name": mb.Name, "messages": len(msgs), "unread": unread,
+			"id": mb.ID, "name": name, "messages": len(msgs), "unread": unread, "shared": shared, "owner_id": mb.UserID,
 		})
+	}
+	for _, mb := range mbs {
+		appendMB(mb, false)
+	}
+	if shared, err := s.store.ListSharedMailboxes(ctx, au.ID); err == nil {
+		for _, mb := range shared {
+			appendMB(mb, true)
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"mailboxes": out})
 }
@@ -102,7 +125,11 @@ func (s *Server) mailboxOwned(r *http.Request, au *authUser, mailboxID string) (
 		}
 		return nil, http.StatusInternalServerError
 	}
-	if mb.UserID != au.ID {
+	if mb.UserID == au.ID {
+		return mb, 0
+	}
+	rights, err := s.store.MailboxRightsForUser(r.Context(), mailboxID, au.ID)
+	if err != nil || rights == "" || !strings.Contains(rights, "r") {
 		return nil, http.StatusForbidden
 	}
 	return mb, 0

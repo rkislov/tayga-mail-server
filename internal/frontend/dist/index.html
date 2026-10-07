@@ -112,6 +112,7 @@
           <div id="mail-empty" class="empty-state" data-i18n="select_message">Выберите письмо</div>
           <div id="mail-reader" class="hidden">
             <div class="reader-actions">
+              <button type="button" class="btn-secondary btn-sm mobile-only" data-pane-back data-i18n="back_list">К списку</button>
               <button type="button" class="btn-secondary btn-sm" id="btn-mail-reply" data-i18n="reply">Ответить</button>
               <button type="button" class="btn-secondary btn-sm" id="btn-mail-delete" data-i18n="delete">Удалить</button>
             </div>
@@ -135,6 +136,8 @@
           <input class="field-input" id="compose-subject" />
           <label class="field-label" data-i18n="body">Текст</label>
           <textarea class="field-input-mono" id="compose-body" rows="10"></textarea>
+          <label class="field-label" data-i18n="attach_file">Вложение (крупное → ссылка)</label>
+          <input class="field-input" type="file" id="compose-attach" />
           <div class="actions">
             <button type="button" class="btn-spray" id="btn-compose-send" data-i18n="send">Отправить</button>
             <button type="button" class="btn-secondary" id="btn-compose-close" data-i18n="back">Назад</button>
@@ -168,6 +171,7 @@
           <div id="cal-empty" class="empty-state" data-i18n="select_event">Выберите событие</div>
           <div id="cal-reader" class="hidden">
             <div class="reader-actions">
+              <button type="button" class="btn-secondary btn-sm mobile-only" data-pane-back data-i18n="back_list">К списку</button>
               <button type="button" class="btn-secondary btn-sm" id="btn-cal-delete" data-i18n="delete">Удалить</button>
             </div>
             <h2 class="heading reader-subject" id="cal-subject"></h2>
@@ -229,6 +233,7 @@
           <div id="contact-empty" class="empty-state" data-i18n="select_contact">Выберите контакт</div>
           <div id="contact-reader" class="hidden">
             <div class="reader-actions">
+              <button type="button" class="btn-secondary btn-sm mobile-only" data-pane-back data-i18n="back_list">К списку</button>
               <button type="button" class="btn-secondary btn-sm" id="btn-contact-delete" data-i18n="delete">Удалить</button>
             </div>
             <h2 class="heading reader-subject" id="contact-subject"></h2>
@@ -294,6 +299,7 @@
           <div id="files-empty" class="empty-state" data-i18n="select_file">Выберите файл</div>
           <div id="files-reader" class="hidden">
             <div class="reader-actions">
+              <button type="button" class="btn-secondary btn-sm mobile-only" data-pane-back data-i18n="back_list">К списку</button>
               <button type="button" class="btn-spray btn-sm" id="btn-files-download" data-i18n="download">Скачать</button>
               <button type="button" class="btn-secondary btn-sm" id="btn-files-open" data-i18n="open">Открыть</button>
               <button type="button" class="btn-secondary btn-sm" id="btn-files-delete" data-i18n="delete">Удалить</button>
@@ -380,7 +386,19 @@
       </div>
 
       <!-- FILTERS / SIEVE -->
-      <div id="app-filters" class="app-page hidden panel-page">
+      <div id="app-filters" class="app-page hidden panel-page stack-gap">
+        <div class="card">
+          <h3 class="heading" data-i18n="vacation_title">Автоответ (отпуск)</h3>
+          <label class="field-check"><input type="checkbox" id="vacation-enabled" /> <span data-i18n="vacation_enabled">Включить</span></label>
+          <label class="field-label" data-i18n="vacation_subject">Тема</label>
+          <input class="field-input" id="vacation-subject" />
+          <label class="field-label" data-i18n="vacation_body">Текст</label>
+          <textarea class="field-input-mono" id="vacation-body" rows="4"></textarea>
+          <div class="actions">
+            <button type="button" class="btn-spray" id="btn-vacation-save" data-i18n="save">Сохранить</button>
+          </div>
+          <p id="vacation-msg" class="msg"></p>
+        </div>
         <div class="card">
           <h3 class="heading" data-i18n="filters_title">Фильтры Sieve</h3>
           <label class="field-label" for="sieve-name">Имя скрипта</label>

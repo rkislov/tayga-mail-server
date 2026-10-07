@@ -30,16 +30,21 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
+		domainIDs, _ := s.store.ListDomainAdminDomains(r.Context(), su.ID)
 		writeJSON(w, http.StatusOK, map[string]any{
-			"id":           su.ID,
-			"email":        su.Email,
-			"display_name": su.DisplayName,
-			"auth_source":  su.AuthSource,
-			"quota_bytes":  su.QuotaBytes,
-			"used_bytes":   used,
-			"enabled":      su.Enabled,
-			"roles":        storage.ParseRoles(su.Roles),
-			"is_admin":     s.isAdminUser(su),
+			"id":             su.ID,
+			"email":          su.Email,
+			"display_name":   su.DisplayName,
+			"auth_source":    su.AuthSource,
+			"quota_bytes":    su.QuotaBytes,
+			"used_bytes":     used,
+			"enabled":        su.Enabled,
+			"roles":          storage.ParseRoles(su.Roles),
+			"admin_scope":    storage.AdminScope(su.Roles),
+			"is_admin":       s.isAdminUser(su),
+			"is_global_admin": s.isGlobalAdminUser(su),
+			"domain_ids":     domainIDs,
+			"service_class_id": su.ServiceClassID,
 		})
 	case http.MethodPatch:
 		var req patchMeRequest
@@ -73,14 +78,4 @@ func (s *Server) isAdmin(email string) bool {
 		}
 	}
 	return false
-}
-
-func (s *Server) isAdminUser(u *storage.User) bool {
-	if u == nil {
-		return false
-	}
-	if s.isAdmin(u.Email) {
-		return true
-	}
-	return storage.HasRole(u.Roles, storage.RoleAdmin)
 }
