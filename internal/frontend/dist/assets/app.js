@@ -36,15 +36,42 @@ const I18N = {
     to: "Кому",
     subject: "Тема",
     body: "Текст",
+    col_from: "От",
+    col_subject: "Тема",
+    col_date: "Дата",
     reply: "Ответить",
     delete: "Удалить",
     calendar_title: "Календарь",
+    calendars: "Календари",
     new_event: "Событие",
+    select_event: "Выберите событие",
+    empty_calendar: "Нет событий",
+    col_summary: "Тема",
+    col_start: "Начало",
+    col_end: "Конец",
+    col_location: "Место",
+    col_description: "Описание",
     contacts_title: "Контакты",
+    address_books: "Книги",
     new_contact: "Контакт",
+    select_contact: "Выберите контакт",
+    empty_contacts: "Нет контактов",
+    col_name: "Имя",
+    col_tel: "Тел",
+    col_org: "Орг",
+    col_note: "Заметка",
     files_title: "Файлы",
     upload: "Загрузить",
+    download: "Скачать",
+    open: "Открыть",
     mkdir: "Папка",
+    select_file: "Выберите файл",
+    empty_files: "Пустая папка",
+    col_size: "Размер",
+    col_type: "Тип",
+    col_path: "Путь",
+    type_folder: "Папка",
+    type_file: "Файл",
     profile_title: "Профиль",
     security_title: "Безопасность",
     appearance_title: "Внешний вид",
@@ -53,6 +80,7 @@ const I18N = {
     language_hint: "Язык интерфейса сохраняется в браузере.",
     filters_title: "Фильтры Sieve",
     session_active: "Сессия активна · IMAP XOAUTH2 / FlowSync",
+    session_expired: "Войдите снова",
     save: "Сохранить",
   },
   en: {
@@ -92,15 +120,42 @@ const I18N = {
     to: "To",
     subject: "Subject",
     body: "Body",
+    col_from: "From",
+    col_subject: "Subject",
+    col_date: "Date",
     reply: "Reply",
     delete: "Delete",
     calendar_title: "Calendar",
+    calendars: "Calendars",
     new_event: "Event",
+    select_event: "Select an event",
+    empty_calendar: "No events",
+    col_summary: "Subject",
+    col_start: "Start",
+    col_end: "End",
+    col_location: "Location",
+    col_description: "Description",
     contacts_title: "Contacts",
+    address_books: "Books",
     new_contact: "Contact",
+    select_contact: "Select a contact",
+    empty_contacts: "No contacts",
+    col_name: "Name",
+    col_tel: "Phone",
+    col_org: "Org",
+    col_note: "Note",
     files_title: "Files",
     upload: "Upload",
+    download: "Download",
+    open: "Open",
     mkdir: "Folder",
+    select_file: "Select a file",
+    empty_files: "Empty folder",
+    col_size: "Size",
+    col_type: "Type",
+    col_path: "Path",
+    type_folder: "Folder",
+    type_file: "File",
     profile_title: "Profile",
     security_title: "Security",
     appearance_title: "Appearance",
@@ -109,6 +164,7 @@ const I18N = {
     language_hint: "Interface language is stored in this browser.",
     filters_title: "Sieve filters",
     session_active: "Session active · IMAP XOAUTH2 / FlowSync",
+    session_expired: "Please sign in again",
     save: "Save",
   },
 };
@@ -213,9 +269,9 @@ const APPS = [
 ];
 
 const mailState = { mailboxID: "", messageID: "", mailboxes: [] };
-const calState = { calendarID: "" };
-const contactState = { bookID: "" };
-const filesState = { path: "" };
+const calState = { calendarID: "", eventID: "", calendars: [], events: [] };
+const contactState = { bookID: "", cardID: "", books: [], cards: [] };
+const filesState = { path: "", selected: null, entries: [] };
 
 function show(id) {
   const account = id === "view-account";
@@ -275,7 +331,8 @@ function showApp(name) {
   if (app === "contacts") refreshContacts();
   if (app === "files") refreshFiles();
   if (app === "filters") refreshSieve();
-  if (app === "monitor") refreshMonitor();
+  if (app === "monitor") { refreshMonitor(); startMonitorLive(); }
+  else stopMonitorLive();
   if (app === "tenants") { refreshTenant(); refreshAdminUsers(); }
   if (app === "tls") refreshTLS();
   if (app === "server") refreshSettings();
@@ -288,6 +345,57 @@ function setMsg(el, text, kind) {
   el.className = "msg" + (kind ? " " + kind : "");
 }
 
+function isAuthPublicPath(path) {
+  return path === "/api/v1/auth/login"
+    || path === "/api/v1/auth/token"
+    || path === "/api/v1/auth/mfa/verify"
+    || path.startsWith("/api/v1/auth/webauthn/login/")
+    || path.startsWith("/api/v1/auth/oidc/");
+}
+
+function clearSession() {
+  state.tokens = null;
+  state.challenge = "";
+  state.methods = [];
+  localStorage.removeItem("tayga.tokens");
+  setNavOpen(false);
+  stopMonitorLive();
+  $("compose-backdrop")?.classList.add("hidden");
+  $("cal-backdrop")?.classList.add("hidden");
+  $("contact-backdrop")?.classList.add("hidden");
+}
+
+function forceLogin(msg) {
+  clearSession();
+  show("view-login");
+  if (msg) setMsg($("login-msg"), msg, "err");
+  else setMsg($("login-msg"), "");
+}
+
+let tokenRefreshPromise = null;
+
+async function refreshAccessToken() {
+  const refresh = state.tokens?.refresh_token;
+  if (!refresh) return false;
+  if (!tokenRefreshPromise) {
+    tokenRefreshPromise = (async () => {
+      const res = await fetch("/api/v1/auth/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ grant_type: "refresh_token", refresh_token: refresh }),
+      });
+      const text = await res.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch { data = null; }
+      if (!res.ok || !data?.access_token) return false;
+      state.tokens = data;
+      localStorage.setItem("tayga.tokens", JSON.stringify(data));
+      return true;
+    })().finally(() => { tokenRefreshPromise = null; });
+  }
+  return tokenRefreshPromise;
+}
+
 async function api(path, opts = {}) {
   const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
   if (state.tokens?.access_token) {
@@ -298,6 +406,12 @@ async function api(path, opts = {}) {
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = { error: text }; }
   if (!res.ok) {
+    if (res.status === 401 && !opts._authRetry && !isAuthPublicPath(path)) {
+      if (state.tokens?.refresh_token && await refreshAccessToken()) {
+        return api(path, Object.assign({}, opts, { _authRetry: true }));
+      }
+      forceLogin(t("session_expired"));
+    }
     const err = new Error((data && data.error) || res.statusText || "request failed");
     err.status = res.status;
     err.data = data;
@@ -388,6 +502,7 @@ async function loadMe() {
     $("acct-role").textContent = me.is_admin ? "admin" : "live";
     $("nav-admin")?.classList.toggle("hidden", !me.is_admin);
   } catch (err) {
+    if (err.status === 401) return;
     $("acct-meta").textContent = err.message;
   }
 }
@@ -395,6 +510,166 @@ async function loadMe() {
 function fmtNum(n) {
   if (n == null) return "—";
   return Number(n).toLocaleString();
+}
+
+const monitorHistory = {
+  max: 48,
+  goroutines: [],
+  heap: [],
+  outbound: [],
+};
+let monitorTimer = null;
+
+function pushHistory(series, value) {
+  series.push(Number(value) || 0);
+  while (series.length > monitorHistory.max) series.shift();
+}
+
+function svgEl(tag, attrs, html) {
+  const a = Object.entries(attrs || {}).map(([k, v]) => `${k}="${String(v).replace(/"/g, "&quot;")}"`).join(" ");
+  return html != null ? `<${tag} ${a}>${html}</${tag}>` : `<${tag} ${a} />`;
+}
+
+function renderBarGroup(host, groups, opts = {}) {
+  if (!host) return;
+  const w = 320, h = 150, padL = 36, padR = 10, padT = 12, padB = 36;
+  const colors = opts.colors || ["#e8b84a", "#d97706", "#5b8def"];
+  const labels = groups.map((g) => g.label);
+  const series = opts.series || ["a", "b"];
+  const seriesLabels = opts.seriesLabels || series;
+  let max = 0;
+  groups.forEach((g) => series.forEach((k) => { max = Math.max(max, Number(g[k]) || 0); }));
+  if (max <= 0) max = 1;
+  const slot = (w - padL - padR) / Math.max(groups.length, 1);
+  const barW = Math.min(18, slot / (series.length + 1.2));
+  let bars = "";
+  groups.forEach((g, i) => {
+    const x0 = padL + i * slot + slot / 2;
+    series.forEach((k, si) => {
+      const v = Number(g[k]) || 0;
+      const bh = ((h - padT - padB) * v) / max;
+      const x = x0 - (series.length * barW + (series.length - 1) * 4) / 2 + si * (barW + 4);
+      const y = h - padB - bh;
+      bars += svgEl("rect", {
+        x: x.toFixed(1), y: y.toFixed(1), width: barW.toFixed(1), height: Math.max(bh, 1).toFixed(1),
+        rx: 2, fill: colors[si % colors.length], opacity: 0.92,
+      });
+    });
+    bars += svgEl("text", {
+      x: x0.toFixed(1), y: h - 10, "text-anchor": "middle", fill: "rgba(255,255,255,0.55)", "font-size": 11,
+    }, escapeHtml(labels[i]));
+  });
+  const ticks = [0, 0.5, 1].map((p) => {
+    const y = h - padB - (h - padT - padB) * p;
+    const val = Math.round(max * p);
+    return svgEl("line", { x1: padL, x2: w - padR, y1: y.toFixed(1), y2: y.toFixed(1), stroke: "rgba(255,255,255,0.08)" })
+      + svgEl("text", { x: padL - 6, y: (y + 3).toFixed(1), "text-anchor": "end", fill: "rgba(255,255,255,0.4)", "font-size": 10 }, fmtNum(val));
+  }).join("");
+  const legend = seriesLabels.map((name, i) =>
+    `<span><i style="background:${colors[i % colors.length]}"></i>${escapeHtml(name)}</span>`
+  ).join("");
+  host.innerHTML = `<svg viewBox="0 0 ${w} ${h}" role="img">${ticks}${bars}</svg><div class="chart-legend">${legend}</div>`;
+}
+
+function renderHBars(host, items, opts = {}) {
+  if (!host) return;
+  const w = 320, rowH = 28, padL = 88, padR = 54, padT = 8;
+  const h = padT + items.length * rowH + 8;
+  const max = Math.max(1, ...items.map((it) => Number(it.value) || 0));
+  const color = opts.color || "#3d8ea8";
+  let body = "";
+  items.forEach((it, i) => {
+    const y = padT + i * rowH;
+    const bw = ((w - padL - padR) * (Number(it.value) || 0)) / max;
+    body += svgEl("text", { x: padL - 8, y: y + 14, "text-anchor": "end", fill: "rgba(255,255,255,0.65)", "font-size": 11 }, escapeHtml(it.label));
+    body += svgEl("rect", { x: padL, y: y + 4, width: (w - padL - padR), height: 14, rx: 3, fill: "rgba(255,255,255,0.06)" });
+    body += svgEl("rect", { x: padL, y: y + 4, width: Math.max(bw, 2).toFixed(1), height: 14, rx: 3, fill: color, opacity: 0.9 });
+    body += svgEl("text", { x: w - 8, y: y + 14, "text-anchor": "end", fill: "rgba(255,255,255,0.75)", "font-size": 11 }, escapeHtml(it.display || fmtNum(it.value)));
+  });
+  host.innerHTML = `<svg viewBox="0 0 ${w} ${h}" role="img">${body}</svg>`;
+}
+
+function renderSparkline(values, color) {
+  const w = 220, h = 56, pad = 4;
+  if (!values.length) {
+    return `<svg viewBox="0 0 ${w} ${h}"><text x="8" y="30" fill="rgba(255,255,255,0.4)" font-size="11">нет данных</text></svg>`;
+  }
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = Math.max(max - min, 1);
+  const pts = values.map((v, i) => {
+    const x = pad + (i * (w - pad * 2)) / Math.max(values.length - 1, 1);
+    const y = h - pad - ((v - min) / span) * (h - pad * 2);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+  const last = values[values.length - 1];
+  const area = `${pad},${h - pad} ${pts} ${w - pad},${h - pad}`;
+  return `<svg viewBox="0 0 ${w} ${h}" role="img">
+    <polygon points="${area}" fill="${color}" opacity="0.18"></polygon>
+    <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></polyline>
+    <circle cx="${pts.split(" ").pop().split(",")[0]}" cy="${pts.split(" ").pop().split(",")[1]}" r="2.5" fill="${color}"></circle>
+  </svg>`;
+}
+
+function renderMonitorCharts(d) {
+  const t = d.tenant || {};
+  const s = d.server || {};
+  const g = d.go || {};
+  renderBarGroup($("chart-bars"), [
+    { label: "Users", a: t.users || 0, b: s.users || 0 },
+    { label: "Msgs", a: t.messages || 0, b: s.messages || 0 },
+    { label: "Domains", a: t.domains || 0, b: s.domains || 0 },
+  ], {
+    series: ["a", "b"],
+    seriesLabels: ["Tenant", "Server"],
+    colors: ["#e8b84a", "#5b8def"],
+  });
+  renderHBars($("chart-storage"), [
+    { label: "Tenant", value: t.bytes_stored || 0, display: fmtBytes(t.bytes_stored || 0) },
+    { label: "Server", value: s.bytes_stored || 0, display: fmtBytes(s.bytes_stored || 0) },
+    { label: "Enabled", value: t.users_enabled || 0, display: fmtNum(t.users_enabled || 0) + " users" },
+    { label: "Mailboxes", value: s.mailboxes || t.mailboxes || 0, display: fmtNum(s.mailboxes || t.mailboxes || 0) },
+  ], { color: "#d97706" });
+  renderHBars($("chart-runtime"), [
+    { label: "Outbound", value: s.outbound_queued || 0, display: fmtNum(s.outbound_queued || 0) },
+    { label: "Goroutines", value: g.goroutines || 0, display: fmtNum(g.goroutines || 0) },
+    { label: "Heap", value: g.heap_alloc || 0, display: fmtBytes(g.heap_alloc || 0) },
+    { label: "Uptime", value: d.uptime_sec || 0, display: fmtNum(d.uptime_sec || 0) + "s" },
+  ], { color: "#3d8ea8" });
+
+  pushHistory(monitorHistory.goroutines, g.goroutines);
+  pushHistory(monitorHistory.heap, g.heap_alloc);
+  pushHistory(monitorHistory.outbound, s.outbound_queued);
+  const spark = $("chart-sparklines");
+  if (spark) {
+    spark.innerHTML = [
+      { title: "Goroutines", series: monitorHistory.goroutines, color: "#e8b84a", fmt: fmtNum },
+      { title: "Heap", series: monitorHistory.heap, color: "#5b8def", fmt: fmtBytes },
+      { title: "Outbound", series: monitorHistory.outbound, color: "#d97706", fmt: fmtNum },
+    ].map((item) => {
+      const last = item.series[item.series.length - 1] || 0;
+      return `<div class="spark-block">
+        <div class="spark-label"><span>${escapeHtml(item.title)}</span><strong>${escapeHtml(item.fmt(last))}</strong></div>
+        ${renderSparkline(item.series, item.color)}
+      </div>`;
+    }).join("");
+  }
+}
+
+function startMonitorLive() {
+  stopMonitorLive();
+  monitorTimer = setInterval(() => {
+    if (!$("view-account") || $("view-account").classList.contains("hidden")) return;
+    if ($("app-monitor")?.classList.contains("hidden")) return;
+    refreshMonitor();
+  }, 5000);
+}
+
+function stopMonitorLive() {
+  if (monitorTimer) {
+    clearInterval(monitorTimer);
+    monitorTimer = null;
+  }
 }
 
 async function refreshMonitor() {
@@ -415,10 +690,12 @@ async function refreshMonitor() {
       ["Bytes (server)", fmtBytes(s.bytes_stored || 0)],
       ["Outbound queued", fmtNum(s.outbound_queued)],
       ["Goroutines", fmtNum(g.goroutines)],
+      ["Heap", fmtBytes(g.heap_alloc || 0)],
     ];
     $("monitor-grid").innerHTML = rows.map(([k, v]) =>
       `<div><span class="meta">${escapeHtml(k)}</span><br/><strong>${escapeHtml(String(v))}</strong></div>`
     ).join("");
+    renderMonitorCharts(d);
     await refreshOutbound();
     await refreshQuarantine();
   } catch (err) {
@@ -1063,12 +1340,7 @@ $("btn-webauthn-login").addEventListener("click", async () => {
 
 $("btn-back-login").addEventListener("click", () => show("view-login"));
 
-$("btn-logout").addEventListener("click", () => {
-  state.tokens = null;
-  localStorage.removeItem("tayga.tokens");
-  setNavOpen(false);
-  show("view-login");
-});
+$("btn-logout").addEventListener("click", () => forceLogin());
 $("btn-refresh-me").addEventListener("click", loadMe);
 
 $("btn-totp-setup").addEventListener("click", async () => {
@@ -1185,6 +1457,39 @@ async function refreshMail() {
   }
 }
 
+function mailFromDisplay(from) {
+  const s = String(from || "").trim();
+  if (!s) return "—";
+  const m = s.match(/^"?([^"<]+?)"?\s*<[^>]+>/);
+  if (m) return m[1].trim();
+  return s.replace(/^<|>$/g, "");
+}
+
+function mailDateShort(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return String(iso).slice(0, 16).replace("T", " ");
+  const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  if (sameDay) {
+    return d.toLocaleTimeString(lang === "en" ? "en-GB" : "ru-RU", { hour: "2-digit", minute: "2-digit" });
+  }
+  const sameYear = d.getFullYear() === now.getFullYear();
+  return d.toLocaleDateString(lang === "en" ? "en-GB" : "ru-RU", sameYear
+    ? { day: "2-digit", month: "2-digit" }
+    : { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
+function mailDateFull(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return String(iso);
+  return d.toLocaleString(lang === "en" ? "en-GB" : "ru-RU", {
+    day: "2-digit", month: "short", year: "numeric",
+    hour: "2-digit", minute: "2-digit",
+  });
+}
+
 async function refreshMailMessages() {
   const list = $("mail-msg-list");
   if (!list || !mailState.mailboxID) return;
@@ -1194,16 +1499,17 @@ async function refreshMailMessages() {
     const data = await api("/api/v1/mail/mailboxes/" + encodeURIComponent(mailState.mailboxID) + "/messages?limit=80");
     const msgs = data.messages || [];
     if (!msgs.length) {
-      list.innerHTML = `<li class="meta">${t("empty_mailbox")}</li>`;
+      list.innerHTML = `<li class="msg-empty meta">${t("empty_mailbox")}</li>`;
       showMailReader(null);
       return;
     }
     list.innerHTML = msgs.map((m) => `
       <li>
-        <button type="button" class="msg-item${!m.seen ? " unread" : ""}${m.id === mailState.messageID ? " is-active" : ""}" data-msg="${escapeHtml(m.id)}">
-          <strong>${escapeHtml(m.subject || "(no subject)")}</strong>
-          <span class="meta">${escapeHtml(m.from || "")}</span>
-          <span class="meta">${escapeHtml((m.internal_date || "").slice(0, 16).replace("T", " "))}</span>
+        <button type="button" class="msg-item${!m.seen ? " unread" : ""}${m.id === mailState.messageID ? " is-active" : ""}" data-msg="${escapeHtml(m.id)}" title="${escapeHtml(m.from || "")}">
+          <span class="msg-flag" aria-hidden="true"></span>
+          <span class="msg-from">${escapeHtml(mailFromDisplay(m.from))}</span>
+          <span class="msg-subject">${escapeHtml(m.subject || "(no subject)")}</span>
+          <span class="msg-date">${escapeHtml(mailDateShort(m.internal_date))}</span>
         </button>
       </li>`).join("");
     list.querySelectorAll("[data-msg]").forEach((btn) => {
@@ -1212,7 +1518,7 @@ async function refreshMailMessages() {
     if (mailState.messageID) openMailMessage(mailState.messageID);
     else showMailReader(null);
   } catch (err) {
-    list.innerHTML = `<li class="meta">${escapeHtml(err.message)}</li>`;
+    list.innerHTML = `<li class="msg-empty meta">${escapeHtml(err.message)}</li>`;
   }
 }
 
@@ -1228,7 +1534,9 @@ function showMailReader(msg) {
   empty.classList.add("hidden");
   reader.classList.remove("hidden");
   $("mail-subject").textContent = msg.subject || "(no subject)";
-  $("mail-meta").textContent = [msg.from, msg.to, msg.date || msg.internal_date].filter(Boolean).join(" · ");
+  if ($("mail-from")) $("mail-from").textContent = msg.from || "—";
+  if ($("mail-to")) $("mail-to").textContent = msg.to || "—";
+  if ($("mail-date")) $("mail-date").textContent = mailDateFull(msg.date || msg.internal_date);
   const body = $("mail-body");
   if (msg.html) {
     body.innerHTML = msg.html;
@@ -1284,10 +1592,10 @@ $("btn-compose-send")?.addEventListener("click", async () => {
   }
 });
 $("btn-mail-reply")?.addEventListener("click", () => {
-  const meta = $("mail-meta")?.textContent || "";
-  const from = (meta.split(" · ")[0] || "").trim();
+  const fromRaw = $("mail-from")?.textContent || "";
+  const addr = (fromRaw.match(/<([^>]+)>/) || [])[1] || fromRaw.trim();
   $("compose-backdrop")?.classList.remove("hidden");
-  $("compose-to").value = from;
+  $("compose-to").value = addr === "—" ? "" : addr;
   $("compose-subject").value = "Re: " + ($("mail-subject")?.textContent || "");
   $("compose-body").value = "\n\n---\n" + ($("mail-body")?.textContent || "").slice(0, 2000);
 });
@@ -1303,38 +1611,151 @@ $("btn-mail-delete")?.addEventListener("click", async () => {
 });
 
 /* —— Calendar —— */
+function fmtCalWhen(v) {
+  if (!v) return "—";
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return String(v);
+  return d.toLocaleString(lang === "en" ? "en-GB" : "ru-RU", {
+    day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
+  });
+}
+
+function fmtCalShort(v) {
+  if (!v) return "—";
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return String(v).slice(5, 16);
+  return d.toLocaleString(lang === "en" ? "en-GB" : "ru-RU", {
+    day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+  });
+}
+
+function localInputToISO(v) {
+  if (!v) return "";
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return v;
+  return d.toISOString();
+}
+
+function showCalCompose(open) {
+  $("cal-backdrop")?.classList.toggle("hidden", !open);
+  if (open) {
+    setMsg($("cal-msg"), "");
+    $("cal-summary")?.focus();
+  }
+}
+
 async function refreshCalendar() {
+  const folders = $("cal-folder-list");
+  const list = $("cal-event-list");
+  if (!folders || !list) return;
   try {
     const data = await api("/api/v1/calendar/calendars");
-    const cals = data.calendars || [];
-    if (!calState.calendarID && cals.length) calState.calendarID = cals[0].id;
-    if (!calState.calendarID) {
-      $("cal-event-list").innerHTML = "<li class=\"meta\">No calendar</li>";
-      return;
+    calState.calendars = data.calendars || [];
+    if (!calState.calendarID && calState.calendars.length) {
+      calState.calendarID = calState.calendars[0].id;
     }
-    const ev = await api("/api/v1/calendar/calendars/" + encodeURIComponent(calState.calendarID) + "/events");
-    const events = ev.events || [];
-    $("cal-event-list").innerHTML = events.map((e) => `
-      <li>
-        <span>
-          <strong>${escapeHtml(e.summary || "")}</strong><br/>
-          <span class="meta">${escapeHtml(e.start || "")} → ${escapeHtml(e.end || "")}</span>
-        </span>
-        <button type="button" class="btn-secondary" data-cal-del="${escapeHtml(e.id)}">${t("delete")}</button>
-      </li>`).join("") || "<li class=\"meta\">—</li>";
-    $("cal-event-list").querySelectorAll("[data-cal-del]").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        try {
-          await api("/api/v1/calendar/events/" + encodeURIComponent(btn.dataset.calDel), { method: "DELETE" });
-          refreshCalendar();
-        } catch (err) { setMsg($("cal-msg"), err.message, "err"); }
+    folders.innerHTML = calState.calendars.map((c) => {
+      const label = c.display_name || c.name || c.id;
+      return `<li>
+        <button type="button" class="folder-btn${c.id === calState.calendarID ? " is-active" : ""}" data-cal="${escapeHtml(c.id)}">
+          <span>${escapeHtml(label)}</span>
+        </button>
+      </li>`;
+    }).join("") || `<li class="meta msg-empty">${escapeHtml(t("empty_calendar"))}</li>`;
+    folders.querySelectorAll("[data-cal]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        calState.calendarID = btn.dataset.cal;
+        calState.eventID = "";
+        folders.querySelectorAll(".folder-btn").forEach((b) => b.classList.toggle("is-active", b.dataset.cal === calState.calendarID));
+        loadCalEvents();
       });
     });
+    await loadCalEvents();
   } catch (err) {
     setMsg($("cal-msg"), err.message, "err");
   }
 }
+
+async function loadCalEvents() {
+  const list = $("cal-event-list");
+  const title = $("cal-folder-title");
+  if (!list || !calState.calendarID) {
+    if (list) list.innerHTML = `<li class="meta msg-empty">${escapeHtml(t("empty_calendar"))}</li>`;
+    showCalReader(null);
+    return;
+  }
+  const cal = calState.calendars.find((c) => c.id === calState.calendarID);
+  if (title) title.textContent = cal?.display_name || cal?.name || t("calendar_title");
+  try {
+    const ev = await api("/api/v1/calendar/calendars/" + encodeURIComponent(calState.calendarID) + "/events");
+    calState.events = (ev.events || []).slice().sort((a, b) => String(a.start || "").localeCompare(String(b.start || "")));
+    list.innerHTML = calState.events.map((e) => `
+      <li>
+        <button type="button" class="msg-item cal-item${e.id === calState.eventID ? " is-active" : ""}" data-ev="${escapeHtml(e.id)}">
+          <span class="msg-subject">${escapeHtml(e.summary || "—")}</span>
+          <span class="msg-date cal-start">${escapeHtml(fmtCalShort(e.start))}</span>
+          <span class="msg-date cal-end">${escapeHtml(fmtCalShort(e.end))}</span>
+        </button>
+      </li>`).join("") || `<li class="meta msg-empty">${escapeHtml(t("empty_calendar"))}</li>`;
+    list.querySelectorAll("[data-ev]").forEach((btn) => {
+      btn.addEventListener("click", () => openCalEvent(btn.dataset.ev));
+    });
+    if (calState.eventID) openCalEvent(calState.eventID);
+    else showCalReader(null);
+  } catch (err) {
+    setMsg($("cal-msg"), err.message, "err");
+  }
+}
+
+function showCalReader(ev) {
+  const empty = $("cal-empty");
+  const reader = $("cal-reader");
+  if (!empty || !reader) return;
+  if (!ev) {
+    empty.classList.remove("hidden");
+    reader.classList.add("hidden");
+    return;
+  }
+  empty.classList.add("hidden");
+  reader.classList.remove("hidden");
+  $("cal-subject").textContent = ev.summary || "—";
+  $("cal-read-start").textContent = fmtCalWhen(ev.start);
+  $("cal-read-end").textContent = fmtCalWhen(ev.end);
+  $("cal-read-location").textContent = ev.location || "—";
+  $("cal-read-body").textContent = ev.description || "";
+}
+
+async function openCalEvent(id) {
+  calState.eventID = id;
+  document.querySelectorAll(".cal-item").forEach((el) => {
+    el.classList.toggle("is-active", el.dataset.ev === id);
+  });
+  const cached = calState.events.find((e) => e.id === id);
+  if (cached) showCalReader(cached);
+  try {
+    const d = await api("/api/v1/calendar/events/" + encodeURIComponent(id));
+    showCalReader(d);
+  } catch (err) {
+    if (!cached) setMsg($("cal-msg"), err.message, "err");
+  }
+}
+
 $("btn-cal-refresh")?.addEventListener("click", () => refreshCalendar());
+$("btn-cal-new")?.addEventListener("click", () => showCalCompose(true));
+$("btn-cal-close")?.addEventListener("click", () => showCalCompose(false));
+$("cal-backdrop")?.addEventListener("click", (e) => {
+  if (e.target === $("cal-backdrop")) showCalCompose(false);
+});
+$("btn-cal-delete")?.addEventListener("click", async () => {
+  if (!calState.eventID || !confirm(t("delete") + "?")) return;
+  try {
+    await api("/api/v1/calendar/events/" + encodeURIComponent(calState.eventID), { method: "DELETE" });
+    calState.eventID = "";
+    await loadCalEvents();
+  } catch (err) {
+    setMsg($("cal-msg"), err.message, "err");
+  }
+});
 $("form-cal-event")?.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!calState.calendarID) {
@@ -1353,51 +1774,142 @@ $("form-cal-event")?.addEventListener("submit", async (e) => {
       method: "POST",
       body: JSON.stringify({
         summary: $("cal-summary").value,
-        start: $("cal-start").value,
-        end: $("cal-end").value,
+        location: $("cal-location")?.value || "",
+        description: $("cal-description")?.value || "",
+        start: localInputToISO($("cal-start").value),
+        end: localInputToISO($("cal-end").value),
       }),
     });
     setMsg($("cal-msg"), "OK", "ok");
     $("form-cal-event").reset();
-    refreshCalendar();
+    showCalCompose(false);
+    await loadCalEvents();
   } catch (err) {
     setMsg($("cal-msg"), err.message, "err");
   }
 });
 
 /* —— Contacts —— */
+function showContactCompose(open) {
+  $("contact-backdrop")?.classList.toggle("hidden", !open);
+  if (open) {
+    setMsg($("contact-msg"), "");
+    $("contact-fn")?.focus();
+  }
+}
+
+function showContactReader(c) {
+  const empty = $("contact-empty");
+  const reader = $("contact-reader");
+  if (!empty || !reader) return;
+  if (!c) {
+    empty.classList.remove("hidden");
+    reader.classList.add("hidden");
+    return;
+  }
+  empty.classList.add("hidden");
+  reader.classList.remove("hidden");
+  $("contact-subject").textContent = c.fn || "—";
+  $("contact-read-email").textContent = c.email || "—";
+  $("contact-read-tel").textContent = c.tel || "—";
+  $("contact-read-org").textContent = c.org || "—";
+  $("contact-read-note").textContent = c.note || "";
+}
+
 async function refreshContacts() {
+  const folders = $("contact-book-list");
+  const list = $("contact-list");
+  if (!folders || !list) return;
   try {
     const data = await api("/api/v1/contacts/books");
-    const books = data.books || [];
-    if (!contactState.bookID && books.length) contactState.bookID = books[0].id;
-    if (!contactState.bookID) {
-      $("contact-list").innerHTML = "<li class=\"meta\">No address book</li>";
-      return;
+    contactState.books = data.books || [];
+    if (!contactState.bookID && contactState.books.length) {
+      contactState.bookID = contactState.books[0].id;
     }
-    const cards = await api("/api/v1/contacts/books/" + encodeURIComponent(contactState.bookID) + "/cards");
-    const list = cards.cards || [];
-    $("contact-list").innerHTML = list.map((c) => `
-      <li>
-        <span>
-          <strong>${escapeHtml(c.fn || "")}</strong><br/>
-          <span class="meta">${escapeHtml(c.email || "")} ${escapeHtml(c.tel || "")}</span>
-        </span>
-        <button type="button" class="btn-secondary" data-card-del="${escapeHtml(c.id)}">${t("delete")}</button>
-      </li>`).join("") || "<li class=\"meta\">—</li>";
-    $("contact-list").querySelectorAll("[data-card-del]").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        try {
-          await api("/api/v1/contacts/cards/" + encodeURIComponent(btn.dataset.cardDel), { method: "DELETE" });
-          refreshContacts();
-        } catch (err) { setMsg($("contact-msg"), err.message, "err"); }
+    folders.innerHTML = contactState.books.map((b) => {
+      const label = b.display_name || b.name || b.id;
+      return `<li>
+        <button type="button" class="folder-btn${b.id === contactState.bookID ? " is-active" : ""}" data-book="${escapeHtml(b.id)}">
+          <span>${escapeHtml(label)}</span>
+        </button>
+      </li>`;
+    }).join("") || `<li class="meta msg-empty">${escapeHtml(t("empty_contacts"))}</li>`;
+    folders.querySelectorAll("[data-book]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        contactState.bookID = btn.dataset.book;
+        contactState.cardID = "";
+        folders.querySelectorAll(".folder-btn").forEach((b) => b.classList.toggle("is-active", b.dataset.book === contactState.bookID));
+        loadContactCards();
       });
     });
+    await loadContactCards();
   } catch (err) {
     setMsg($("contact-msg"), err.message, "err");
   }
 }
+
+async function loadContactCards() {
+  const list = $("contact-list");
+  const title = $("contact-book-title");
+  if (!list || !contactState.bookID) {
+    if (list) list.innerHTML = `<li class="meta msg-empty">${escapeHtml(t("empty_contacts"))}</li>`;
+    showContactReader(null);
+    return;
+  }
+  const book = contactState.books.find((b) => b.id === contactState.bookID);
+  if (title) title.textContent = book?.display_name || book?.name || t("contacts_title");
+  try {
+    const cards = await api("/api/v1/contacts/books/" + encodeURIComponent(contactState.bookID) + "/cards");
+    contactState.cards = (cards.cards || []).slice().sort((a, b) => String(a.fn || "").localeCompare(String(b.fn || ""), lang));
+    list.innerHTML = contactState.cards.map((c) => `
+      <li>
+        <button type="button" class="msg-item contact-item${c.id === contactState.cardID ? " is-active" : ""}" data-card="${escapeHtml(c.id)}">
+          <span class="msg-from">${escapeHtml(c.fn || "—")}</span>
+          <span class="msg-subject">${escapeHtml(c.email || "—")}</span>
+          <span class="msg-date">${escapeHtml(c.tel || "—")}</span>
+        </button>
+      </li>`).join("") || `<li class="meta msg-empty">${escapeHtml(t("empty_contacts"))}</li>`;
+    list.querySelectorAll("[data-card]").forEach((btn) => {
+      btn.addEventListener("click", () => openContactCard(btn.dataset.card));
+    });
+    if (contactState.cardID) openContactCard(contactState.cardID);
+    else showContactReader(null);
+  } catch (err) {
+    setMsg($("contact-msg"), err.message, "err");
+  }
+}
+
+async function openContactCard(id) {
+  contactState.cardID = id;
+  document.querySelectorAll(".contact-item").forEach((el) => {
+    el.classList.toggle("is-active", el.dataset.card === id);
+  });
+  const cached = contactState.cards.find((c) => c.id === id);
+  if (cached) showContactReader(cached);
+  try {
+    const d = await api("/api/v1/contacts/cards/" + encodeURIComponent(id));
+    showContactReader(d);
+  } catch (err) {
+    if (!cached) setMsg($("contact-msg"), err.message, "err");
+  }
+}
+
 $("btn-contacts-refresh")?.addEventListener("click", () => refreshContacts());
+$("btn-contact-new")?.addEventListener("click", () => showContactCompose(true));
+$("btn-contact-close")?.addEventListener("click", () => showContactCompose(false));
+$("contact-backdrop")?.addEventListener("click", (e) => {
+  if (e.target === $("contact-backdrop")) showContactCompose(false);
+});
+$("btn-contact-delete")?.addEventListener("click", async () => {
+  if (!contactState.cardID || !confirm(t("delete") + "?")) return;
+  try {
+    await api("/api/v1/contacts/cards/" + encodeURIComponent(contactState.cardID), { method: "DELETE" });
+    contactState.cardID = "";
+    await loadContactCards();
+  } catch (err) {
+    setMsg($("contact-msg"), err.message, "err");
+  }
+});
 $("form-contact")?.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!contactState.bookID) {
@@ -1418,11 +1930,14 @@ $("form-contact")?.addEventListener("submit", async (e) => {
         fn: $("contact-fn").value,
         email: $("contact-email").value,
         tel: $("contact-tel").value,
+        org: $("contact-org")?.value || "",
+        note: $("contact-note")?.value || "",
       }),
     });
     setMsg($("contact-msg"), "OK", "ok");
     $("form-contact").reset();
-    refreshContacts();
+    showContactCompose(false);
+    await loadContactCards();
   } catch (err) {
     setMsg($("contact-msg"), err.message, "err");
   }
@@ -1434,6 +1949,51 @@ function joinPath(base, name) {
   return base.replace(/\/+$/, "") + "/" + name;
 }
 
+function showFileReader(entry) {
+  const empty = $("files-empty");
+  const reader = $("files-reader");
+  if (!empty || !reader) return;
+  if (!entry) {
+    empty.classList.remove("hidden");
+    reader.classList.add("hidden");
+    return;
+  }
+  empty.classList.add("hidden");
+  reader.classList.remove("hidden");
+  $("files-subject").textContent = entry.name || "—";
+  $("files-read-path").textContent = "/" + joinPath(filesState.path, entry.name);
+  $("files-read-size").textContent = entry.is_dir ? "—" : fmtBytes(entry.size || 0);
+  $("files-read-type").textContent = entry.is_dir ? t("type_folder") : t("type_file");
+  $("btn-files-download")?.classList.toggle("hidden", !!entry.is_dir);
+  $("btn-files-open")?.classList.toggle("hidden", !entry.is_dir);
+}
+
+function selectFileEntry(name) {
+  const entry = filesState.entries.find((e) => e.name === name) || null;
+  filesState.selected = entry;
+  document.querySelectorAll(".file-item").forEach((el) => {
+    el.classList.toggle("is-active", el.dataset.name === name);
+  });
+  showFileReader(entry);
+}
+
+async function downloadFile(name) {
+  const path = joinPath(filesState.path, name);
+  const headers = {};
+  if (state.tokens?.access_token) headers.Authorization = "Bearer " + state.tokens.access_token;
+  const res = await fetch("/api/v1/files/content?path=" + encodeURIComponent(path), { headers });
+  if (!res.ok) {
+    setMsg($("files-msg"), "download failed", "err");
+    return;
+  }
+  const blob = await res.blob();
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
 async function refreshFiles() {
   const list = $("files-list");
   if (!list) return;
@@ -1441,78 +2001,86 @@ async function refreshFiles() {
   try {
     const q = filesState.path ? "?path=" + encodeURIComponent(filesState.path) : "";
     const data = await api("/api/v1/files" + q);
-    const entries = data.entries || [];
+    filesState.entries = data.entries || [];
     let html = "";
     if (filesState.path) {
-      html += `<li><button type="button" class="btn-secondary" id="files-up">..</button></li>`;
+      html += `<li>
+        <button type="button" class="msg-item file-item is-dir" id="files-up">
+          <span class="msg-subject">..</span>
+          <span class="msg-date">—</span>
+          <span class="msg-date file-type">${escapeHtml(t("type_folder"))}</span>
+        </button>
+      </li>`;
     }
-    html += entries.map((e) => `
+    html += filesState.entries.map((e) => `
       <li>
-        <span>
-          <strong>${escapeHtml(e.name)}</strong>
-          <span class="meta"> · ${e.is_dir ? "dir" : fmtBytes(e.size || 0)}</span>
-        </span>
-        <span class="actions">
-          ${e.is_dir
-            ? `<button type="button" class="btn-secondary" data-dir="${escapeHtml(e.name)}">Open</button>`
-            : `<button type="button" class="btn-secondary" data-dl="${escapeHtml(e.name)}">Download</button>`}
-          <button type="button" class="btn-secondary" data-rm="${escapeHtml(e.name)}">${t("delete")}</button>
-        </span>
-      </li>`).join("") || (!filesState.path ? "<li class=\"meta\">—</li>" : "");
+        <button type="button" class="msg-item file-item${e.is_dir ? " is-dir" : ""}${filesState.selected?.name === e.name ? " is-active" : ""}" data-name="${escapeHtml(e.name)}">
+          <span class="msg-subject">${escapeHtml(e.name)}</span>
+          <span class="msg-date">${e.is_dir ? "—" : escapeHtml(fmtBytes(e.size || 0))}</span>
+          <span class="msg-date file-type">${escapeHtml(e.is_dir ? t("type_folder") : t("type_file"))}</span>
+        </button>
+      </li>`).join("") || (!filesState.path ? `<li class="meta msg-empty">${escapeHtml(t("empty_files"))}</li>` : "");
     list.innerHTML = html;
     $("files-up")?.addEventListener("click", () => {
       const parts = filesState.path.split("/").filter(Boolean);
       parts.pop();
       filesState.path = parts.join("/");
+      filesState.selected = null;
       refreshFiles();
     });
-    list.querySelectorAll("[data-dir]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        filesState.path = joinPath(filesState.path, btn.dataset.dir);
-        refreshFiles();
-      });
-    });
-    list.querySelectorAll("[data-dl]").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        const path = joinPath(filesState.path, btn.dataset.dl);
-        const headers = {};
-        if (state.tokens?.access_token) headers.Authorization = "Bearer " + state.tokens.access_token;
-        const res = await fetch("/api/v1/files/content?path=" + encodeURIComponent(path), { headers });
-        if (!res.ok) { setMsg($("files-msg"), "download failed", "err"); return; }
-        const blob = await res.blob();
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = btn.dataset.dl;
-        a.click();
-        URL.revokeObjectURL(a.href);
-      });
-    });
-    list.querySelectorAll("[data-rm]").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        if (!confirm("Delete " + btn.dataset.rm + "?")) return;
-        try {
-          await api("/api/v1/files?path=" + encodeURIComponent(joinPath(filesState.path, btn.dataset.rm)), {
-            method: "DELETE",
-          });
+    list.querySelectorAll("[data-name]").forEach((btn) => {
+      btn.addEventListener("click", () => selectFileEntry(btn.dataset.name));
+      btn.addEventListener("dblclick", () => {
+        const entry = filesState.entries.find((e) => e.name === btn.dataset.name);
+        if (entry?.is_dir) {
+          filesState.path = joinPath(filesState.path, entry.name);
+          filesState.selected = null;
           refreshFiles();
-        } catch (err) { setMsg($("files-msg"), err.message, "err"); }
+        } else if (entry) {
+          downloadFile(entry.name);
+        }
       });
     });
+    if (filesState.selected) {
+      const still = filesState.entries.find((e) => e.name === filesState.selected.name);
+      showFileReader(still || null);
+      if (!still) filesState.selected = null;
+    } else {
+      showFileReader(null);
+    }
   } catch (err) {
     setMsg($("files-msg"), err.message, "err");
   }
 }
 $("btn-files-refresh")?.addEventListener("click", () => refreshFiles());
-$("form-mkdir")?.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const name = ($("mkdir-name").value || "").trim();
-  if (!name) return;
+$("btn-files-mkdir")?.addEventListener("click", async () => {
+  const name = prompt(t("mkdir"));
+  if (!name || !name.trim()) return;
   try {
     await api("/api/v1/files/mkdir", {
       method: "POST",
-      body: JSON.stringify({ path: joinPath(filesState.path, name) }),
+      body: JSON.stringify({ path: joinPath(filesState.path, name.trim()) }),
     });
-    $("mkdir-name").value = "";
+    refreshFiles();
+  } catch (err) { setMsg($("files-msg"), err.message, "err"); }
+});
+$("btn-files-download")?.addEventListener("click", () => {
+  if (filesState.selected && !filesState.selected.is_dir) downloadFile(filesState.selected.name);
+});
+$("btn-files-open")?.addEventListener("click", () => {
+  if (!filesState.selected?.is_dir) return;
+  filesState.path = joinPath(filesState.path, filesState.selected.name);
+  filesState.selected = null;
+  refreshFiles();
+});
+$("btn-files-delete")?.addEventListener("click", async () => {
+  if (!filesState.selected) return;
+  if (!confirm(t("delete") + " " + filesState.selected.name + "?")) return;
+  try {
+    await api("/api/v1/files?path=" + encodeURIComponent(joinPath(filesState.path, filesState.selected.name)), {
+      method: "DELETE",
+    });
+    filesState.selected = null;
     refreshFiles();
   } catch (err) { setMsg($("files-msg"), err.message, "err"); }
 });
@@ -1551,9 +2119,21 @@ document.addEventListener("keydown", (e) => {
 $("lang-select")?.addEventListener("change", (e) => applyLang(e.target.value));
 applyLang(lang);
 
-// Restore session
-try {
-  const tok = JSON.parse(localStorage.getItem("tayga.tokens") || "null");
-  const email = localStorage.getItem("tayga.email") || "";
-  if (tok?.access_token) enterAccount(tok, email);
-} catch {}
+// Restore session — invalid/expired tokens send user back to login
+(async function restoreSession() {
+  try {
+    const tok = JSON.parse(localStorage.getItem("tayga.tokens") || "null");
+    const email = localStorage.getItem("tayga.email") || "";
+    if (!tok?.access_token) {
+      show("view-login");
+      return;
+    }
+    state.tokens = tok;
+    state.email = email;
+    $("auth-layout")?.classList.add("hidden");
+    await api("/api/v1/me");
+    enterAccount(state.tokens, email || state.email);
+  } catch {
+    forceLogin(t("session_expired"));
+  }
+})();
