@@ -262,6 +262,10 @@ type LDAPGroupsConfig struct {
 	Filter       string   `yaml:"filter"`        // {dn} placeholder (search mode)
 	AttrName     string   `yaml:"attr_name"`     // group CN attr (default cn)
 	AdminGroups  []string `yaml:"admin_groups"`  // DN or CN → role admin
+	Nested       bool     `yaml:"nested"`        // expand nested/transitive membership
+	NestedMode   string   `yaml:"nested_mode"`   // walk | chain (AD matching rule)
+	MaxDepth     int      `yaml:"max_depth"`     // walk depth cap (default 8)
+	MemberAttr   string   `yaml:"member_attr"`   // walk: parent search attr (default member)
 }
 
 // LDAPSyncConfig periodically provisions/updates users from LDAP groups.
@@ -565,6 +569,22 @@ func (c *Config) Validate() error {
 		}
 		if d.Groups.Mode == "search" && d.Groups.Filter == "" {
 			d.Groups.Filter = "(&(objectClass=groupOfNames)(member={dn}))"
+		}
+		switch strings.ToLower(strings.TrimSpace(d.Groups.NestedMode)) {
+		case "", "walk", "chain":
+			if d.Groups.NestedMode == "" {
+				d.Groups.NestedMode = "walk"
+			} else {
+				d.Groups.NestedMode = strings.ToLower(strings.TrimSpace(d.Groups.NestedMode))
+			}
+		default:
+			return fmt.Errorf("ldap.domains.%s.groups.nested_mode must be walk or chain", name)
+		}
+		if d.Groups.MaxDepth <= 0 {
+			d.Groups.MaxDepth = 8
+		}
+		if d.Groups.MemberAttr == "" {
+			d.Groups.MemberAttr = "member"
 		}
 		if d.Sync.MemberAttr == "" {
 			d.Sync.MemberAttr = "member"

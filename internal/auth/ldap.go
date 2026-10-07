@@ -83,9 +83,9 @@ func (d *Directory) Authenticate(ctx context.Context, domain, username, password
 		return nil, err
 	}
 
-	groups := entry.Groups
+	var groups []string
 	mode := strings.ToLower(strings.TrimSpace(dc.Groups.Mode))
-	if mode == "search" || (mode == "memberof" && len(groups) == 0) {
+	if mode == "memberof" || mode == "search" {
 		if g, gerr := d.resolveGroups(ctx, dc, entry); gerr == nil {
 			groups = g
 		}
