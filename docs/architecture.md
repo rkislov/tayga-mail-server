@@ -120,12 +120,16 @@ Embedded at `/` (`internal/frontend/dist`): sign-in, TOTP + WebAuthn MFA, passke
 
 Prometheus: `/metrics` includes `tayga_*` gauges (users, messages, bytes, …).
 
-CLI backup:
+CLI backup / restore:
 
 ```bash
 ./tayga-mail backup -config configs/tayga.example.yaml -out backup.tar.gz
-./tayga-mail backup -config configs/tayga.example.yaml -out backup.tar.gz -tenant <uuid> -include-mail=false
+./tayga-mail restore -config configs/tayga.example.yaml -in backup.tar.gz
 ```
+
+Admin restore: `POST /api/v1/admin/backup/restore` (multipart `file`).
+
+HA / ops: see [docs/ha.md](ha.md).
 
 Admins: `http.admins` email list (default `admin@example.com`).
 
@@ -137,4 +141,4 @@ Admins: `http.admins` email list (default `admin@example.com`).
 
 ## Next milestones
 
-Monitoring dashboard + Prometheus `tayga_*` metrics + tenant backup (UI/API/CLI). Next: restore tooling, HA notes.
+Backup restore (CLI/UI/API) + HA ops notes. Next: optional object-store maildir, cross-node IDLE.

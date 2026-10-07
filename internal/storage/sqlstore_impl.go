@@ -63,10 +63,19 @@ func (s *Store) rebind(query string) string {
 }
 
 func (s *Store) CreateTenant(ctx context.Context, name string) (*Tenant, error) {
+	return s.InsertTenant(ctx, &Tenant{Name: name})
+}
+
+func (s *Store) InsertTenant(ctx context.Context, t *Tenant) (*Tenant, error) {
 	now := time.Now().UTC()
-	t := &Tenant{ID: NewID(), Name: name, CreatedAt: now}
+	if t.ID == "" {
+		t.ID = NewID()
+	}
+	if t.CreatedAt.IsZero() {
+		t.CreatedAt = now
+	}
 	q := s.rebind(`INSERT INTO tenants(id, name, created_at) VALUES (?, ?, ?)`)
-	if _, err := s.db.ExecContext(ctx, q, t.ID, name, now); err != nil {
+	if _, err := s.db.ExecContext(ctx, q, t.ID, t.Name, t.CreatedAt); err != nil {
 		return nil, mapErr(err)
 	}
 	return t, nil
@@ -111,11 +120,30 @@ func (s *Store) ListTenants(ctx context.Context) ([]*Tenant, error) {
 }
 
 func (s *Store) CreateDomain(ctx context.Context, tenantID, name string) (*Domain, error) {
+	return s.InsertDomain(ctx, &Domain{TenantID: tenantID, Name: name})
+}
+
+func (s *Store) InsertDomain(ctx context.Context, d *Domain) (*Domain, error) {
 	now := time.Now().UTC()
-	name = strings.ToLower(name)
-	d := &Domain{ID: NewID(), TenantID: tenantID, Name: name, CreatedAt: now}
+	d.Name = strings.ToLower(d.Name)
+	if d.ID == "" {
+		d.ID = NewID()
+	}
+	if d.CreatedAt.IsZero() {
+		d.CreatedAt = now
+	}
 	q := s.rebind(`INSERT INTO domains(id, tenant_id, name, created_at) VALUES (?, ?, ?, ?)`)
-	if _, err := s.db.ExecContext(ctx, q, d.ID, tenantID, name, now); err != nil {
+	if _, err := s.db.ExecContext(ctx, q, d.ID, d.TenantID, d.Name, d.CreatedAt); err != nil {
+		return nil, mapErr(err)
+	}
+	return d, nil
+}
+
+func (s *Store) GetDomainByID(ctx context.Context, id string) (*Domain, error) {
+	d := &Domain{}
+	q := s.rebind(`SELECT id, tenant_id, name, created_at FROM domains WHERE id = ?`)
+	err := s.db.QueryRowContext(ctx, q, id).Scan(&d.ID, &d.TenantID, &d.Name, &d.CreatedAt)
+	if err != nil {
 		return nil, mapErr(err)
 	}
 	return d, nil
