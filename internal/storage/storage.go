@@ -90,6 +90,11 @@ type Driver interface {
 	DeleteAddressObject(ctx context.Context, addressBookID, hrefName string) error
 	EnsureDAVDefaults(ctx context.Context, userID string) error
 
+	EnsureFlowSyncDevice(ctx context.Context, userID, deviceID, deviceType string) (*FlowSyncDevice, error)
+	SetFlowSyncPolicyKey(ctx context.Context, deviceRowID, policyKey string) error
+	GetFlowSyncSyncKey(ctx context.Context, deviceRowID, collectionID string) (string, error)
+	SetFlowSyncSyncKey(ctx context.Context, deviceRowID, collectionID, syncKey string) error
+
 	DB() *sql.DB
 }
 

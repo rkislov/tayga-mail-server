@@ -1,4 +1,4 @@
-# Tayga Mail Server — Architecture (Phase 1–6)
+# Tayga Mail Server — Architecture (Phase 1–7)
 
 ## Overview
 
@@ -7,74 +7,57 @@ TMS is a single-binary mail server (`tayga-mail`) built in Go with `CGO_ENABLED=
 ```
 cmd/tayga
   ├─ config (YAML)
-  ├─ storage (sqlite | postgres; UUID PKs)
+  ├─ storage (sqlite | postgres; UUID PKs everywhere)
   ├─ auth (local Argon2id; LDAP hybrid; OIDC; TOTP MFA; opaque tokens)
   ├─ mailstore (Maildir++)
   ├─ smtp / imap / pop3 / managesieve
   ├─ sieve (foxcpp/go-sieve on delivery)
   ├─ dav (CalDAV + CardDAV via emersion/go-webdav)
-  └─ httpapi (/healthz, /readyz, /metrics, /api/v1/auth/*, /dav/*, embedded UI)
+  ├─ flowsync (proprietary Tayga sync engine — ActiveSync/EWS wire)
+  └─ httpapi (/healthz, /readyz, /metrics, /api/v1/auth/*, /dav/*, FlowSync, UI)
 ```
 
 ## Storage
 
-- All entity primary keys and FKs are UUID strings (`TEXT`); IMAP `uid` / `uidnext` / `uidvalidity` stay numeric protocol counters.
+- **All entity primary keys and FKs are UUID strings (`TEXT`)**, including FlowSync device rows, policy keys, and sync-state tokens. IMAP `uid` / `uidnext` / `uidvalidity` stay numeric protocol counters.
 - Shared schema with `tenant_id` isolation.
-- Message bodies on disk (Maildir++); metadata in `messages` (UID, flags, path).
-- User mailbox quota: `users.quota_bytes` (0 = unlimited), enforced on SMTP/IMAP/Sieve writes.
-- MFA: `user_mfa`, `mfa_challenges`, `oauth_tokens` (migration `002_mfa_oauth`).
-- CalDAV/CardDAV: `calendars`, `calendar_objects`, `addressbooks`, `address_objects` (migration `003_dav`).
+- Migrations: `001_init`, `002_mfa_oauth`, `003_dav`, `004_flowsync`.
 
 ## Auth
 
-- **Local**: Argon2id password hashes.
-- **LDAP hybrid** (`ldap.domains.<domain>`): service bind → search → user bind; JIT creates `auth_source=ldap` users.
-- **OIDC** (`oidc.domains.<domain>`): authorization-code flow; JIT creates `auth_source=oidc` users.
-- **MFA (TOTP)**: enroll via HTTP API; backup codes (hashed). When enabled and `mfa.require_token_for_mfa_users`, password auth on protocols is rejected.
-- **Tokens**: opaque access/refresh pairs; use with SASL `XOAUTH2` / `OAUTHBEARER` on IMAP/SMTP and Bearer on DAV.
-
-### HTTP auth API
-
-| Method | Path | Purpose |
-|--------|------|---------|
-| POST | `/api/v1/auth/login` | password → tokens or MFA challenge |
-| POST | `/api/v1/auth/mfa/verify` | challenge + TOTP → tokens |
-| POST | `/api/v1/auth/token` | refresh_token grant |
-| POST | `/api/v1/auth/mfa/setup` | begin TOTP (Bearer) |
-| POST | `/api/v1/auth/mfa/confirm` | enable TOTP (Bearer) |
-| POST | `/api/v1/auth/mfa/disable` | disable TOTP (Bearer) |
-| GET | `/api/v1/auth/oidc/{domain}/start` | redirect to IdP |
-| GET | `/api/v1/auth/oidc/callback` | code exchange → tokens |
+- Local Argon2id; LDAP hybrid; OIDC; TOTP MFA; opaque Bearer tokens for IMAP/SMTP/DAV/FlowSync.
 
 ## CalDAV / CardDAV
 
 | URL | Purpose |
 |-----|---------|
-| `/.well-known/caldav` | redirect → `/dav/cal/` |
-| `/.well-known/carddav` | redirect → `/dav/card/` |
-| `/dav/cal/{email}/` | principal |
-| `/dav/cal/{email}/calendars/{name}/` | calendar collection |
-| `/dav/cal/{email}/calendars/{name}/{uid}.ics` | event/todo |
-| `/dav/card/{email}/` | principal |
-| `/dav/card/{email}/addressbooks/{name}/` | address book |
-| `/dav/card/{email}/addressbooks/{name}/{uid}.vcf` | contact |
+| `/.well-known/caldav` | → `/dav/cal/` |
+| `/.well-known/carddav` | → `/dav/card/` |
+| `/dav/cal/{email}/…` | calendars (UUID-backed objects) |
+| `/dav/card/{email}/…` | address books |
 
-Auth: HTTP Basic or Bearer (opaque access token). Seed creates default calendar + address book.
+## FlowSync (proprietary)
+
+Tayga's in-house sync engine. Wire-compatible with ActiveSync-class mobile clients and EWS-class desktop clients. **Not** a fork of Z-Push/SOGo/OpenChange — original Tayga code. Responses carry `X-FlowSync: Tayga-Proprietary`.
+
+| Endpoint | Role |
+|----------|------|
+| `/Autodiscover/Autodiscover.xml` | POX Autodiscover → FlowSync URLs |
+| `/autodiscover/autodiscover.json/…` | JSON Autodiscover |
+| `/Microsoft-Server-ActiveSync` | FolderSync, Sync, Ping, Provision, GetItemEstimate |
+| `/EWS/Exchange.asmx` | FindItem, GetItem, SyncFolderItems, FindFolder |
+
+Collection/item IDs exposed to clients are **UUIDs** (mailbox / message / device / policy).
+
+Enable: `flowsync.enabled: true` (default).
 
 ## Protocols (dev ports)
 
-| Protocol    | Config                 | Default   |
-|-------------|------------------------|-----------|
-| SMTP MX     | `smtp.mx`              | `:1025`   |
-| Submission  | `smtp.submission`      | `:1587`   |
-| IMAP        | `imap.listen`          | `:1143`   |
-| POP3        | `pop3.listen`          | `:1110`   |
-| ManageSieve | `managesieve.listen`   | `:14190`  |
-| HTTP / DAV  | `http.listen`          | `:8080`   |
-
-## Sieve MVP
-
-Active script on SMTP local delivery; ManageSieve on `:14190`.
+| Protocol | Default |
+|----------|---------|
+| SMTP MX / submission | `:1025` / `:1587` |
+| IMAP / POP3 / ManageSieve | `:1143` / `:1110` / `:14190` |
+| HTTP / DAV / FlowSync | `:8080` |
 
 ## Build
 
@@ -83,10 +66,8 @@ CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o tayga-mail ./cmd/tayga
 ./tayga-mail -config configs/tayga.example.yaml
 ```
 
-Seed user: `admin@example.com` / `changeme`
-
-**Note:** UUID schema is not compatible with older integer-ID databases — delete the SQLite file (or migrate manually) before upgrading.
+Seed: `admin@example.com` / `changeme`. UUID schema requires a fresh DB when upgrading from integer IDs.
 
 ## Next milestones
 
-WebAuthn MFA → ActiveSync/EWS → …
+WebAuthn MFA → richer FlowSync (WBXML, calendar/contacts sync, policies) → …

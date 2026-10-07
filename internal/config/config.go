@@ -20,6 +20,7 @@ type Config struct {
 	LDAP        LDAPConfig        `yaml:"ldap"`
 	OIDC        OIDCConfig        `yaml:"oidc"`
 	MFA         MFAConfig         `yaml:"mfa"`
+	FlowSync    FlowSyncConfig    `yaml:"flowsync"`
 	TLS         TLSConfig         `yaml:"tls"`
 	HTTP        HTTPConfig        `yaml:"http"`
 	Seed        SeedConfig        `yaml:"seed"`
@@ -113,6 +114,12 @@ type MFAConfig struct {
 	RequireTokenForMFAUsers bool `yaml:"require_token_for_mfa_users"`
 }
 
+// FlowSyncConfig controls Tayga's proprietary FlowSync engine
+// (ActiveSync- and EWS-compatible wire protocols).
+type FlowSyncConfig struct {
+	Enabled bool `yaml:"enabled"`
+}
+
 type TLSConfig struct {
 	CertFile string `yaml:"cert_file"`
 	KeyFile  string `yaml:"key_file"`
@@ -186,8 +193,9 @@ func Default() *Config {
 			ChallengeTTL:            5 * time.Minute,
 			RequireTokenForMFAUsers: true,
 		},
-		HTTP: HTTPConfig{Listen: ":8080", PublicURL: "http://127.0.0.1:8080"},
-		Log:  LogConfig{Level: "info", Format: "json"},
+		FlowSync: FlowSyncConfig{Enabled: true},
+		HTTP:     HTTPConfig{Listen: ":8080", PublicURL: "http://127.0.0.1:8080"},
+		Log:      LogConfig{Level: "info", Format: "json"},
 	}
 }
 
