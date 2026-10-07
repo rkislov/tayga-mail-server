@@ -10,6 +10,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/tayga/tms/internal/auth"
+	"github.com/tayga/tms/internal/dav"
 	"github.com/tayga/tms/internal/frontend"
 	"github.com/tayga/tms/internal/storage"
 )
@@ -40,6 +41,8 @@ func (s *Server) Start(ctx context.Context) error {
 	mux.HandleFunc("/api/v1/auth/mfa/confirm", s.handleMFAConfirm)
 	mux.HandleFunc("/api/v1/auth/mfa/disable", s.handleMFADisable)
 	mux.HandleFunc("/api/v1/auth/oidc/", s.handleOIDCRoutes)
+
+	dav.Mount(mux, s.store, s.authn)
 
 	mux.Handle("/", frontend.Handler())
 

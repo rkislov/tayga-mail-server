@@ -9,7 +9,7 @@ import (
 
 // UserMFA holds TOTP enrollment state for a user.
 type UserMFA struct {
-	UserID      int64
+	UserID      string
 	TOTPSecret  string
 	TOTPEnabled bool
 	BackupCodes string // JSON array of hashed codes
@@ -18,8 +18,8 @@ type UserMFA struct {
 
 // OAuthToken is an opaque access/refresh token pair.
 type OAuthToken struct {
-	ID               int64
-	UserID           int64
+	ID               string
+	UserID           string
 	AccessToken      string
 	RefreshToken     string
 	ExpiresAt        time.Time
@@ -31,12 +31,12 @@ type OAuthToken struct {
 // when TOTP is required.
 type MFAChallenge struct {
 	Token     string
-	UserID    int64
+	UserID    string
 	ExpiresAt time.Time
 	CreatedAt time.Time
 }
 
-func (s *Store) GetUserMFA(ctx context.Context, userID int64) (*UserMFA, error) {
+func (s *Store) GetUserMFA(ctx context.Context, userID string) (*UserMFA, error) {
 	q := s.rebind(`SELECT user_id, totp_secret, totp_enabled, backup_codes, updated_at FROM user_mfa WHERE user_id = ?`)
 	m := &UserMFA{}
 	var enabled any
@@ -85,22 +85,12 @@ func (s *Store) UpsertUserMFA(ctx context.Context, m *UserMFA) error {
 func (s *Store) CreateOAuthToken(ctx context.Context, t *OAuthToken) (*OAuthToken, error) {
 	now := time.Now().UTC()
 	t.CreatedAt = now
-	if s.dialect == DialectPostgres {
-		err := s.db.QueryRowContext(ctx, `
-			INSERT INTO oauth_tokens (user_id, access_token, refresh_token, expires_at, refresh_expires_at, created_at)
-			VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-			t.UserID, t.AccessToken, t.RefreshToken, t.ExpiresAt, t.RefreshExpiresAt, now,
-		).Scan(&t.ID)
-		return t, err
+	if t.ID == "" {
+		t.ID = NewID()
 	}
-	res, err := s.db.ExecContext(ctx, `
-		INSERT INTO oauth_tokens (user_id, access_token, refresh_token, expires_at, refresh_expires_at, created_at)
-		VALUES (?, ?, ?, ?, ?, ?)`,
-		t.UserID, t.AccessToken, t.RefreshToken, t.ExpiresAt, t.RefreshExpiresAt, now)
-	if err != nil {
-		return nil, err
-	}
-	t.ID, err = res.LastInsertId()
+	q := s.rebind(`INSERT INTO oauth_tokens (id, user_id, access_token, refresh_token, expires_at, refresh_expires_at, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`)
+	_, err := s.db.ExecContext(ctx, q, t.ID, t.UserID, t.AccessToken, t.RefreshToken, t.ExpiresAt, t.RefreshExpiresAt, now)
 	return t, err
 }
 
@@ -116,13 +106,13 @@ func (s *Store) GetOAuthTokenByRefresh(ctx context.Context, refreshToken string)
 	return s.scanOAuthToken(s.db.QueryRowContext(ctx, q, refreshToken))
 }
 
-func (s *Store) DeleteOAuthToken(ctx context.Context, id int64) error {
+func (s *Store) DeleteOAuthToken(ctx context.Context, id string) error {
 	q := s.rebind(`DELETE FROM oauth_tokens WHERE id = ?`)
 	_, err := s.db.ExecContext(ctx, q, id)
 	return err
 }
 
-func (s *Store) DeleteOAuthTokensByUser(ctx context.Context, userID int64) error {
+func (s *Store) DeleteOAuthTokensByUser(ctx context.Context, userID string) error {
 	q := s.rebind(`DELETE FROM oauth_tokens WHERE user_id = ?`)
 	_, err := s.db.ExecContext(ctx, q, userID)
 	return err

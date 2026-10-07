@@ -42,7 +42,10 @@ func Run(ctx context.Context, cfg config.SeedConfig, store storage.Driver, hashe
 	}
 
 	email := strings.ToLower(cfg.Email)
-	if _, err := store.GetUserByEmail(ctx, email); err == nil {
+	if existing, err := store.GetUserByEmail(ctx, email); err == nil {
+		if err := store.EnsureDAVDefaults(ctx, existing.ID); err != nil {
+			return err
+		}
 		log.Info("seed user already exists", "email", email)
 		return nil
 	} else if !errors.Is(err, storage.ErrNotFound) {
@@ -81,6 +84,9 @@ func Run(ctx context.Context, cfg config.SeedConfig, store storage.Driver, hashe
 		return err
 	}
 	if _, err := store.EnsureMailbox(ctx, u.ID, "INBOX", root); err != nil {
+		return err
+	}
+	if err := store.EnsureDAVDefaults(ctx, u.ID); err != nil {
 		return err
 	}
 
