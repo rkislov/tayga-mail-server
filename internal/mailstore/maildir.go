@@ -1,20 +1,38 @@
 package mailstore
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 )
 
-// Store manages Maildir++ layouts on disk.
+// Store manages Maildir++ layouts on disk, optionally mirrored to an object store.
 type Store struct {
 	Root string
+	blob Blob
+	log  *slog.Logger
 }
 
 func New(root string) *Store {
 	return &Store{Root: root}
+}
+
+// SetObjectStore attaches a durable blob backend. Local maildir remains the hot cache;
+// Deliver/Delete/MoveToCur sync keys, and Read falls back to the blob on cache miss.
+func (s *Store) SetObjectStore(b Blob, log *slog.Logger) {
+	if s == nil {
+		return
+	}
+	s.blob = b
+	if log == nil {
+		log = slog.Default()
+	}
+	s.log = log
 }
 
 // UserRoot returns the Maildir++ base path for a user email.
@@ -90,12 +108,32 @@ func (s *Store) Deliver(email, folder string, data []byte) (relPath string, size
 	if err != nil {
 		rel = newPath
 	}
+	s.blobPut(rel, data)
 	return rel, int64(len(data)), nil
 }
 
 // Read returns the raw message bytes for a relative path under the root.
+// On local miss, tries the object store and repopulates the cache.
 func (s *Store) Read(relPath string) ([]byte, error) {
-	return os.ReadFile(s.Abs(relPath))
+	data, err := os.ReadFile(s.Abs(relPath))
+	if err == nil {
+		return data, nil
+	}
+	if !os.IsNotExist(err) || s.blob == nil {
+		return nil, err
+	}
+	data, berr := s.blob.Get(context.Background(), blobKey(relPath))
+	if berr != nil {
+		if errors.Is(berr, errBlobNotFound) {
+			return nil, err
+		}
+		return nil, berr
+	}
+	abs := s.Abs(relPath)
+	if mkErr := os.MkdirAll(filepath.Dir(abs), 0o750); mkErr == nil {
+		_ = os.WriteFile(abs, data, 0o640)
+	}
+	return data, nil
 }
 
 // Delete removes a message file. Missing files are ignored.
@@ -104,6 +142,7 @@ func (s *Store) Delete(relPath string) error {
 	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
+	s.blobDelete(relPath)
 	return nil
 }
 
@@ -113,6 +152,7 @@ func (s *Store) MoveToCur(relPath string, imapFlags []string) (string, error) {
 	dir, name := filepath.Split(abs)
 	cleanDir := filepath.Clean(dir)
 
+	oldRel := relPath
 	if filepath.Base(cleanDir) == "cur" {
 		newName := rewriteMaildirName(name, imapFlags)
 		newAbs := filepath.Join(cleanDir, newName)
@@ -122,7 +162,7 @@ func (s *Store) MoveToCur(relPath string, imapFlags []string) (string, error) {
 			}
 			abs = newAbs
 		}
-		return relFromRoot(s.Root, abs), nil
+		return s.finishMove(oldRel, abs)
 	}
 
 	if filepath.Base(cleanDir) != "new" {
@@ -134,7 +174,7 @@ func (s *Store) MoveToCur(relPath string, imapFlags []string) (string, error) {
 			}
 			abs = newAbs
 		}
-		return relFromRoot(s.Root, abs), nil
+		return s.finishMove(oldRel, abs)
 	}
 
 	parent := filepath.Dir(cleanDir)
@@ -147,7 +187,44 @@ func (s *Store) MoveToCur(relPath string, imapFlags []string) (string, error) {
 	if err := os.Rename(abs, newAbs); err != nil {
 		return "", err
 	}
-	return relFromRoot(s.Root, newAbs), nil
+	return s.finishMove(oldRel, newAbs)
+}
+
+func (s *Store) finishMove(oldRel, newAbs string) (string, error) {
+	newRel := relFromRoot(s.Root, newAbs)
+	if s.blob != nil && newRel != oldRel {
+		if data, err := os.ReadFile(newAbs); err == nil {
+			s.blobPut(newRel, data)
+			s.blobDelete(oldRel)
+		}
+	}
+	return newRel, nil
+}
+
+func blobKey(relPath string) string {
+	return filepath.ToSlash(relPath)
+}
+
+func (s *Store) blobPut(relPath string, data []byte) {
+	if s == nil || s.blob == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := s.blob.Put(ctx, blobKey(relPath), data); err != nil && s.log != nil {
+		s.log.Warn("object store put failed", "key", relPath, "err", err)
+	}
+}
+
+func (s *Store) blobDelete(relPath string) {
+	if s == nil || s.blob == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := s.blob.Delete(ctx, blobKey(relPath)); err != nil && s.log != nil {
+		s.log.Warn("object store delete failed", "key", relPath, "err", err)
+	}
 }
 
 // ListFolders returns IMAP mailbox names under a user (INBOX + .Folder → Folder).

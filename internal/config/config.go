@@ -47,7 +47,20 @@ type PostgresConfig struct {
 }
 
 type MailstoreConfig struct {
-	Root string `yaml:"root"`
+	Root        string            `yaml:"root"`
+	ObjectStore ObjectStoreConfig `yaml:"object_store"`
+}
+
+// ObjectStoreConfig enables write-through S3-compatible maildir mirroring.
+type ObjectStoreConfig struct {
+	Enabled   bool   `yaml:"enabled"`
+	Endpoint  string `yaml:"endpoint"`
+	Region    string `yaml:"region"`
+	Bucket    string `yaml:"bucket"`
+	AccessKey string `yaml:"access_key"`
+	SecretKey string `yaml:"secret_key"`
+	Prefix    string `yaml:"prefix"`
+	PathStyle bool   `yaml:"path_style"`
 }
 
 type SMTPConfig struct {
@@ -248,6 +261,15 @@ func (c *Config) Validate() error {
 	}
 	if c.Mailstore.Root == "" {
 		return fmt.Errorf("mailstore.root is required")
+	}
+	if c.Mailstore.ObjectStore.Enabled {
+		os := c.Mailstore.ObjectStore
+		if os.Endpoint == "" || os.Bucket == "" || os.AccessKey == "" || os.SecretKey == "" {
+			return fmt.Errorf("mailstore.object_store: endpoint, bucket, access_key, and secret_key are required when enabled")
+		}
+		if os.Region == "" {
+			c.Mailstore.ObjectStore.Region = "us-east-1"
+		}
 	}
 	if c.SMTP.MaxSize <= 0 {
 		c.SMTP.MaxSize = 25 << 20

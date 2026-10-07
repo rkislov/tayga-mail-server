@@ -8,7 +8,7 @@ Tayga Mail is a **single-binary** server. This document describes practical HA a
 |-----------|----------------|
 | **PostgreSQL** | Preferred for multi-node. Point every node at the same DSN (`storage.driver: postgres`). |
 | **SQLite** | Local only. Do not share a SQLite file over NFS for writers. |
-| **Maildir** (`mailstore.root`) | Put on shared POSIX storage (NFS/CephFS) **or** keep node-local and pin users to a node. Concurrent writers on the same maildir need careful locking; prefer one active writer per user tree. |
+| **Maildir** (`mailstore.root`) | Put on shared POSIX storage (NFS/CephFS), keep node-local with sticky users, **or** enable `mailstore.object_store` (S3/MinIO write-through). Local root stays the hot cache; cold reads refill from the bucket. Concurrent writers on the same maildir need careful locking; prefer one active writer per user tree. |
 | **TLS certs** | Same `tls.cert_file` / `tls.key_file` on all nodes, or terminate TLS at a load balancer. Hot-reload via admin UI applies per-process. |
 
 ## Recommended topologies
@@ -66,11 +66,29 @@ IDLE uses an in-process update hub. When `storage.driver` is **postgres**, Tayga
 
 SQLite builds stay single-node (no bus). Sticky IMAP affinity is still recommended so mailbox sessions stay on one frontend, but EXISTS notifications no longer require it for multi-node Postgres HA.
 
+## Object store maildir
+
+```yaml
+mailstore:
+  root: ./data/maildir
+  object_store:
+    enabled: true
+    endpoint: "http://minio:9000"
+    region: us-east-1
+    bucket: tayga-mail
+    access_key: …
+    secret_key: …
+    prefix: "maildir/"
+    path_style: true
+```
+
+Deliver/Delete/flag moves sync object keys (relative maildir paths). `Read` falls back to the bucket on local miss. Backups still archive the local `mailstore.root` cache — warm nodes before a backup drill if you rely on cold objects.
+
 ## What is not included yet
 
 - Automatic leader election / fencing
-- Built-in object-storage maildir backend
 - Point-in-time DB restore orchestration (use Postgres tooling)
+- Background full-bucket ↔ maildir resync job
 
 ## Checklist before production HA
 
