@@ -91,11 +91,12 @@ Reconcile all indexed messages (push local→blob, pull blob→local):
 ./tayga-mail sync-objects -config configs/tayga.example.yaml -dry-run
 ```
 
+Or set `mailstore.object_store.sync_interval: 1h` for an in-process ticker.
+
 ## What is not included yet
 
 - Automatic leader election / fencing
 - Point-in-time DB restore orchestration (use Postgres tooling)
-- Periodic in-process sync ticker (use cron + `sync-objects`)
 
 ## Checklist before production HA
 

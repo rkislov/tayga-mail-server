@@ -24,6 +24,7 @@ mailstore:
     secret_key: minio123
     prefix: "maildir/"
     path_style: true   # MinIO / path-style; set false for virtual-hosted AWS
+    # sync_interval: 1h  # optional in-process reconcile (0/omit = use cron + sync-objects)
 
 smtp:
   mx: ":25"
