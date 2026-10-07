@@ -29,16 +29,23 @@ type Config struct {
 	Log         LogConfig         `yaml:"log"`
 }
 
-// HAConfig enables optional active/standby fencing (Postgres advisory lock).
+// HAConfig enables optional active/standby or per-user sticky writer fencing.
 type HAConfig struct {
-	Mode     string        `yaml:"mode"`      // none | active_standby
-	LeaseTTL time.Duration `yaml:"lease_ttl"` // re-check interval (default 5s)
-	Fence    string        `yaml:"fence"`     // mx | writers (default mx)
+	Mode      string        `yaml:"mode"`       // none | active_standby | sticky
+	LeaseTTL  time.Duration `yaml:"lease_ttl"`  // active_standby re-check (default 5s)
+	Fence     string        `yaml:"fence"`      // mx | writers (active_standby only; default mx)
+	StickyTTL time.Duration `yaml:"sticky_ttl"` // sticky lease TTL (default 30s)
+	NodeID    string        `yaml:"node_id"`    // sticky node identity (default hostname-uuid)
 }
 
-// FenceWriters reports whether HA should gate all maildir writers (not only MX).
+// FenceWriters reports whether HA should gate all maildir writers behind the cluster leader.
 func (c HAConfig) FenceWriters() bool {
 	return c.Mode == "active_standby" && (c.Fence == "writers" || c.Fence == "writer")
+}
+
+// StickyWriters reports whether per-user writer leases are enabled.
+func (c HAConfig) StickyWriters() bool {
+	return c.Mode == "sticky"
 }
 
 type ServerConfig struct {
@@ -296,7 +303,10 @@ func Default() *Config {
 			PublicURL:         "https://127.0.0.1",
 			Admins:            []string{"admin@example.com"},
 		},
-		HA:  HAConfig{Mode: "none", LeaseTTL: 5 * time.Second, Fence: "mx"},
+		HA: HAConfig{
+			Mode: "none", LeaseTTL: 5 * time.Second, Fence: "mx",
+			StickyTTL: 30 * time.Second,
+		},
 		Log: LogConfig{Level: "info", Format: "json"},
 	}
 }
@@ -447,8 +457,12 @@ func (c *Config) Validate() error {
 		default:
 			return fmt.Errorf("ha.fence must be mx or writers, got %q", c.HA.Fence)
 		}
+	case "sticky":
+		if c.HA.StickyTTL <= 0 {
+			c.HA.StickyTTL = 30 * time.Second
+		}
 	default:
-		return fmt.Errorf("ha.mode must be none or active_standby, got %q", c.HA.Mode)
+		return fmt.Errorf("ha.mode must be none, active_standby, or sticky, got %q", c.HA.Mode)
 	}
 	return nil
 }

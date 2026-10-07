@@ -39,6 +39,19 @@ ha:
 
 Metric: `tayga_ha_is_leader` (1 = this process holds the lease). Use VIP/DNS or LB health that prefers the leader when `fence: writers`.
 
+### 1c. Per-user sticky writers (`ha.mode: sticky`)
+
+Any node may accept connections; **writes for a given user** stick to one node via `user_writer_leases` (TTL renew on each write). Other nodes return `421` / standby error until the lease expires.
+
+```yaml
+ha:
+  mode: sticky
+  sticky_ttl: 30s
+  # node_id: mail-1   # optional stable identity
+```
+
+Works with SQLite (lab) or Postgres (multi-node). Prefer sticky LB affinity so clients usually land on the holding node; leases recover after `sticky_ttl` if a node dies.
+
 ### 2. Multiple frontends, shared Postgres + shared maildir
 
 1. N identical Tayga nodes behind L4/L7 load balancer (sticky sessions help IMAP IDLE).
@@ -114,7 +127,7 @@ Or set `mailstore.object_store.sync_interval: 1h` for an in-process ticker.
 
 ## What is not included yet
 
-- Per-user sticky writer assignment (cluster-wide single writer only via `fence: writers`)
+- Automatic client redirect to the sticky holder (clients must retry / use LB)
 - Point-in-time DB restore orchestration (use Postgres tooling)
 
 ## Checklist before production HA

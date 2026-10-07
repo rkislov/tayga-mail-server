@@ -68,6 +68,7 @@ func migrate(ctx context.Context, db *sql.DB, dialect Dialect) error {
 			"004_flowsync.sqlite.sql",
 			"005_webauthn.sqlite.sql",
 			"006_outbound.sqlite.sql",
+			"007_sticky.sqlite.sql",
 		}
 	case DialectPostgres:
 		files = []string{
@@ -77,6 +78,7 @@ func migrate(ctx context.Context, db *sql.DB, dialect Dialect) error {
 			"004_flowsync.postgres.sql",
 			"005_webauthn.postgres.sql",
 			"006_outbound.postgres.sql",
+			"007_sticky.postgres.sql",
 		}
 	default:
 		return fmt.Errorf("unsupported dialect")

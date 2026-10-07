@@ -33,17 +33,19 @@ type Server struct {
 	tls       *tlsutil.Manager
 	ha           ha.Gate
 	fenceWriters bool
+	writers      ha.WriterGate
 	queue        *OutboundQueue
 	servers      []*gosmtp.Server
 }
 
-func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth.Layer, ms *mailstore.Store, eng *sieve.Engine, tlsMgr *tlsutil.Manager, gate ha.Gate) *Server {
+func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth.Layer, ms *mailstore.Store, eng *sieve.Engine, tlsMgr *tlsutil.Manager, gate ha.Gate, writers ha.WriterGate) *Server {
 	if gate == nil {
 		gate = ha.AlwaysLeader{}
 	}
 	return &Server{
 		cfg: cfg, log: log, store: store, authn: authn, mailstore: ms, sieve: eng, tls: tlsMgr, ha: gate,
 		fenceWriters: cfg.HA.FenceWriters(),
+		writers:      writers,
 	}
 }
 
@@ -100,6 +102,7 @@ func (s *Server) Start(ctx context.Context) error {
 			MaxAttempts: qc.MaxAttempts, BatchSize: qc.BatchSize,
 		}, s.log)
 		oq.SetHA(s.ha, s.fenceWriters)
+		oq.SetWriters(s.writers)
 		s.queue = oq
 		oq.Start(ctx)
 	}
@@ -122,6 +125,7 @@ func (s *Server) Start(ctx context.Context) error {
 			requireAuth: spec.requireAuth,
 			ha:           s.ha,
 			fenceWriters: s.fenceWriters,
+			writers:      s.writers,
 			out:          out,
 			dkim:         dkimSig,
 			queue:        oq,
@@ -201,6 +205,7 @@ type backend struct {
 	requireAuth bool
 	ha           ha.Gate
 	fenceWriters bool
+	writers      ha.WriterGate
 	out          outboundSender
 	dkim         *dkimSigner
 	queue        *OutboundQueue
@@ -376,6 +381,11 @@ func (s *session) deliver(ctx context.Context, rcpt string, data []byte, msgid s
 	u, err := s.backend.store.ResolveRecipient(ctx, rcpt)
 	if err != nil {
 		return err
+	}
+	if s.backend.writers != nil {
+		if err := s.backend.writers.AllowWrite(ctx, u.ID); err != nil {
+			return &gosmtp.SMTPError{Code: 421, EnhancedCode: gosmtp.EnhancedCode{4, 3, 2}, Message: "Not writer for recipient; try later"}
+		}
 	}
 	if s.backend.sieve != nil {
 		err := s.backend.sieve.Deliver(ctx, u, s.from, rcpt, data, msgid)
