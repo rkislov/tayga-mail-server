@@ -37,6 +37,20 @@ func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) (*storage.
 	return su, true
 }
 
+// adminTenantUser loads a user in the admin's tenant or writes an error response.
+func (s *Server) adminTenantUser(w http.ResponseWriter, r *http.Request, admin *storage.User, id string) *storage.User {
+	target, err := s.store.GetUserByID(r.Context(), id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return nil
+	}
+	if target.TenantID != admin.TenantID {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return nil
+	}
+	return target
+}
+
 func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 	admin, ok := s.requireAdmin(w, r)
 	if !ok {
@@ -116,23 +130,48 @@ func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusCreated, map[string]any{"id": u.ID, "email": u.Email})
 
 	case strings.HasSuffix(path, "/quota") && r.Method == http.MethodPut:
-		id := strings.TrimSuffix(path, "/quota")
-		id = strings.Trim(id, "/")
+		id := strings.Trim(strings.TrimSuffix(path, "/quota"), "/")
 		var req adminQuotaRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
 			return
 		}
-		target, err := s.store.GetUserByID(r.Context(), id)
-		if err != nil {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
-			return
-		}
-		if target.TenantID != admin.TenantID {
-			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		if s.adminTenantUser(w, r, admin, id) == nil {
 			return
 		}
 		if err := s.store.UpdateUserQuota(r.Context(), id, req.QuotaBytes); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
+
+	case strings.HasSuffix(path, "/password") && r.Method == http.MethodPut:
+		id := strings.Trim(strings.TrimSuffix(path, "/password"), "/")
+		var req struct {
+			Password string `json:"password"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+			return
+		}
+		if len(req.Password) < 8 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "password must be at least 8 characters"})
+			return
+		}
+		target := s.adminTenantUser(w, r, admin, id)
+		if target == nil {
+			return
+		}
+		if target.AuthSource != "local" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "only local users support password reset"})
+			return
+		}
+		hash, err := s.authn.Hasher.Hash(req.Password)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "hash failed"})
+			return
+		}
+		if err := s.store.UpdateUserPassword(r.Context(), id, hash); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
@@ -146,13 +185,7 @@ func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
 			return
 		}
-		target, err := s.store.GetUserByID(r.Context(), path)
-		if err != nil {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
-			return
-		}
-		if target.TenantID != admin.TenantID {
-			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		if s.adminTenantUser(w, r, admin, path) == nil {
 			return
 		}
 		if req.Enabled != nil {

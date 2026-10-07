@@ -172,42 +172,100 @@ func wbFieldName(page, tagID byte) string {
 		}
 	case cpEmail:
 		switch tagID {
+		case 0x06:
+			return "To"
 		case 0x07:
 			return "From"
 		case 0x08:
 			return "Subject"
+		case 0x09:
+			return "Cc"
+		case 0x0B:
+			return "ReplyTo"
 		case 0x0F:
 			return "DateReceived"
+		case 0x11:
+			return "Importance"
 		case 0x13:
 			return "Read"
+		case 0x15:
+			return "MessageClass"
 		}
 	case cpCalendar:
 		switch tagID {
 		case 0x06:
 			return "AllDayEvent"
+		case 0x0D:
+			return "BusyStatus"
+		case 0x15:
+			return "DTStamp"
 		case 0x16:
 			return "EndTime"
 		case 0x1D:
 			return "Location"
+		case 0x1E:
+			return "MeetingStatus"
+		case 0x1F:
+			return "OrganizerEmail"
+		case 0x20:
+			return "OrganizerName"
 		case 0x23:
 			return "Subject"
 		case 0x24:
 			return "UID"
 		case 0x25:
 			return "StartTime"
+		case 0x26:
+			return "Sensitivity"
+		case 0x2B:
+			return "Timezone"
 		}
 	case cpContacts:
 		switch tagID {
+		case 0x06:
+			return "Anniversary"
+		case 0x07:
+			return "AssistantName"
+		case 0x0A:
+			return "Birthday"
+		case 0x0C:
+			return "BusinessAddressCity"
+		case 0x0F:
+			return "BusinessAddressStreet"
+		case 0x10:
+			return "BusinessFaxNumber"
+		case 0x11:
+			return "BusinessPhoneNumber"
+		case 0x16:
+			return "CompanyName"
+		case 0x18:
+			return "Department"
 		case 0x1A:
 			return "Email1Address"
+		case 0x1B:
+			return "Email2Address"
+		case 0x1C:
+			return "Email3Address"
 		case 0x1D:
 			return "FileAs"
 		case 0x1E:
 			return "FirstName"
+		case 0x20:
+			return "HomePhoneNumber"
+		case 0x26:
+			return "JobTitle"
 		case 0x30:
 			return "LastName"
+		case 0x31:
+			return "MiddleName"
 		case 0x36:
 			return "MobilePhoneNumber"
+		case 0x3A:
+			return "NickName"
+		case 0x3B:
+			return "OfficeLocation"
+		case 0x49:
+			return "WebPage"
 		}
 	}
 	return ""

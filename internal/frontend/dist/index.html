@@ -452,10 +452,14 @@
         list.innerHTML = (data.users || []).map((u) => `
           <li>
             <span>
-              <strong>${escapeHtml(u.email)}</strong><br/>
+              <strong>${escapeHtml(u.email)}</strong>${u.enabled ? "" : " · disabled"}<br/>
               <span class="meta">${fmtBytes(u.used_bytes)} / ${u.quota_bytes > 0 ? fmtBytes(u.quota_bytes) : "∞"} · ${escapeHtml(u.id)}</span>
             </span>
-            <button type="button" class="secondary" data-quota="${escapeHtml(u.id)}">Set quota</button>
+            <span class="actions">
+              <button type="button" class="secondary" data-quota="${escapeHtml(u.id)}">Quota</button>
+              <button type="button" class="secondary" data-toggle="${escapeHtml(u.id)}" data-enabled="${u.enabled ? "1" : "0"}">${u.enabled ? "Disable" : "Enable"}</button>
+              <button type="button" class="secondary" data-pass="${escapeHtml(u.id)}">Reset pw</button>
+            </span>
           </li>`).join("");
         list.querySelectorAll("[data-quota]").forEach((btn) => {
           btn.addEventListener("click", async () => {
@@ -474,6 +478,40 @@
               setMsg($("admin-msg"), "Quota updated.", "ok");
               refreshAdminUsers();
               loadMe();
+            } catch (err) {
+              setMsg($("admin-msg"), err.message, "err");
+            }
+          });
+        });
+        list.querySelectorAll("[data-toggle]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const enabled = btn.dataset.enabled !== "1";
+            try {
+              await api("/api/v1/admin/users/" + encodeURIComponent(btn.dataset.toggle), {
+                method: "PATCH",
+                body: JSON.stringify({ enabled }),
+              });
+              setMsg($("admin-msg"), enabled ? "User enabled." : "User disabled.", "ok");
+              refreshAdminUsers();
+            } catch (err) {
+              setMsg($("admin-msg"), err.message, "err");
+            }
+          });
+        });
+        list.querySelectorAll("[data-pass]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const password = prompt("New password (min 8 characters)");
+            if (password == null) return;
+            if (password.length < 8) {
+              setMsg($("admin-msg"), "password too short", "err");
+              return;
+            }
+            try {
+              await api("/api/v1/admin/users/" + encodeURIComponent(btn.dataset.pass) + "/password", {
+                method: "PUT",
+                body: JSON.stringify({ password }),
+              });
+              setMsg($("admin-msg"), "Password reset.", "ok");
             } catch (err) {
               setMsg($("admin-msg"), err.message, "err");
             }

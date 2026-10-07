@@ -55,11 +55,16 @@ var (
 	tagApplicationData = wbTag{cpAirSync, 0x1D}
 
 	// Contacts (1)
-	tagContactEmail1 = wbTag{cpContacts, 0x1A}
-	tagContactFileAs = wbTag{cpContacts, 0x1D}
-	tagContactFirst  = wbTag{cpContacts, 0x1E}
-	tagContactLast   = wbTag{cpContacts, 0x30}
-	tagContactMobile = wbTag{cpContacts, 0x36}
+	tagContactBusinessPhone = wbTag{cpContacts, 0x11}
+	tagContactCompany       = wbTag{cpContacts, 0x16}
+	tagContactEmail1        = wbTag{cpContacts, 0x1A}
+	tagContactEmail2        = wbTag{cpContacts, 0x1B}
+	tagContactFileAs        = wbTag{cpContacts, 0x1D}
+	tagContactFirst         = wbTag{cpContacts, 0x1E}
+	tagContactHomePhone     = wbTag{cpContacts, 0x20}
+	tagContactJobTitle      = wbTag{cpContacts, 0x26}
+	tagContactLast          = wbTag{cpContacts, 0x30}
+	tagContactMobile        = wbTag{cpContacts, 0x36}
 
 	// Email (2)
 	tagEmailFrom         = wbTag{cpEmail, 0x07}

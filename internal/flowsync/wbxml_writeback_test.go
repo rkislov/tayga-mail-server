@@ -86,6 +86,38 @@ func TestParseWBXMLClientDelete(t *testing.T) {
 	}
 }
 
+func TestParseWBXMLClientAddContactExtraFields(t *testing.T) {
+	e := newWBEncoder()
+	e.start(tagSync)
+	e.start(tagCollections)
+	e.start(tagCollection)
+	e.start(tagCommands)
+	e.start(tagAdd)
+	e.taggedStr(tagClientID, "c2")
+	e.start(tagApplicationData)
+	e.taggedStr(tagContactCompany, "Analytical")
+	e.taggedStr(tagContactJobTitle, "Mathematician")
+	e.taggedStr(tagContactBusinessPhone, "+1-555-0100")
+	e.taggedStr(tagContactHomePhone, "+1-555-0101")
+	e.taggedStr(tagContactEmail2, "ada@alt.ex")
+	e.end()
+	e.end()
+	e.end()
+	e.end()
+	e.end()
+	e.end()
+
+	ops := parseWBXMLClientOps(e.bytes())
+	if len(ops) != 1 {
+		t.Fatalf("ops=%+v", ops)
+	}
+	f := ops[0].Fields
+	if f["CompanyName"] != "Analytical" || f["JobTitle"] != "Mathematician" ||
+		f["BusinessPhoneNumber"] != "+1-555-0100" || f["Email2Address"] != "ada@alt.ex" {
+		t.Fatalf("fields %+v", f)
+	}
+}
+
 func TestParseWBXMLIgnoresServerIdOutsideCommands(t *testing.T) {
 	// FolderSync-style ServerId strings must not become delete ops.
 	e := newWBEncoder()
