@@ -16,6 +16,7 @@ import (
 	"github.com/emersion/go-sasl"
 	"github.com/tayga/tms/internal/auth"
 	"github.com/tayga/tms/internal/config"
+	"github.com/tayga/tms/internal/ha"
 	"github.com/tayga/tms/internal/mailstore"
 	"github.com/tayga/tms/internal/storage"
 	"github.com/tayga/tms/internal/tlsutil"
@@ -25,21 +26,29 @@ const Delimiter = "/"
 
 // Server wraps go-imap listeners.
 type Server struct {
-	cfg       *config.Config
-	log       *slog.Logger
-	store     storage.Driver
-	authn     *auth.Layer
-	mailstore *mailstore.Store
-	hub       *Hub
-	tls       *tlsutil.Manager
-	servers   []*imapserv.Server
+	cfg          *config.Config
+	log          *slog.Logger
+	store        storage.Driver
+	authn        *auth.Layer
+	mailstore    *mailstore.Store
+	hub          *Hub
+	tls          *tlsutil.Manager
+	ha           ha.Gate
+	fenceWriters bool
+	servers      []*imapserv.Server
 }
 
-func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth.Layer, ms *mailstore.Store, hub *Hub, tlsMgr *tlsutil.Manager) *Server {
+func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth.Layer, ms *mailstore.Store, hub *Hub, tlsMgr *tlsutil.Manager, gate ha.Gate) *Server {
 	if hub == nil {
 		hub = NewHub(store)
 	}
-	return &Server{cfg: cfg, log: log, store: store, authn: authn, mailstore: ms, hub: hub, tls: tlsMgr}
+	if gate == nil {
+		gate = ha.AlwaysLeader{}
+	}
+	return &Server{
+		cfg: cfg, log: log, store: store, authn: authn, mailstore: ms, hub: hub, tls: tlsMgr,
+		ha: gate, fenceWriters: cfg.HA.FenceWriters(),
+	}
 }
 
 // Hub returns the update hub used for IDLE/EXISTS notifications.
@@ -48,7 +57,10 @@ func (s *Server) Hub() *Hub { return s.hub }
 func (s *Server) Start(ctx context.Context) error {
 	tlsCfg := s.tlsConfig()
 
-	be := &Backend{log: s.log, store: s.store, authn: s.authn, ms: s.mailstore, hub: s.hub}
+	be := &Backend{
+		log: s.log, store: s.store, authn: s.authn, ms: s.mailstore, hub: s.hub,
+		ha: s.ha, fenceWriters: s.fenceWriters,
+	}
 
 	type spec struct {
 		addr     string
@@ -130,11 +142,20 @@ func (s *Server) tlsConfig() *tls.Config {
 
 // Backend implements backend.Backend and backend.BackendUpdater.
 type Backend struct {
-	log   *slog.Logger
-	store storage.Driver
-	authn *auth.Layer
-	ms    *mailstore.Store
-	hub   *Hub
+	log          *slog.Logger
+	store        storage.Driver
+	authn        *auth.Layer
+	ms           *mailstore.Store
+	hub          *Hub
+	ha           ha.Gate
+	fenceWriters bool
+}
+
+func (b *Backend) requireWriter() error {
+	if b.fenceWriters && b.ha != nil && !b.ha.IsLeader() {
+		return ha.ErrStandby
+	}
+	return nil
 }
 
 func (b *Backend) Updates() <-chan backend.Update {
@@ -228,6 +249,9 @@ func (u *User) GetMailbox(name string) (backend.Mailbox, error) {
 }
 
 func (u *User) CreateMailbox(name string) error {
+	if err := u.backend.requireWriter(); err != nil {
+		return err
+	}
 	name = strings.TrimSuffix(name, Delimiter)
 	if name == "" {
 		return backend.ErrMailboxAlreadyExists
@@ -245,6 +269,9 @@ func (u *User) CreateMailbox(name string) error {
 }
 
 func (u *User) DeleteMailbox(name string) error {
+	if err := u.backend.requireWriter(); err != nil {
+		return err
+	}
 	if strings.EqualFold(name, "INBOX") {
 		return errors.New("cannot delete INBOX")
 	}
@@ -270,6 +297,9 @@ func (u *User) DeleteMailbox(name string) error {
 }
 
 func (u *User) RenameMailbox(existingName, newName string) error {
+	if err := u.backend.requireWriter(); err != nil {
+		return err
+	}
 	newName = strings.TrimSuffix(newName, Delimiter)
 	ctx := context.Background()
 	if _, err := u.backend.store.GetMailbox(ctx, u.user.ID, existingName); err != nil {
@@ -466,6 +496,9 @@ func (m *Mailbox) SearchMessages(uid bool, criteria *imap.SearchCriteria) ([]uin
 }
 
 func (m *Mailbox) CreateMessage(flags []string, date time.Time, body imap.Literal) error {
+	if err := m.user.backend.requireWriter(); err != nil {
+		return err
+	}
 	data, err := io.ReadAll(body)
 	if err != nil {
 		return err
@@ -497,6 +530,9 @@ func (m *Mailbox) CreateMessage(flags []string, date time.Time, body imap.Litera
 }
 
 func (m *Mailbox) UpdateMessagesFlags(uid bool, seqset *imap.SeqSet, op imap.FlagsOp, flags []string) error {
+	if err := m.user.backend.requireWriter(); err != nil {
+		return err
+	}
 	msgs, err := m.messages()
 	if err != nil {
 		return err
@@ -559,6 +595,9 @@ func updateFlags(current []string, op imap.FlagsOp, flags []string) []string {
 }
 
 func (m *Mailbox) CopyMessages(uid bool, seqset *imap.SeqSet, dest string) error {
+	if err := m.user.backend.requireWriter(); err != nil {
+		return err
+	}
 	destMB, err := m.user.GetMailbox(dest)
 	if err != nil {
 		return err
@@ -605,6 +644,9 @@ func (m *Mailbox) CopyMessages(uid bool, seqset *imap.SeqSet, dest string) error
 }
 
 func (m *Mailbox) Expunge() error {
+	if err := m.user.backend.requireWriter(); err != nil {
+		return err
+	}
 	ctx := context.Background()
 	deleted, err := m.user.backend.store.ExpungeMailbox(ctx, m.mb.ID)
 	if err != nil {

@@ -20,17 +20,24 @@ Tayga Mail is a **single-binary** server. This document describes practical HA a
 3. Fail over VIP / DNS to the standby; start or promote the standby process.
 4. Run regular backups (`tayga-mail backup`) from the active node.
 
-### 1b. Automatic MX fencing (`ha.mode: active_standby`)
+### 1b. Automatic fencing (`ha.mode: active_standby`)
 
-Requires `storage.driver: postgres`. Nodes share a session advisory lock; only the lease holder accepts **unauthenticated MX** mail (others reply `421`). Authenticated submission, IMAP, and HTTP stay up on every node.
+Requires `storage.driver: postgres`. Nodes share a session advisory lock.
 
 ```yaml
 ha:
   mode: active_standby
   lease_ttl: 5s
+  fence: mx       # default: only unauthenticated MX → 421 on standby
+  # fence: writers  # also gate SMTP submission, IMAP/POP3 maildir writes, outbound queue, object-store sync
 ```
 
-Metric: `tayga_ha_is_leader` (1 = this process holds the MX lease).
+| `ha.fence` | Standby behaviour |
+|------------|-------------------|
+| `mx` | Unauthenticated MX returns `421`. Submission, IMAP, HTTP stay up on every node. |
+| `writers` | All maildir writers gated: SMTP (MX+submission) `421`, IMAP APPEND/STORE/COPY/EXPUNGE/mailbox ops → error, POP3 DELE rejected, outbound queue drain skipped, object-store sync skipped. Reads and HTTP stay up. |
+
+Metric: `tayga_ha_is_leader` (1 = this process holds the lease). Use VIP/DNS or LB health that prefers the leader when `fence: writers`.
 
 ### 2. Multiple frontends, shared Postgres + shared maildir
 
@@ -107,7 +114,7 @@ Or set `mailstore.object_store.sync_interval: 1h` for an in-process ticker.
 
 ## What is not included yet
 
-- Fencing of authenticated submission / IMAP writers (only MX is gated today)
+- Per-user sticky writer assignment (cluster-wide single writer only via `fence: writers`)
 - Point-in-time DB restore orchestration (use Postgres tooling)
 
 ## Checklist before production HA
