@@ -319,7 +319,7 @@ func parseICalEvent(data string) icalEvent {
 }
 
 type vcardFields struct {
-	FN, FirstName, LastName, Email, Tel string
+	FN, FirstName, LastName, Email, Email2, Tel, HomeTel, WorkTel, Org, Title string
 }
 
 func parseVCard(data string) vcardFields {
@@ -337,13 +337,26 @@ func parseVCard(data string) vcardFields {
 			if len(parts) > 1 {
 				c.FirstName = parts[1]
 			}
+		case strings.HasPrefix(upper, "ORG"):
+			c.Org = icsValue(line)
+		case strings.HasPrefix(upper, "TITLE"):
+			c.Title = icsValue(line)
 		case strings.HasPrefix(upper, "EMAIL"):
+			v := icsValue(line)
 			if c.Email == "" {
-				c.Email = icsValue(line)
+				c.Email = v
+			} else if c.Email2 == "" {
+				c.Email2 = v
 			}
 		case strings.HasPrefix(upper, "TEL"):
-			if c.Tel == "" {
-				c.Tel = icsValue(line)
+			v := icsValue(line)
+			switch {
+			case strings.Contains(upper, "TYPE=HOME"):
+				c.HomeTel = v
+			case strings.Contains(upper, "TYPE=WORK"):
+				c.WorkTel = v
+			case strings.Contains(upper, "TYPE=CELL"), c.Tel == "":
+				c.Tel = v
 			}
 		}
 	}
