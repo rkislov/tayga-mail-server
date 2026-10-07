@@ -22,6 +22,7 @@ import (
 	"github.com/tayga/tms/internal/sieve"
 	"github.com/tayga/tms/internal/smtp"
 	"github.com/tayga/tms/internal/storage"
+	"github.com/tayga/tms/internal/tlsutil"
 )
 
 func main() {
@@ -62,6 +63,10 @@ func run(cfgPath string) error {
 
 	authn := auth.NewLayer(store, cfg.LDAP, cfg.MFA, cfg.OIDC)
 	ms := mailstore.New(cfg.Mailstore.Root)
+	tlsMgr, err := tlsutil.NewManager(cfg)
+	if err != nil {
+		return fmt.Errorf("tls: %w", err)
+	}
 	imapHub := imapserver.NewHub(store)
 	sieveEng := sieve.New(store, ms, log)
 	sieveEng.Notifier = imapHub
@@ -70,27 +75,27 @@ func run(cfgPath string) error {
 		return fmt.Errorf("seed: %w", err)
 	}
 
-	smtpSrv := smtp.New(cfg, log, store, authn, ms, sieveEng)
+	smtpSrv := smtp.New(cfg, log, store, authn, ms, sieveEng, tlsMgr)
 	if err := smtpSrv.Start(ctx); err != nil {
 		return fmt.Errorf("smtp: %w", err)
 	}
 
-	imapSrv := imapserver.New(cfg, log, store, authn, ms, imapHub)
+	imapSrv := imapserver.New(cfg, log, store, authn, ms, imapHub, tlsMgr)
 	if err := imapSrv.Start(ctx); err != nil {
 		return fmt.Errorf("imap: %w", err)
 	}
 
-	pop3Srv := pop3.New(cfg, log, store, authn, ms)
+	pop3Srv := pop3.New(cfg, log, store, authn, ms, tlsMgr)
 	if err := pop3Srv.Start(ctx); err != nil {
 		return fmt.Errorf("pop3: %w", err)
 	}
 
-	msieveSrv := managesieve.New(cfg, log, store, authn)
+	msieveSrv := managesieve.New(cfg, log, store, authn, tlsMgr)
 	if err := msieveSrv.Start(ctx); err != nil {
 		return fmt.Errorf("managesieve: %w", err)
 	}
 
-	httpSrv := httpapi.New(cfg, log, store, authn, ms)
+	httpSrv := httpapi.New(cfg, log, store, authn, ms, tlsMgr)
 	if err := httpSrv.Start(ctx); err != nil {
 		return fmt.Errorf("http: %w", err)
 	}
