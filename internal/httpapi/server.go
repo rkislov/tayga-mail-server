@@ -61,6 +61,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/sieve/scripts/", s.handleSieveScripts)
 	mux.HandleFunc("/api/v1/admin/users", s.handleAdminUsers)
 	mux.HandleFunc("/api/v1/admin/users/", s.handleAdminUsers)
+	mux.HandleFunc("/api/v1/admin/tenant", s.handleAdminTenant)
+	mux.HandleFunc("/api/v1/admin/domains", s.handleAdminDomains)
+	mux.HandleFunc("/api/v1/admin/domains/", s.handleAdminDomains)
 	mux.HandleFunc("/api/v1/admin/tls", s.handleAdminTLS)
 
 	dav.Mount(mux, s.store, s.authn)
