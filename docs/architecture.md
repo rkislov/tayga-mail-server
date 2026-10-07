@@ -147,4 +147,4 @@ CLI: `tayga-mail sync-objects` reconciles indexed message paths between local ma
 
 ## Next milestones
 
-Leader election / fencing for multi-writer maildir; periodic in-process object sync ticker.
+Leader election / fencing for multi-writer maildir.
