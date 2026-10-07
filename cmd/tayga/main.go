@@ -27,11 +27,15 @@ import (
 	"github.com/tayga/tms/internal/smtp"
 	"github.com/tayga/tms/internal/storage"
 	"github.com/tayga/tms/internal/tlsutil"
+	"github.com/tayga/tms/internal/version"
 )
 
 func main() {
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
+		case "version", "-version", "--version":
+			fmt.Println(version.String())
+			return
 		case "backup":
 			if err := runBackup(os.Args[2:]); err != nil {
 				fmt.Fprintf(os.Stderr, "tayga backup: %v\n", err)
@@ -54,7 +58,12 @@ func main() {
 	}
 
 	cfgPath := flag.String("config", "configs/tayga.example.yaml", "path to YAML config")
+	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+	if *showVersion {
+		fmt.Println(version.String())
+		return
+	}
 
 	if err := run(*cfgPath); err != nil {
 		fmt.Fprintf(os.Stderr, "tayga: %v\n", err)
@@ -361,6 +370,8 @@ func run(cfgPath string) error {
 	}
 
 	log.Info("tayga mail server started",
+		"version", version.Version,
+		"commit", version.Commit,
 		"hostname", cfg.Server.Hostname,
 		"storage", cfg.Storage.Driver,
 	)

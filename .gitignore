@@ -2,6 +2,7 @@
 /tayga-mail
 /tayga
 *.exe
+/dist/
 
 # Data
 /data/

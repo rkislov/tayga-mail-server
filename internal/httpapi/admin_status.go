@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/tayga/tms/internal/backup"
+	"github.com/tayga/tms/internal/version"
 )
 
 var startedAt = time.Now().UTC()
@@ -38,6 +39,9 @@ func (s *Server) handleAdminStatus(w http.ResponseWriter, r *http.Request) {
 	runtime.ReadMemStats(&ms)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"hostname":   s.cfg.Server.Hostname,
+		"version":    version.Version,
+		"commit":     version.Commit,
+		"build_date": version.Date,
 		"uptime_sec": int(time.Since(startedAt).Seconds()),
 		"started_at": startedAt.Format(time.RFC3339),
 		"go": map[string]any{
