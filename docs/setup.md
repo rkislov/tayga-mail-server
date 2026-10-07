@@ -25,7 +25,14 @@ CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o tayga-mail ./cmd/tayga
 ./tayga-mail version
 ```
 
-Готовые архивы: GitHub Releases (`v*`) или `VERSION=v0.7.1 ./scripts/crossbuild.sh`.
+Готовые архивы: GitHub Releases (`v*`) или `VERSION=v0.7.3 ./scripts/crossbuild.sh`.
+
+Интерактивное меню (wizard, backup/restore, перенос sqlite↔postgres, секции настроек):
+
+```bash
+./tayga-mail menu -config /etc/tayga/tayga.yaml
+# синонимы: setup, console
+```
 
 Скопируйте бинарник, например в `/usr/local/bin/tayga-mail`, и создайте каталог данных:
 

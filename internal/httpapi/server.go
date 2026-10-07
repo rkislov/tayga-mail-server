@@ -18,6 +18,7 @@ import (
 	"github.com/tayga/tms/internal/frontend"
 	"github.com/tayga/tms/internal/mailstore"
 	"github.com/tayga/tms/internal/migrate"
+	"github.com/tayga/tms/internal/notify"
 	"github.com/tayga/tms/internal/settings"
 	"github.com/tayga/tms/internal/storage"
 	"github.com/tayga/tms/internal/tlsutil"
@@ -35,6 +36,7 @@ type Server struct {
 	tls     *tlsutil.Manager
 	xmpp    xmpp.Gateway
 	migrate *migrate.Service
+	notify  *notify.Hub
 	servers []*http.Server
 }
 
@@ -115,6 +117,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/migration", s.handleMigration)
 	mux.HandleFunc("/api/v1/migration/", s.handleMigration)
 	mux.HandleFunc("/api/v1/admin/migration", s.handleAdminMigration)
+	mux.HandleFunc("/api/v1/notifications", s.handleNotifications)
+	mux.HandleFunc("/api/v1/notifications/", s.handleNotifications)
 
 	dav.Mount(mux, s.store, s.authn)
 	flowsync.Mount(mux, s.cfg, s.log, s.store, s.authn, s.ms)

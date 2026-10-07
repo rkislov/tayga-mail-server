@@ -57,6 +57,8 @@
     </footer>
   </div>
 
+  <div id="toast-host" class="toast-host" aria-live="polite" aria-relevant="additions"></div>
+
   <section id="view-account" class="app-shell hidden">
     <header class="app-topbar">
       <button type="button" class="burger" id="btn-nav-toggle" aria-expanded="false" aria-controls="app-nav" aria-label="Menu">
@@ -66,6 +68,7 @@
       </button>
       <p class="brand-sm">Tayga <span>Mail</span></p>
       <p class="app-topbar-title" id="app-topbar-title" data-i18n="nav_mail">Почта</p>
+      <button type="button" class="btn-secondary btn-sm btn-ico topbar-notify" id="btn-notify-perm" data-i18n-title="notify_enable" title="Уведомления" aria-label="Уведомления"><span class="ico" data-ico="chat" aria-hidden="true"></span></button>
     </header>
 
     <div class="nav-backdrop" id="nav-backdrop" hidden></div>
