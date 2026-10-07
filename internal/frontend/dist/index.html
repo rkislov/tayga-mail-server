@@ -9,17 +9,19 @@
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --forest: #1f4d2e;
-      --moss: #3d7a4a;
-      --earth: #4a3728;
-      --spray: #e85d04;
-      --spray-deep: #c44900;
-      --stone: #eef1ea;
-      --ink: #1a1f1c;
-      --mist: rgba(255, 255, 255, 0.72);
-      --line: rgba(31, 77, 46, 0.18);
-      --err: #9b2226;
-      --ok: #2d6a4f;
+      --sun: #f4d03f;
+      --magenta: #e85a9b;
+      --indigo: #2a1b5c;
+      --cosmos: #1a1040;
+      --earth-green: #2f6b4f;
+      --spray: #ff6b35;
+      --spray-deep: #e85d04;
+      --ink: #f7f3ea;
+      --mist: rgba(18, 12, 40, 0.62);
+      --line: rgba(255, 255, 255, 0.18);
+      --err: #ff8a80;
+      --ok: #7dcea0;
+      --muted: rgba(247, 243, 234, 0.72);
     }
     * { box-sizing: border-box; }
     html, body { height: 100%; }
@@ -27,16 +29,19 @@
       margin: 0;
       color: var(--ink);
       font-family: "Source Sans 3", system-ui, sans-serif;
-      background:
-        radial-gradient(ellipse 80% 50% at 10% 0%, rgba(232, 93, 4, 0.18), transparent 55%),
-        radial-gradient(ellipse 70% 60% at 100% 100%, rgba(31, 77, 46, 0.28), transparent 50%),
-        linear-gradient(160deg, #f7f8f3 0%, #e4ebe3 45%, #d5e0d4 100%);
+      background-color: var(--cosmos);
+      background-image:
+        linear-gradient(180deg, rgba(26, 16, 64, 0.35) 0%, rgba(10, 8, 28, 0.55) 55%, rgba(5, 8, 16, 0.78) 100%),
+        url("/assets/cosmic-abstract.jpg");
+      background-size: cover;
+      background-position: center top;
       background-attachment: fixed;
+      background-repeat: no-repeat;
     }
     .shell {
       min-height: 100%;
       display: grid;
-      grid-template-rows: auto 1fr;
+      grid-template-rows: auto 1fr auto;
     }
     .brand-bar {
       padding: 1.25rem 1.5rem 0;
@@ -44,13 +49,14 @@
     .brand {
       font-family: Fraunces, Georgia, serif;
       font-weight: 700;
-      font-size: clamp(1.75rem, 4vw, 2.4rem);
-      color: var(--forest);
+      font-size: clamp(1.85rem, 5vw, 2.75rem);
+      color: #fff;
       letter-spacing: -0.02em;
       margin: 0;
       line-height: 1.1;
+      text-shadow: 0 2px 18px rgba(0,0,0,0.45);
     }
-    .brand span { color: var(--spray); }
+    .brand span { color: var(--sun); }
     .stage {
       display: grid;
       place-items: center;
@@ -59,22 +65,22 @@
     .panel {
       width: min(420px, 100%);
       background: var(--mist);
-      backdrop-filter: blur(10px);
+      backdrop-filter: blur(14px);
       border: 1px solid var(--line);
-      border-radius: 4px;
+      border-radius: 6px;
       padding: 1.5rem 1.4rem 1.35rem;
-      box-shadow: 0 18px 40px rgba(26, 31, 28, 0.08);
+      box-shadow: 0 24px 50px rgba(0, 0, 0, 0.35);
     }
     .panel h2 {
       font-family: Fraunces, Georgia, serif;
       font-size: 1.35rem;
       font-weight: 500;
       margin: 0 0 0.35rem;
-      color: var(--earth);
+      color: #fff;
     }
     .lede {
       margin: 0 0 1.25rem;
-      color: rgba(26, 31, 28, 0.72);
+      color: var(--muted);
       font-size: 0.95rem;
     }
     label {
@@ -83,21 +89,21 @@
       font-weight: 600;
       letter-spacing: 0.04em;
       text-transform: uppercase;
-      color: var(--forest);
+      color: var(--sun);
       margin: 0.85rem 0 0.35rem;
     }
     input {
       width: 100%;
       border: 1px solid var(--line);
-      background: #fff;
-      color: var(--ink);
+      background: rgba(255,255,255,0.92);
+      color: #1a1040;
       padding: 0.7rem 0.8rem;
       font: inherit;
       border-radius: 3px;
     }
     input:focus {
-      outline: 2px solid rgba(232, 93, 4, 0.45);
-      border-color: var(--spray);
+      outline: 2px solid rgba(244, 208, 63, 0.55);
+      border-color: var(--sun);
     }
     .actions {
       display: flex;
@@ -113,13 +119,13 @@
       font-weight: 600;
       padding: 0.7rem 1.05rem;
       border-radius: 3px;
-      background: var(--forest);
+      background: var(--indigo);
       color: #fff;
     }
-    button:hover { background: var(--moss); }
+    button:hover { background: #3b2a7a; }
     button.secondary {
       background: transparent;
-      color: var(--forest);
+      color: #fff;
       border: 1px solid var(--line);
     }
     button.spray { background: var(--spray); }
@@ -141,16 +147,18 @@
     .card {
       background: var(--mist);
       border: 1px solid var(--line);
-      border-radius: 4px;
+      border-radius: 6px;
       padding: 1.2rem 1.25rem;
+      backdrop-filter: blur(14px);
+      box-shadow: 0 18px 40px rgba(0,0,0,0.28);
     }
     .card h3 {
       font-family: Fraunces, Georgia, serif;
       margin: 0 0 0.5rem;
       font-size: 1.15rem;
-      color: var(--forest);
+      color: #fff;
     }
-    .meta { color: rgba(26, 31, 28, 0.7); font-size: 0.92rem; }
+    .meta { color: var(--muted); font-size: 0.92rem; }
     .row {
       display: flex;
       flex-wrap: wrap;
@@ -162,13 +170,19 @@
     .chip {
       display: inline-block;
       padding: 0.2rem 0.55rem;
-      border: 1px solid var(--spray);
-      color: var(--spray-deep);
+      border: 1px solid var(--sun);
+      color: var(--sun);
       font-size: 0.72rem;
       font-weight: 700;
       letter-spacing: 0.06em;
       text-transform: uppercase;
     }
+    .foot {
+      padding: 1rem 1.5rem 1.4rem;
+      color: rgba(247, 243, 234, 0.55);
+      font-size: 0.78rem;
+    }
+    .foot a { color: var(--sun); }
     ul.creds {
       list-style: none;
       margin: 0.75rem 0 0;
@@ -186,7 +200,8 @@
       display: block;
       margin-top: 0.5rem;
       padding: 0.65rem 0.75rem;
-      background: #fff;
+      background: rgba(255,255,255,0.9);
+      color: #1a1040;
       border: 1px dashed var(--line);
       word-break: break-all;
       font-size: 0.82rem;
@@ -287,6 +302,9 @@
         </div>
       </section>
     </div>
+    <footer class="foot">
+      © Кислов Роман Сергеевич · Tayga Mail · Apache License 2.0 · abstract backdrop by the author
+    </footer>
   </div>
 
   <script>

@@ -13,7 +13,7 @@ cmd/tayga
   ├─ smtp / imap / pop3 / managesieve
   ├─ sieve (foxcpp/go-sieve on delivery)
   ├─ dav (CalDAV + CardDAV via emersion/go-webdav)
-  ├─ flowsync (proprietary Tayga sync engine — ActiveSync/EWS wire)
+  ├─ flowsync (original FlowSync engine — ActiveSync/EWS wire; Apache-2.0)
   └─ httpapi (/healthz, /readyz, /metrics, /api/v1/auth/*, /dav/*, FlowSync, embedded admin UI)
 ```
 
@@ -37,20 +37,20 @@ cmd/tayga
 | `/dav/cal/{email}/…` | calendars (UUID-backed objects) |
 | `/dav/card/{email}/…` | address books |
 
-## FlowSync (proprietary)
+## FlowSync (original)
 
-Tayga's in-house sync engine. Wire-compatible with ActiveSync-class mobile clients and EWS-class desktop clients. **Not** a fork of Z-Push/SOGo/OpenChange — original Tayga code. Responses carry `X-FlowSync: Tayga-Proprietary`.
+Original sync engine by Кислов Роман Сергеевич (Apache-2.0). Wire-compatible with ActiveSync-class mobile clients and EWS-class desktop clients. **Not** a fork of Z-Push/SOGo/OpenChange. Responses carry `X-FlowSync: Tayga-Proprietary` (engine brand; project license remains Apache-2.0).
 
 | Endpoint | Role |
 |----------|------|
 | `/Autodiscover/Autodiscover.xml` | POX Autodiscover → FlowSync URLs |
 | `/autodiscover/autodiscover.json/…` | JSON Autodiscover |
-| `/Microsoft-Server-ActiveSync` | FolderSync, Sync (Email/Calendar/Contacts read+write), Ping, Provision, GetItemEstimate (XML + WBXML) |
+| `/Microsoft-Server-ActiveSync` | FolderSync/Create/Delete/Update, Sync, MoveItems, Ping, Provision, GetItemEstimate (XML + WBXML) |
 | `/EWS/Exchange.asmx` | Find/Get/Create/Update/Delete + SyncFolderItems for mail, calendar, contacts; FindFolder |
 
 Collection/item IDs exposed to clients are **UUIDs** (mailbox / message / calendar / address book / event / contact / device / policy).
 
-FolderSync advertises mailboxes plus CalDAV calendars (type 8) and CardDAV address books (type 9). Sync write-back: calendar/contact Add·Change·Delete; mail Change (`Read`) and Delete. EWS CreateItem/UpdateItem/DeleteItem for the same. Provision returns a richer device policy with a UUID `PolicyKey`.
+FolderSync advertises mailboxes plus CalDAV calendars (type 8) and CardDAV address books (type 9). Sync write-back: calendar/contact Add·Change·Delete; mail Change (`Read`) and Delete; FolderCreate/MoveItems for mailboxes. EWS CreateItem/UpdateItem/DeleteItem for the same. Provision returns a richer device policy with a UUID `PolicyKey`.
 
 Enable: `flowsync.enabled: true` (default).
 
@@ -99,6 +99,12 @@ Embedded at `/` (`internal/frontend/dist`): sign-in, TOTP + WebAuthn MFA, passke
 
 Admins: `http.admins` email list (default `admin@example.com`).
 
+## License & authorship
+
+- **License:** Apache License 2.0 (`LICENSE`, `NOTICE`)
+- **Author:** Кислов Роман Сергеевич (Roman Sergeyevich Kislov)
+- **UI:** abstract cosmic backgrounds (author artwork under `internal/frontend/dist/assets/`)
+
 ## Next milestones
 
-FlowSync FolderCreate/MoveItems → richer admin UI (create user form) → …
+Richer admin UI (create-user form) → FlowSync WBXML write-back → …

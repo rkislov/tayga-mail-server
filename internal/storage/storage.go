@@ -52,6 +52,7 @@ type Driver interface {
 	ListMessages(ctx context.Context, mailboxID string) ([]*Message, error)
 	UpdateMessageFlags(ctx context.Context, messageID, flags string) error
 	UpdateMessagePath(ctx context.Context, messageID, filePath string) error
+	MoveMessage(ctx context.Context, messageID, dstMailboxID string) (*Message, error)
 	DeleteMessage(ctx context.Context, messageID string) error
 	ExpungeMailbox(ctx context.Context, mailboxID string) ([]*Message, error)
 
@@ -78,6 +79,7 @@ type Driver interface {
 	ListCalendars(ctx context.Context, userID string) ([]*Calendar, error)
 	GetCalendarByName(ctx context.Context, userID, name string) (*Calendar, error)
 	GetCalendarByID(ctx context.Context, userID, id string) (*Calendar, error)
+	DeleteCalendar(ctx context.Context, userID, name string) error
 	ListCalendarObjects(ctx context.Context, calendarID string) ([]*CalendarObject, error)
 	GetCalendarObject(ctx context.Context, calendarID, hrefName string) (*CalendarObject, error)
 	GetCalendarObjectByID(ctx context.Context, id string) (*CalendarObject, error)

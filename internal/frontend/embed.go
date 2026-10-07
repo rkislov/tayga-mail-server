@@ -7,9 +7,9 @@ import (
 	"net/http"
 )
 
-// Dist holds static assets under frontend/dist.
+// Dist holds static assets under frontend/dist (including nested assets/).
 //
-//go:embed dist/*
+//go:embed all:dist
 var Dist embed.FS
 
 // Handler serves embedded static files at /.
