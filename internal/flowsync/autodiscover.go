@@ -283,10 +283,9 @@ func (a *autodiscover) handleMozilla(w http.ResponseWriter, r *http.Request) {
 	if domain == "" {
 		domain = a.hostname
 	}
-	socketType := "plain"
-	if ep.SSL {
-		socketType = "SSL"
-	}
+	imapPort, imapSock := mozillaSocket(ep.SSL, ep.IMAPSPort, ep.IMAPPort)
+	popPort, popSock := mozillaSocket(ep.SSL, ep.POP3SPort, ep.POPPort)
+	smtpPort, smtpSock := mozillaSocket(ep.SSL, ep.SMTPSPort, ep.SMTPPort)
 	login := email
 	if login == "" {
 		login = "%EMAILADDRESS%"
@@ -321,9 +320,9 @@ func (a *autodiscover) handleMozilla(w http.ResponseWriter, r *http.Request) {
   </emailProvider>
 </clientConfig>`,
 		xmlEscape(domain), xmlEscape(domain),
-		xmlEscape(ep.IMAPHost), preferSecurePort(ep.SSL, ep.IMAPSPort, ep.IMAPPort), socketType, xmlEscape(login),
-		xmlEscape(ep.POPHost), preferSecurePort(ep.SSL, ep.POP3SPort, ep.POPPort), socketType, xmlEscape(login),
-		xmlEscape(ep.SMTPHost), preferSecurePort(ep.SSL, ep.SMTPSPort, ep.SMTPPort), socketType, xmlEscape(login),
+		xmlEscape(ep.IMAPHost), imapPort, imapSock, xmlEscape(login),
+		xmlEscape(ep.POPHost), popPort, popSock, xmlEscape(login),
+		xmlEscape(ep.SMTPHost), smtpPort, smtpSock, xmlEscape(login),
 	)
 	w.Header().Set("Content-Type", "text/xml; charset=utf-8")
 	w.Header().Set("X-FlowSync", "Tayga-Proprietary")
@@ -343,6 +342,15 @@ func extractEmailFromPOX(body string) string {
 		return strings.TrimSpace(rest)
 	}
 	return strings.TrimSpace(rest[:j])
+}
+
+// mozillaSocket returns port + socketType for Mozilla autoconfig.
+// TLS public URL → SSL on the secure port; otherwise STARTTLS on the cleartext port.
+func mozillaSocket(ssl bool, securePort, plainPort int) (int, string) {
+	if ssl {
+		return preferSecurePort(true, securePort, plainPort), "SSL"
+	}
+	return preferSecurePort(false, securePort, plainPort), "STARTTLS"
 }
 
 func xmlEscape(s string) string {

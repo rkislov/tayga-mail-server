@@ -10,6 +10,26 @@ import (
 	"github.com/tayga/tms/internal/storage"
 )
 
+func (s *Server) calendarAccessible(r *http.Request, au *authUser, calendarID string) (*storage.Calendar, error) {
+	if cal, err := s.store.GetCalendarByID(r.Context(), au.ID, calendarID); err == nil {
+		return cal, nil
+	}
+	rights, err := s.store.CalendarRightsForUser(r.Context(), calendarID, au.ID)
+	if err != nil || rights == "" {
+		return nil, storage.ErrNotFound
+	}
+	shared, err := s.store.ListSharedCalendars(r.Context(), au.ID)
+	if err != nil {
+		return nil, err
+	}
+	for _, c := range shared {
+		if c.ID == calendarID {
+			return c, nil
+		}
+	}
+	return nil, storage.ErrNotFound
+}
+
 func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 	au, err := s.userFromBearer(r)
 	if err != nil {
@@ -28,15 +48,30 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		out := make([]map[string]any, 0, len(cals))
+		seen := map[string]struct{}{}
 		for _, c := range cals {
+			seen[c.ID] = struct{}{}
 			out = append(out, map[string]any{
-				"id": c.ID, "name": c.Name, "display_name": c.DisplayName, "description": c.Description,
+				"id": c.ID, "name": c.Name, "display_name": c.DisplayName, "description": c.Description, "shared": false,
 			})
+		}
+		if shared, err := s.store.ListSharedCalendars(r.Context(), au.ID); err == nil {
+			for _, c := range shared {
+				if _, ok := seen[c.ID]; ok {
+					continue
+				}
+				out = append(out, map[string]any{
+					"id": c.ID, "name": c.Name, "display_name": c.DisplayName + " (shared)", "description": c.Description, "shared": true,
+				})
+			}
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"calendars": out})
 
+	case len(parts) >= 3 && parts[0] == "calendars" && parts[2] == "acl":
+		s.handleCalendarACL(w, r, au, parts[1])
+
 	case r.Method == http.MethodGet && len(parts) == 3 && parts[0] == "calendars" && parts[2] == "events":
-		cal, err := s.store.GetCalendarByID(r.Context(), au.ID, parts[1])
+		cal, err := s.calendarAccessible(r, au, parts[1])
 		if err != nil {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 			return
@@ -80,7 +115,7 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 			return
 		}
-		cal, err := s.store.GetCalendarByID(r.Context(), au.ID, o.CalendarID)
+		cal, err := s.calendarAccessible(r, au, o.CalendarID)
 		if err != nil {
 			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 			return
