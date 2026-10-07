@@ -26,18 +26,19 @@ import (
 
 // Server wraps one or more go-smtp listeners (MX / submission / SMTPS).
 type Server struct {
-	cfg       *config.Config
-	log       *slog.Logger
-	store     storage.Driver
-	authn     *auth.Layer
-	mailstore *mailstore.Store
-	sieve     *sieve.Engine
-	tls       *tlsutil.Manager
+	cfg          *config.Config
+	log          *slog.Logger
+	store        storage.Driver
+	authn        *auth.Layer
+	mailstore    *mailstore.Store
+	sieve        *sieve.Engine
+	tls          *tlsutil.Manager
 	ha           ha.Gate
 	fenceWriters bool
 	writers      ha.WriterGate
 	scan         *scanPolicy
 	spam         *spamPolicy
+	dkimVerify   *dkimVerifyPolicy
 	queue        *OutboundQueue
 	servers      []*gosmtp.Server
 }
@@ -111,6 +112,24 @@ func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth
 		}
 		log.Info("smtp spam check enabled", "backend", sp.Name(), "folder", srv.spam.cfg.Folder)
 	}
+	if cfg.DKIMVerify.Enabled {
+		authserv := cfg.DKIMVerify.AuthservID
+		if authserv == "" {
+			authserv = cfg.Server.Hostname
+		}
+		action := cfg.DKIMVerify.Action
+		if action == "" {
+			action = "tag"
+		}
+		srv.dkimVerify = &dkimVerifyPolicy{
+			action:           action,
+			requireSignature: cfg.DKIMVerify.RequireSignature,
+			failOpen:         cfg.DKIMVerify.FailOpen,
+			authservID:       authserv,
+			log:              log,
+		}
+		log.Info("smtp dkim verify enabled", "action", action, "authserv_id", authserv)
+	}
 	return srv
 }
 
@@ -180,19 +199,20 @@ func (s *Server) Start(ctx context.Context) error {
 
 	for _, spec := range specs {
 		be := &backend{
-			log:         s.log,
-			store:       s.store,
-			authn:       s.authn,
-			mailstore:   s.mailstore,
-			sieve:       s.sieve,
-			hostname:    s.cfg.Server.Hostname,
-			maxSize:     s.cfg.SMTP.MaxSize,
-			requireAuth: spec.requireAuth,
+			log:          s.log,
+			store:        s.store,
+			authn:        s.authn,
+			mailstore:    s.mailstore,
+			sieve:        s.sieve,
+			hostname:     s.cfg.Server.Hostname,
+			maxSize:      s.cfg.SMTP.MaxSize,
+			requireAuth:  spec.requireAuth,
 			ha:           s.ha,
 			fenceWriters: s.fenceWriters,
 			writers:      s.writers,
 			scan:         s.scan,
 			spam:         s.spam,
+			dkimVerify:   s.dkimVerify,
 			out:          out,
 			dkim:         dkimSig,
 			queue:        oq,
@@ -262,19 +282,20 @@ func (s *Server) tlsConfig() *tls.Config {
 }
 
 type backend struct {
-	log         *slog.Logger
-	store       storage.Driver
-	authn       *auth.Layer
-	mailstore   *mailstore.Store
-	sieve       *sieve.Engine
-	hostname    string
-	maxSize     int64
-	requireAuth bool
+	log          *slog.Logger
+	store        storage.Driver
+	authn        *auth.Layer
+	mailstore    *mailstore.Store
+	sieve        *sieve.Engine
+	hostname     string
+	maxSize      int64
+	requireAuth  bool
 	ha           ha.Gate
 	fenceWriters bool
 	writers      ha.WriterGate
 	scan         *scanPolicy
 	spam         *spamPolicy
+	dkimVerify   *dkimVerifyPolicy
 	out          outboundSender
 	dkim         *dkimSigner
 	queue        *OutboundQueue
@@ -290,13 +311,13 @@ func (b *backend) NewSession(c *gosmtp.Conn) (gosmtp.Session, error) {
 }
 
 type session struct {
-	backend *backend
-	remote  string
-	user    *storage.User
-	from    string
-	toLocal []string
+	backend  *backend
+	remote   string
+	user     *storage.User
+	from     string
+	toLocal  []string
 	toRemote []string
-	opts    *gosmtp.MailOptions
+	opts     *gosmtp.MailOptions
 }
 
 func (s *session) AuthMechanisms() []string {
@@ -454,6 +475,18 @@ func (s *session) deliver(ctx context.Context, rcpt string, data []byte, msgid s
 	if s.backend.writers != nil {
 		if err := s.backend.writers.AllowWrite(ctx, u.ID); err != nil {
 			return &gosmtp.SMTPError{Code: 421, EnhancedCode: gosmtp.EnhancedCode{4, 3, 2}, Message: "Not writer for recipient; try later"}
+		}
+	}
+	// Inbound DKIM verify for unauthenticated MX only.
+	if s.backend.dkimVerify != nil && s.user == nil {
+		var dkimErr error
+		data, dkimErr = s.backend.dkimVerify.apply(data)
+		if dkimErr != nil {
+			var smtpErr *gosmtp.SMTPError
+			if errors.As(dkimErr, &smtpErr) {
+				return smtpErr
+			}
+			return dkimErr
 		}
 	}
 	if s.backend.scan != nil {
