@@ -60,7 +60,7 @@ func run(cfgPath string) error {
 	}
 	defer store.Close()
 
-	authn := auth.NewLayer(store)
+	authn := auth.NewLayer(store, cfg.LDAP)
 	ms := mailstore.New(cfg.Mailstore.Root)
 	sieveEng := sieve.New(store, ms, log)
 

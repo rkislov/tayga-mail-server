@@ -17,6 +17,7 @@ type Config struct {
 	IMAP        IMAPConfig        `yaml:"imap"`
 	POP3        POP3Config        `yaml:"pop3"`
 	ManageSieve ManageSieveConfig `yaml:"managesieve"`
+	LDAP        LDAPConfig        `yaml:"ldap"`
 	TLS         TLSConfig         `yaml:"tls"`
 	HTTP        HTTPConfig        `yaml:"http"`
 	Seed        SeedConfig        `yaml:"seed"`
@@ -66,6 +67,25 @@ type POP3Config struct {
 
 type ManageSieveConfig struct {
 	Listen string `yaml:"listen"`
+}
+
+// LDAPConfig holds per-domain LDAP directories for hybrid authentication.
+type LDAPConfig struct {
+	CacheTTL time.Duration               `yaml:"cache_ttl"`
+	Domains  map[string]LDAPDomainConfig `yaml:"domains"`
+}
+
+type LDAPDomainConfig struct {
+	Enabled      bool          `yaml:"enabled"`
+	URL          string        `yaml:"url"` // ldap:// or ldaps://
+	StartTLS     bool          `yaml:"start_tls"`
+	BindDN       string        `yaml:"bind_dn"`
+	BindPassword string        `yaml:"bind_password"`
+	BaseDN       string        `yaml:"base_dn"`
+	Filter       string        `yaml:"filter"` // {email}, {user}
+	AttrEmail    string        `yaml:"attr_email"`
+	AttrName     string        `yaml:"attr_name"`
+	Timeout      time.Duration `yaml:"timeout"`
 }
 
 type TLSConfig struct {
@@ -128,8 +148,12 @@ func Default() *Config {
 		IMAP:        IMAPConfig{Listen: ":1143"},
 		POP3:        POP3Config{Listen: ":1110"},
 		ManageSieve: ManageSieveConfig{Listen: ":14190"},
-		HTTP:        HTTPConfig{Listen: ":8080"},
-		Log:         LogConfig{Level: "info", Format: "json"},
+		LDAP: LDAPConfig{
+			CacheTTL: 5 * time.Minute,
+			Domains:  map[string]LDAPDomainConfig{},
+		},
+		HTTP: HTTPConfig{Listen: ":8080"},
+		Log:  LogConfig{Level: "info", Format: "json"},
 	}
 }
 
@@ -161,6 +185,30 @@ func (c *Config) Validate() error {
 	}
 	if c.SMTP.WriteTimeout <= 0 {
 		c.SMTP.WriteTimeout = 60 * time.Second
+	}
+	if c.LDAP.CacheTTL <= 0 {
+		c.LDAP.CacheTTL = 5 * time.Minute
+	}
+	if c.LDAP.Domains == nil {
+		c.LDAP.Domains = map[string]LDAPDomainConfig{}
+	}
+	for name, d := range c.LDAP.Domains {
+		if !d.Enabled {
+			continue
+		}
+		if d.URL == "" || d.BaseDN == "" || d.Filter == "" {
+			return fmt.Errorf("ldap.domains.%s: url, base_dn, and filter are required when enabled", name)
+		}
+		if d.AttrEmail == "" {
+			d.AttrEmail = "mail"
+		}
+		if d.AttrName == "" {
+			d.AttrName = "cn"
+		}
+		if d.Timeout <= 0 {
+			d.Timeout = 10 * time.Second
+		}
+		c.LDAP.Domains[name] = d
 	}
 	return nil
 }

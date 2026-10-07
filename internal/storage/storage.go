@@ -11,6 +11,7 @@ var (
 	ErrNotFound      = errors.New("not found")
 	ErrAlreadyExists = errors.New("already exists")
 	ErrUnauthorized  = errors.New("unauthorized")
+	ErrQuotaExceeded = errors.New("mailbox quota exceeded")
 )
 
 // Driver is the storage abstraction shared by protocol handlers.
@@ -29,6 +30,8 @@ type Driver interface {
 	GetUserByEmail(ctx context.Context, email string) (*User, error)
 	GetUserByID(ctx context.Context, id int64) (*User, error)
 	UpdateUserPassword(ctx context.Context, userID int64, passwordHash string) error
+	UpdateUserProfile(ctx context.Context, userID int64, displayName string) error
+	SumMailboxBytes(ctx context.Context, userID int64) (int64, error)
 
 	CreateAlias(ctx context.Context, domainID, userID int64, localPart string) (*Alias, error)
 	ResolveRecipient(ctx context.Context, email string) (*User, error)

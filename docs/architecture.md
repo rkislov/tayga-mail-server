@@ -1,4 +1,4 @@
-# Tayga Mail Server — Architecture (Phase 1–3)
+# Tayga Mail Server — Architecture (Phase 1–4)
 
 ## Overview
 
@@ -8,11 +8,10 @@ TMS is a single-binary mail server (`tayga-mail`) built in Go with `CGO_ENABLED=
 cmd/tayga
   ├─ config (YAML)
   ├─ storage (sqlite | postgres)
-  ├─ auth (local Argon2id; LDAP/OIDC stubs)
+  ├─ auth (local Argon2id; LDAP hybrid per-domain; OIDC stub)
   ├─ mailstore (Maildir++)
-  ├─ smtp (MX + submission)
-  ├─ imap (go-imap backend)
-  ├─ pop3 (RFC 1939 INBOX)
+  ├─ smtp / imap / pop3 / managesieve
+  ├─ sieve (foxcpp/go-sieve on delivery)
   └─ httpapi (/healthz, /readyz, /metrics, embedded UI placeholder)
 ```
 
@@ -20,6 +19,14 @@ cmd/tayga
 
 - Shared schema with `tenant_id` isolation.
 - Message bodies on disk (Maildir++); metadata in `messages` (UID, flags, path).
+- User mailbox quota: `users.quota_bytes` (0 = unlimited), enforced on SMTP/IMAP/Sieve writes.
+
+## Auth
+
+- **Local**: Argon2id password hashes.
+- **LDAP hybrid** (`ldap.domains.<domain>`): service bind → search → user bind; JIT creates `auth_source=ldap` users. Existing local users never fall through to LDAP.
+- Response cache: `ldap.cache_ttl` (negative cache is shorter).
+- OIDC: stub for a later milestone.
 
 ## Protocols (dev ports)
 
@@ -32,21 +39,9 @@ cmd/tayga
 | ManageSieve | `managesieve.listen`   | `:14190`  |
 | HTTP        | `http.listen`          | `:8080`   |
 
-## IMAP MVP
-
-LOGIN, LIST, SELECT, FETCH, STORE, APPEND, SEARCH (basic), COPY, EXPUNGE,
-CREATE/DELETE/RENAME. Auth via local Argon2id. Bodies read from Maildir.
-
-## POP3 MVP
-
-USER/PASS, STAT, LIST, RETR, DELE (+QUIT), RSET, UIDL, TOP, CAPA on INBOX.
-
 ## Sieve MVP
 
-- Interpreter: `foxcpp/go-sieve` (fileinto, reject, envelope, imap4flags, variables, relational, copy, subaddress, body).
-- Active script runs on SMTP local delivery.
-- ManageSieve (RFC 5804 subset): AUTHENTICATE PLAIN, PUTSCRIPT, GETSCRIPT, LISTSCRIPTS, SETACTIVE, DELETESCRIPT, CHECKSCRIPT, RENAMESCRIPT.
-- Vacation and outbound `redirect` to external MTAs are not implemented yet (local redirect only).
+Active script on SMTP local delivery; ManageSieve on `:14190`.
 
 ## Build
 
@@ -59,4 +54,4 @@ Seed user: `admin@example.com` / `changeme`
 
 ## Next milestones
 
-LDAP per-domain → OIDC/MFA → CalDAV/CardDAV → ActiveSync/EWS → …
+OIDC per-domain + MFA (TOTP/WebAuthn) → CalDAV/CardDAV → ActiveSync/EWS → …
