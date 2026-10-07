@@ -89,7 +89,7 @@ Privileged ports (<1024) require root or `CAP_NET_BIND_SERVICE`. TLS certs: `tls
 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o tayga-mail ./cmd/tayga
 ./tayga-mail version
 ./tayga-mail -config configs/tayga.example.yaml
-# Cross builds: VERSION=v0.5.1 ./scripts/crossbuild.sh
+# Cross builds: VERSION=v0.5.2 ./scripts/crossbuild.sh
 ```
 
 Seed: `admin@example.com` / `changeme`. UUID schema requires a fresh DB when upgrading from integer IDs.
@@ -108,7 +108,7 @@ Enable: `mfa.webauthn.enabled: true` (RP ID from `http.public_url`).
 
 ## Web UI
 
-Embedded at `/` (`internal/frontend/dist`): app shell with **mail**, **calendar**, **contacts**, **files**, user settings (profile / security / appearance / Sieve / language ru|en), and admin (monitor / tenants / TLS / server). Themes via `localStorage` (`tayga.theme`).
+Embedded at `/` (`internal/frontend/dist`): app shell with **mail**, **calendar**, **contacts**, **files** (Outlook-style panes), user settings (profile / security / appearance / Sieve / language ru|en), and admin (monitor with live SVG charts / tenants / TLS / server). Unauthenticated users are sent to the login card. Themes via `localStorage` (`tayga.theme`).
 
 ### User apps API
 
