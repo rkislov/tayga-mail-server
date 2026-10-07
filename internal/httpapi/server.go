@@ -117,6 +117,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/migration", s.handleMigration)
 	mux.HandleFunc("/api/v1/migration/", s.handleMigration)
 	mux.HandleFunc("/api/v1/admin/migration", s.handleAdminMigration)
+	mux.HandleFunc("/api/v1/admin/mail-log", s.handleAdminMailLog)
 	mux.HandleFunc("/api/v1/notifications", s.handleNotifications)
 	mux.HandleFunc("/api/v1/notifications/", s.handleNotifications)
 

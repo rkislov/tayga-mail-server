@@ -201,6 +201,9 @@ type Driver interface {
 	ServerStats(ctx context.Context) (*ServerStats, error)
 	TenantStats(ctx context.Context, tenantID string) (*TenantStats, error)
 
+	InsertMailLog(ctx context.Context, e *MailLogEntry) error
+	SearchMailLog(ctx context.Context, q MailLogQuery) ([]MailLogEntry, error)
+
 	DB() *sql.DB
 }
 

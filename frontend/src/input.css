@@ -1549,8 +1549,20 @@ html[data-theme="teriberka"] {
     min-width: 7rem;
   }
 
+  .filter-bar > .filter-grow {
+    flex: 2 1 16rem;
+    min-width: 12rem;
+  }
+
   .filter-bar .field-label {
     margin-top: 0;
+  }
+
+  .maillog-lines {
+    max-height: min(60vh, 28rem);
+    font-size: 0.8rem;
+    line-height: 1.45;
+    margin-top: 0.5rem;
   }
 
   .monitor-grid {

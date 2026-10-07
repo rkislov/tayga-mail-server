@@ -98,7 +98,7 @@ XMPP + OMEMO: [docs/xmpp.md](./xmpp.md), TZ [docs/tms-xmpp-001.md](./tms-xmpp-00
 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o tayga-mail ./cmd/tayga
 ./tayga-mail version
 ./tayga-mail -config configs/tayga.example.yaml
-# Cross builds: VERSION=v0.7.3 ./scripts/crossbuild.sh
+# Cross builds: VERSION=v0.8.0 ./scripts/crossbuild.sh
 # Ops console: ./tayga-mail menu -config configs/tayga.example.yaml
 ```
 
@@ -118,7 +118,7 @@ Enable: `mfa.webauthn.enabled: true` (RP ID from `http.public_url`).
 
 ## Web UI
 
-Embedded at `/` (`internal/frontend/dist`): app shell with **mail**, **calendar**, **contacts**, **files**, **chat** (Outlook-style panes; ≤900px master-detail), user settings (profile / security / appearance / Sieve+vacation / language ru|en), and admin (monitor / tenants / УЦ / **XMPP** / server / CoS). Roles: `global_admin`, `domain_admin`, `user`. Unauthenticated users are sent to the login card. Themes via `localStorage` (`tayga.theme`); street-art theme promotes Chat/Messenger. Thunderbird companion: `extensions/thunderbird-tayga/`. Chat API: `/api/v1/chat/*`; admin XMPP/bots: `/api/v1/admin/bots`, settings section `xmpp`. Details: [xmpp.md](./xmpp.md).
+Embedded at `/` (`internal/frontend/dist`): app shell with **mail**, **calendar**, **contacts**, **files**, **chat** (Outlook-style panes; ≤900px master-detail), user settings (profile / security / appearance / Sieve+vacation / language ru|en), and admin (monitor / **mail log** / tenants / УЦ / **XMPP** / server / CoS). Roles: `global_admin`, `domain_admin`, `user`. Unauthenticated users are sent to the login card. Themes via `localStorage` (`tayga.theme`); street-art theme promotes Chat/Messenger. Thunderbird companion: `extensions/thunderbird-tayga/`. Chat API: `/api/v1/chat/*`; admin XMPP/bots: `/api/v1/admin/bots`, settings section `xmpp`. Details: [xmpp.md](./xmpp.md).
 
 ### User apps API
 
@@ -171,6 +171,7 @@ Embedded at `/` (`internal/frontend/dist`): app shell with **mail**, **calendar*
 | `GET/POST /api/v1/admin/bots` | XMPP status + HTTP bots; create bot (token once) |
 | `DELETE /api/v1/admin/bots/{id}` | delete HTTP bot |
 | `GET /api/v1/admin/status` | monitoring snapshot (tenant + server counters) |
+| `GET /api/v1/admin/mail-log?q=` | searchable mail transaction log (`domain_admin` → own domains; `global_admin` → all) |
 | `GET /api/v1/admin/outbound` | list outbound retry queue |
 | `POST /api/v1/admin/outbound/{uuid}/retry` | schedule immediate retry |
 | `DELETE /api/v1/admin/outbound/{uuid}` | drop queued message |
