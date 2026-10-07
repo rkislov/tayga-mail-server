@@ -31,9 +31,18 @@ type Config struct {
 	Spam        SpamConfig        `yaml:"spam"`
 	DKIMVerify  DKIMVerifyConfig  `yaml:"dkim_verify"`
 	SPF         SPFConfig         `yaml:"spf"`
+	IPRev       IPRevConfig       `yaml:"iprev"`
 	DMARC       DMARCConfig       `yaml:"dmarc"`
 	ARC         ARCConfig         `yaml:"arc"`
 	Log         LogConfig         `yaml:"log"`
+}
+
+// IPRevConfig checks PTR + forward-confirmed reverse DNS (RFC 8601 iprev).
+type IPRevConfig struct {
+	Enabled    bool   `yaml:"enabled"`
+	Action     string `yaml:"action"` // tag | reject
+	FailOpen   bool   `yaml:"fail_open"`
+	AuthservID string `yaml:"authserv_id"`
 }
 
 // ARCConfig verifies and optionally seals Authenticated Received Chain (RFC 8617).
@@ -487,6 +496,11 @@ func Default() *Config {
 			Action:   "tag",
 			FailOpen: true,
 		},
+		IPRev: IPRevConfig{
+			Enabled:  false,
+			Action:   "tag",
+			FailOpen: true,
+		},
 		DMARC: DMARCConfig{
 			Enabled:  false,
 			Action:   "tag",
@@ -810,6 +824,19 @@ func (c *Config) Validate() error {
 		}
 		if c.SPF.AuthservID == "" {
 			c.SPF.AuthservID = c.Server.Hostname
+		}
+	}
+	if c.IPRev.Enabled {
+		switch c.IPRev.Action {
+		case "", "tag", "reject":
+			if c.IPRev.Action == "" {
+				c.IPRev.Action = "tag"
+			}
+		default:
+			return fmt.Errorf("iprev.action must be tag or reject, got %q", c.IPRev.Action)
+		}
+		if c.IPRev.AuthservID == "" {
+			c.IPRev.AuthservID = c.Server.Hostname
 		}
 	}
 	if c.DMARC.Enabled {
