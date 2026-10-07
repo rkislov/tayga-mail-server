@@ -31,8 +31,6 @@ func parseSyncClientOps(body []byte) []clientOp {
 	}
 	src := string(body)
 	if body[0] == wbxmlVersion {
-		// Minimal WBXML: only ServerId deletes / Class already handled elsewhere.
-		// Full WBXML write-back uses XML from clients that speak XML, or opaque Confirmed.
 		return parseWBXMLClientOps(body)
 	}
 	return parseXMLClientOps(src)
@@ -70,13 +68,6 @@ func extractAppDataFields(block string) map[string]string {
 		}
 	}
 	return fields
-}
-
-func parseWBXMLClientOps(body []byte) []clientOp {
-	// XML write-back is the supported path for this milestone; WBXML client mutation
-	// parsing needs a full command walker. Avoid false-positive deletes on ServerId strings.
-	_ = body
-	return nil
 }
 
 func (h *easHandler) applyWritebacks(ctx context.Context, u *storage.User, kind collectionKind, collectionID string, ops []clientOp) []writebackResult {

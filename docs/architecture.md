@@ -50,7 +50,7 @@ Original sync engine by Кислов Роман Сергеевич (Apache-2.0).
 
 Collection/item IDs exposed to clients are **UUIDs** (mailbox / message / calendar / address book / event / contact / device / policy).
 
-FolderSync advertises mailboxes plus CalDAV calendars (type 8) and CardDAV address books (type 9). Sync write-back: calendar/contact Add·Change·Delete; mail Change (`Read`) and Delete; FolderCreate/MoveItems for mailboxes. EWS CreateItem/UpdateItem/DeleteItem for the same. Provision returns a richer device policy with a UUID `PolicyKey`.
+FolderSync advertises mailboxes plus CalDAV calendars (type 8) and CardDAV address books (type 9). Sync write-back (XML and WBXML): calendar/contact Add·Change·Delete; mail Change (`Read`) and Delete; FolderCreate/MoveItems for mailboxes. EWS CreateItem/UpdateItem/DeleteItem for the same. Provision returns a richer device policy with a UUID `PolicyKey`.
 
 Enable: `flowsync.enabled: true` (default).
 
@@ -107,4 +107,4 @@ Admins: `http.admins` email list (default `admin@example.com`).
 
 ## Next milestones
 
-Richer admin UI (create-user form) → FlowSync WBXML write-back → …
+Admin create-user form + FlowSync WBXML Sync write-back (Add/Change/Delete) shipped. Next: richer admin (disable/reset), broader WBXML field coverage, IMAP IDLE polish.
