@@ -9,11 +9,17 @@
 *.db
 *.db-*
 
+# Local overrides
+configs/tayga.local.yaml
+
 # IDE / OS
 .idea/
 .vscode/
 .DS_Store
 *.swp
+
+# Frontend
+frontend/node_modules/
 
 # Go
 /vendor/

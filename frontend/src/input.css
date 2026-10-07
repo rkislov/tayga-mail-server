@@ -1,0 +1,206 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Fraunces", Georgia, serif;
+  --font-body: "Source Sans 3", system-ui, sans-serif;
+  --color-sun: #e8b84a;
+  --color-spray: #d97706;
+  --color-spray-deep: #b45309;
+  --color-pine: #1a3d2e;
+  --color-moss: #2f6b4f;
+  --color-mist-ink: #f4f1ea;
+  --color-cosmos: #1a1040;
+  --color-cosmos-sun: #f4d03f;
+  --color-cosmos-spray: #ff6b35;
+}
+
+@layer base {
+  html,
+  body {
+    @apply h-full;
+  }
+
+  body {
+    @apply m-0 font-body text-mist-ink antialiased;
+    background-color: #0f241c;
+    background-image:
+      linear-gradient(180deg, rgba(15, 36, 28, 0.45) 0%, rgba(8, 20, 16, 0.62) 50%, rgba(4, 12, 10, 0.78) 100%),
+      var(--tayga-bg-image);
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+    background-repeat: no-repeat;
+  }
+
+  html[data-theme="cosmos"] body {
+    background-color: #1a1040;
+    background-image:
+      linear-gradient(180deg, rgba(26, 16, 64, 0.35) 0%, rgba(10, 8, 28, 0.55) 55%, rgba(5, 8, 16, 0.78) 100%),
+      var(--tayga-bg-image);
+  }
+}
+
+@layer components {
+  .panel,
+  .card {
+    @apply rounded border border-white/20 p-5 shadow-lg;
+    background: rgba(12, 32, 24, 0.72);
+    backdrop-filter: blur(14px);
+  }
+
+  html[data-theme="cosmos"] .panel,
+  html[data-theme="cosmos"] .card {
+    background: rgba(18, 12, 40, 0.62);
+  }
+
+  .brand {
+    @apply font-display text-[clamp(1.85rem,5vw,2.75rem)] font-bold leading-tight tracking-tight text-white;
+    text-shadow: 0 2px 14px rgba(0, 0, 0, 0.4);
+  }
+
+  .brand span {
+    @apply text-sun;
+  }
+
+  html[data-theme="cosmos"] .brand span {
+    color: var(--color-cosmos-sun);
+  }
+
+  .heading {
+    @apply font-display text-xl font-medium text-white;
+  }
+
+  .lede,
+  .meta {
+    @apply text-[0.95rem] text-white/70;
+  }
+
+  .field-label {
+    @apply mt-3 mb-1.5 block text-xs font-semibold uppercase tracking-wide text-sun;
+  }
+
+  html[data-theme="cosmos"] .field-label {
+    color: var(--color-cosmos-sun);
+  }
+
+  .field-input {
+    @apply w-full rounded-sm border border-white/20 bg-white/90 px-3 py-2.5 text-pine outline-none;
+  }
+
+  .field-input:focus {
+    @apply border-sun ring-2 ring-sun/50;
+  }
+
+  html[data-theme="cosmos"] .field-input {
+    @apply text-cosmos;
+  }
+
+  .field-input-mono {
+    @apply w-full min-h-36 resize-y rounded-sm border border-white/20 bg-white/90 px-3 py-2.5 font-mono text-sm text-pine outline-none;
+  }
+
+  .field-input-mono:focus {
+    @apply border-sun ring-2 ring-sun/50;
+  }
+
+  html[data-theme="cosmos"] .field-input-mono {
+    @apply text-cosmos;
+  }
+
+  .btn {
+    @apply cursor-pointer appearance-none rounded-sm border-0 px-4 py-2.5 font-semibold text-white;
+    background: var(--color-pine);
+  }
+
+  .btn:hover {
+    background: #244a39;
+  }
+
+  html[data-theme="cosmos"] .btn {
+    background: #2a1b5c;
+  }
+
+  html[data-theme="cosmos"] .btn:hover {
+    background: #3b2a7a;
+  }
+
+  .btn-spray {
+    @apply cursor-pointer appearance-none rounded-sm border-0 px-4 py-2.5 font-semibold text-white;
+    background: var(--color-spray);
+  }
+
+  .btn-spray:hover {
+    background: var(--color-spray-deep);
+  }
+
+  html[data-theme="cosmos"] .btn-spray {
+    background: var(--color-cosmos-spray);
+  }
+
+  html[data-theme="cosmos"] .btn-spray:hover {
+    background: #e85d04;
+  }
+
+  .btn-secondary {
+    @apply cursor-pointer appearance-none rounded-sm border border-white/20 bg-transparent px-4 py-2.5 font-semibold text-white;
+  }
+
+  .btn-secondary:hover {
+    @apply bg-white/10;
+  }
+
+  .btn:disabled,
+  .btn-spray:disabled,
+  .btn-secondary:disabled {
+    @apply cursor-not-allowed opacity-55;
+  }
+
+  .actions {
+    @apply mt-5 flex flex-wrap gap-2.5;
+  }
+
+  .msg {
+    @apply mt-3 min-h-[1.2em] text-sm;
+  }
+
+  .msg.err {
+    @apply text-red-300;
+  }
+
+  .msg.ok {
+    @apply text-emerald-300;
+  }
+
+  .chip {
+    @apply inline-block border border-sun px-2 py-0.5 text-[0.72rem] font-bold uppercase tracking-wider text-sun;
+  }
+
+  html[data-theme="cosmos"] .chip {
+    border-color: var(--color-cosmos-sun);
+    color: var(--color-cosmos-sun);
+  }
+
+  .creds {
+    @apply mt-3 list-none p-0;
+  }
+
+  .creds li {
+    @apply flex justify-between gap-3 border-t border-white/20 py-2 text-[0.92rem];
+  }
+
+  .secret {
+    @apply mt-2 block break-all border border-dashed border-white/25 bg-white/90 px-3 py-2.5 font-mono text-sm text-pine;
+  }
+
+  html[data-theme="cosmos"] .secret {
+    @apply text-cosmos;
+  }
+
+  .theme-toggle {
+    @apply cursor-pointer rounded-sm border border-white/25 bg-black/25 px-2.5 py-1.5 text-xs font-semibold uppercase tracking-wide text-white/85;
+  }
+
+  .theme-toggle:hover {
+    @apply bg-black/40 text-white;
+  }
+}
