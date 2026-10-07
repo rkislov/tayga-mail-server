@@ -12,10 +12,13 @@ import (
 	_ "github.com/lib/pq"
 )
 
-// Gate reports whether this process should accept MX (unauthenticated) mail.
+// Gate reports whether this process holds the HA lease (MX and/or maildir writer).
 type Gate interface {
 	IsLeader() bool
 }
+
+// ErrStandby is returned by protocol handlers when ha.fence=writers and this node is not leader.
+var ErrStandby = fmt.Errorf("ha: node is standby; try the active writer")
 
 // AlwaysLeader is used when HA fencing is disabled.
 type AlwaysLeader struct{}
@@ -119,13 +122,13 @@ func (l *PGLease) tryAcquire(ctx context.Context) {
 	}
 	if ok {
 		if !l.leader.Swap(true) {
-			l.log.Info("ha lease acquired; this node is MX leader")
+			l.log.Info("ha lease acquired; this node is active")
 		}
 		return
 	}
 	// Someone else holds it — confirm we are not leader.
 	if l.leader.Swap(false) {
-		l.log.Warn("ha lease held by peer; standing by for MX")
+		l.log.Warn("ha lease held by peer; standing by")
 	}
 }
 

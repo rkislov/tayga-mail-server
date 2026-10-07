@@ -31,16 +31,20 @@ type Server struct {
 	mailstore *mailstore.Store
 	sieve     *sieve.Engine
 	tls       *tlsutil.Manager
-	ha        ha.Gate
-	queue     *OutboundQueue
-	servers   []*gosmtp.Server
+	ha           ha.Gate
+	fenceWriters bool
+	queue        *OutboundQueue
+	servers      []*gosmtp.Server
 }
 
 func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth.Layer, ms *mailstore.Store, eng *sieve.Engine, tlsMgr *tlsutil.Manager, gate ha.Gate) *Server {
 	if gate == nil {
 		gate = ha.AlwaysLeader{}
 	}
-	return &Server{cfg: cfg, log: log, store: store, authn: authn, mailstore: ms, sieve: eng, tls: tlsMgr, ha: gate}
+	return &Server{
+		cfg: cfg, log: log, store: store, authn: authn, mailstore: ms, sieve: eng, tls: tlsMgr, ha: gate,
+		fenceWriters: cfg.HA.FenceWriters(),
+	}
 }
 
 func (s *Server) outbound() (outboundSender, *dkimSigner, error) {
@@ -95,6 +99,7 @@ func (s *Server) Start(ctx context.Context) error {
 			Enabled: true, Workers: qc.Workers, PollInterval: qc.PollInterval,
 			MaxAttempts: qc.MaxAttempts, BatchSize: qc.BatchSize,
 		}, s.log)
+		oq.SetHA(s.ha, s.fenceWriters)
 		s.queue = oq
 		oq.Start(ctx)
 	}
@@ -115,12 +120,13 @@ func (s *Server) Start(ctx context.Context) error {
 			hostname:    s.cfg.Server.Hostname,
 			maxSize:     s.cfg.SMTP.MaxSize,
 			requireAuth: spec.requireAuth,
-			ha:          s.ha,
-			out:         out,
-			dkim:        dkimSig,
-			queue:       oq,
-			ipLimit:     ipLim,
-			userLimit:   userLim,
+			ha:           s.ha,
+			fenceWriters: s.fenceWriters,
+			out:          out,
+			dkim:         dkimSig,
+			queue:        oq,
+			ipLimit:      ipLim,
+			userLimit:    userLim,
 		}
 		srv := gosmtp.NewServer(be)
 		srv.Domain = s.cfg.Server.Hostname
@@ -193,12 +199,13 @@ type backend struct {
 	hostname    string
 	maxSize     int64
 	requireAuth bool
-	ha        ha.Gate
-	out       outboundSender
-	dkim      *dkimSigner
-	queue     *OutboundQueue
-	ipLimit   *rateLimiter
-	userLimit *rateLimiter
+	ha           ha.Gate
+	fenceWriters bool
+	out          outboundSender
+	dkim         *dkimSigner
+	queue        *OutboundQueue
+	ipLimit      *rateLimiter
+	userLimit    *rateLimiter
 }
 
 func (b *backend) NewSession(c *gosmtp.Conn) (gosmtp.Session, error) {
@@ -270,9 +277,11 @@ func (s *session) Mail(from string, opts *gosmtp.MailOptions) error {
 	if s.backend.requireAuth && s.user == nil {
 		return &gosmtp.SMTPError{Code: 530, EnhancedCode: gosmtp.EnhancedCode{5, 7, 0}, Message: "Authentication required"}
 	}
-	// Unauthenticated MX: only the HA lease holder accepts new mail.
-	if !s.backend.requireAuth && s.backend.ha != nil && !s.backend.ha.IsLeader() {
-		return &gosmtp.SMTPError{Code: 421, EnhancedCode: gosmtp.EnhancedCode{4, 3, 2}, Message: "Not MX leader; try later"}
+	// HA fencing: mx = unauthenticated only; writers = all SMTP writers.
+	if s.backend.ha != nil && !s.backend.ha.IsLeader() {
+		if s.backend.fenceWriters || !s.backend.requireAuth {
+			return &gosmtp.SMTPError{Code: 421, EnhancedCode: gosmtp.EnhancedCode{4, 3, 2}, Message: "Not HA leader; try later"}
+		}
 	}
 	s.from = from
 	s.opts = opts

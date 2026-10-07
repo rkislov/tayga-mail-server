@@ -16,6 +16,7 @@ import (
 
 	"github.com/tayga/tms/internal/auth"
 	"github.com/tayga/tms/internal/config"
+	"github.com/tayga/tms/internal/ha"
 	"github.com/tayga/tms/internal/mailstore"
 	"github.com/tayga/tms/internal/storage"
 	"github.com/tayga/tms/internal/tlsutil"
@@ -23,21 +24,29 @@ import (
 
 // Server is a minimal RFC 1939 POP3 server for INBOX.
 type Server struct {
-	cfg       *config.Config
-	log       *slog.Logger
-	store     storage.Driver
-	authn     *auth.Layer
-	mailstore *mailstore.Store
-	tls       *tlsutil.Manager
-	tlsCfg    *tls.Config
+	cfg          *config.Config
+	log          *slog.Logger
+	store        storage.Driver
+	authn        *auth.Layer
+	mailstore    *mailstore.Store
+	tls          *tlsutil.Manager
+	tlsCfg       *tls.Config
+	ha           ha.Gate
+	fenceWriters bool
 
 	mu     sync.Mutex
 	ln     []net.Listener
 	closed bool
 }
 
-func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth.Layer, ms *mailstore.Store, tlsMgr *tlsutil.Manager) *Server {
-	return &Server{cfg: cfg, log: log, store: store, authn: authn, mailstore: ms, tls: tlsMgr}
+func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth.Layer, ms *mailstore.Store, tlsMgr *tlsutil.Manager, gate ha.Gate) *Server {
+	if gate == nil {
+		gate = ha.AlwaysLeader{}
+	}
+	return &Server{
+		cfg: cfg, log: log, store: store, authn: authn, mailstore: ms, tls: tlsMgr,
+		ha: gate, fenceWriters: cfg.HA.FenceWriters(),
+	}
 }
 
 func (s *Server) Start(ctx context.Context) error {
@@ -340,6 +349,9 @@ func (sess *session) cmdDELE(arg string) error {
 	if err := sess.requireAuth(); err != nil {
 		return err
 	}
+	if sess.s.fenceWriters && sess.s.ha != nil && !sess.s.ha.IsLeader() {
+		return sess.err("standby; try active node")
+	}
 	n, err := strconv.Atoi(arg)
 	if err != nil || n < 1 || n > len(sess.msgs) || sess.deleted[n] {
 		return sess.err("no such message")
@@ -413,6 +425,17 @@ func (sess *session) cmdSTLS() error {
 
 func (sess *session) cmdQUIT() error {
 	if sess.authed {
+		hasDel := false
+		for i := range sess.msgs {
+			if sess.deleted[i+1] {
+				hasDel = true
+				break
+			}
+		}
+		if hasDel && sess.s.fenceWriters && sess.s.ha != nil && !sess.s.ha.IsLeader() {
+			_ = sess.err("standby; deletions not committed")
+			return nil
+		}
 		ctx := context.Background()
 		for i := range sess.msgs {
 			if !sess.deleted[i+1] {
