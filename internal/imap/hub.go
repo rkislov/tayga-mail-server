@@ -9,16 +9,33 @@ import (
 	"github.com/tayga/tms/internal/storage"
 )
 
+// ClusterPublisher fans mailbox notifications to other Tayga nodes (e.g. Postgres LISTEN/NOTIFY).
+type ClusterPublisher interface {
+	Publish(email, mailbox string)
+}
+
 // Hub broadcasts mailbox status changes to IDLE/NOOP clients (go-imap BackendUpdater).
 // Each Updates() call creates a fan-out subscription (one per IMAP listener).
 type Hub struct {
-	store storage.Driver
-	mu    sync.Mutex
-	subs  []chan backend.Update
+	store   storage.Driver
+	mu      sync.Mutex
+	subs    []chan backend.Update
+	cluster ClusterPublisher
 }
 
 func NewHub(store storage.Driver) *Hub {
 	return &Hub{store: store}
+}
+
+// SetCluster attaches an optional cross-node publisher. Local Notify still wakes this process;
+// Publish is best-effort for peers.
+func (h *Hub) SetCluster(p ClusterPublisher) {
+	if h == nil {
+		return
+	}
+	h.mu.Lock()
+	h.cluster = p
+	h.mu.Unlock()
 }
 
 func (h *Hub) Updates() <-chan backend.Update {
@@ -29,8 +46,27 @@ func (h *Hub) Updates() <-chan backend.Update {
 	return ch
 }
 
-// Notify pushes an EXISTS-capable mailbox status update for username@mailbox.
+// Notify pushes an EXISTS-capable mailbox status update for username@mailbox,
+// then optionally publishes to peer nodes.
 func (h *Hub) Notify(email, mailbox string) {
+	if h == nil {
+		return
+	}
+	h.notifyLocal(email, mailbox)
+	h.mu.Lock()
+	pub := h.cluster
+	h.mu.Unlock()
+	if pub != nil {
+		pub.Publish(email, mailbox)
+	}
+}
+
+// NotifyRemote applies a peer notification locally without rebroadcasting.
+func (h *Hub) NotifyRemote(email, mailbox string) {
+	h.notifyLocal(email, mailbox)
+}
+
+func (h *Hub) notifyLocal(email, mailbox string) {
 	if h == nil {
 		return
 	}

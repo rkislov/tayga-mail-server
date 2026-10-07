@@ -173,6 +173,16 @@ func run(cfgPath string) error {
 	sieveEng := sieve.New(store, ms, log)
 	sieveEng.Notifier = imapHub
 
+	if cfg.Storage.Driver == "postgres" {
+		if sqlStore, ok := store.(*storage.Store); ok {
+			bus := imapserver.NewPGBus(imapHub, sqlStore.DB(), cfg.Storage.Postgres.DSN, log)
+			imapHub.SetCluster(bus)
+			if err := bus.Start(ctx); err != nil {
+				return fmt.Errorf("imap idle cluster: %w", err)
+			}
+		}
+	}
+
 	if err := seed.Run(ctx, cfg.Seed, store, authn.Hasher, ms, log); err != nil {
 		return fmt.Errorf("seed: %w", err)
 	}

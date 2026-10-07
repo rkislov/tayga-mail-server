@@ -141,4 +141,4 @@ Admins: `http.admins` email list (default `admin@example.com`).
 
 ## Next milestones
 
-Backup restore (CLI/UI/API) + HA ops notes. Next: optional object-store maildir, cross-node IDLE.
+Cross-node IMAP IDLE via Postgres LISTEN/NOTIFY (`tayga_idle`). Next: optional object-store maildir backend.
