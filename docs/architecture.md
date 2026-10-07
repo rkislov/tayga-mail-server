@@ -85,13 +85,15 @@ Enable: `mfa.webauthn.enabled: true` (RP ID from `http.public_url`).
 
 ## Admin UI
 
-Embedded at `/` (`internal/frontend/dist`): sign-in, TOTP + WebAuthn MFA, passkey enrollment/revoke, quota usage, tenant user admin.
+Embedded at `/` (`internal/frontend/dist`): sign-in, TOTP + WebAuthn MFA, passkey enrollment/revoke, Sieve filters, quota usage, tenant user admin.
 
 ### Account / admin API
 
 | Endpoint | Role |
 |----------|------|
 | `GET/PATCH /api/v1/me` | profile + `quota_bytes` / `used_bytes` |
+| `GET/PUT/DELETE /api/v1/sieve/scripts[/{name}]` | list / save / delete Sieve scripts |
+| `POST /api/v1/sieve/scripts/{name}/activate` | set active script |
 | `GET /api/v1/admin/users` | list tenant users (admins only) |
 | `POST /api/v1/admin/users` | create local user |
 | `PUT /api/v1/admin/users/{uuid}/quota` | set quota (0 = unlimited) |
@@ -108,4 +110,4 @@ Admins: `http.admins` email list (default `admin@example.com`).
 
 ## Next milestones
 
-IMAP IDLE/EXISTS via update hub (SMTP/Sieve delivery + mailbox mutations). Next: Sieve UI, multi-tenant polish.
+Sieve script UI + REST API; IMAP IDLE hub. Next: multi-tenant polish, richer Autodiscover.
