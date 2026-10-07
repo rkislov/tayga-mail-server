@@ -219,6 +219,60 @@ func (s *Store) UpdateUserProfile(ctx context.Context, userID, displayName strin
 	return nil
 }
 
+func (s *Store) UpdateUserQuota(ctx context.Context, userID string, quotaBytes int64) error {
+	q := s.rebind(`UPDATE users SET quota_bytes = ? WHERE id = ?`)
+	res, err := s.db.ExecContext(ctx, q, quotaBytes, userID)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (s *Store) UpdateUserEnabled(ctx context.Context, userID string, enabled bool) error {
+	v := 0
+	if enabled {
+		v = 1
+	}
+	q := s.rebind(`UPDATE users SET enabled = ? WHERE id = ?`)
+	res, err := s.db.ExecContext(ctx, q, v, userID)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (s *Store) ListUsersByTenant(ctx context.Context, tenantID string) ([]*User, error) {
+	q := s.rebind(`SELECT ` + userCols + ` FROM users WHERE tenant_id = ? ORDER BY email`)
+	rows, err := s.db.QueryContext(ctx, q, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*User
+	for rows.Next() {
+		u, err := s.scanUser(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) SumMailboxBytes(ctx context.Context, userID string) (int64, error) {
 	q := s.rebind(`SELECT COALESCE(SUM(m.size), 0) FROM messages m
 		JOIN mailboxes b ON m.mailbox_id = b.id WHERE b.user_id = ?`)

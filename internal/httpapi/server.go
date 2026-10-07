@@ -33,7 +33,8 @@ func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth
 	return &Server{cfg: cfg, addr: cfg.HTTP.Listen, log: log, store: store, authn: authn, ms: ms}
 }
 
-func (s *Server) Start(ctx context.Context) error {
+// Handler builds the HTTP mux (health, auth, DAV, FlowSync, admin UI).
+func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", s.handleHealthz)
 	mux.HandleFunc("/readyz", s.handleReadyz)
@@ -52,15 +53,21 @@ func (s *Server) Start(ctx context.Context) error {
 	mux.HandleFunc("/api/v1/auth/webauthn/credentials", s.handleWebAuthnCredentials)
 	mux.HandleFunc("/api/v1/auth/webauthn/credentials/", s.handleWebAuthnCredentials)
 	mux.HandleFunc("/api/v1/auth/oidc/", s.handleOIDCRoutes)
+	mux.HandleFunc("/api/v1/me", s.handleMe)
+	mux.HandleFunc("/api/v1/admin/users", s.handleAdminUsers)
+	mux.HandleFunc("/api/v1/admin/users/", s.handleAdminUsers)
 
 	dav.Mount(mux, s.store, s.authn)
 	flowsync.Mount(mux, s.cfg, s.log, s.store, s.authn, s.ms)
 
 	mux.Handle("/", frontend.Handler())
+	return mux
+}
 
+func (s *Server) Start(ctx context.Context) error {
 	s.server = &http.Server{
 		Addr:              s.addr,
-		Handler:           mux,
+		Handler:           s.Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

@@ -85,8 +85,20 @@ Enable: `mfa.webauthn.enabled: true` (RP ID from `http.public_url`).
 
 ## Admin UI
 
-Embedded at `/` (`internal/frontend/dist`): sign-in, TOTP + WebAuthn MFA, passkey enrollment/revoke.
+Embedded at `/` (`internal/frontend/dist`): sign-in, TOTP + WebAuthn MFA, passkey enrollment/revoke, quota usage, tenant user admin.
+
+### Account / admin API
+
+| Endpoint | Role |
+|----------|------|
+| `GET/PATCH /api/v1/me` | profile + `quota_bytes` / `used_bytes` |
+| `GET /api/v1/admin/users` | list tenant users (admins only) |
+| `POST /api/v1/admin/users` | create local user |
+| `PUT /api/v1/admin/users/{uuid}/quota` | set quota (0 = unlimited) |
+| `PATCH /api/v1/admin/users/{uuid}` | enable/disable |
+
+Admins: `http.admins` email list (default `admin@example.com`).
 
 ## Next milestones
 
-Quotas/admin APIs → FlowSync FolderCreate/MoveItems → …
+FlowSync FolderCreate/MoveItems → richer admin UI (create user form) → …
