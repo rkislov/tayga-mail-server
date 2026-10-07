@@ -370,6 +370,21 @@
           <p id="tls-msg" class="msg" role="status"></p>
         </div>
 
+        <div class="card hidden" id="card-settings">
+          <h3>Server settings</h3>
+          <p class="meta">Runtime config stored in the database. Bootstrap YAML keeps only storage path and mailstore root. Most changes need a process restart.</p>
+          <p class="meta hidden" id="settings-restart" style="color: var(--sun);">Restart required — settings saved; restart tayga-mail to apply listeners and mail policies.</p>
+          <label for="settings-section">Section</label>
+          <select id="settings-section" style="width:100%;padding:0.7rem 0.8rem;border-radius:4px;border:1px solid var(--line);background:rgba(255,255,255,0.92);color:#1a1040;"></select>
+          <label for="settings-json">JSON</label>
+          <textarea id="settings-json" spellcheck="false" rows="16" style="font-family:ui-monospace,monospace;font-size:0.85rem;"></textarea>
+          <div class="actions">
+            <button type="button" class="spray" id="btn-settings-save">Save section</button>
+            <button type="button" class="secondary" id="btn-settings-refresh">Reload</button>
+          </div>
+          <p id="settings-msg" class="msg" role="status"></p>
+        </div>
+
         <div class="card">
           <h3>Authenticator (TOTP)</h3>
           <p class="meta">Enroll an app like Aegis or Google Authenticator.</p>
@@ -540,12 +555,14 @@ keep;</textarea>
         $("acct-role").textContent = me.is_admin ? "admin" : "live";
         $("card-admin").classList.toggle("hidden", !me.is_admin);
         $("card-tls").classList.toggle("hidden", !me.is_admin);
+        $("card-settings").classList.toggle("hidden", !me.is_admin);
         $("card-monitor").classList.toggle("hidden", !me.is_admin);
         if (me.is_admin) {
           refreshMonitor();
           refreshTenant();
           refreshAdminUsers();
           refreshTLS();
+          refreshSettings();
         }
       } catch (err) {
         $("acct-meta").textContent = err.message;
@@ -973,6 +990,70 @@ keep;</textarea>
         setMsg($("tls-msg"), "Self-signed certificate generated and activated.", "ok");
       } catch (err) {
         setMsg($("tls-msg"), err.message, "err");
+      }
+    });
+
+    const settingsState = { all: null };
+
+    function fillSettingsSectionSelect(sections) {
+      const sel = $("settings-section");
+      const cur = sel.value;
+      sel.innerHTML = "";
+      (sections || []).forEach((name) => {
+        const opt = document.createElement("option");
+        opt.value = name;
+        opt.textContent = name;
+        sel.appendChild(opt);
+      });
+      if (cur && sections && sections.includes(cur)) sel.value = cur;
+      else if (sections && sections.length) sel.value = sections.includes("spam") ? "spam" : sections[0];
+    }
+
+    function showSettingsSection(name) {
+      if (!settingsState.all || !settingsState.all.settings) return;
+      const val = settingsState.all.settings[name] || {};
+      $("settings-json").value = JSON.stringify(val, null, 2);
+    }
+
+    async function refreshSettings() {
+      try {
+        const data = await api("/api/v1/admin/settings");
+        settingsState.all = data;
+        fillSettingsSectionSelect(data.sections || []);
+        showSettingsSection($("settings-section").value);
+        $("settings-restart").classList.toggle("hidden", !data.restart_required);
+        setMsg($("settings-msg"), "");
+      } catch (err) {
+        setMsg($("settings-msg"), err.message, "err");
+      }
+    }
+
+    $("settings-section").addEventListener("change", () => {
+      showSettingsSection($("settings-section").value);
+    });
+    $("btn-settings-refresh").addEventListener("click", () => refreshSettings());
+    $("btn-settings-save").addEventListener("click", async () => {
+      const section = $("settings-section").value;
+      let parsed;
+      try {
+        parsed = JSON.parse($("settings-json").value);
+      } catch (err) {
+        setMsg($("settings-msg"), "Invalid JSON: " + err.message, "err");
+        return;
+      }
+      setMsg($("settings-msg"), "Saving…");
+      try {
+        const out = await api("/api/v1/admin/settings/" + encodeURIComponent(section), {
+          method: "PUT",
+          body: JSON.stringify(parsed),
+        });
+        $("settings-restart").classList.toggle("hidden", !out.restart_required);
+        setMsg($("settings-msg"), out.restart_required
+          ? "Saved. Restart tayga-mail to apply."
+          : "Saved.", "ok");
+        await refreshSettings();
+      } catch (err) {
+        setMsg($("settings-msg"), err.message, "err");
       }
     });
 

@@ -1,4 +1,6 @@
-# Tayga Mail Server — example configuration
+# Tayga Mail Server — bootstrap configuration (minimal).
+# Operational settings (spam, DMARC, outbound, LDAP, listeners overrides, …)
+# are stored in the database and edited in Admin → Server settings.
 # Standard ports (<1024) need root or CAP_NET_BIND_SERVICE.
 
 server:
@@ -14,271 +16,26 @@ storage:
 
 mailstore:
   root: ./data/maildir
-  # Optional S3-compatible write-through mirror (local maildir stays hot cache).
-  object_store:
-    enabled: false
-    endpoint: "http://127.0.0.1:9000"
-    region: us-east-1
-    bucket: tayga-mail
-    access_key: minio
-    secret_key: minio123
-    prefix: "maildir/"
-    path_style: true   # MinIO / path-style; set false for virtual-hosted AWS
-    # sync_interval: 1h  # optional in-process reconcile (0/omit = use cron + sync-objects)
 
-smtp:
-  mx: ":25"
-  submission: ":587"   # STARTTLS when tls certs are present
-  smtps: ":465"        # implicit TLS
-  max_size: 26214400 # 25 MiB
-  read_timeout: 60s
-  write_timeout: 60s
-  # Outbound for authenticated submission to external recipients
-  outbound_direct: false # true = MX lookup when relay.host is empty
-  relay:
-    host: "" # e.g. "smtp.example.com:587" (preferred over direct)
-    username: ""
-    password: ""
-    # disable_starttls: false
-  # Direct MX: opportunistic STARTTLS; optional MTA-STS (RFC 8461) + TLS-RPT (RFC 8460)
-  mta_sts:
-    enabled: false
-    timeout: 10s
-    fail_open: true          # deliver if policy DNS/HTTPS fetch fails
-    # Publish our policy at https://mta-sts.<domain>/.well-known/mta-sts.txt
-    # DNS: _mta-sts.<domain> TXT "v=STSv1; id=<id>" and A/AAAA mta-sts.<domain> → this host
-    publish:
-      enabled: false
-      mode: testing          # testing | enforce | none
-      # id: "20241007"
-      max_age: 86400
-      # mx: [mail.example.com]  # default: server.hostname
-  tls_rpt:
-    enabled: false           # aggregate JSON reports to recipient _smtp._tls rua=
-    org_name: "Tayga Mail"
-    # contact: "tlsrpt-noreply@mail.example.com"
-    interval: 24h
-  dane:
-    enabled: false           # TLSA _25._tcp.<mx> (RFC 7672); no plaintext fallback when TLSA present
-    timeout: 10s
-    fail_open: true          # deliver with normal STARTTLS if TLSA lookup fails
-  dkim:
-    enabled: false
-    domain: example.com
-    selector: tayga
-    private_key_file: ./data/dkim/private.pem
-  rate_limit:
-    per_ip: 0      # e.g. 60
-    per_user: 0    # e.g. 30
-    window: 1m
-  # Durable outbound retries + DSN to local senders on final failure
-  queue:
-    enabled: true
-    workers: 1
-    poll_interval: 5s
-    max_attempts: 8
-    batch_size: 10
-
-imap:
-  listen: ":143"       # STARTTLS when tls certs are present
-  imaps: ":993"        # implicit TLS
-
-pop3:
-  listen: ":110"       # STLS when tls certs are present
-  pop3s: ":995"        # implicit TLS
-
-managesieve:
-  listen: ":4190"      # STARTTLS when tls certs are present
-
-# Per-domain LDAP (hybrid with local users). Disabled by default.
-ldap:
-  cache_ttl: 5m
-  domains:
-    # example.com:
-    #   enabled: true
-    #   url: "ldap://127.0.0.1:1389"
-    #   start_tls: false
-    #   bind_dn: "cn=admin,dc=example,dc=com"
-    #   bind_password: "secret"
-    #   base_dn: "ou=people,dc=example,dc=com"
-    #   filter: "(&(objectClass=inetOrgPerson)(mail={email}))"
-    #   attr_email: mail
-    #   attr_name: cn
-    #   timeout: 10s
-    #   # Map LDAP groups → Tayga roles (admin) on login
-    #   groups:
-    #     mode: memberof          # off | memberof | search
-    #     attr_memberof: memberOf
-    #     # mode: search
-    #     # base_dn: "ou=groups,dc=example,dc=com"
-    #     # filter: "(&(objectClass=groupOfNames)(member={dn}))"
-    #     # attr_name: cn
-    #     nested: true            # expand nested/transitive membership
-    #     nested_mode: walk       # walk (memberOf/member BFS) | chain (AD OID)
-    #     max_depth: 8
-    #     # member_attr: member   # walk parent search / chain attribute
-    #     admin_groups:
-    #       - "cn=mail-admins,ou=groups,dc=example,dc=com"
-    #       - "mail-admins"
-    #   # Periodic / CLI provisioning from groups
-    #   sync:
-    #     enabled: true
-    #     interval: 1h            # 0 = CLI only (tayga-mail ldap-sync)
-    #     group_dns:
-    #       - "cn=mail-users,ou=groups,dc=example,dc=com"
-    #     member_attr: member
-
-# Per-domain OpenID Connect (authorization code). Disabled by default.
-oidc:
-  domains:
-    # example.com:
-    #   enabled: true
-    #   issuer: "https://login.example.com"
-    #   client_id: "tayga"
-    #   client_secret: "secret"
-    #   redirect_url: "https://mail.example.com/api/v1/auth/oidc/callback"
-    #   scopes: [openid, email, profile]
-
-# HA fencing. Standby returns 421 / IMAP NO on gated writers.
-ha:
-  mode: none # none | active_standby | sticky
-  lease_ttl: 5s
-  fence: mx  # active_standby: mx | writers
-  sticky_ttl: 30s
-  # node_id: ""  # sticky node identity (default hostname-uuid)
-
-# Inbound virus scan (SMTP local delivery). Requires clamd or an exec scanner.
-scan:
-  enabled: false
-  backend: clamav          # clamav | exec | none
-  action: quarantine       # reject | quarantine | tag
-  quarantine_folder: Quarantine
-  timeout: 30s
-  fail_open: false         # true = deliver if scanner is down
-  clamav:
-    address: "127.0.0.1:3310"
-  # exec:
-  #   command: ["clamdscan", "--fdpass", "--no-summary", "-"]
-
-# Spam scoring via Rspamd HTTP /checkv2 (after virus scan, before Sieve)
-spam:
-  enabled: false
-  backend: rspamd          # rspamd | none
-  url: "http://127.0.0.1:11333"
-  # password: ""           # Rspamd controller password if required
-  timeout: 10s
-  fail_open: true          # true = deliver if Rspamd is down
-  folder: Junk             # folder for quarantine_above action
-  follow_rspamd: true      # map reject / greylist / add header from Rspamd
-  # Optional score overrides (also apply when follow_rspamd is true):
-  # reject_above: 15
-  # quarantine_above: 6
-  # tag_above: 4
-
-# Temporary defer of unknown (ip, MAIL FROM, RCPT) triplets on unauthenticated MX
-# Shared via greylist table (SQLite/Postgres) so HA nodes agree.
-greylist:
-  enabled: false
-  delay: 5m
-  pass_ttl: 36h              # delete rows with last_seen older than this
-  ipv4_net: 32               # e.g. 24 to greylist by /24
-
-# Inbound mail authentication on unauthenticated MX (before virus/spam)
-# Order: greylist → helo → iprev → SPF → DKIM → ARC verify → DMARC → ARC seal.
-helo:
-  enabled: false
-  action: tag                # tag | reject
-  require_fqdn: true         # dotted name or [IP] literal; rejects localhost / bare IP
-  # authserv_id: ""
-
-iprev:
-  enabled: false
-  action: tag                # tag | reject (require forward-confirmed PTR)
-  fail_open: true
-  # authserv_id: ""
-
-spf:
-  enabled: false
-  action: tag                # tag | reject
-  fail_open: true
-  # authserv_id: ""
-
-dkim_verify:
-  enabled: false
-  action: tag                # tag | reject
-  require_signature: false   # reject unsigned when action=reject
-  fail_open: true            # temperror (DNS) → deliver with dkim=temperror
-  # authserv_id: ""          # default: server.hostname (Authentication-Results)
-
-dmarc:
-  enabled: false
-  action: tag                # tag | reject | follow (honor DNS p=reject)
-  fail_open: true
-  arc_trust: false           # ARC cv=pass softens DMARC fail (no reject)
-  # authserv_id: ""
-  report:
-    enabled: false           # aggregate rua reports (needs outbound queue/relay)
-    failure: false           # per-message ruf AFRF on DMARC fail (fo=/ruf=)
-    org_name: "Tayga Mail"
-    # contact: "dmarc-noreply@mail.example.com"
-    interval: 24h
-
-# Authenticated Received Chain (RFC 8617) — verify before DMARC, seal after
-arc:
-  enabled: false
-  verify: true               # Authentication-Results arc=pass|fail|none
-  seal: false                # prepend ARC set (needs RSA key)
-  action: tag                # tag | reject (on verify fail)
-  fail_open: true
-  # authserv_id: ""
-  # domain: example.com
-  # selector: arc
-  # private_key_file: ./data/dkim/private.pem   # RSA PEM (same key as DKIM ok)
-
-# FlowSync — original Tayga sync engine (ActiveSync- and EWS-compatible wire; Apache-2.0)
-flowsync:
-  enabled: true
-
-# MFA / opaque tokens for XOAUTH2 & OAUTHBEARER on IMAP/SMTP
-mfa:
-  issuer: "Tayga Mail"
-  access_token_ttl: 1h
-  refresh_token_ttl: 720h
-  challenge_ttl: 5m
-  # When true, users with TOTP/WebAuthn cannot use password on IMAP/SMTP/POP3.
-  require_token_for_mfa_users: true
-  webauthn:
-    enabled: true
-    # rp_id / rp_origins default from http.public_url host
-    # rp_display_name: "Tayga Mail"
-    # rp_id: "mail.example.com"
-    # rp_origins: ["https://mail.example.com"]
-
-tls:
-  cert_file: ./data/certs/server.crt
-  key_file: ./data/certs/server.key
-  # Dev only: create a self-signed cert if files are missing
-  auto_generate: true
-
-http:
-  listen: ":80"
-  tls_listen: ":443"
-  redirect_http_to_tls: true
-  public_url: "https://mail.example.com"
-  admins:
-    - admin@example.com
-  # CalDAV:  /dav/cal/{email}/calendars/default/
-  # CardDAV: /dav/card/{email}/addressbooks/default/
-  # Discovery: /.well-known/caldav | /.well-known/carddav
-
+# Optional first-boot seed (or set via Admin → Server settings → seed, then restart):
 seed:
   enabled: true
   tenant: default
   domain: example.com
   email: admin@example.com
   password: changeme
-  name: Admin
+  name: Administrator
 
-log:
-  level: info
-  format: json
+# Optional emergency overrides (also in Admin UI; restart to apply):
+# http:
+#   listen: ":80"
+#   tls_listen: ":443"
+#   public_url: "https://mail.example.com"
+#   admins: ["admin@example.com"]
+# log:
+#   level: info
+#   format: json
+# tls:
+#   cert_file: ./data/certs/server.crt
+#   key_file: ./data/certs/server.key
+#   auto_generate: true

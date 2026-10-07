@@ -63,7 +63,11 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) isAdmin(email string) bool {
 	email = strings.ToLower(strings.TrimSpace(email))
-	for _, a := range s.cfg.HTTP.Admins {
+	cfg := s.cfgLive()
+	if cfg == nil {
+		return false
+	}
+	for _, a := range cfg.HTTP.Admins {
 		if strings.EqualFold(strings.TrimSpace(a), email) {
 			return true
 		}
