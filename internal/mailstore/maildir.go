@@ -1,9 +1,12 @@
 package mailstore
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -85,7 +88,11 @@ func (s *Store) EnsureFolder(email, folder string) (string, error) {
 }
 
 // Deliver writes a message into the new/ subdirectory and returns the relative file path.
+// When folder is Archive, the body is stored gzip-compressed (*.gz).
 func (s *Store) Deliver(email, folder string, data []byte) (relPath string, size int64, err error) {
+	if strings.EqualFold(strings.TrimSpace(folder), "Archive") {
+		return s.DeliverGzip(email, "Archive", data)
+	}
 	folderPath, err := s.EnsureFolder(email, folder)
 	if err != nil {
 		return "", 0, err
@@ -112,12 +119,78 @@ func (s *Store) Deliver(email, folder string, data []byte) (relPath string, size
 	return rel, int64(len(data)), nil
 }
 
-// Read returns the raw message bytes for a relative path under the root.
+// DeliverGzip writes a gzip-compressed RFC822 message into folder/cur/.
+func (s *Store) DeliverGzip(email, folder string, data []byte) (relPath string, size int64, err error) {
+	folderPath, err := s.EnsureFolder(email, folder)
+	if err != nil {
+		return "", 0, err
+	}
+	compressed, err := gzipBytes(data)
+	if err != nil {
+		return "", 0, err
+	}
+	tmpName := fmt.Sprintf("%d.%d.%s", time.Now().UnixNano(), os.Getpid(), hostname())
+	tmpPath := filepath.Join(folderPath, "tmp", tmpName)
+	if err := os.WriteFile(tmpPath, compressed, 0o640); err != nil {
+		return "", 0, err
+	}
+	finalName := tmpName + ":2,.eml.gz"
+	curPath := filepath.Join(folderPath, "cur", finalName)
+	if err := os.Rename(tmpPath, curPath); err != nil {
+		_ = os.Remove(tmpPath)
+		return "", 0, err
+	}
+	rel, err := filepath.Rel(s.Root, curPath)
+	if err != nil {
+		rel = curPath
+	}
+	s.blobPut(rel, compressed)
+	return rel, int64(len(compressed)), nil
+}
+
+// MoveToArchive relocates an on-disk message into .Archive/ as gzip and deletes the source.
+// Returns the new relative path, compressed size, and uncompressed RFC822 bytes.
+func (s *Store) MoveToArchive(email, srcRel string) (newRel string, size int64, raw []byte, err error) {
+	raw, err = s.Read(srcRel)
+	if err != nil {
+		return "", 0, nil, err
+	}
+	newRel, size, err = s.DeliverGzip(email, "Archive", raw)
+	if err != nil {
+		return "", 0, nil, err
+	}
+	if newRel != srcRel {
+		_ = s.Delete(srcRel)
+	}
+	return newRel, size, raw, nil
+}
+
+// UnarchiveToFolder gunzips an archived message into folder/new/ and deletes the .gz source.
+func (s *Store) UnarchiveToFolder(email, srcRel, folder string) (newRel string, size int64, raw []byte, err error) {
+	raw, err = s.Read(srcRel)
+	if err != nil {
+		return "", 0, nil, err
+	}
+	if strings.EqualFold(strings.TrimSpace(folder), "Archive") {
+		return "", 0, nil, fmt.Errorf("destination cannot be Archive")
+	}
+	newRel, size, err = s.Deliver(email, folder, raw)
+	if err != nil {
+		return "", 0, nil, err
+	}
+	if newRel != srcRel {
+		_ = s.Delete(srcRel)
+	}
+	return newRel, size, raw, nil
+}
+
+// Read returns the raw (uncompressed) message bytes for a relative path under the root.
+// Paths ending in .gz or files with gzip magic are transparently inflated.
 // On local miss, tries the object store and repopulates the cache.
 func (s *Store) Read(relPath string) ([]byte, error) {
 	data, err := os.ReadFile(s.Abs(relPath))
 	if err == nil {
-		return data, nil
+		return maybeGunzip(data, relPath)
 	}
 	if !os.IsNotExist(err) || s.blob == nil {
 		return nil, err
@@ -133,7 +206,43 @@ func (s *Store) Read(relPath string) ([]byte, error) {
 	if mkErr := os.MkdirAll(filepath.Dir(abs), 0o750); mkErr == nil {
 		_ = os.WriteFile(abs, data, 0o640)
 	}
-	return data, nil
+	return maybeGunzip(data, relPath)
+}
+
+func gzipBytes(data []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	zw := gzip.NewWriter(&buf)
+	if _, err := zw.Write(data); err != nil {
+		_ = zw.Close()
+		return nil, err
+	}
+	if err := zw.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func maybeGunzip(data []byte, relPath string) ([]byte, error) {
+	if !looksGzipped(data, relPath) {
+		return data, nil
+	}
+	zr, err := gzip.NewReader(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	defer zr.Close()
+	out, err := io.ReadAll(zr)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func looksGzipped(data []byte, relPath string) bool {
+	if strings.HasSuffix(strings.ToLower(relPath), ".gz") {
+		return true
+	}
+	return len(data) >= 2 && data[0] == 0x1f && data[1] == 0x8b
 }
 
 // Delete removes a message file. Missing files are ignored.

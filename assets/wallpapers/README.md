@@ -13,7 +13,7 @@ Themes in this tree:
 | `kalyazin/` | Колязин | flooded bell tower |
 | `temple/` | Храм на Нерли | Church of the Intercession on the Nerl |
 | `moscow/` | Москва-Сити | Moscow City skyline |
-| `street-art/` | Стрит-арт | mural ad for Tayga Mail Server |
+| `street-art/` | Стрит-арт | mural ad: Tayga Mail Server + Chat/Messenger |
 | `teriberka/` | Териберка | Barents Sea Arctic coast |
 
 Each theme folder has masters (`master-16x9`, `master-4x3`, `master-9x16`, `source-author`) plus sized JPEGs:

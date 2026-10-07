@@ -13,6 +13,7 @@ import (
 
 	gosieve "github.com/foxcpp/go-sieve"
 	"github.com/foxcpp/go-sieve/interp"
+	"github.com/tayga/tms/internal/mailsearch"
 	"github.com/tayga/tms/internal/mailstore"
 	"github.com/tayga/tms/internal/storage"
 )
@@ -128,16 +129,22 @@ func (e *Engine) FileInto(ctx context.Context, user *storage.User, folder string
 		return err
 	}
 	flagStr := storage.NormalizeFlags(flags)
-	_, err = e.Store.InsertMessage(ctx, &storage.Message{
+	msg := &storage.Message{
 		MailboxID:    mb.ID,
 		Size:         size,
 		Flags:        flagStr,
 		InternalDate: time.Now().UTC(),
 		FilePath:     rel,
 		MessageID:    msgid,
-	})
-	if err == nil && e.Notifier != nil {
-		e.Notifier.Notify(user.Email, folder)
+		Archived:     strings.EqualFold(folder, "Archive"),
+	}
+	mailsearch.ApplyHeaders(msg, data)
+	inserted, err := e.Store.InsertMessage(ctx, msg)
+	if err == nil {
+		_ = mailsearch.Index(ctx, e.Store, inserted.ID, data)
+		if e.Notifier != nil {
+			e.Notifier.Notify(user.Email, folder)
+		}
 	}
 	return err
 }

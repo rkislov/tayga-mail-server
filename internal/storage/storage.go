@@ -99,6 +99,11 @@ type Driver interface {
 	ListMessages(ctx context.Context, mailboxID string) ([]*Message, error)
 	UpdateMessageFlags(ctx context.Context, messageID, flags string) error
 	UpdateMessagePath(ctx context.Context, messageID, filePath string) error
+	UpdateMessageArchiveMeta(ctx context.Context, messageID, filePath string, size int64, archived bool, subject, fromAddr, toAddr, dateHdr string) error
+	UpdateMessageHeaders(ctx context.Context, messageID, subject, fromAddr, toAddr, dateHdr string) error
+	UpsertMessageSearch(ctx context.Context, messageID, subject, fromAddr, toAddr, body string) error
+	DeleteMessageSearch(ctx context.Context, messageID string) error
+	SearchMessages(ctx context.Context, userID, mailboxID, fromFilter, toFilter, subjectFilter, ftsQuery string, limit int) ([]SearchHit, error)
 	MoveMessage(ctx context.Context, messageID, dstMailboxID string) (*Message, error)
 	DeleteMessage(ctx context.Context, messageID string) error
 	ExpungeMailbox(ctx context.Context, mailboxID string) ([]*Message, error)
@@ -294,6 +299,11 @@ type Message struct {
 	InternalDate time.Time
 	FilePath     string
 	MessageID    string
+	Subject      string
+	FromAddr     string
+	ToAddr       string
+	DateHdr      string
+	Archived     bool
 	CreatedAt    time.Time
 }
 

@@ -16,6 +16,7 @@ import (
 	"github.com/tayga/tms/internal/auth"
 	"github.com/tayga/tms/internal/config"
 	"github.com/tayga/tms/internal/ha"
+	"github.com/tayga/tms/internal/mailsearch"
 	"github.com/tayga/tms/internal/mailstore"
 	"github.com/tayga/tms/internal/scan"
 	"github.com/tayga/tms/internal/sieve"
@@ -756,15 +757,21 @@ func (s *session) deliver(ctx context.Context, rcpt string, data []byte, msgid s
 	if err != nil {
 		return err
 	}
-	_, err = s.backend.store.InsertMessage(ctx, &storage.Message{
+	msg := &storage.Message{
 		MailboxID:    mb.ID,
 		Size:         size,
 		Flags:        "",
 		InternalDate: time.Now().UTC(),
 		FilePath:     rel,
 		MessageID:    msgid,
-	})
-	return err
+	}
+	mailsearch.ApplyHeaders(msg, data)
+	inserted, err := s.backend.store.InsertMessage(ctx, msg)
+	if err != nil {
+		return err
+	}
+	_ = mailsearch.Index(ctx, s.backend.store, inserted.ID, data)
+	return nil
 }
 
 func (s *session) Reset() {

@@ -19,6 +19,7 @@ type Config struct {
 	IMAP        IMAPConfig        `yaml:"imap"`
 	POP3        POP3Config        `yaml:"pop3"`
 	ManageSieve ManageSieveConfig `yaml:"managesieve"`
+	XMPP        XMPPConfig        `yaml:"xmpp"`
 	LDAP        LDAPConfig        `yaml:"ldap"`
 	OIDC        OIDCConfig        `yaml:"oidc"`
 	MFA         MFAConfig         `yaml:"mfa"`
@@ -297,6 +298,27 @@ type ManageSieveConfig struct {
 	Listen string `yaml:"listen"`
 }
 
+// XMPPConfig controls the embedded XMPP module (TMS-XMPP-001).
+// Disabled by default until Stage 1 is production-ready.
+type XMPPConfig struct {
+	Enabled         bool                   `yaml:"enabled"`
+	Listen          string                 `yaml:"listen"`           // C2S STARTTLS, default :5222
+	ListenTLS       string                 `yaml:"listen_tls"`       // C2S implicit TLS, optional (:5223)
+	S2SListen       string                 `yaml:"s2s_listen"`       // S2S, default empty until federation
+	RequireTLS      bool                   `yaml:"require_tls"`
+	ComponentListen string                 `yaml:"component_listen"` // XEP-0114, default :5347 when components set
+	Components      []XMPPComponentConfig  `yaml:"components"`      // external bots/bridges
+}
+
+// XMPPComponentConfig registers an external XMPP component (bot/bridge) by subdomain.
+// Domain becomes "{subdomain}.{server.hostname}" unless Domain is set explicitly.
+type XMPPComponentConfig struct {
+	Name      string `yaml:"name"`      // label for logs
+	Subdomain string `yaml:"subdomain"` // e.g. "bots" → bots.mail.example.com
+	Domain    string `yaml:"domain"`    // optional full component domain
+	Secret    string `yaml:"secret"`    // shared secret for handshake
+}
+
 // LDAPConfig holds per-domain LDAP directories for hybrid authentication.
 type LDAPConfig struct {
 	CacheTTL time.Duration               `yaml:"cache_ttl"`
@@ -381,8 +403,23 @@ type FlowSyncConfig struct {
 type TLSConfig struct {
 	CertFile string `yaml:"cert_file"`
 	KeyFile  string `yaml:"key_file"`
+	// CertsDir holds the certificate catalog (self-signed / uploaded / ACME).
+	CertsDir string `yaml:"certs_dir"`
+	// ActiveID is the catalog entry used by all TLS listeners (set via УЦ UI).
+	ActiveID string `yaml:"active_id"`
 	// AutoGenerate writes a self-signed cert when cert/key files are missing (dev only).
 	AutoGenerate bool `yaml:"auto_generate"`
+	ACME         ACMEConfig `yaml:"acme"`
+}
+
+// ACMEConfig configures the built-in Let's Encrypt / ACME client.
+type ACMEConfig struct {
+	// Email for the ACME account (required by Let's Encrypt).
+	Email string `yaml:"email"`
+	// Directory overrides the ACME directory URL (empty = production Let's Encrypt).
+	Directory string `yaml:"directory"`
+	// Staging uses Let's Encrypt staging (rate-limit safe for tests).
+	Staging bool `yaml:"staging"`
 }
 
 type HTTPConfig struct {
@@ -467,10 +504,22 @@ func Default() *Config {
 		IMAP:        IMAPConfig{Listen: ":143", IMAPS: ":993"},
 		POP3:        POP3Config{Listen: ":110", POP3S: ":995"},
 		ManageSieve: ManageSieveConfig{Listen: ":4190"},
+		XMPP: XMPPConfig{
+			Enabled:         false,
+			Listen:          ":5222",
+			ListenTLS:       ":5223",
+			RequireTLS:      true,
+			ComponentListen: ":5347",
+			Components:      nil,
+		},
 		TLS: TLSConfig{
 			CertFile:     "./data/certs/server.crt",
 			KeyFile:      "./data/certs/server.key",
+			CertsDir:     "./data/certs/store",
 			AutoGenerate: true,
+			ACME: ACMEConfig{
+				Staging: false,
+			},
 		},
 		LDAP: LDAPConfig{
 			CacheTTL: 5 * time.Minute,
