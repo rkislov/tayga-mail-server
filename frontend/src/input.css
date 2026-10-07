@@ -388,7 +388,43 @@ html[data-theme="teriberka"] {
   }
 
   .app-topbar-title {
-    @apply ml-auto truncate text-sm font-semibold text-white/70;
+    @apply min-w-0 flex-1 truncate text-sm font-semibold text-white/70;
+  }
+
+  .topbar-notify {
+    @apply shrink-0;
+  }
+
+  .toast-host {
+    @apply pointer-events-none fixed inset-x-0 top-3 z-[80] mx-auto flex w-[min(100%-1.5rem,24rem)] flex-col gap-2;
+  }
+
+  .toast {
+    @apply pointer-events-auto cursor-pointer rounded-md border border-white/20 px-3.5 py-2.5 shadow-lg;
+    background: color-mix(in srgb, var(--panel-bg) 94%, transparent);
+    backdrop-filter: blur(14px);
+    animation: toast-in 0.28s ease-out;
+  }
+
+  .toast-title {
+    @apply block text-sm font-semibold text-white;
+  }
+
+  .toast-body {
+    @apply mt-0.5 block text-xs text-white/70;
+  }
+
+  .toast-kind-mail {
+    border-left: 3px solid var(--accent);
+  }
+
+  .toast-kind-calendar {
+    border-left: 3px solid var(--btn-spray);
+  }
+
+  @keyframes toast-in {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
   }
 
   .burger {

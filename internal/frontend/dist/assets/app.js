@@ -63,6 +63,11 @@ const I18N = {
     xmpp_no_components: "Компоненты не настроены (секция xmpp в Сервер)",
     xmpp_save_cfg: "Сохранить C2S",
     xmpp_restart_hint: "Смена слушателей XMPP требует перезапуска tayga-mail.",
+    notify_enable: "Уведомления браузера",
+    notify_mail: "Новое письмо",
+    notify_cal: "Событие скоро",
+    notify_perm_ok: "Уведомления разрешены",
+    notify_perm_denied: "Уведомления запрещены браузером",
     ca_title: "Удостоверяющий центр",
     ca_lede: "Каталог сертификатов: самоподписанные, коммерческие PEM и Let’s Encrypt (ACME).",
     ca_list: "Сертификаты",
@@ -218,6 +223,11 @@ const I18N = {
     xmpp_no_components: "No components configured (xmpp section in Server)",
     xmpp_save_cfg: "Save C2S",
     xmpp_restart_hint: "Changing XMPP listeners requires a tayga-mail restart.",
+    notify_enable: "Browser notifications",
+    notify_mail: "New mail",
+    notify_cal: "Upcoming event",
+    notify_perm_ok: "Notifications allowed",
+    notify_perm_denied: "Notifications blocked by the browser",
     ca_title: "Certificate authority",
     ca_lede: "Certificate catalog: self-signed, commercial PEM, and Let’s Encrypt (ACME).",
     ca_list: "Certificates",
@@ -623,6 +633,7 @@ function clearSession() {
   localStorage.removeItem("tayga.tokens");
   setNavOpen(false);
   stopMonitorLive();
+  stopNotifyLive();
   $("compose-backdrop")?.classList.add("hidden");
   $("cal-backdrop")?.classList.add("hidden");
   $("contact-backdrop")?.classList.add("hidden");
@@ -1191,7 +1202,7 @@ async function refreshTenant() {
             <option value="on" ${d.migration_enabled === "on" ? "selected" : ""}>${t("mig_on")}</option>
             <option value="off" ${d.migration_enabled === "off" ? "selected" : ""}>${t("mig_off")}</option>
           </select>
-          <button type="button" class="btn-secondary" data-del-domain="${escapeHtml(d.name)}" ${d.user_count > 0 ? "disabled" : ""}>Remove</button>
+        <button type="button" class="btn-secondary" data-del-domain="${escapeHtml(d.name)}" ${d.user_count > 0 ? "disabled" : ""}>Remove</button>
         </span>
       </li>`).join("") || "<li><span class=\"meta\">No domains yet.</span></li>";
     list.querySelectorAll("[data-del-domain]").forEach((btn) => {
@@ -1427,8 +1438,8 @@ async function refreshTLS() {
       renderTLSStatus(info);
       renderCertList([]);
     } catch (e2) {
-      $("tls-status").textContent = err.message;
-      setMsg($("tls-msg"), err.message, "err");
+    $("tls-status").textContent = err.message;
+    setMsg($("tls-msg"), err.message, "err");
     }
   }
 }
@@ -1772,7 +1783,7 @@ function showSettingsSection(name) {
   } else {
     tlsPanel?.classList.add("hidden");
     jsonWrap?.classList.remove("hidden");
-    $("settings-json").value = JSON.stringify(val, null, 2);
+  $("settings-json").value = JSON.stringify(val, null, 2);
   }
 }
 
@@ -1817,11 +1828,11 @@ $("btn-settings-save").addEventListener("click", async () => {
       }
     }
   } else {
-    try {
-      parsed = JSON.parse($("settings-json").value);
-    } catch (err) {
-      setMsg($("settings-msg"), "Invalid JSON: " + err.message, "err");
-      return;
+  try {
+    parsed = JSON.parse($("settings-json").value);
+  } catch (err) {
+    setMsg($("settings-msg"), "Invalid JSON: " + err.message, "err");
+    return;
     }
   }
   setMsg($("settings-msg"), "Saving…");
@@ -1973,7 +1984,75 @@ function enterAccount(tokens, email) {
   loadMe();
   showApp("mail");
   applyLang(lang);
+  startNotifyLive();
 }
+
+const notifyState = { es: null };
+
+function stopNotifyLive() {
+  try { notifyState.es?.close(); } catch (_) {}
+  notifyState.es = null;
+}
+
+function showToast(ev) {
+  const host = $("toast-host");
+  if (!host || !ev) return;
+  const el = document.createElement("div");
+  const kind = ev.kind === "calendar" ? "calendar" : (ev.kind === "mail" ? "mail" : "system");
+  el.className = "toast toast-kind-" + kind;
+  el.innerHTML = `<span class="toast-title">${escapeHtml(ev.title || t("notify_mail"))}</span>`
+    + (ev.body ? `<span class="toast-body">${escapeHtml(ev.body)}</span>` : "");
+  el.addEventListener("click", () => {
+    if (ev.href === "calendar") showApp("calendar");
+    else if (ev.href === "mail" || kind === "mail") showApp("mail");
+    el.remove();
+  });
+  host.appendChild(el);
+  setTimeout(() => el.remove(), 8000);
+
+  if (typeof Notification !== "undefined" && Notification.permission === "granted" && document.hidden) {
+    try {
+      const n = new Notification(ev.title || t("notify_mail"), {
+        body: ev.body || "",
+        tag: ev.id || ("tayga-" + kind),
+      });
+      n.onclick = () => {
+        window.focus();
+        if (ev.href === "calendar") showApp("calendar");
+        else showApp("mail");
+        n.close();
+      };
+    } catch (_) {}
+  }
+}
+
+function startNotifyLive() {
+  stopNotifyLive();
+  const tok = state.tokens?.access_token;
+  if (!tok || typeof EventSource === "undefined") return;
+  const es = new EventSource("/api/v1/notifications/stream?access_token=" + encodeURIComponent(tok));
+  notifyState.es = es;
+  es.addEventListener("notify", (e) => {
+    try {
+      showToast(JSON.parse(e.data));
+    } catch (_) {}
+  });
+  es.onerror = () => {
+    // EventSource reconnects automatically; leave open
+  };
+}
+
+$("btn-notify-perm")?.addEventListener("click", async () => {
+  if (typeof Notification === "undefined") return;
+  try {
+    const perm = await Notification.requestPermission();
+    if (perm === "granted") {
+      showToast({ kind: "system", title: t("notify_perm_ok"), body: "" });
+    } else {
+      showToast({ kind: "system", title: t("notify_perm_denied"), body: "" });
+    }
+  } catch (_) {}
+});
 
 $("form-login").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -3038,9 +3117,9 @@ updateNavUser(state.email || localStorage.getItem("tayga.email") || "", false);
 
 // Restore session — invalid/expired tokens send user back to login
 (async function restoreSession() {
-  try {
-    const tok = JSON.parse(localStorage.getItem("tayga.tokens") || "null");
-    const email = localStorage.getItem("tayga.email") || "";
+try {
+  const tok = JSON.parse(localStorage.getItem("tayga.tokens") || "null");
+  const email = localStorage.getItem("tayga.email") || "";
     if (!tok?.access_token) {
       show("view-login");
       return;

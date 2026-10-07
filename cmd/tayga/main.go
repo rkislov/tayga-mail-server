@@ -13,6 +13,7 @@ import (
 
 	"github.com/tayga/tms/internal/auth"
 	"github.com/tayga/tms/internal/backup"
+	"github.com/tayga/tms/internal/climenu"
 	"github.com/tayga/tms/internal/config"
 	"github.com/tayga/tms/internal/ha"
 	"github.com/tayga/tms/internal/httpapi"
@@ -22,6 +23,7 @@ import (
 	"github.com/tayga/tms/internal/managesieve"
 	"github.com/tayga/tms/internal/metrics"
 	"github.com/tayga/tms/internal/migrate"
+	"github.com/tayga/tms/internal/notify"
 	"github.com/tayga/tms/internal/pop3"
 	"github.com/tayga/tms/internal/seed"
 	"github.com/tayga/tms/internal/settings"
@@ -60,6 +62,19 @@ func main() {
 		case "ldap-sync":
 			if err := runLDAPSync(os.Args[2:]); err != nil {
 				fmt.Fprintf(os.Stderr, "tayga ldap-sync: %v\n", err)
+				os.Exit(1)
+			}
+			return
+		case "menu", "setup", "console":
+			cfgPath := "configs/tayga.example.yaml"
+			if len(os.Args) > 2 {
+				fs := flag.NewFlagSet(os.Args[1], flag.ExitOnError)
+				p := fs.String("config", cfgPath, "path to YAML config")
+				_ = fs.Parse(os.Args[2:])
+				cfgPath = *p
+			}
+			if err := climenu.Run(cfgPath); err != nil {
+				fmt.Fprintf(os.Stderr, "tayga menu: %v\n", err)
 				os.Exit(1)
 			}
 			return
@@ -331,8 +346,20 @@ func run(cfgPath string) error {
 		return fmt.Errorf("tls: %w", err)
 	}
 	imapHub := imapserver.NewHub(store)
+	notifyHub := notify.NewHub()
 	sieveEng := sieve.New(store, ms, log)
-	sieveEng.Notifier = imapHub
+	sieveEng.Notifier = notify.Fanout{
+		Idle: imapHub,
+		Hub:  notifyHub,
+		ResolveUserID: func(email string) string {
+			u, err := store.GetUserByEmail(context.Background(), email)
+			if err != nil || u == nil {
+				return ""
+			}
+			return u.ID
+		},
+	}
+	(&notify.ReminderLoop{Hub: notifyHub, Store: store, Log: log}).Start(ctx)
 
 	if cfg.Storage.Driver == "postgres" {
 		if sqlStore, ok := store.(*storage.Store); ok {
@@ -432,6 +459,7 @@ func run(cfgPath string) error {
 	httpSrv := httpapi.New(cfg, log, store, authn, ms, tlsMgr, hub)
 	httpSrv.SetXMPP(xmppSrv)
 	httpSrv.SetMigrate(migSvc)
+	httpSrv.SetNotify(notifyHub)
 	if err := httpSrv.Start(ctx); err != nil {
 		return fmt.Errorf("http: %w", err)
 	}
