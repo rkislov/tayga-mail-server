@@ -45,6 +45,14 @@ smtp:
     enabled: false
     timeout: 10s
     fail_open: true          # deliver if policy DNS/HTTPS fetch fails
+    # Publish our policy at https://mta-sts.<domain>/.well-known/mta-sts.txt
+    # DNS: _mta-sts.<domain> TXT "v=STSv1; id=<id>" and A/AAAA mta-sts.<domain> → this host
+    publish:
+      enabled: false
+      mode: testing          # testing | enforce | none
+      # id: "20241007"
+      max_age: 86400
+      # mx: [mail.example.com]  # default: server.hostname
   tls_rpt:
     enabled: false           # aggregate JSON reports to recipient _smtp._tls rua=
     org_name: "Tayga Mail"
