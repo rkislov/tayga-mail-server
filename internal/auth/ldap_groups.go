@@ -32,14 +32,206 @@ func (d *Directory) resolveGroups(ctx context.Context, dc config.LDAPDomainConfi
 		}
 	}
 
+	var direct []string
 	switch mode {
 	case "memberof":
-		return d.groupsMemberOf(conn, dc, person.DN)
+		// Prefer groups already read during user search (memberOf attribute).
+		if len(person.Groups) > 0 {
+			direct = append(direct, person.Groups...)
+		} else {
+			var gerr error
+			direct, gerr = d.groupsMemberOf(conn, dc, person.DN)
+			if gerr != nil {
+				return nil, gerr
+			}
+		}
 	case "search":
-		return d.groupsSearch(conn, dc, person.DN)
+		var gerr error
+		direct, gerr = d.groupsSearch(conn, dc, person.DN)
+		if gerr != nil {
+			return nil, gerr
+		}
 	default:
 		return nil, nil
 	}
+	if !dc.Groups.Nested {
+		return direct, nil
+	}
+	return d.expandNestedGroups(conn, dc, person.DN, direct)
+}
+
+// expandNestedGroups adds transitive parent groups (nested membership).
+func (d *Directory) expandNestedGroups(conn *ldap.Conn, dc config.LDAPDomainConfig, userDN string, direct []string) ([]string, error) {
+	mode := strings.ToLower(strings.TrimSpace(dc.Groups.NestedMode))
+	if mode == "" {
+		mode = "walk"
+	}
+	switch mode {
+	case "chain":
+		return d.groupsChain(conn, dc, userDN)
+	default:
+		return expandGroupClosure(direct, func(dn string) ([]string, error) {
+			return d.parentGroups(conn, dc, dn)
+		}, dc.Groups.MaxDepth), nil
+	}
+}
+
+// groupsChain uses Active Directory LDAP_MATCHING_RULE_IN_CHAIN (1.2.840.113556.1.4.1941).
+func (d *Directory) groupsChain(conn *ldap.Conn, dc config.LDAPDomainConfig, userDN string) ([]string, error) {
+	base := dc.Groups.BaseDN
+	if base == "" {
+		base = dc.BaseDN
+	}
+	attrName := dc.Groups.AttrName
+	if attrName == "" {
+		attrName = "cn"
+	}
+	memberAttr := dc.Groups.MemberAttr
+	if memberAttr == "" {
+		memberAttr = "member"
+	}
+	filter := fmt.Sprintf("(%s:1.2.840.113556.1.4.1941:=%s)", memberAttr, ldap.EscapeFilter(userDN))
+	req := ldap.NewSearchRequest(
+		base,
+		ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, int(dc.Timeout.Seconds()), false,
+		filter,
+		[]string{"dn", attrName},
+		nil,
+	)
+	res, err := conn.Search(req)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, e := range res.Entries {
+		out = append(out, e.DN)
+		if cn := e.GetAttributeValue(attrName); cn != "" {
+			out = append(out, cn)
+		}
+	}
+	return out, nil
+}
+
+func (d *Directory) parentGroups(conn *ldap.Conn, dc config.LDAPDomainConfig, groupDN string) ([]string, error) {
+	groupDN = strings.TrimSpace(groupDN)
+	if groupDN == "" || !strings.Contains(groupDN, "=") {
+		return nil, nil
+	}
+	// Prefer memberOf on the group entry (AD / memberof overlay).
+	attr := dc.Groups.AttrMemberOf
+	if attr == "" {
+		attr = "memberOf"
+	}
+	req := ldap.NewSearchRequest(
+		groupDN,
+		ldap.ScopeBaseObject, ldap.NeverDerefAliases, 1, int(dc.Timeout.Seconds()), false,
+		"(objectClass=*)",
+		[]string{attr},
+		nil,
+	)
+	res, err := conn.Search(req)
+	if err == nil && len(res.Entries) > 0 {
+		vals := res.Entries[0].GetAttributeValues(attr)
+		if len(vals) > 0 {
+			var out []string
+			for _, v := range vals {
+				v = strings.TrimSpace(v)
+				if v != "" {
+					out = append(out, v)
+				}
+			}
+			return out, nil
+		}
+	}
+	// Fallback: search for groups that list this DN as member.
+	base := dc.Groups.BaseDN
+	if base == "" {
+		base = dc.BaseDN
+	}
+	memberAttr := dc.Groups.MemberAttr
+	if memberAttr == "" {
+		memberAttr = "member"
+	}
+	attrName := dc.Groups.AttrName
+	if attrName == "" {
+		attrName = "cn"
+	}
+	filter := fmt.Sprintf("(%s=%s)", memberAttr, ldap.EscapeFilter(groupDN))
+	sreq := ldap.NewSearchRequest(
+		base,
+		ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, int(dc.Timeout.Seconds()), false,
+		filter,
+		[]string{"dn", attrName},
+		nil,
+	)
+	sres, err := conn.Search(sreq)
+	if err != nil {
+		return nil, nil // best-effort
+	}
+	var out []string
+	for _, e := range sres.Entries {
+		out = append(out, e.DN)
+	}
+	return out, nil
+}
+
+// expandGroupClosure BFS-expands seed group DNs via parentsOf, up to maxDepth.
+// Non-DN tokens (plain CNs) are kept in the result but not walked.
+func expandGroupClosure(seed []string, parentsOf func(dn string) ([]string, error), maxDepth int) []string {
+	if maxDepth <= 0 {
+		maxDepth = 8
+	}
+	seen := map[string]struct{}{}
+	var out []string
+	add := func(g string) {
+		g = strings.TrimSpace(g)
+		if g == "" {
+			return
+		}
+		key := strings.ToLower(g)
+		if _, ok := seen[key]; ok {
+			return
+		}
+		seen[key] = struct{}{}
+		out = append(out, g)
+		if cn := groupCN(g); cn != "" && cn != key {
+			if _, ok := seen[cn]; !ok {
+				seen[cn] = struct{}{}
+				out = append(out, cn)
+			}
+		}
+	}
+	var frontier []string
+	for _, g := range seed {
+		add(g)
+		if strings.Contains(g, "=") {
+			frontier = append(frontier, g)
+		}
+	}
+	for depth := 0; depth < maxDepth && len(frontier) > 0; depth++ {
+		var next []string
+		for _, dn := range frontier {
+			parents, err := parentsOf(dn)
+			if err != nil {
+				continue
+			}
+			for _, p := range parents {
+				key := strings.ToLower(strings.TrimSpace(p))
+				if key == "" {
+					continue
+				}
+				if _, ok := seen[key]; ok {
+					continue
+				}
+				add(p)
+				if strings.Contains(p, "=") {
+					next = append(next, p)
+				}
+			}
+		}
+		frontier = next
+	}
+	return out
 }
 
 func (d *Directory) groupsMemberOf(conn *ldap.Conn, dc config.LDAPDomainConfig, userDN string) ([]string, error) {
