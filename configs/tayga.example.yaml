@@ -103,6 +103,19 @@ ha:
   sticky_ttl: 30s
   # node_id: ""  # sticky node identity (default hostname-uuid)
 
+# Inbound virus scan (SMTP local delivery). Requires clamd or an exec scanner.
+scan:
+  enabled: false
+  backend: clamav          # clamav | exec | none
+  action: quarantine       # reject | quarantine | tag
+  quarantine_folder: Quarantine
+  timeout: 30s
+  fail_open: false         # true = deliver if scanner is down
+  clamav:
+    address: "127.0.0.1:3310"
+  # exec:
+  #   command: ["clamdscan", "--fdpass", "--no-summary", "-"]
+
 # FlowSync — original Tayga sync engine (ActiveSync- and EWS-compatible wire; Apache-2.0)
 flowsync:
   enabled: true

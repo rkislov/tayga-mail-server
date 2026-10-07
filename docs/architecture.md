@@ -165,6 +165,10 @@ Outbound messages are enqueued (`smtp.queue`, table `outbound_queue`) and retrie
 
 Metric: `tayga_outbound_queued`. Admin: `GET/DELETE /api/v1/admin/outbound[/{id}]`, `POST …/{id}/retry` (Monitoring card).
 
+## Virus scan / quarantine
+
+Inbound SMTP local delivery can run `scan` (ClamAV clamd INSTREAM or exec). Actions: `reject` (550), `quarantine` (folder, default `Quarantine`), `tag` (deliver with `X-Virus-*` headers). See `scan:` in `configs/tayga.example.yaml`.
+
 ## Next milestones
 
-Quarantine / virus-scan hooks.
+Spam scoring / Rspamd hooks; admin quarantine UI.

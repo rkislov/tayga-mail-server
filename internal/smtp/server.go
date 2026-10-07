@@ -17,6 +17,7 @@ import (
 	"github.com/tayga/tms/internal/config"
 	"github.com/tayga/tms/internal/ha"
 	"github.com/tayga/tms/internal/mailstore"
+	"github.com/tayga/tms/internal/scan"
 	"github.com/tayga/tms/internal/sieve"
 	"github.com/tayga/tms/internal/storage"
 	"github.com/tayga/tms/internal/tlsutil"
@@ -34,6 +35,7 @@ type Server struct {
 	ha           ha.Gate
 	fenceWriters bool
 	writers      ha.WriterGate
+	scan         *scanPolicy
 	queue        *OutboundQueue
 	servers      []*gosmtp.Server
 }
@@ -42,11 +44,37 @@ func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth
 	if gate == nil {
 		gate = ha.AlwaysLeader{}
 	}
-	return &Server{
+	srv := &Server{
 		cfg: cfg, log: log, store: store, authn: authn, mailstore: ms, sieve: eng, tls: tlsMgr, ha: gate,
 		fenceWriters: cfg.HA.FenceWriters(),
 		writers:      writers,
 	}
+	sc, err := scan.New(scan.Config{
+		Enabled:          cfg.Scan.Enabled,
+		Backend:          cfg.Scan.Backend,
+		Action:           scan.Action(cfg.Scan.Action),
+		QuarantineFolder: cfg.Scan.QuarantineFolder,
+		Timeout:          cfg.Scan.Timeout,
+		FailOpen:         cfg.Scan.FailOpen,
+		ClamAVAddress:    cfg.Scan.ClamAV.Address,
+		ExecCommand:      cfg.Scan.Exec.Command,
+	})
+	if err != nil {
+		log.Error("scan config invalid; scanning disabled", "err", err)
+	} else if sc != nil {
+		srv.scan = &scanPolicy{
+			scanner: sc, action: scan.Action(cfg.Scan.Action), folder: cfg.Scan.QuarantineFolder,
+			failOpen: cfg.Scan.FailOpen, log: log,
+		}
+		if srv.scan.action == "" {
+			srv.scan.action = scan.ActionQuarantine
+		}
+		if srv.scan.folder == "" {
+			srv.scan.folder = "Quarantine"
+		}
+		log.Info("smtp virus scan enabled", "backend", sc.Name(), "action", srv.scan.action)
+	}
+	return srv
 }
 
 func (s *Server) outbound() (outboundSender, *dkimSigner, error) {
@@ -126,6 +154,7 @@ func (s *Server) Start(ctx context.Context) error {
 			ha:           s.ha,
 			fenceWriters: s.fenceWriters,
 			writers:      s.writers,
+			scan:         s.scan,
 			out:          out,
 			dkim:         dkimSig,
 			queue:        oq,
@@ -206,6 +235,7 @@ type backend struct {
 	ha           ha.Gate
 	fenceWriters bool
 	writers      ha.WriterGate
+	scan         *scanPolicy
 	out          outboundSender
 	dkim         *dkimSigner
 	queue        *OutboundQueue
@@ -385,6 +415,23 @@ func (s *session) deliver(ctx context.Context, rcpt string, data []byte, msgid s
 	if s.backend.writers != nil {
 		if err := s.backend.writers.AllowWrite(ctx, u.ID); err != nil {
 			return &gosmtp.SMTPError{Code: 421, EnhancedCode: gosmtp.EnhancedCode{4, 3, 2}, Message: "Not writer for recipient; try later"}
+		}
+	}
+	if s.backend.scan != nil {
+		var scanErr error
+		data, scanErr = s.backend.scan.apply(ctx, u, data, msgid, s.deliverQuarantine)
+		if scanErr != nil {
+			if errors.Is(scanErr, errQuarantined) {
+				return nil
+			}
+			var smtpErr *gosmtp.SMTPError
+			if errors.As(scanErr, &smtpErr) {
+				return smtpErr
+			}
+			if errors.Is(scanErr, storage.ErrQuotaExceeded) {
+				return &gosmtp.SMTPError{Code: 552, EnhancedCode: gosmtp.EnhancedCode{5, 2, 2}, Message: "Mailbox full"}
+			}
+			return scanErr
 		}
 	}
 	if s.backend.sieve != nil {
