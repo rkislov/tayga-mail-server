@@ -175,10 +175,16 @@ After virus scan and before Sieve, optional `spam:` checks Rspamd HTTP `/checkv2
 
 Admin: `GET /api/v1/admin/quarantine` (folders Quarantine+Junk), `POST …/{id}/release` (move to INBOX), `DELETE …/{id}` (Monitoring card).
 
-## Inbound DKIM verify
+## Inbound mail auth (SPF / DKIM / DMARC)
 
-Unauthenticated MX delivery can run `dkim_verify:` (DNS TXT public key lookup via go-msgauth). Results are written as `Authentication-Results` (`dkim=pass|fail|none|temperror|permerror`). Actions: `tag` (default) or `reject` on failed signatures; optional `require_signature`. Authenticated submission skips verify. See `configs/tayga.example.yaml`.
+On unauthenticated MX (before virus/spam), optional checks in order:
+
+1. `spf:` — `blitiri.com.ar/go/spf` against client IP + MAIL FROM
+2. `dkim_verify:` — DNS TXT public key via go-msgauth
+3. `dmarc:` — policy lookup + SPF/DKIM alignment (`action: follow` honors `p=reject`)
+
+Each step may inject `Authentication-Results`. Authenticated submission skips all three. Admin quarantine UI shows spam/virus headers, filters (`folder`/`kind`/`q`), and message preview. See `configs/tayga.example.yaml`.
 
 ## Next milestones
 
-Spam UI polish; LDAP group sync; inbound SPF/DMARC.
+LDAP group sync; DMARC reporting (rua); ARC.

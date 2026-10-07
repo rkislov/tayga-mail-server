@@ -7,10 +7,10 @@ import (
 
 // rateLimiter is a simple token-bucket style fixed-window counter.
 type rateLimiter struct {
-	mu      sync.Mutex
-	window  time.Duration
-	limit   int
-	hits    map[string]bucket
+	mu     sync.Mutex
+	window time.Duration
+	limit  int
+	hits   map[string]bucket
 }
 
 type bucket struct {
