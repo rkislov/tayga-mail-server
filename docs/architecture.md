@@ -193,6 +193,10 @@ With `dmarc.report.enabled`, each evaluation is aggregated in `dmarc_agg` (per U
 
 Per-domain `ldap.domains.*.groups` maps membership to Tayga roles (`admin`) via `memberof` or group search. Roles are stored on `users.roles` and grant admin API access alongside `http.admins`. Optional `sync:` provisions members of `group_dns` / `admin_groups` on an interval or via `tayga-mail ldap-sync`.
 
+## ARC (Authenticated Received Chain)
+
+`arc:` on unauthenticated MX (after SPF/DKIM/DMARC): verify the existing chain (`Authentication-Results: … arc=pass|fail|none`) and optionally seal a new ARC set with our auth results (`seal: true` + RSA key). Uses `github.com/rest-mail/go-arc` (RFC 8617).
+
 ## Next milestones
 
-ARC; LDAP nested groups; DMARC failure reports (ruf).
+LDAP nested groups; DMARC failure reports (ruf); ARC trust policy for DMARC override.
