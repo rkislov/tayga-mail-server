@@ -226,14 +226,15 @@ func (s *Store) CreateUser(ctx context.Context, u *User) (*User, error) {
 		enabled = 0
 	}
 
+	u.Roles = JoinRoles(ParseRoles(u.Roles))
 	q := s.rebind(`INSERT INTO users(
 		id, tenant_id, domain_id, email, local_part, display_name, password_hash,
-		auth_source, quota_bytes, enabled, created_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		auth_source, quota_bytes, enabled, roles, created_at
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 
 	args := []any{
 		u.ID, u.TenantID, u.DomainID, u.Email, u.LocalPart, u.DisplayName, u.PasswordHash,
-		u.AuthSource, u.QuotaBytes, enabled, now,
+		u.AuthSource, u.QuotaBytes, enabled, u.Roles, now,
 	}
 	if _, err := s.db.ExecContext(ctx, q, args...); err != nil {
 		return nil, mapErr(err)
@@ -246,7 +247,7 @@ func (s *Store) scanUser(row interface{ Scan(dest ...any) error }) (*User, error
 	var enabled any
 	err := row.Scan(
 		&u.ID, &u.TenantID, &u.DomainID, &u.Email, &u.LocalPart, &u.DisplayName,
-		&u.PasswordHash, &u.AuthSource, &u.QuotaBytes, &enabled, &u.CreatedAt,
+		&u.PasswordHash, &u.AuthSource, &u.QuotaBytes, &enabled, &u.Roles, &u.CreatedAt,
 	)
 	if err != nil {
 		return nil, mapErr(err)
@@ -270,7 +271,7 @@ func asBool(v any) bool {
 	}
 }
 
-const userCols = `id, tenant_id, domain_id, email, local_part, display_name, password_hash, auth_source, quota_bytes, enabled, created_at`
+const userCols = `id, tenant_id, domain_id, email, local_part, display_name, password_hash, auth_source, quota_bytes, enabled, roles, created_at`
 
 func (s *Store) GetUserByEmail(ctx context.Context, email string) (*User, error) {
 	email = strings.ToLower(email)
@@ -291,6 +292,23 @@ func (s *Store) GetUserByID(ctx context.Context, id string) (*User, error) {
 func (s *Store) UpdateUserPassword(ctx context.Context, userID, passwordHash string) error {
 	q := s.rebind(`UPDATE users SET password_hash = ? WHERE id = ?`)
 	res, err := s.db.ExecContext(ctx, q, passwordHash, userID)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (s *Store) UpdateUserRoles(ctx context.Context, userID, roles string) error {
+	roles = JoinRoles(ParseRoles(roles))
+	q := s.rebind(`UPDATE users SET roles = ? WHERE id = ?`)
+	res, err := s.db.ExecContext(ctx, q, roles, userID)
 	if err != nil {
 		return err
 	}
