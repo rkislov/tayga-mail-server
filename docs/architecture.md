@@ -179,13 +179,14 @@ Admin: `GET /api/v1/admin/quarantine` (folders Quarantine+Junk), `POST …/{id}/
 
 On unauthenticated MX (before virus/spam), optional checks in order:
 
-1. `helo:` — client HELO/EHLO syntax (`require_fqdn`, reject `localhost` / bare IP)
-2. `iprev:` — PTR + forward-confirmed reverse DNS (`Authentication-Results: … iprev=pass|fail`)
-3. `spf:` — `blitiri.com.ar/go/spf` against client IP + client HELO + MAIL FROM
-4. `dkim_verify:` — DNS TXT public key via go-msgauth
-5. `arc:` verify — existing ARC chain (`Authentication-Results: … arc=pass|fail|none`)
-6. `dmarc:` — policy lookup + SPF/DKIM alignment (`action: follow` honors `p=reject`); with `dmarc.arc_trust: true`, ARC `cv=pass` softens fail (no reject, still records `dmarc=fail reason="arc-pass"`)
-7. `arc:` seal — optional new ARC set with our auth results (`seal: true` + RSA key)
+1. `greylist:` — first-seen `(ip, MAIL FROM, RCPT)` deferred with `421` until `delay` elapses (in-memory; `ipv4_net` can key by /24)
+2. `helo:` — client HELO/EHLO syntax (`require_fqdn`, reject `localhost` / bare IP)
+3. `iprev:` — PTR + forward-confirmed reverse DNS (`Authentication-Results: … iprev=pass|fail`)
+4. `spf:` — `blitiri.com.ar/go/spf` against client IP + client HELO + MAIL FROM
+5. `dkim_verify:` — DNS TXT public key via go-msgauth
+6. `arc:` verify — existing ARC chain (`Authentication-Results: … arc=pass|fail|none`)
+7. `dmarc:` — policy lookup + SPF/DKIM alignment (`action: follow` honors `p=reject`); with `dmarc.arc_trust: true`, ARC `cv=pass` softens fail (no reject, still records `dmarc=fail reason="arc-pass"`)
+8. `arc:` seal — optional new ARC set with our auth results (`seal: true` + RSA key)
 
 Each step may inject `Authentication-Results`. Authenticated submission skips all of these. Admin quarantine UI shows spam/virus headers, filters (`folder`/`kind`/`q`), and message preview. See `configs/tayga.example.yaml`.
 
