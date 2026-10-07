@@ -45,10 +45,12 @@ Tayga's in-house sync engine. Wire-compatible with ActiveSync-class mobile clien
 |----------|------|
 | `/Autodiscover/Autodiscover.xml` | POX Autodiscover → FlowSync URLs |
 | `/autodiscover/autodiscover.json/…` | JSON Autodiscover |
-| `/Microsoft-Server-ActiveSync` | FolderSync, Sync, Ping, Provision, GetItemEstimate (XML + WBXML) |
-| `/EWS/Exchange.asmx` | FindItem, GetItem, SyncFolderItems, FindFolder |
+| `/Microsoft-Server-ActiveSync` | FolderSync, Sync (Email/Calendar/Contacts), Ping, Provision, GetItemEstimate (XML + WBXML) |
+| `/EWS/Exchange.asmx` | FindItem/GetItem/SyncFolderItems for mail, calendar, contacts; FindFolder |
 
-Collection/item IDs exposed to clients are **UUIDs** (mailbox / message / device / policy).
+Collection/item IDs exposed to clients are **UUIDs** (mailbox / message / calendar / address book / event / contact / device / policy).
+
+FolderSync advertises mailboxes plus CalDAV calendars (type 8) and CardDAV address books (type 9). Provision returns a richer device policy (password, lock timeout, camera/storage) with a UUID `PolicyKey`.
 
 Enable: `flowsync.enabled: true` (default).
 
@@ -83,4 +85,4 @@ Enable: `mfa.webauthn.enabled: true` (RP ID from `http.public_url`).
 
 ## Next milestones
 
-FlowSync calendar/contacts sync + richer policies → admin UI polish → …
+Admin UI polish → FlowSync write-back (create/update/delete) → …
