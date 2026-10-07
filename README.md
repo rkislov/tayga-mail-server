@@ -51,7 +51,7 @@ Seed: `admin@example.com` / `changeme`. TLS: `tls.auto_generate` or `scripts/gen
 - Object store: optional S3/MinIO write-through for maildir (`mailstore.object_store`); `tayga-mail sync-objects` to reconcile
 - Virus scan: `scan.enabled` with ClamAV/exec → reject, quarantine folder, or tag headers
 - Spam: `spam.enabled` Rspamd `/checkv2` → reject / greylist / tag / Junk quarantine; admin `/api/v1/admin/quarantine`
-- Inbound auth: `spf` → `dkim_verify` → ARC verify → `dmarc` → ARC seal on MX
+- Inbound auth: `iprev` → `spf` → `dkim_verify` → ARC verify → `dmarc` → ARC seal on MX
 - DMARC rua/ruf: aggregate XML (`report.enabled`) and AFRF failure reports (`report.failure`)
 - DMARC ARC trust: `dmarc.arc_trust` softens fail when ARC `cv=pass`
 - ARC: `arc.enabled` verify/seal (RFC 8617) on inbound MX

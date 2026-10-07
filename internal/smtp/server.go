@@ -40,6 +40,7 @@ type Server struct {
 	spam         *spamPolicy
 	dkimVerify   *dkimVerifyPolicy
 	spf          *spfPolicy
+	iprev        *iprevPolicy
 	dmarc        *dmarcPolicy
 	dmarcReport  *dmarcReporter
 	arc          *arcPolicy
@@ -146,6 +147,18 @@ func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth
 		}
 		srv.spf = &spfPolicy{action: action, failOpen: cfg.SPF.FailOpen, authservID: authserv, log: log}
 		log.Info("smtp spf check enabled", "action", action)
+	}
+	if cfg.IPRev.Enabled {
+		authserv := cfg.IPRev.AuthservID
+		if authserv == "" {
+			authserv = cfg.Server.Hostname
+		}
+		action := cfg.IPRev.Action
+		if action == "" {
+			action = "tag"
+		}
+		srv.iprev = &iprevPolicy{action: action, failOpen: cfg.IPRev.FailOpen, authservID: authserv, log: log}
+		log.Info("smtp iprev check enabled", "action", action)
 	}
 	if cfg.DMARC.Enabled {
 		authserv := cfg.DMARC.AuthservID
@@ -283,6 +296,7 @@ func (s *Server) Start(ctx context.Context) error {
 			spam:         s.spam,
 			dkimVerify:   s.dkimVerify,
 			spf:          s.spf,
+			iprev:        s.iprev,
 			dmarc:        s.dmarc,
 			arc:          s.arc,
 			out:          out,
@@ -369,6 +383,7 @@ type backend struct {
 	spam         *spamPolicy
 	dkimVerify   *dkimVerifyPolicy
 	spf          *spfPolicy
+	iprev        *iprevPolicy
 	dmarc        *dmarcPolicy
 	arc          *arcPolicy
 	out          outboundSender
@@ -552,7 +567,7 @@ func (s *session) deliver(ctx context.Context, rcpt string, data []byte, msgid s
 			return &gosmtp.SMTPError{Code: 421, EnhancedCode: gosmtp.EnhancedCode{4, 3, 2}, Message: "Not writer for recipient; try later"}
 		}
 	}
-	// Inbound mail auth (SPF → DKIM → ARC verify → DMARC → ARC seal) for unauthenticated MX only.
+	// Inbound mail auth (iprev → SPF → DKIM → ARC verify → DMARC → ARC seal) for unauthenticated MX only.
 	if s.user == nil {
 		var (
 			spfRes      = spfNoneResult()
@@ -560,6 +575,16 @@ func (s *session) deliver(ctx context.Context, rcpt string, data []byte, msgid s
 			arcCV       = "none"
 			authErr     error
 		)
+		if s.backend.iprev != nil {
+			data, authErr = s.backend.iprev.apply(stripPort(s.remote), data)
+			if authErr != nil {
+				var smtpErr *gosmtp.SMTPError
+				if errors.As(authErr, &smtpErr) {
+					return smtpErr
+				}
+				return authErr
+			}
+		}
 		if s.backend.spf != nil {
 			data, spfRes, authErr = s.backend.spf.apply(stripPort(s.remote), s.backend.hostname, s.from, data)
 			if authErr != nil {
