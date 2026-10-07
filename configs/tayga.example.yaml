@@ -49,6 +49,13 @@ smtp:
     per_ip: 0      # e.g. 60
     per_user: 0    # e.g. 30
     window: 1m
+  # Durable outbound retries + DSN to local senders on final failure
+  queue:
+    enabled: true
+    workers: 1
+    poll_interval: 5s
+    max_attempts: 8
+    batch_size: 10
 
 imap:
   listen: ":143"       # STARTTLS when tls certs are present
