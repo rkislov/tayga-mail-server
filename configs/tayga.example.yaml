@@ -33,6 +33,17 @@ smtp:
   max_size: 26214400 # 25 MiB
   read_timeout: 60s
   write_timeout: 60s
+  # Outbound for authenticated submission to external recipients
+  relay:
+    host: "" # e.g. "smtp.example.com:587"
+    username: ""
+    password: ""
+    # disable_starttls: false
+  dkim:
+    enabled: false
+    domain: example.com
+    selector: tayga
+    private_key_file: ./data/dkim/private.pem
 
 imap:
   listen: ":143"       # STARTTLS when tls certs are present
