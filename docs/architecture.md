@@ -14,7 +14,7 @@ cmd/tayga
   ├─ sieve (foxcpp/go-sieve on delivery)
   ├─ dav (CalDAV + CardDAV via emersion/go-webdav)
   ├─ flowsync (proprietary Tayga sync engine — ActiveSync/EWS wire)
-  └─ httpapi (/healthz, /readyz, /metrics, /api/v1/auth/*, /dav/*, FlowSync, UI)
+  └─ httpapi (/healthz, /readyz, /metrics, /api/v1/auth/*, /dav/*, FlowSync, embedded admin UI)
 ```
 
 ## Storage
@@ -83,6 +83,10 @@ Seed: `admin@example.com` / `changeme`. UUID schema requires a fresh DB when upg
 
 Enable: `mfa.webauthn.enabled: true` (RP ID from `http.public_url`).
 
+## Admin UI
+
+Embedded at `/` (`internal/frontend/dist`): sign-in, TOTP + WebAuthn MFA, passkey enrollment/revoke.
+
 ## Next milestones
 
-Admin UI polish → FlowSync write-back (create/update/delete) → …
+FlowSync write-back (create/update/delete for mail/calendar/contacts) → quotas/admin APIs → …

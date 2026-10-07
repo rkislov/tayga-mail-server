@@ -1,4 +1,6 @@
-# Frontend source (future)
+# Frontend
 
 Built assets are embedded from `internal/frontend/dist` via `//go:embed`.
-Replace that tree with a TailwindCSS build (street art + nature) in a later stage.
+
+The current UI is a single-page admin shell (login, TOTP/WebAuthn MFA, passkey management)
+with the Tayga “street art + nature” palette. Replace with a Tailwind/React build later if needed.
