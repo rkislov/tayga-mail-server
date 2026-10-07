@@ -175,6 +175,10 @@ After virus scan and before Sieve, optional `spam:` checks Rspamd HTTP `/checkv2
 
 Admin: `GET /api/v1/admin/quarantine` (folders Quarantine+Junk), `POST …/{id}/release` (move to INBOX), `DELETE …/{id}` (Monitoring card).
 
+## Inbound DKIM verify
+
+Unauthenticated MX delivery can run `dkim_verify:` (DNS TXT public key lookup via go-msgauth). Results are written as `Authentication-Results` (`dkim=pass|fail|none|temperror|permerror`). Actions: `tag` (default) or `reject` on failed signatures; optional `require_signature`. Authenticated submission skips verify. See `configs/tayga.example.yaml`.
+
 ## Next milestones
 
-DKIM verify inbound; more spam UI polish; LDAP group sync.
+Spam UI polish; LDAP group sync; inbound SPF/DMARC.
