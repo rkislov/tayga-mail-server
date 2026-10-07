@@ -139,6 +139,10 @@ Admins: `http.admins` email list (default `admin@example.com`).
 - **Author:** Кислов Роман Сергеевич (Roman Sergeyevich Kislov)
 - **UI:** abstract cosmic backgrounds (author artwork under `internal/frontend/dist/assets/`)
 
+## Mailstore
+
+Local Maildir++ under `mailstore.root`. Optional S3-compatible write-through (`mailstore.object_store`): messages mirrored to the bucket; cache miss on `Read` pulls from object storage.
+
 ## Next milestones
 
-Cross-node IMAP IDLE via Postgres LISTEN/NOTIFY (`tayga_idle`). Next: optional object-store maildir backend.
+Object-store maildir + cross-node IDLE shipped. Next: background blob↔maildir resync, leader election.
