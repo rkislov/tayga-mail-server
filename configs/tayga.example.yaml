@@ -34,8 +34,9 @@ smtp:
   read_timeout: 60s
   write_timeout: 60s
   # Outbound for authenticated submission to external recipients
+  outbound_direct: false # true = MX lookup when relay.host is empty
   relay:
-    host: "" # e.g. "smtp.example.com:587"
+    host: "" # e.g. "smtp.example.com:587" (preferred over direct)
     username: ""
     password: ""
     # disable_starttls: false

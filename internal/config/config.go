@@ -72,14 +72,15 @@ type ObjectStoreConfig struct {
 }
 
 type SMTPConfig struct {
-	Submission   string          `yaml:"submission"`
-	MX           string          `yaml:"mx"`
-	SMTPS        string          `yaml:"smtps"`
-	MaxSize      int64           `yaml:"max_size"` // bytes; 0 = default 25 MiB
-	ReadTimeout  time.Duration   `yaml:"read_timeout"`
-	WriteTimeout time.Duration   `yaml:"write_timeout"`
-	Relay        SMTPRelayConfig `yaml:"relay"`
-	DKIM         SMTPDKIMConfig  `yaml:"dkim"`
+	Submission     string          `yaml:"submission"`
+	MX             string          `yaml:"mx"`
+	SMTPS          string          `yaml:"smtps"`
+	MaxSize        int64           `yaml:"max_size"` // bytes; 0 = default 25 MiB
+	ReadTimeout    time.Duration   `yaml:"read_timeout"`
+	WriteTimeout   time.Duration   `yaml:"write_timeout"`
+	OutboundDirect bool            `yaml:"outbound_direct"` // MX lookup when relay.host empty
+	Relay          SMTPRelayConfig `yaml:"relay"`
+	DKIM           SMTPDKIMConfig  `yaml:"dkim"`
 }
 
 // SMTPRelayConfig is the outbound smart-host for authenticated external recipients.
