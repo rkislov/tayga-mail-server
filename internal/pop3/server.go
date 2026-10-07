@@ -28,6 +28,7 @@ type Server struct {
 	store     storage.Driver
 	authn     *auth.Layer
 	mailstore *mailstore.Store
+	tls       *tlsutil.Manager
 	tlsCfg    *tls.Config
 
 	mu     sync.Mutex
@@ -35,15 +36,12 @@ type Server struct {
 	closed bool
 }
 
-func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth.Layer, ms *mailstore.Store) *Server {
-	return &Server{cfg: cfg, log: log, store: store, authn: authn, mailstore: ms}
+func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth.Layer, ms *mailstore.Store, tlsMgr *tlsutil.Manager) *Server {
+	return &Server{cfg: cfg, log: log, store: store, authn: authn, mailstore: ms, tls: tlsMgr}
 }
 
 func (s *Server) Start(ctx context.Context) error {
-	tlsCfg, err := s.loadTLS()
-	if err != nil {
-		return err
-	}
+	tlsCfg := s.tlsConfig()
 	s.tlsCfg = tlsCfg
 
 	type spec struct {
@@ -61,6 +59,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	for _, sp := range specs {
 		var ln net.Listener
+		var err error
 		if sp.implicit {
 			if tlsCfg == nil {
 				s.log.Warn("pop3s configured but TLS certs missing; skipping", "addr", sp.addr)
@@ -119,8 +118,12 @@ func (s *Server) Shutdown(context.Context) error {
 	return first
 }
 
-func (s *Server) loadTLS() (*tls.Config, error) {
-	return tlsutil.Load(s.cfg)
+func (s *Server) tlsConfig() *tls.Config {
+	if s.tls != nil {
+		return s.tls.TLSConfig()
+	}
+	cfg, _ := tlsutil.Load(s.cfg)
+	return cfg
 }
 
 type session struct {

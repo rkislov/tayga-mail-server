@@ -293,6 +293,24 @@
           <p id="admin-msg" class="msg" role="status"></p>
         </div>
 
+        <div class="card hidden" id="card-tls">
+          <h3>TLS certificates</h3>
+          <p class="meta">Server cert for HTTPS, IMAPS, POP3S, SMTPS, submission STARTTLS. Changes apply without restart.</p>
+          <p class="meta" id="tls-status">Loading…</p>
+          <label for="tls-cert">Certificate PEM</label>
+          <textarea id="tls-cert" spellcheck="false" placeholder="-----BEGIN CERTIFICATE-----"></textarea>
+          <label for="tls-key">Private key PEM</label>
+          <textarea id="tls-key" spellcheck="false" placeholder="-----BEGIN PRIVATE KEY-----"></textarea>
+          <label for="tls-hosts">Self-signed hosts (comma-separated)</label>
+          <input id="tls-hosts" type="text" placeholder="mail.example.com, localhost, 127.0.0.1" />
+          <div class="actions">
+            <button type="button" class="spray" id="btn-tls-upload">Install PEM</button>
+            <button type="button" class="secondary" id="btn-tls-generate">Generate self-signed</button>
+            <button type="button" class="secondary" id="btn-tls-refresh">Refresh</button>
+          </div>
+          <p id="tls-msg" class="msg" role="status"></p>
+        </div>
+
         <div class="card">
           <h3>Authenticator (TOTP)</h3>
           <p class="meta">Enroll an app like Aegis or Google Authenticator.</p>
@@ -462,7 +480,11 @@ keep;</textarea>
         $("acct-quota").textContent = q;
         $("acct-role").textContent = me.is_admin ? "admin" : "live";
         $("card-admin").classList.toggle("hidden", !me.is_admin);
-        if (me.is_admin) refreshAdminUsers();
+        $("card-tls").classList.toggle("hidden", !me.is_admin);
+        if (me.is_admin) {
+          refreshAdminUsers();
+          refreshTLS();
+        }
       } catch (err) {
         $("acct-meta").textContent = err.message;
       }
@@ -544,6 +566,67 @@ keep;</textarea>
         setMsg($("admin-msg"), err.message, "err");
       }
     }
+
+    function renderTLSStatus(info) {
+      if (!info || !info.configured) {
+        $("tls-status").textContent = "No certificate loaded. Upload PEM or generate a self-signed cert.";
+        return;
+      }
+      const sans = [].concat(info.dns_names || [], info.ip_sans || []).join(", ") || "—";
+      $("tls-status").innerHTML =
+        "<strong>" + escapeHtml(info.subject || "") + "</strong><br/>" +
+        "<span class=\"meta\">Valid " + escapeHtml(info.not_before || "") + " → " + escapeHtml(info.not_after || "") +
+        " · " + (info.expires_in_hours != null ? info.expires_in_hours + "h left" : "") + "</span><br/>" +
+        "<span class=\"meta\">SANs: " + escapeHtml(sans) + "</span><br/>" +
+        "<span class=\"meta\">SHA-256: " + escapeHtml(info.fingerprint_sha256 || "") + "</span>";
+    }
+
+    async function refreshTLS() {
+      try {
+        const info = await api("/api/v1/admin/tls");
+        renderTLSStatus(info);
+        if (!$("tls-hosts").value && info) {
+          const hosts = [].concat(info.dns_names || [], info.ip_sans || []);
+          if (hosts.length) $("tls-hosts").value = hosts.join(", ");
+        }
+      } catch (err) {
+        $("tls-status").textContent = err.message;
+        setMsg($("tls-msg"), err.message, "err");
+      }
+    }
+
+    $("btn-tls-refresh").addEventListener("click", () => refreshTLS());
+    $("btn-tls-upload").addEventListener("click", async () => {
+      setMsg($("tls-msg"), "Installing…");
+      try {
+        const info = await api("/api/v1/admin/tls", {
+          method: "PUT",
+          body: JSON.stringify({
+            certificate: $("tls-cert").value,
+            private_key: $("tls-key").value,
+          }),
+        });
+        renderTLSStatus(info);
+        $("tls-key").value = "";
+        setMsg($("tls-msg"), "Certificate installed (hot-reloaded).", "ok");
+      } catch (err) {
+        setMsg($("tls-msg"), err.message, "err");
+      }
+    });
+    $("btn-tls-generate").addEventListener("click", async () => {
+      const hosts = $("tls-hosts").value.split(",").map((s) => s.trim()).filter(Boolean);
+      setMsg($("tls-msg"), "Generating…");
+      try {
+        const info = await api("/api/v1/admin/tls", {
+          method: "POST",
+          body: JSON.stringify({ hosts, days: 365 }),
+        });
+        renderTLSStatus(info);
+        setMsg($("tls-msg"), "Self-signed certificate generated and activated.", "ok");
+      } catch (err) {
+        setMsg($("tls-msg"), err.message, "err");
+      }
+    });
 
     $("form-create-user").addEventListener("submit", async (e) => {
       e.preventDefault();

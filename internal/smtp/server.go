@@ -28,18 +28,16 @@ type Server struct {
 	authn     *auth.Layer
 	mailstore *mailstore.Store
 	sieve     *sieve.Engine
+	tls       *tlsutil.Manager
 	servers   []*gosmtp.Server
 }
 
-func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth.Layer, ms *mailstore.Store, eng *sieve.Engine) *Server {
-	return &Server{cfg: cfg, log: log, store: store, authn: authn, mailstore: ms, sieve: eng}
+func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth.Layer, ms *mailstore.Store, eng *sieve.Engine, tlsMgr *tlsutil.Manager) *Server {
+	return &Server{cfg: cfg, log: log, store: store, authn: authn, mailstore: ms, sieve: eng, tls: tlsMgr}
 }
 
 func (s *Server) Start(ctx context.Context) error {
-	tlsCfg, err := s.loadTLS()
-	if err != nil {
-		return err
-	}
+	tlsCfg := s.tlsConfig()
 
 	type listenSpec struct {
 		addr        string
@@ -81,6 +79,7 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 
 		var ln net.Listener
+		var err error
 		if spec.implicit {
 			if tlsCfg == nil {
 				s.log.Warn("smtps configured but TLS certs missing; skipping", "addr", spec.addr)
@@ -122,8 +121,12 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	return first
 }
 
-func (s *Server) loadTLS() (*tls.Config, error) {
-	return tlsutil.Load(s.cfg)
+func (s *Server) tlsConfig() *tls.Config {
+	if s.tls != nil {
+		return s.tls.TLSConfig()
+	}
+	cfg, _ := tlsutil.Load(s.cfg)
+	return cfg
 }
 
 type backend struct {

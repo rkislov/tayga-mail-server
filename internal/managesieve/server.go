@@ -26,24 +26,22 @@ type Server struct {
 	log   *slog.Logger
 	store storage.Driver
 	authn *auth.Layer
+	tls   *tlsutil.Manager
 
 	mu     sync.Mutex
 	ln     []net.Listener
 	closed bool
 }
 
-func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth.Layer) *Server {
-	return &Server{cfg: cfg, log: log, store: store, authn: authn}
+func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth.Layer, tlsMgr *tlsutil.Manager) *Server {
+	return &Server{cfg: cfg, log: log, store: store, authn: authn, tls: tlsMgr}
 }
 
 func (s *Server) Start(ctx context.Context) error {
 	if s.cfg.ManageSieve.Listen == "" {
 		return nil
 	}
-	tlsCfg, err := s.loadTLS()
-	if err != nil {
-		return err
-	}
+	tlsCfg := s.tlsConfig()
 
 	ln, err := net.Listen("tcp", s.cfg.ManageSieve.Listen)
 	if err != nil {
@@ -94,8 +92,12 @@ func (s *Server) Shutdown(context.Context) error {
 	return first
 }
 
-func (s *Server) loadTLS() (*tls.Config, error) {
-	return tlsutil.Load(s.cfg)
+func (s *Server) tlsConfig() *tls.Config {
+	if s.tls != nil {
+		return s.tls.TLSConfig()
+	}
+	cfg, _ := tlsutil.Load(s.cfg)
+	return cfg
 }
 
 type session struct {

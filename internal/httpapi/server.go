@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"log/slog"
 	"net"
@@ -27,11 +28,12 @@ type Server struct {
 	store   storage.Driver
 	authn   *auth.Layer
 	ms      *mailstore.Store
+	tls     *tlsutil.Manager
 	servers []*http.Server
 }
 
-func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth.Layer, ms *mailstore.Store) *Server {
-	return &Server{cfg: cfg, log: log, store: store, authn: authn, ms: ms}
+func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth.Layer, ms *mailstore.Store, tlsMgr *tlsutil.Manager) *Server {
+	return &Server{cfg: cfg, log: log, store: store, authn: authn, ms: ms, tls: tlsMgr}
 }
 
 // Handler builds the HTTP mux (health, auth, DAV, FlowSync, admin UI).
@@ -59,6 +61,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/sieve/scripts/", s.handleSieveScripts)
 	mux.HandleFunc("/api/v1/admin/users", s.handleAdminUsers)
 	mux.HandleFunc("/api/v1/admin/users/", s.handleAdminUsers)
+	mux.HandleFunc("/api/v1/admin/tls", s.handleAdminTLS)
 
 	dav.Mount(mux, s.store, s.authn)
 	flowsync.Mount(mux, s.cfg, s.log, s.store, s.authn, s.ms)
@@ -68,9 +71,15 @@ func (s *Server) Handler() http.Handler {
 }
 
 func (s *Server) Start(ctx context.Context) error {
-	tlsCfg, err := tlsutil.LoadHTTP(s.cfg)
-	if err != nil {
-		return err
+	var tlsCfg *tls.Config
+	if s.tls != nil {
+		tlsCfg = s.tls.HTTPConfig()
+	} else {
+		var err error
+		tlsCfg, err = tlsutil.LoadHTTP(s.cfg)
+		if err != nil {
+			return err
+		}
 	}
 	handler := s.Handler()
 
