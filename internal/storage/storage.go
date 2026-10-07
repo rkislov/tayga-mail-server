@@ -21,12 +21,15 @@ type Driver interface {
 	Migrate(ctx context.Context) error
 
 	CreateTenant(ctx context.Context, name string) (*Tenant, error)
+	InsertTenant(ctx context.Context, t *Tenant) (*Tenant, error)
 	GetTenantByName(ctx context.Context, name string) (*Tenant, error)
 	GetTenantByID(ctx context.Context, id string) (*Tenant, error)
 	ListTenants(ctx context.Context) ([]*Tenant, error)
 
 	CreateDomain(ctx context.Context, tenantID, name string) (*Domain, error)
+	InsertDomain(ctx context.Context, d *Domain) (*Domain, error)
 	GetDomainByName(ctx context.Context, name string) (*Domain, error)
+	GetDomainByID(ctx context.Context, id string) (*Domain, error)
 	ListDomainsByTenant(ctx context.Context, tenantID string) ([]*Domain, error)
 	CountUsersByDomain(ctx context.Context, domainID string) (int, error)
 	DeleteDomain(ctx context.Context, tenantID, domainID string) error
