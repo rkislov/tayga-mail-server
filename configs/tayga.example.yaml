@@ -60,7 +60,7 @@ oidc:
     #   redirect_url: "http://127.0.0.1:8080/api/v1/auth/oidc/callback"
     #   scopes: [openid, email, profile]
 
-# FlowSync — proprietary Tayga sync engine (ActiveSync- and EWS-compatible wire)
+# FlowSync — original Tayga sync engine (ActiveSync- and EWS-compatible wire; Apache-2.0)
 flowsync:
   enabled: true
 

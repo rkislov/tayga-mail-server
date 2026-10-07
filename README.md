@@ -2,6 +2,9 @@
 
 Corporate-class multi-domain / multi-tenant mail server in Go.
 
+**Author:** Кислов Роман Сергеевич (Roman Sergeyevich Kislov)  
+**License:** [Apache License 2.0](LICENSE)
+
 See [docs/architecture.md](docs/architecture.md) and `configs/tayga.example.yaml`.
 
 ## Quick start
@@ -24,7 +27,7 @@ CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o tayga-mail ./cmd/tayga
 - IMAP/SMTP: SASL `XOAUTH2` / `OAUTHBEARER` with access tokens from the auth API
 - CalDAV: `http://127.0.0.1:8080/dav/cal/` (Basic/Bearer); `/.well-known/caldav`
 - CardDAV: `http://127.0.0.1:8080/dav/card/` (Basic/Bearer); `/.well-known/carddav`
-- FlowSync (proprietary): ActiveSync `/Microsoft-Server-ActiveSync` (mail + calendar + contacts), EWS `/EWS/Exchange.asmx`, Autodiscover
+- FlowSync (original): ActiveSync `/Microsoft-Server-ActiveSync` (mail + calendar + contacts + folders/move), EWS `/EWS/Exchange.asmx`, Autodiscover
 - WebAuthn MFA: `/api/v1/auth/webauthn/*` (passkeys; UUID credential/session IDs)
 - Admin UI: `http://127.0.0.1:8080/` (login, TOTP, passkeys, quota)
 - Account API: `GET /api/v1/me`; admin: `/api/v1/admin/users` (`http.admins`)
@@ -32,4 +35,6 @@ CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o tayga-mail ./cmd/tayga
 
 ## License
 
-Proprietary / TBD.
+Copyright © Кислов Роман Сергеевич. Licensed under the Apache License, Version 2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
+UI abstract backdrop art © Кислов Роман Сергеевич.

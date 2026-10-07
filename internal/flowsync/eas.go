@@ -21,7 +21,7 @@ type easHandler struct {
 func (h *easHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("MS-Server-ActiveSync", "18.0")
 	w.Header().Set("MS-ASProtocolVersions", "14.0,14.1,16.0,16.1")
-	w.Header().Set("MS-ASProtocolCommands", "FolderSync,Sync,Ping,Provision,GetItemEstimate,Options")
+	w.Header().Set("MS-ASProtocolCommands", "FolderSync,FolderCreate,FolderDelete,FolderUpdate,Sync,MoveItems,Ping,Provision,GetItemEstimate,Options")
 	w.Header().Set("X-FlowSync", "Tayga-Proprietary")
 	w.Header().Set("X-FlowSync-Engine", "FlowSync/1.0")
 
@@ -62,8 +62,16 @@ func (h *easHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch strings.ToLower(cmd) {
 	case "foldersync":
 		xmlOut, binOut, err = h.folderSync(r.Context(), u, dev, useWBXML)
+	case "foldercreate":
+		xmlOut, binOut, err = h.folderCreate(r.Context(), u, body, useWBXML)
+	case "folderdelete":
+		xmlOut, binOut, err = h.folderDelete(r.Context(), u, body, useWBXML)
+	case "folderupdate":
+		xmlOut, binOut, err = h.folderUpdate(r.Context(), u, body, useWBXML)
 	case "sync":
 		xmlOut, binOut, err = h.syncCollection(r.Context(), u, dev, body, useWBXML)
+	case "moveitems":
+		xmlOut, binOut, err = h.moveItems(r.Context(), u, body, useWBXML)
 	case "provision":
 		xmlOut, binOut, err = h.provision(r.Context(), u, dev, useWBXML)
 	case "ping":
