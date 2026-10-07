@@ -204,3 +204,9 @@ With `groups.nested: true`, membership is expanded transitively: `nested_mode: w
 ## ARC (Authenticated Received Chain)
 
 `arc:` uses `github.com/rest-mail/go-arc` (RFC 8617). Verify runs before DMARC so `dmarc.arc_trust` can override disposition; seal runs after so the sealed set includes DMARC results.
+
+## Outbound MTA-STS / TLS-RPT
+
+With `smtp.outbound_direct`, delivery uses opportunistic STARTTLS (EHLO = `server.hostname`). When `smtp.mta_sts.enabled`, recipient `_mta-sts` TXT + `https://mta-sts.<domain>/.well-known/mta-sts.txt` are fetched and cached (`max_age`). Mode `enforce` restricts MX to policy patterns and requires successful STARTTLS; `testing` applies the same checks for reporting but still delivers on failure. `smtp.mta_sts.fail_open` continues without STS if the policy cannot be fetched.
+
+With `smtp.tls_rpt.enabled`, outbound TLS outcomes are aggregated and emailed as RFC 8460 JSON to `mailto:` addresses from `_smtp._tls.<domain>` (`rua=`).
