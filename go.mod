@@ -3,9 +3,11 @@ module github.com/tayga/tms
 go 1.26.0
 
 require (
+	blitiri.com.ar/go/spf v1.6.0
 	github.com/emersion/go-ical v0.0.0-20250609112844-439c63cef608
 	github.com/emersion/go-imap v1.2.1
 	github.com/emersion/go-message v0.18.2
+	github.com/emersion/go-msgauth v0.7.0
 	github.com/emersion/go-sasl v0.0.0-20241020182733-b788ff22d5a6
 	github.com/emersion/go-smtp v0.25.0
 	github.com/emersion/go-vcard v0.1.0
@@ -26,7 +28,6 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/emersion/go-msgauth v0.7.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.4 // indirect
 	github.com/go-asn1-ber/asn1-ber v1.5.8-0.20250403174932-29230038a667 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect

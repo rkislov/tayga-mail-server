@@ -20,9 +20,11 @@ type dkimVerifyPolicy struct {
 	log              *slog.Logger
 }
 
-func (p *dkimVerifyPolicy) apply(data []byte) ([]byte, error) {
+// apply verifies DKIM and injects Authentication-Results.
+// passDomains lists d= domains with a valid signature (for DMARC alignment).
+func (p *dkimVerifyPolicy) apply(data []byte) (out []byte, passDomains []string, err error) {
 	if p == nil {
-		return data, nil
+		return data, nil, nil
 	}
 	opts := &dkim.VerifyOptions{
 		LookupTXT:        p.lookupTXT,
@@ -33,47 +35,48 @@ func (p *dkimVerifyPolicy) apply(data []byte) ([]byte, error) {
 	}
 	vers, err := dkim.VerifyWithOptions(bytes.NewReader(data), opts)
 	if err != nil && !dkim.IsTempFail(err) && !dkim.IsPermFail(err) {
-		// e.g. ErrTooManySignatures — still may have partial results
 		if p.log != nil {
 			p.log.Warn("dkim verify", "err", err)
 		}
 	}
 	if err != nil && dkim.IsTempFail(err) {
 		if !p.failOpen {
-			return nil, &gosmtp.SMTPError{Code: 451, EnhancedCode: gosmtp.EnhancedCode{4, 7, 5}, Message: "DKIM temporary failure"}
+			return nil, nil, &gosmtp.SMTPError{Code: 451, EnhancedCode: gosmtp.EnhancedCode{4, 7, 5}, Message: "DKIM temporary failure"}
 		}
 		data = scan.InjectHeader(data, "Authentication-Results", p.authservID+"; dkim=temperror")
-		return data, nil
+		return data, nil, nil
 	}
 
 	ar := formatAuthResults(p.authservID, vers)
 	data = scan.InjectHeader(data, "Authentication-Results", ar)
 
-	pass, fail, temperror := summarizeDKIM(vers)
+	pass, fail, temperror, passDomains := summarizeDKIM(vers)
 	if temperror && !pass && !fail {
 		if !p.failOpen {
-			return nil, &gosmtp.SMTPError{Code: 451, EnhancedCode: gosmtp.EnhancedCode{4, 7, 5}, Message: "DKIM temporary failure"}
+			return nil, nil, &gosmtp.SMTPError{Code: 451, EnhancedCode: gosmtp.EnhancedCode{4, 7, 5}, Message: "DKIM temporary failure"}
 		}
 	}
 	if p.requireSignature && len(vers) == 0 {
 		if p.action == "reject" {
-			return nil, &gosmtp.SMTPError{Code: 550, EnhancedCode: gosmtp.EnhancedCode{5, 7, 20}, Message: "DKIM signature required"}
+			return nil, nil, &gosmtp.SMTPError{Code: 550, EnhancedCode: gosmtp.EnhancedCode{5, 7, 20}, Message: "DKIM signature required"}
 		}
 	}
 	if fail && p.action == "reject" {
-		return nil, &gosmtp.SMTPError{Code: 550, EnhancedCode: gosmtp.EnhancedCode{5, 7, 20}, Message: "DKIM verification failed"}
+		return nil, nil, &gosmtp.SMTPError{Code: 550, EnhancedCode: gosmtp.EnhancedCode{5, 7, 20}, Message: "DKIM verification failed"}
 	}
-	_ = pass
-	return data, nil
+	return data, passDomains, nil
 }
 
-func summarizeDKIM(vers []*dkim.Verification) (pass, fail, temperror bool) {
+func summarizeDKIM(vers []*dkim.Verification) (pass, fail, temperror bool, passDomains []string) {
 	for _, v := range vers {
 		if v == nil {
 			continue
 		}
 		if v.Err == nil {
 			pass = true
+			if v.Domain != "" {
+				passDomains = append(passDomains, strings.ToLower(v.Domain))
+			}
 			continue
 		}
 		if dkim.IsTempFail(v.Err) {
