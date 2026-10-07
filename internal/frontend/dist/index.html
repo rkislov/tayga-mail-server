@@ -241,13 +241,22 @@
           <div class="row" style="margin-top:0">
             <div>
               <h3 id="acct-email">—</h3>
-              <p class="meta">Signed in · tokens ready for IMAP XOAUTH2 / FlowSync</p>
+              <p class="meta" id="acct-meta">Signed in · tokens ready for IMAP XOAUTH2 / FlowSync</p>
+              <p class="meta" id="acct-quota"></p>
             </div>
-            <span class="chip">live</span>
+            <span class="chip" id="acct-role">live</span>
           </div>
           <div class="actions">
             <button type="button" class="secondary" id="btn-logout">Sign out</button>
+            <button type="button" class="secondary" id="btn-refresh-me">Refresh</button>
           </div>
+        </div>
+
+        <div class="card hidden" id="card-admin">
+          <h3>Tenant users</h3>
+          <p class="meta">Admin: list users and set mailbox quotas (0 = unlimited).</p>
+          <ul class="creds" id="admin-user-list"></ul>
+          <p id="admin-msg" class="msg" role="status"></p>
         </div>
 
         <div class="card">
@@ -379,6 +388,71 @@
       return out;
     }
 
+    function fmtBytes(n) {
+      if (n == null) return "—";
+      if (n < 1024) return n + " B";
+      if (n < 1024*1024) return (n/1024).toFixed(1) + " KiB";
+      if (n < 1024*1024*1024) return (n/(1024*1024)).toFixed(1) + " MiB";
+      return (n/(1024*1024*1024)).toFixed(2) + " GiB";
+    }
+
+    async function loadMe() {
+      try {
+        const me = await api("/api/v1/me");
+        state.email = me.email || state.email;
+        $("acct-email").textContent = me.email;
+        localStorage.setItem("tayga.email", state.email);
+        const q = me.quota_bytes > 0
+          ? `${fmtBytes(me.used_bytes)} / ${fmtBytes(me.quota_bytes)} used`
+          : `${fmtBytes(me.used_bytes)} used · unlimited quota`;
+        $("acct-quota").textContent = q;
+        $("acct-role").textContent = me.is_admin ? "admin" : "live";
+        $("card-admin").classList.toggle("hidden", !me.is_admin);
+        if (me.is_admin) refreshAdminUsers();
+      } catch (err) {
+        $("acct-meta").textContent = err.message;
+      }
+    }
+
+    async function refreshAdminUsers() {
+      try {
+        const data = await api("/api/v1/admin/users");
+        const list = $("admin-user-list");
+        list.innerHTML = (data.users || []).map((u) => `
+          <li>
+            <span>
+              <strong>${escapeHtml(u.email)}</strong><br/>
+              <span class="meta">${fmtBytes(u.used_bytes)} / ${u.quota_bytes > 0 ? fmtBytes(u.quota_bytes) : "∞"} · ${escapeHtml(u.id)}</span>
+            </span>
+            <button type="button" class="secondary" data-quota="${escapeHtml(u.id)}">Set quota</button>
+          </li>`).join("");
+        list.querySelectorAll("[data-quota]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const raw = prompt("Quota bytes (0 = unlimited)", "0");
+            if (raw == null) return;
+            const quota_bytes = Number(raw);
+            if (Number.isNaN(quota_bytes) || quota_bytes < 0) {
+              setMsg($("admin-msg"), "invalid quota", "err");
+              return;
+            }
+            try {
+              await api("/api/v1/admin/users/" + encodeURIComponent(btn.dataset.quota) + "/quota", {
+                method: "PUT",
+                body: JSON.stringify({ quota_bytes }),
+              });
+              setMsg($("admin-msg"), "Quota updated.", "ok");
+              refreshAdminUsers();
+              loadMe();
+            } catch (err) {
+              setMsg($("admin-msg"), err.message, "err");
+            }
+          });
+        });
+      } catch (err) {
+        setMsg($("admin-msg"), err.message, "err");
+      }
+    }
+
     function enterAccount(tokens, email) {
       state.tokens = tokens;
       state.email = email || state.email;
@@ -387,6 +461,7 @@
       $("acct-email").textContent = state.email;
       show("view-account");
       refreshPasskeys();
+      loadMe();
     }
 
     $("form-login").addEventListener("submit", async (e) => {
@@ -469,6 +544,7 @@
       localStorage.removeItem("tayga.tokens");
       show("view-login");
     });
+    $("btn-refresh-me").addEventListener("click", loadMe);
 
     $("btn-totp-setup").addEventListener("click", async () => {
       setMsg($("totp-msg"), "Creating secret…");
