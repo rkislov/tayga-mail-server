@@ -10,22 +10,27 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/tayga/tms/internal/auth"
+	"github.com/tayga/tms/internal/config"
 	"github.com/tayga/tms/internal/dav"
+	"github.com/tayga/tms/internal/flowsync"
 	"github.com/tayga/tms/internal/frontend"
+	"github.com/tayga/tms/internal/mailstore"
 	"github.com/tayga/tms/internal/storage"
 )
 
 // Server exposes health, metrics, auth API, and the embedded Web UI.
 type Server struct {
 	log    *slog.Logger
+	cfg    *config.Config
 	store  storage.Driver
 	authn  *auth.Layer
+	ms     *mailstore.Store
 	addr   string
 	server *http.Server
 }
 
-func New(addr string, log *slog.Logger, store storage.Driver, authn *auth.Layer) *Server {
-	return &Server{addr: addr, log: log, store: store, authn: authn}
+func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth.Layer, ms *mailstore.Store) *Server {
+	return &Server{cfg: cfg, addr: cfg.HTTP.Listen, log: log, store: store, authn: authn, ms: ms}
 }
 
 func (s *Server) Start(ctx context.Context) error {
@@ -43,6 +48,7 @@ func (s *Server) Start(ctx context.Context) error {
 	mux.HandleFunc("/api/v1/auth/oidc/", s.handleOIDCRoutes)
 
 	dav.Mount(mux, s.store, s.authn)
+	flowsync.Mount(mux, s.cfg, s.log, s.store, s.authn, s.ms)
 
 	mux.Handle("/", frontend.Handler())
 
