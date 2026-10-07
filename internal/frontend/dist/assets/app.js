@@ -249,6 +249,11 @@ const THEMES = {
     image: "/assets/moscow-city.jpg",
     image2x: "/assets/moscow-city@2x.jpg",
   },
+  street: {
+    label: "Стрит-арт",
+    image: "/assets/street-art.jpg",
+    image2x: "/assets/street-art@2x.jpg",
+  },
 };
 
 function applyTheme(name) {

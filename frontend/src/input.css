@@ -87,6 +87,18 @@ html[data-theme="moscow"] {
   --overlay: linear-gradient(180deg, rgba(20, 40, 80, 0.32) 0%, rgba(10, 18, 40, 0.55) 48%, rgba(4, 8, 20, 0.8) 100%);
 }
 
+html[data-theme="street"] {
+  --panel-bg: rgba(24, 20, 18, 0.76);
+  --accent: #e8b84a;
+  --btn-bg: #2a3538;
+  --btn-bg-hover: #3a484c;
+  --btn-spray: #c8783a;
+  --btn-spray-hover: #a85f2c;
+  --field-text: #1c1814;
+  --body-bg: #141210;
+  --overlay: linear-gradient(180deg, rgba(36, 32, 28, 0.35) 0%, rgba(18, 16, 14, 0.58) 50%, rgba(6, 6, 6, 0.82) 100%);
+}
+
 @layer base {
   html,
   body {
