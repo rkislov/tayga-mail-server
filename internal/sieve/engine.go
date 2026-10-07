@@ -102,6 +102,9 @@ func (e *Engine) Deliver(ctx context.Context, user *storage.User, envelopeFrom, 
 }
 
 func (e *Engine) fileInto(ctx context.Context, user *storage.User, folder string, flags []string, data []byte, msgid string) error {
+	if err := storage.EnsureQuota(ctx, e.Store, user, int64(len(data))); err != nil {
+		return err
+	}
 	if _, err := e.Mailstore.EnsureUser(user.Email); err != nil {
 		return err
 	}

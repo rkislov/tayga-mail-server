@@ -33,6 +33,22 @@ pop3:
 managesieve:
   listen: ":14190"
 
+# Per-domain LDAP (hybrid with local users). Disabled by default.
+ldap:
+  cache_ttl: 5m
+  domains:
+    # example.com:
+    #   enabled: true
+    #   url: "ldap://127.0.0.1:1389"
+    #   start_tls: false
+    #   bind_dn: "cn=admin,dc=example,dc=com"
+    #   bind_password: "secret"
+    #   base_dn: "ou=people,dc=example,dc=com"
+    #   filter: "(&(objectClass=inetOrgPerson)(mail={email}))"
+    #   attr_email: mail
+    #   attr_name: cn
+    #   timeout: 10s
+
 tls:
   cert_file: ""
   key_file: ""
