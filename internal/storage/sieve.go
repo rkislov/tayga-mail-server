@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-func (s *Store) ListSieveScripts(ctx context.Context, userID int64) ([]*SieveScript, error) {
+func (s *Store) ListSieveScripts(ctx context.Context, userID string) ([]*SieveScript, error) {
 	q := s.rebind(`SELECT id, user_id, name, script, active, created_at FROM sieve_scripts WHERE user_id = ? ORDER BY name`)
 	rows, err := s.db.QueryContext(ctx, q, userID)
 	if err != nil {
@@ -23,12 +23,12 @@ func (s *Store) ListSieveScripts(ctx context.Context, userID int64) ([]*SieveScr
 	return out, rows.Err()
 }
 
-func (s *Store) GetSieveScript(ctx context.Context, userID int64, name string) (*SieveScript, error) {
+func (s *Store) GetSieveScript(ctx context.Context, userID, name string) (*SieveScript, error) {
 	q := s.rebind(`SELECT id, user_id, name, script, active, created_at FROM sieve_scripts WHERE user_id = ? AND name = ?`)
 	return s.scanSieve(s.db.QueryRowContext(ctx, q, userID, name))
 }
 
-func (s *Store) GetActiveSieveScript(ctx context.Context, userID int64) (*SieveScript, error) {
+func (s *Store) GetActiveSieveScript(ctx context.Context, userID string) (*SieveScript, error) {
 	q := s.rebind(`SELECT id, user_id, name, script, active, created_at FROM sieve_scripts WHERE user_id = ? AND active = ?`)
 	active := 1
 	if s.dialect == DialectPostgres {
@@ -37,7 +37,7 @@ func (s *Store) GetActiveSieveScript(ctx context.Context, userID int64) (*SieveS
 	return s.scanSieve(s.db.QueryRowContext(ctx, q, userID, active))
 }
 
-func (s *Store) PutSieveScript(ctx context.Context, userID int64, name, script string) (*SieveScript, error) {
+func (s *Store) PutSieveScript(ctx context.Context, userID, name, script string) (*SieveScript, error) {
 	now := time.Now().UTC()
 	existing, err := s.GetSieveScript(ctx, userID, name)
 	if err == nil {
@@ -52,30 +52,22 @@ func (s *Store) PutSieveScript(ctx context.Context, userID int64, name, script s
 		return nil, err
 	}
 
-	sc := &SieveScript{UserID: userID, Name: name, Script: script, Active: false, CreatedAt: now}
-	q := s.rebind(`INSERT INTO sieve_scripts(user_id, name, script, active, created_at) VALUES (?, ?, ?, ?, ?)`)
+	sc := &SieveScript{ID: NewID(), UserID: userID, Name: name, Script: script, Active: false, CreatedAt: now}
+	q := s.rebind(`INSERT INTO sieve_scripts(id, user_id, name, script, active, created_at) VALUES (?, ?, ?, ?, ?, ?)`)
 	active := 0
-	args := []any{userID, name, script, active, now}
 	if s.dialect == DialectPostgres {
-		err := s.db.QueryRowContext(ctx, q+` RETURNING id`, userID, name, script, false, now).Scan(&sc.ID)
-		if err != nil {
+		if _, err := s.db.ExecContext(ctx, q, sc.ID, userID, name, script, false, now); err != nil {
 			return nil, mapErr(err)
 		}
 		return sc, nil
 	}
-	res, err := s.db.ExecContext(ctx, q, args...)
-	if err != nil {
+	if _, err := s.db.ExecContext(ctx, q, sc.ID, userID, name, script, active, now); err != nil {
 		return nil, mapErr(err)
 	}
-	id, err := res.LastInsertId()
-	if err != nil {
-		return nil, err
-	}
-	sc.ID = id
 	return sc, nil
 }
 
-func (s *Store) DeleteSieveScript(ctx context.Context, userID int64, name string) error {
+func (s *Store) DeleteSieveScript(ctx context.Context, userID, name string) error {
 	q := s.rebind(`DELETE FROM sieve_scripts WHERE user_id = ? AND name = ?`)
 	res, err := s.db.ExecContext(ctx, q, userID, name)
 	if err != nil {
@@ -91,7 +83,7 @@ func (s *Store) DeleteSieveScript(ctx context.Context, userID int64, name string
 	return nil
 }
 
-func (s *Store) SetActiveSieveScript(ctx context.Context, userID int64, name string) error {
+func (s *Store) SetActiveSieveScript(ctx context.Context, userID, name string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err

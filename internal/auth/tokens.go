@@ -41,7 +41,7 @@ type TokenService struct {
 }
 
 // IssueTokens creates a new access/refresh pair for userID.
-func (t *TokenService) IssueTokens(ctx context.Context, userID int64) (*TokenPair, error) {
+func (t *TokenService) IssueTokens(ctx context.Context, userID string) (*TokenPair, error) {
 	access, err := randomToken(32)
 	if err != nil {
 		return nil, err

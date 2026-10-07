@@ -7,7 +7,7 @@ import (
 
 type cacheEntry struct {
 	ok        bool
-	userID    int64
+	userID    string
 	expiresAt time.Time
 }
 
@@ -43,17 +43,17 @@ func cacheKey(email, password string) string {
 	return email + "\x00" + password
 }
 
-func (c *authCache) get(email, password string) (userID int64, ok bool, hit bool) {
+func (c *authCache) get(email, password string) (userID string, ok bool, hit bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	e, exists := c.items[cacheKey(email, password)]
 	if !exists || time.Now().After(e.expiresAt) {
-		return 0, false, false
+		return "", false, false
 	}
 	return e.userID, e.ok, true
 }
 
-func (c *authCache) setOK(email, password string, userID int64) {
+func (c *authCache) setOK(email, password string, userID string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.items[cacheKey(email, password)] = cacheEntry{

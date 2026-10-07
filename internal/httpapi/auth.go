@@ -212,7 +212,7 @@ func (s *Server) userFromBearer(r *http.Request) (*authUser, error) {
 }
 
 type authUser struct {
-	ID    int64
+	ID    string
 	Email string
 }
 

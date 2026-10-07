@@ -23,73 +23,93 @@ type Driver interface {
 	CreateTenant(ctx context.Context, name string) (*Tenant, error)
 	GetTenantByName(ctx context.Context, name string) (*Tenant, error)
 
-	CreateDomain(ctx context.Context, tenantID int64, name string) (*Domain, error)
+	CreateDomain(ctx context.Context, tenantID, name string) (*Domain, error)
 	GetDomainByName(ctx context.Context, name string) (*Domain, error)
 
 	CreateUser(ctx context.Context, u *User) (*User, error)
 	GetUserByEmail(ctx context.Context, email string) (*User, error)
-	GetUserByID(ctx context.Context, id int64) (*User, error)
-	UpdateUserPassword(ctx context.Context, userID int64, passwordHash string) error
-	UpdateUserProfile(ctx context.Context, userID int64, displayName string) error
-	SumMailboxBytes(ctx context.Context, userID int64) (int64, error)
+	GetUserByID(ctx context.Context, id string) (*User, error)
+	UpdateUserPassword(ctx context.Context, userID, passwordHash string) error
+	UpdateUserProfile(ctx context.Context, userID, displayName string) error
+	SumMailboxBytes(ctx context.Context, userID string) (int64, error)
 
-	CreateAlias(ctx context.Context, domainID, userID int64, localPart string) (*Alias, error)
+	CreateAlias(ctx context.Context, domainID, userID, localPart string) (*Alias, error)
 	ResolveRecipient(ctx context.Context, email string) (*User, error)
 
-	EnsureMailbox(ctx context.Context, userID int64, name, path string) (*Mailbox, error)
-	GetMailbox(ctx context.Context, userID int64, name string) (*Mailbox, error)
-	ListMailboxes(ctx context.Context, userID int64) ([]*Mailbox, error)
-	CreateMailbox(ctx context.Context, userID int64, name, path string) (*Mailbox, error)
-	DeleteMailbox(ctx context.Context, userID int64, name string) error
-	RenameMailbox(ctx context.Context, userID int64, oldName, newName, newPath string) error
+	EnsureMailbox(ctx context.Context, userID, name, path string) (*Mailbox, error)
+	GetMailbox(ctx context.Context, userID, name string) (*Mailbox, error)
+	ListMailboxes(ctx context.Context, userID string) ([]*Mailbox, error)
+	CreateMailbox(ctx context.Context, userID, name, path string) (*Mailbox, error)
+	DeleteMailbox(ctx context.Context, userID, name string) error
+	RenameMailbox(ctx context.Context, userID, oldName, newName, newPath string) error
 
 	InsertMessage(ctx context.Context, msg *Message) (*Message, error)
-	GetMessageByID(ctx context.Context, id int64) (*Message, error)
-	GetMessageByUID(ctx context.Context, mailboxID, uid int64) (*Message, error)
-	ListMessages(ctx context.Context, mailboxID int64) ([]*Message, error)
-	UpdateMessageFlags(ctx context.Context, messageID int64, flags string) error
-	UpdateMessagePath(ctx context.Context, messageID int64, filePath string) error
-	DeleteMessage(ctx context.Context, messageID int64) error
-	ExpungeMailbox(ctx context.Context, mailboxID int64) ([]*Message, error) // returns deleted msgs (had \Deleted)
+	GetMessageByID(ctx context.Context, id string) (*Message, error)
+	GetMessageByUID(ctx context.Context, mailboxID string, uid int64) (*Message, error)
+	ListMessages(ctx context.Context, mailboxID string) ([]*Message, error)
+	UpdateMessageFlags(ctx context.Context, messageID, flags string) error
+	UpdateMessagePath(ctx context.Context, messageID, filePath string) error
+	DeleteMessage(ctx context.Context, messageID string) error
+	ExpungeMailbox(ctx context.Context, mailboxID string) ([]*Message, error)
 
-	ListSieveScripts(ctx context.Context, userID int64) ([]*SieveScript, error)
-	GetSieveScript(ctx context.Context, userID int64, name string) (*SieveScript, error)
-	GetActiveSieveScript(ctx context.Context, userID int64) (*SieveScript, error)
-	PutSieveScript(ctx context.Context, userID int64, name, script string) (*SieveScript, error)
-	DeleteSieveScript(ctx context.Context, userID int64, name string) error
-	SetActiveSieveScript(ctx context.Context, userID int64, name string) error // empty name = deactivate all
+	ListSieveScripts(ctx context.Context, userID string) ([]*SieveScript, error)
+	GetSieveScript(ctx context.Context, userID, name string) (*SieveScript, error)
+	GetActiveSieveScript(ctx context.Context, userID string) (*SieveScript, error)
+	PutSieveScript(ctx context.Context, userID, name, script string) (*SieveScript, error)
+	DeleteSieveScript(ctx context.Context, userID, name string) error
+	SetActiveSieveScript(ctx context.Context, userID, name string) error
 
-	GetUserMFA(ctx context.Context, userID int64) (*UserMFA, error)
+	GetUserMFA(ctx context.Context, userID string) (*UserMFA, error)
 	UpsertUserMFA(ctx context.Context, m *UserMFA) error
 	CreateOAuthToken(ctx context.Context, t *OAuthToken) (*OAuthToken, error)
 	GetOAuthTokenByAccess(ctx context.Context, accessToken string) (*OAuthToken, error)
 	GetOAuthTokenByRefresh(ctx context.Context, refreshToken string) (*OAuthToken, error)
-	DeleteOAuthToken(ctx context.Context, id int64) error
-	DeleteOAuthTokensByUser(ctx context.Context, userID int64) error
+	DeleteOAuthToken(ctx context.Context, id string) error
+	DeleteOAuthTokensByUser(ctx context.Context, userID string) error
 	CreateMFAChallenge(ctx context.Context, c *MFAChallenge) error
 	GetMFAChallenge(ctx context.Context, token string) (*MFAChallenge, error)
 	DeleteMFAChallenge(ctx context.Context, token string) error
+
+	EnsureCalendar(ctx context.Context, userID, name, displayName string) (*Calendar, error)
+	CreateCalendar(ctx context.Context, c *Calendar) (*Calendar, error)
+	ListCalendars(ctx context.Context, userID string) ([]*Calendar, error)
+	GetCalendarByName(ctx context.Context, userID, name string) (*Calendar, error)
+	ListCalendarObjects(ctx context.Context, calendarID string) ([]*CalendarObject, error)
+	GetCalendarObject(ctx context.Context, calendarID, hrefName string) (*CalendarObject, error)
+	UpsertCalendarObject(ctx context.Context, o *CalendarObject) (*CalendarObject, error)
+	DeleteCalendarObject(ctx context.Context, calendarID, hrefName string) error
+
+	EnsureAddressBook(ctx context.Context, userID, name, displayName string) (*AddressBook, error)
+	CreateAddressBook(ctx context.Context, ab *AddressBook) (*AddressBook, error)
+	ListAddressBooks(ctx context.Context, userID string) ([]*AddressBook, error)
+	GetAddressBookByName(ctx context.Context, userID, name string) (*AddressBook, error)
+	DeleteAddressBook(ctx context.Context, userID, name string) error
+	ListAddressObjects(ctx context.Context, addressBookID string) ([]*AddressObject, error)
+	GetAddressObject(ctx context.Context, addressBookID, hrefName string) (*AddressObject, error)
+	UpsertAddressObject(ctx context.Context, o *AddressObject) (*AddressObject, error)
+	DeleteAddressObject(ctx context.Context, addressBookID, hrefName string) error
+	EnsureDAVDefaults(ctx context.Context, userID string) error
 
 	DB() *sql.DB
 }
 
 type Tenant struct {
-	ID        int64
+	ID        string
 	Name      string
 	CreatedAt time.Time
 }
 
 type Domain struct {
-	ID        int64
-	TenantID  int64
+	ID        string
+	TenantID  string
 	Name      string
 	CreatedAt time.Time
 }
 
 type User struct {
-	ID           int64
-	TenantID     int64
-	DomainID     int64
+	ID           string
+	TenantID     string
+	DomainID     string
 	Email        string
 	LocalPart    string
 	DisplayName  string
@@ -101,16 +121,16 @@ type User struct {
 }
 
 type Alias struct {
-	ID        int64
-	DomainID  int64
-	UserID    int64
+	ID        string
+	DomainID  string
+	UserID    string
 	LocalPart string
 	CreatedAt time.Time
 }
 
 type Mailbox struct {
-	ID          int64
-	UserID      int64
+	ID          string
+	UserID      string
 	Name        string
 	Path        string
 	UIDNext     int64
@@ -119,8 +139,8 @@ type Mailbox struct {
 }
 
 type Message struct {
-	ID           int64
-	MailboxID    int64
+	ID           string
+	MailboxID    string
 	UID          int64
 	Size         int64
 	Flags        string
@@ -131,8 +151,8 @@ type Message struct {
 }
 
 type SieveScript struct {
-	ID        int64
-	UserID    int64
+	ID        string
+	UserID    string
 	Name      string
 	Script    string
 	Active    bool
