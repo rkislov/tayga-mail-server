@@ -288,7 +288,9 @@ func run(cfgPath string) error {
 	}
 
 	var gate ha.Gate = ha.AlwaysLeader{}
-	if cfg.HA.Mode == "active_standby" {
+	var writers ha.WriterGate
+	switch cfg.HA.Mode {
+	case "active_standby":
 		lease, err := ha.NewPGLease(ctx, ha.LeaseConfig{
 			DSN: cfg.Storage.Postgres.DSN,
 			TTL: cfg.HA.LeaseTTL,
@@ -299,6 +301,9 @@ func run(cfgPath string) error {
 		}
 		lease.Start(ctx)
 		gate = lease
+		if cfg.HA.FenceWriters() {
+			writers = ha.ClusterWriters{Gate: lease}
+		}
 		go func() {
 			t := time.NewTicker(time.Second)
 			defer t.Stop()
@@ -316,6 +321,13 @@ func run(cfgPath string) error {
 			"fence", cfg.HA.Fence,
 			"is_leader", lease.IsLeader(),
 		)
+	case "sticky":
+		st := ha.NewSticky(ha.StickyConfig{
+			Store: store, NodeID: cfg.HA.NodeID, TTL: cfg.HA.StickyTTL, Log: log,
+		})
+		writers = st
+		metrics.SetHALeader(true) // sticky has no single cluster leader
+		log.Info("ha sticky writers enabled", "node_id", st.NodeID(), "sticky_ttl", cfg.HA.StickyTTL.String())
 	}
 
 	if objBlob != nil && objSyncInterval > 0 {
@@ -323,17 +335,17 @@ func run(cfgPath string) error {
 		log.Info("mailstore object store sync ticker", "interval", objSyncInterval.String())
 	}
 
-	smtpSrv := smtp.New(cfg, log, store, authn, ms, sieveEng, tlsMgr, gate)
+	smtpSrv := smtp.New(cfg, log, store, authn, ms, sieveEng, tlsMgr, gate, writers)
 	if err := smtpSrv.Start(ctx); err != nil {
 		return fmt.Errorf("smtp: %w", err)
 	}
 
-	imapSrv := imapserver.New(cfg, log, store, authn, ms, imapHub, tlsMgr, gate)
+	imapSrv := imapserver.New(cfg, log, store, authn, ms, imapHub, tlsMgr, writers)
 	if err := imapSrv.Start(ctx); err != nil {
 		return fmt.Errorf("imap: %w", err)
 	}
 
-	pop3Srv := pop3.New(cfg, log, store, authn, ms, tlsMgr, gate)
+	pop3Srv := pop3.New(cfg, log, store, authn, ms, tlsMgr, writers)
 	if err := pop3Srv.Start(ctx); err != nil {
 		return fmt.Errorf("pop3: %w", err)
 	}

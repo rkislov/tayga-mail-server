@@ -131,6 +131,11 @@ type Driver interface {
 	DeleteOutbound(ctx context.Context, id string) error
 	CountOutbound(ctx context.Context) (int, error)
 
+	// TryAcquireUserWriter grabs or renews a per-user maildir writer lease for nodeID.
+	// acquired=false means another live node holds it (holder is that node_id).
+	TryAcquireUserWriter(ctx context.Context, userID, nodeID string, ttl time.Duration) (acquired bool, holder string, err error)
+	ReleaseUserWriter(ctx context.Context, userID, nodeID string) error
+
 	ServerStats(ctx context.Context) (*ServerStats, error)
 	TenantStats(ctx context.Context, tenantID string) (*TenantStats, error)
 

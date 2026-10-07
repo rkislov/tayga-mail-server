@@ -95,11 +95,13 @@ oidc:
     #   redirect_url: "https://mail.example.com/api/v1/auth/oidc/callback"
     #   scopes: [openid, email, profile]
 
-# HA fencing (requires postgres). Standby returns 421 / IMAP NO on gated writers.
+# HA fencing. Standby returns 421 / IMAP NO on gated writers.
 ha:
-  mode: none # none | active_standby
+  mode: none # none | active_standby | sticky
   lease_ttl: 5s
-  fence: mx  # mx = only unauthenticated MX; writers = SMTP+IMAP+POP3 maildir writes + outbound queue
+  fence: mx  # active_standby: mx | writers
+  sticky_ttl: 30s
+  # node_id: ""  # sticky node identity (default hostname-uuid)
 
 # FlowSync — original Tayga sync engine (ActiveSync- and EWS-compatible wire; Apache-2.0)
 flowsync:
