@@ -43,6 +43,7 @@ type Server struct {
 	dmarc        *dmarcPolicy
 	dmarcReport  *dmarcReporter
 	arc          *arcPolicy
+	tlsrpt       *tlsReporter
 	queue        *OutboundQueue
 	servers      []*gosmtp.Server
 }
@@ -182,6 +183,9 @@ func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth
 			log.Info("smtp arc enabled", "verify", ap.verify, "seal", ap.seal, "action", ap.action)
 		}
 	}
+	if cfg.SMTP.TLSRPT.Enabled {
+		srv.tlsrpt = newTLSReporter(cfg.SMTP.TLSRPT.OrgName, cfg.SMTP.TLSRPT.Contact, cfg.Server.Hostname, cfg.SMTP.TLSRPT.Interval, log)
+	}
 	return srv
 }
 
@@ -194,7 +198,12 @@ func (s *Server) outbound() (outboundSender, *dkimSigner, error) {
 		return rel, sig, nil
 	}
 	if s.cfg.SMTP.OutboundDirect {
-		return newDirectSender(s.cfg.SMTP.WriteTimeout), sig, nil
+		var sts *stsResolver
+		if s.cfg.SMTP.MTASTS.Enabled {
+			sts = newSTSResolver(s.cfg.SMTP.MTASTS.Timeout, s.cfg.SMTP.MTASTS.FailOpen, s.log)
+			s.log.Info("smtp mta-sts enabled", "fail_open", s.cfg.SMTP.MTASTS.FailOpen)
+		}
+		return newDirectSender(s.cfg.SMTP.WriteTimeout, s.cfg.Server.Hostname, sts, s.tlsrpt, s.log), sig, nil
 	}
 	return nil, sig, nil
 }
@@ -245,6 +254,10 @@ func (s *Server) Start(ctx context.Context) error {
 	if s.dmarcReport != nil {
 		s.dmarcReport.SetOutbound(oq, out)
 		s.dmarcReport.Start(ctx)
+	}
+	if s.tlsrpt != nil {
+		s.tlsrpt.SetOutbound(oq, out)
+		s.tlsrpt.Start(ctx)
 	}
 	rl := s.cfg.SMTP.RateLimit
 	ipLim := newRateLimiter(rl.PerIP, rl.Window)
