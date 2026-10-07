@@ -89,7 +89,7 @@ Privileged ports (<1024) require root or `CAP_NET_BIND_SERVICE`. TLS certs: `tls
 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o tayga-mail ./cmd/tayga
 ./tayga-mail version
 ./tayga-mail -config configs/tayga.example.yaml
-# Cross builds: VERSION=v0.3.0 ./scripts/crossbuild.sh
+# Cross builds: VERSION=v0.4.0 ./scripts/crossbuild.sh
 ```
 
 Seed: `admin@example.com` / `changeme`. UUID schema requires a fresh DB when upgrading from integer IDs.
@@ -153,7 +153,7 @@ Admins: `http.admins` email list (default `admin@example.com`).
 
 - **License:** Apache License 2.0 (`LICENSE`, `NOTICE`)
 - **Author:** Кислов Роман Сергеевич (Roman Sergeyevich Kislov)
-- **UI:** abstract cosmic backgrounds (author artwork under `internal/frontend/dist/assets/`)
+- **UI:** Tailwind SPA; default taiga (forest) backdrop, optional cosmos theme (backdrop art © Алиса Кислова; assets under `internal/frontend/dist/assets/`)
 
 ## Mailstore
 
