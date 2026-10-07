@@ -221,12 +221,15 @@ func writeAuthError(w http.ResponseWriter, err error) {
 	case errors.Is(err, auth.ErrInvalidCredentials),
 		errors.Is(err, auth.ErrInvalidToken),
 		errors.Is(err, auth.ErrInvalidMFACode),
-		errors.Is(err, auth.ErrMFARequired):
+		errors.Is(err, auth.ErrMFARequired),
+		errors.Is(err, auth.ErrWebAuthnSession):
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": err.Error()})
 	case errors.Is(err, auth.ErrUserDisabled):
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": err.Error()})
 	case errors.Is(err, auth.ErrTokenExpired):
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": err.Error()})
+	case errors.Is(err, auth.ErrWebAuthnDisabled):
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 	default:
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 	}

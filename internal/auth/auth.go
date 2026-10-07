@@ -33,15 +33,16 @@ type PasswordHasher interface {
 
 // Layer composes local auth with optional LDAP/OIDC providers per domain.
 type Layer struct {
-	Store  storage.Driver
-	Hasher PasswordHasher
-	LDAP   LDAPProvider
-	OIDC   OIDCProvider
-	Tokens *TokenService
-	MFA    *MFAService
-	OIDCCl *OIDCClient
-	mfaCfg config.MFAConfig
-	dir    *Directory // optional; used for EnabledFor checks
+	Store    storage.Driver
+	Hasher   PasswordHasher
+	LDAP     LDAPProvider
+	OIDC     OIDCProvider
+	Tokens   *TokenService
+	MFA      *MFAService
+	WebAuthn *WebAuthnService
+	OIDCCl   *OIDCClient
+	mfaCfg   config.MFAConfig
+	dir      *Directory // optional; used for EnabledFor checks
 }
 
 // LDAPProvider is a per-domain LDAP authenticator.
@@ -68,7 +69,7 @@ func (StubOIDC) ValidateAccessToken(context.Context, string) (*storage.User, err
 	return nil, ErrUnsupportedSource
 }
 
-// NewLayer builds an auth layer with LDAP, MFA, and token services.
+// NewLayer builds an auth layer with LDAP, MFA, WebAuthn, and token services.
 func NewLayer(store storage.Driver, ldapCfg config.LDAPConfig, mfaCfg config.MFAConfig, oidcCfg config.OIDCConfig) *Layer {
 	tokens := &TokenService{Store: store, Cfg: mfaCfg}
 	mfa := &MFAService{
@@ -77,13 +78,19 @@ func NewLayer(store storage.Driver, ldapCfg config.LDAPConfig, mfaCfg config.MFA
 		Issuer: mfaCfg.Issuer,
 		TTL:    mfaCfg.ChallengeTTL,
 	}
+	wa, err := NewWebAuthnService(store, tokens, mfaCfg)
+	if err != nil {
+		// Misconfiguration: leave WebAuthn nil; callers see ErrWebAuthnDisabled.
+		wa = &WebAuthnService{Store: store, Tokens: tokens, Cfg: mfaCfg.WebAuthn, TTL: mfaCfg.ChallengeTTL}
+	}
 	l := &Layer{
-		Store:  store,
-		Hasher: Argon2id{},
-		OIDC:   tokens,
-		Tokens: tokens,
-		MFA:    mfa,
-		mfaCfg: mfaCfg,
+		Store:    store,
+		Hasher:   Argon2id{},
+		OIDC:     tokens,
+		Tokens:   tokens,
+		MFA:      mfa,
+		WebAuthn: wa,
+		mfaCfg:   mfaCfg,
 	}
 	l.OIDCCl = NewOIDCClient(store, tokens, oidcCfg)
 	if len(ldapCfg.Domains) > 0 {

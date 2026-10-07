@@ -73,10 +73,25 @@ func (m *MFAService) Disable(ctx context.Context, userID, code string) error {
 	return m.Store.UpsertUserMFA(ctx, mfa)
 }
 
-// IsEnabled reports whether the user has TOTP active.
+// IsEnabled reports whether the user has TOTP and/or WebAuthn credentials.
 func (m *MFAService) IsEnabled(ctx context.Context, userID string) bool {
-	mfa, err := m.Store.GetUserMFA(ctx, userID)
-	return err == nil && mfa.TOTPEnabled
+	if mfa, err := m.Store.GetUserMFA(ctx, userID); err == nil && mfa.TOTPEnabled {
+		return true
+	}
+	n, err := m.Store.CountWebAuthnCredentials(ctx, userID)
+	return err == nil && n > 0
+}
+
+// MFAMethods returns which second factors the user can use.
+func (m *MFAService) MFAMethods(ctx context.Context, userID string) []string {
+	var methods []string
+	if mfa, err := m.Store.GetUserMFA(ctx, userID); err == nil && mfa.TOTPEnabled {
+		methods = append(methods, "totp")
+	}
+	if n, err := m.Store.CountWebAuthnCredentials(ctx, userID); err == nil && n > 0 {
+		methods = append(methods, "webauthn")
+	}
+	return methods
 }
 
 // LoginWithPassword verifies password; if MFA is on, returns a challenge.
@@ -101,7 +116,12 @@ func (l *Layer) LoginWithPassword(ctx context.Context, username, password string
 		}); err != nil {
 			return nil, err
 		}
-		return &LoginResult{MFARequired: true, Challenge: ch, UserEmail: u.Email}, nil
+		return &LoginResult{
+			MFARequired: true,
+			Challenge:   ch,
+			UserEmail:   u.Email,
+			Methods:     l.MFA.MFAMethods(ctx, u.ID),
+		}, nil
 	}
 	pair, err := l.Tokens.IssueTokens(ctx, u.ID)
 	if err != nil {

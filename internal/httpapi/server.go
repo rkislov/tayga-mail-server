@@ -45,6 +45,12 @@ func (s *Server) Start(ctx context.Context) error {
 	mux.HandleFunc("/api/v1/auth/mfa/setup", s.handleMFASetup)
 	mux.HandleFunc("/api/v1/auth/mfa/confirm", s.handleMFAConfirm)
 	mux.HandleFunc("/api/v1/auth/mfa/disable", s.handleMFADisable)
+	mux.HandleFunc("/api/v1/auth/webauthn/register/begin", s.handleWebAuthnRegisterBegin)
+	mux.HandleFunc("/api/v1/auth/webauthn/register/finish", s.handleWebAuthnRegisterFinish)
+	mux.HandleFunc("/api/v1/auth/webauthn/login/begin", s.handleWebAuthnLoginBegin)
+	mux.HandleFunc("/api/v1/auth/webauthn/login/finish", s.handleWebAuthnLoginFinish)
+	mux.HandleFunc("/api/v1/auth/webauthn/credentials", s.handleWebAuthnCredentials)
+	mux.HandleFunc("/api/v1/auth/webauthn/credentials/", s.handleWebAuthnCredentials)
 	mux.HandleFunc("/api/v1/auth/oidc/", s.handleOIDCRoutes)
 
 	dav.Mount(mux, s.store, s.authn)
