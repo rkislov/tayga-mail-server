@@ -37,6 +37,10 @@ type Layer struct {
 	Hasher PasswordHasher
 	LDAP   LDAPProvider
 	OIDC   OIDCProvider
+	Tokens *TokenService
+	MFA    *MFAService
+	OIDCCl *OIDCClient
+	mfaCfg config.MFAConfig
 	dir    *Directory // optional; used for EnabledFor checks
 }
 
@@ -45,7 +49,7 @@ type LDAPProvider interface {
 	Authenticate(ctx context.Context, domain, username, password string) (*storage.User, error)
 }
 
-// OIDCProvider is reserved for XOAUTH2 / token validation (stub).
+// OIDCProvider validates opaque access tokens (XOAUTH2 / OAUTHBEARER).
 type OIDCProvider interface {
 	ValidateAccessToken(ctx context.Context, token string) (*storage.User, error)
 }
@@ -64,13 +68,24 @@ func (StubOIDC) ValidateAccessToken(context.Context, string) (*storage.User, err
 	return nil, ErrUnsupportedSource
 }
 
-// NewLayer builds an auth layer. Pass ldap config to enable hybrid LDAP.
-func NewLayer(store storage.Driver, ldapCfg config.LDAPConfig) *Layer {
+// NewLayer builds an auth layer with LDAP, MFA, and token services.
+func NewLayer(store storage.Driver, ldapCfg config.LDAPConfig, mfaCfg config.MFAConfig, oidcCfg config.OIDCConfig) *Layer {
+	tokens := &TokenService{Store: store, Cfg: mfaCfg}
+	mfa := &MFAService{
+		Store:  store,
+		Tokens: tokens,
+		Issuer: mfaCfg.Issuer,
+		TTL:    mfaCfg.ChallengeTTL,
+	}
 	l := &Layer{
 		Store:  store,
 		Hasher: Argon2id{},
-		OIDC:   StubOIDC{},
+		OIDC:   tokens,
+		Tokens: tokens,
+		MFA:    mfa,
+		mfaCfg: mfaCfg,
 	}
+	l.OIDCCl = NewOIDCClient(store, tokens, oidcCfg)
 	if len(ldapCfg.Domains) > 0 {
 		dir := NewDirectory(store, ldapCfg)
 		l.LDAP = dir
@@ -81,44 +96,30 @@ func NewLayer(store storage.Driver, ldapCfg config.LDAPConfig) *Layer {
 	return l
 }
 
+// Authenticate verifies username/password for IMAP/SMTP/POP3/ManageSieve.
+// Users with TOTP enabled are rejected when RequireTokenForMFAUsers is set
+// (they must use XOAUTH2/OAUTHBEARER with an access token from the HTTP API).
 func (l *Layer) Authenticate(ctx context.Context, username, password string) (*storage.User, error) {
-	username = strings.ToLower(strings.TrimSpace(username))
-	if username == "" || password == "" {
-		return nil, ErrInvalidCredentials
-	}
-
-	domain := ""
-	if at := strings.LastIndex(username, "@"); at >= 0 {
-		domain = username[at+1:]
-	}
-
-	u, err := l.Store.GetUserByEmail(ctx, username)
+	u, err := l.verifyPassword(ctx, username, password)
 	if err != nil {
-		if !errors.Is(err, storage.ErrNotFound) {
-			return nil, err
-		}
-		// JIT path: try LDAP if domain is configured.
-		if l.dir != nil && l.dir.EnabledFor(domain) {
-			return l.LDAP.Authenticate(ctx, domain, username, password)
-		}
+		return nil, err
+	}
+	if l.mfaCfg.RequireTokenForMFAUsers && l.MFA != nil && l.MFA.IsEnabled(ctx, u.ID) {
+		return nil, ErrMFARequired
+	}
+	return u, nil
+}
+
+// AuthenticateToken validates an OAuth access token for protocol SASL.
+func (l *Layer) AuthenticateToken(ctx context.Context, username, token string) (*storage.User, error) {
+	u, err := l.OIDC.ValidateAccessToken(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+	if username != "" && !strings.EqualFold(username, u.Email) {
 		return nil, ErrInvalidCredentials
 	}
-	if !u.Enabled {
-		return nil, ErrUserDisabled
-	}
-
-	switch u.AuthSource {
-	case "", "local":
-		ok, err := l.Hasher.Verify(u.PasswordHash, password)
-		if err != nil || !ok {
-			return nil, ErrInvalidCredentials
-		}
-		return u, nil
-	case "ldap":
-		return l.LDAP.Authenticate(ctx, domain, username, password)
-	default:
-		return nil, fmt.Errorf("%w: %s", ErrUnsupportedSource, u.AuthSource)
-	}
+	return u, nil
 }
 
 // Argon2id implements PasswordHasher using the encoded PHC string format.

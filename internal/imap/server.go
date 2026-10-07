@@ -13,6 +13,7 @@ import (
 	"github.com/emersion/go-imap"
 	"github.com/emersion/go-imap/backend"
 	imapserv "github.com/emersion/go-imap/server"
+	"github.com/emersion/go-sasl"
 	"github.com/tayga/tms/internal/auth"
 	"github.com/tayga/tms/internal/config"
 	"github.com/tayga/tms/internal/mailstore"
@@ -63,6 +64,7 @@ func (s *Server) Start(ctx context.Context) error {
 		if tlsCfg != nil {
 			srv.TLSConfig = tlsCfg
 		}
+		s.enableOAuth(srv, be)
 
 		var ln net.Listener
 		if sp.implicit {
@@ -130,11 +132,50 @@ type Backend struct {
 	ms    *mailstore.Store
 }
 
+func (s *Server) enableOAuth(srv *imapserv.Server, be *Backend) {
+	srv.EnableAuth(sasl.OAuthBearer, func(conn imapserv.Conn) sasl.Server {
+		return sasl.NewOAuthBearerServer(func(opts sasl.OAuthBearerOptions) *sasl.OAuthBearerError {
+			u, err := be.authn.AuthenticateToken(context.Background(), opts.Username, opts.Token)
+			if err != nil {
+				return &sasl.OAuthBearerError{Status: "invalid_token", Schemes: "bearer"}
+			}
+			user, err := be.userFromStorage(u)
+			if err != nil {
+				return &sasl.OAuthBearerError{Status: "invalid_token", Schemes: "bearer"}
+			}
+			ctx := conn.Context()
+			ctx.State = imap.AuthenticatedState
+			ctx.User = user
+			return nil
+		})
+	})
+	srv.EnableAuth(auth.XOAuth2, func(conn imapserv.Conn) sasl.Server {
+		return auth.NewXOAuth2Server(func(username, token string) error {
+			u, err := be.authn.AuthenticateToken(context.Background(), username, token)
+			if err != nil {
+				return err
+			}
+			user, err := be.userFromStorage(u)
+			if err != nil {
+				return err
+			}
+			ctx := conn.Context()
+			ctx.State = imap.AuthenticatedState
+			ctx.User = user
+			return nil
+		})
+	})
+}
+
 func (b *Backend) Login(_ *imap.ConnInfo, username, password string) (backend.User, error) {
 	u, err := b.authn.Authenticate(context.Background(), username, password)
 	if err != nil {
 		return nil, backend.ErrInvalidCredentials
 	}
+	return b.userFromStorage(u)
+}
+
+func (b *Backend) userFromStorage(u *storage.User) (backend.User, error) {
 	if _, err := b.ms.EnsureUser(u.Email); err != nil {
 		return nil, err
 	}

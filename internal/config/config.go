@@ -18,6 +18,8 @@ type Config struct {
 	POP3        POP3Config        `yaml:"pop3"`
 	ManageSieve ManageSieveConfig `yaml:"managesieve"`
 	LDAP        LDAPConfig        `yaml:"ldap"`
+	OIDC        OIDCConfig        `yaml:"oidc"`
+	MFA         MFAConfig         `yaml:"mfa"`
 	TLS         TLSConfig         `yaml:"tls"`
 	HTTP        HTTPConfig        `yaml:"http"`
 	Seed        SeedConfig        `yaml:"seed"`
@@ -88,13 +90,37 @@ type LDAPDomainConfig struct {
 	Timeout      time.Duration `yaml:"timeout"`
 }
 
+// OIDCConfig holds per-domain OpenID Connect IdP settings.
+type OIDCConfig struct {
+	Domains map[string]OIDCDomainConfig `yaml:"domains"`
+}
+
+type OIDCDomainConfig struct {
+	Enabled      bool     `yaml:"enabled"`
+	Issuer       string   `yaml:"issuer"`
+	ClientID     string   `yaml:"client_id"`
+	ClientSecret string   `yaml:"client_secret"`
+	RedirectURL  string   `yaml:"redirect_url"`
+	Scopes       []string `yaml:"scopes"`
+}
+
+type MFAConfig struct {
+	Issuer          string        `yaml:"issuer"`            // TOTP issuer label
+	AccessTokenTTL  time.Duration `yaml:"access_token_ttl"`  // default 1h
+	RefreshTokenTTL time.Duration `yaml:"refresh_token_ttl"` // default 720h
+	ChallengeTTL    time.Duration `yaml:"challenge_ttl"`     // default 5m
+	// When true, users with TOTP enabled cannot use password auth on IMAP/SMTP.
+	RequireTokenForMFAUsers bool `yaml:"require_token_for_mfa_users"`
+}
+
 type TLSConfig struct {
 	CertFile string `yaml:"cert_file"`
 	KeyFile  string `yaml:"key_file"`
 }
 
 type HTTPConfig struct {
-	Listen string `yaml:"listen"`
+	Listen    string `yaml:"listen"`
+	PublicURL string `yaml:"public_url"` // e.g. http://127.0.0.1:8080 for OIDC redirects
 }
 
 type SeedConfig struct {
@@ -152,7 +178,15 @@ func Default() *Config {
 			CacheTTL: 5 * time.Minute,
 			Domains:  map[string]LDAPDomainConfig{},
 		},
-		HTTP: HTTPConfig{Listen: ":8080"},
+		OIDC: OIDCConfig{Domains: map[string]OIDCDomainConfig{}},
+		MFA: MFAConfig{
+			Issuer:                  "Tayga Mail",
+			AccessTokenTTL:          time.Hour,
+			RefreshTokenTTL:         30 * 24 * time.Hour,
+			ChallengeTTL:            5 * time.Minute,
+			RequireTokenForMFAUsers: true,
+		},
+		HTTP: HTTPConfig{Listen: ":8080", PublicURL: "http://127.0.0.1:8080"},
 		Log:  LogConfig{Level: "info", Format: "json"},
 	}
 }
@@ -209,6 +243,36 @@ func (c *Config) Validate() error {
 			d.Timeout = 10 * time.Second
 		}
 		c.LDAP.Domains[name] = d
+	}
+	if c.OIDC.Domains == nil {
+		c.OIDC.Domains = map[string]OIDCDomainConfig{}
+	}
+	for name, d := range c.OIDC.Domains {
+		if !d.Enabled {
+			continue
+		}
+		if d.Issuer == "" || d.ClientID == "" || d.RedirectURL == "" {
+			return fmt.Errorf("oidc.domains.%s: issuer, client_id, redirect_url required when enabled", name)
+		}
+		if len(d.Scopes) == 0 {
+			d.Scopes = []string{"openid", "email", "profile"}
+		}
+		c.OIDC.Domains[name] = d
+	}
+	if c.MFA.Issuer == "" {
+		c.MFA.Issuer = "Tayga Mail"
+	}
+	if c.MFA.AccessTokenTTL <= 0 {
+		c.MFA.AccessTokenTTL = time.Hour
+	}
+	if c.MFA.RefreshTokenTTL <= 0 {
+		c.MFA.RefreshTokenTTL = 30 * 24 * time.Hour
+	}
+	if c.MFA.ChallengeTTL <= 0 {
+		c.MFA.ChallengeTTL = 5 * time.Minute
+	}
+	if c.HTTP.PublicURL == "" {
+		c.HTTP.PublicURL = "http://127.0.0.1" + c.HTTP.Listen
 	}
 	return nil
 }

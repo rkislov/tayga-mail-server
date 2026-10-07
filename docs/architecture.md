@@ -1,4 +1,4 @@
-# Tayga Mail Server — Architecture (Phase 1–4)
+# Tayga Mail Server — Architecture (Phase 1–5)
 
 ## Overview
 
@@ -8,11 +8,11 @@ TMS is a single-binary mail server (`tayga-mail`) built in Go with `CGO_ENABLED=
 cmd/tayga
   ├─ config (YAML)
   ├─ storage (sqlite | postgres)
-  ├─ auth (local Argon2id; LDAP hybrid per-domain; OIDC stub)
+  ├─ auth (local Argon2id; LDAP hybrid; OIDC; TOTP MFA; opaque tokens)
   ├─ mailstore (Maildir++)
   ├─ smtp / imap / pop3 / managesieve
   ├─ sieve (foxcpp/go-sieve on delivery)
-  └─ httpapi (/healthz, /readyz, /metrics, embedded UI placeholder)
+  └─ httpapi (/healthz, /readyz, /metrics, /api/v1/auth/*, embedded UI)
 ```
 
 ## Storage
@@ -20,13 +20,28 @@ cmd/tayga
 - Shared schema with `tenant_id` isolation.
 - Message bodies on disk (Maildir++); metadata in `messages` (UID, flags, path).
 - User mailbox quota: `users.quota_bytes` (0 = unlimited), enforced on SMTP/IMAP/Sieve writes.
+- MFA: `user_mfa`, `mfa_challenges`, `oauth_tokens` (migration `002_mfa_oauth`).
 
 ## Auth
 
 - **Local**: Argon2id password hashes.
-- **LDAP hybrid** (`ldap.domains.<domain>`): service bind → search → user bind; JIT creates `auth_source=ldap` users. Existing local users never fall through to LDAP.
-- Response cache: `ldap.cache_ttl` (negative cache is shorter).
-- OIDC: stub for a later milestone.
+- **LDAP hybrid** (`ldap.domains.<domain>`): service bind → search → user bind; JIT creates `auth_source=ldap` users.
+- **OIDC** (`oidc.domains.<domain>`): authorization-code flow; JIT creates `auth_source=oidc` users.
+- **MFA (TOTP)**: enroll via HTTP API; backup codes (hashed). When enabled and `mfa.require_token_for_mfa_users`, password auth on protocols is rejected.
+- **Tokens**: opaque access/refresh pairs; use with SASL `XOAUTH2` / `OAUTHBEARER` on IMAP and SMTP submission.
+
+### HTTP auth API
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| POST | `/api/v1/auth/login` | password → tokens or MFA challenge |
+| POST | `/api/v1/auth/mfa/verify` | challenge + TOTP → tokens |
+| POST | `/api/v1/auth/token` | refresh_token grant |
+| POST | `/api/v1/auth/mfa/setup` | begin TOTP (Bearer) |
+| POST | `/api/v1/auth/mfa/confirm` | enable TOTP (Bearer) |
+| POST | `/api/v1/auth/mfa/disable` | disable TOTP (Bearer) |
+| GET | `/api/v1/auth/oidc/{domain}/start` | redirect to IdP |
+| GET | `/api/v1/auth/oidc/callback` | code exchange → tokens |
 
 ## Protocols (dev ports)
 
@@ -54,4 +69,4 @@ Seed user: `admin@example.com` / `changeme`
 
 ## Next milestones
 
-OIDC per-domain + MFA (TOTP/WebAuthn) → CalDAV/CardDAV → ActiveSync/EWS → …
+WebAuthn MFA → CalDAV/CardDAV → ActiveSync/EWS → …

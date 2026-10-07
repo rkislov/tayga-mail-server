@@ -58,16 +58,24 @@ func Open(ctx context.Context, cfg config.StorageConfig) (Driver, error) {
 }
 
 func migrate(ctx context.Context, db *sql.DB, dialect Dialect) error {
-	var filename string
+	var files []string
 	switch dialect {
 	case DialectSQLite:
-		filename = "001_init.sqlite.sql"
+		files = []string{"001_init.sqlite.sql", "002_mfa_oauth.sqlite.sql"}
 	case DialectPostgres:
-		filename = "001_init.postgres.sql"
+		files = []string{"001_init.postgres.sql", "002_mfa_oauth.postgres.sql"}
 	default:
 		return fmt.Errorf("unsupported dialect")
 	}
+	for _, filename := range files {
+		if err := applyMigration(ctx, db, dialect, filename); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
+func applyMigration(ctx context.Context, db *sql.DB, dialect Dialect, filename string) error {
 	raw, err := migrations.FS.ReadFile(filename)
 	if err != nil {
 		return fmt.Errorf("read migration %s: %w", filename, err)

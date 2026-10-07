@@ -49,12 +49,33 @@ ldap:
     #   attr_name: cn
     #   timeout: 10s
 
+# Per-domain OpenID Connect (authorization code). Disabled by default.
+oidc:
+  domains:
+    # example.com:
+    #   enabled: true
+    #   issuer: "https://login.example.com"
+    #   client_id: "tayga"
+    #   client_secret: "secret"
+    #   redirect_url: "http://127.0.0.1:8080/api/v1/auth/oidc/callback"
+    #   scopes: [openid, email, profile]
+
+# MFA / opaque tokens for XOAUTH2 & OAUTHBEARER on IMAP/SMTP
+mfa:
+  issuer: "Tayga Mail"
+  access_token_ttl: 1h
+  refresh_token_ttl: 720h
+  challenge_ttl: 5m
+  # When true, users with TOTP enabled cannot use password on IMAP/SMTP/POP3.
+  require_token_for_mfa_users: true
+
 tls:
   cert_file: ""
   key_file: ""
 
 http:
   listen: ":8080"
+  public_url: "http://127.0.0.1:8080"
 
 seed:
   enabled: true
