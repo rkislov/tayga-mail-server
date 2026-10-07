@@ -155,6 +155,10 @@ Authenticated submission may RCPT external addresses when `smtp.relay.host` is s
 
 SMTP `rate_limit.per_ip` / `per_user` (windowed) returns `421` when exceeded.
 
+Outbound messages are enqueued (`smtp.queue`, table `outbound_queue`) and retried with exponential backoff. After `max_attempts`, a multipart/report DSN is delivered to the local envelope-from mailbox.
+
+Metric: `tayga_outbound_queued`.
+
 ## Next milestones
 
-Outbound retry queue / DSN; multi-writer maildir fencing beyond MX.
+Admin outbound queue UI; multi-writer maildir fencing beyond MX.

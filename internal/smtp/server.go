@@ -32,6 +32,7 @@ type Server struct {
 	sieve     *sieve.Engine
 	tls       *tlsutil.Manager
 	ha        ha.Gate
+	queue     *OutboundQueue
 	servers   []*gosmtp.Server
 }
 
@@ -87,6 +88,16 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 		s.log.Info("smtp outbound enabled", "mode", mode, "dkim", dkimSig != nil)
 	}
+	qc := s.cfg.SMTP.Queue
+	var oq *OutboundQueue
+	if out != nil && qc.Enabled {
+		oq = newOutboundQueue(s.store, out, dkimSig, s.sieve, s.cfg.Server.Hostname, QueueConfig{
+			Enabled: true, Workers: qc.Workers, PollInterval: qc.PollInterval,
+			MaxAttempts: qc.MaxAttempts, BatchSize: qc.BatchSize,
+		}, s.log)
+		s.queue = oq
+		oq.Start(ctx)
+	}
 	rl := s.cfg.SMTP.RateLimit
 	ipLim := newRateLimiter(rl.PerIP, rl.Window)
 	userLim := newRateLimiter(rl.PerUser, rl.Window)
@@ -107,6 +118,7 @@ func (s *Server) Start(ctx context.Context) error {
 			ha:          s.ha,
 			out:         out,
 			dkim:        dkimSig,
+			queue:       oq,
 			ipLimit:     ipLim,
 			userLimit:   userLim,
 		}
@@ -184,6 +196,7 @@ type backend struct {
 	ha        ha.Gate
 	out       outboundSender
 	dkim      *dkimSigner
+	queue     *OutboundQueue
 	ipLimit   *rateLimiter
 	userLimit *rateLimiter
 }
@@ -318,19 +331,26 @@ func (s *session) Data(r io.Reader) error {
 		}
 	}
 	if len(s.toRemote) > 0 {
-		out := data
+		outData := data
 		if s.backend.dkim != nil {
-			signed, err := s.backend.dkim.Sign(out)
+			signed, err := s.backend.dkim.Sign(outData)
 			if err != nil {
 				s.backend.log.Error("dkim sign failed", "err", err)
 				return &gosmtp.SMTPError{Code: 451, EnhancedCode: gosmtp.EnhancedCode{4, 3, 0}, Message: "DKIM signing failed"}
 			}
-			out = signed
+			outData = signed
 		}
 		from := normalizeAddr(s.from)
-		if err := s.backend.out.Send(from, s.toRemote, out); err != nil {
-			s.backend.log.Error("outbound delivery failed", "err", err, "recipients", len(s.toRemote))
-			return &gosmtp.SMTPError{Code: 451, EnhancedCode: gosmtp.EnhancedCode{4, 3, 0}, Message: "Outbound delivery failed"}
+		if s.backend.queue != nil {
+			if err := s.backend.queue.Enqueue(ctx, from, s.toRemote, outData, msgid); err != nil {
+				s.backend.log.Error("outbound enqueue failed", "err", err)
+				return &gosmtp.SMTPError{Code: 451, EnhancedCode: gosmtp.EnhancedCode{4, 3, 0}, Message: "Queue failed"}
+			}
+		} else if s.backend.out != nil {
+			if err := s.backend.out.Send(from, s.toRemote, outData); err != nil {
+				s.backend.log.Error("outbound delivery failed", "err", err, "recipients", len(s.toRemote))
+				return &gosmtp.SMTPError{Code: 451, EnhancedCode: gosmtp.EnhancedCode{4, 3, 0}, Message: "Outbound delivery failed"}
+			}
 		}
 	}
 	s.backend.log.Info("message accepted",
