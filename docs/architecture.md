@@ -96,6 +96,7 @@ Embedded at `/` (`internal/frontend/dist`): sign-in, TOTP + WebAuthn MFA, passke
 | `POST /api/v1/admin/users` | create local user |
 | `PUT /api/v1/admin/users/{uuid}/quota` | set quota (0 = unlimited) |
 | `PATCH /api/v1/admin/users/{uuid}` | enable/disable |
+| `PUT /api/v1/admin/users/{uuid}/password` | reset local password (min 8 chars) |
 
 Admins: `http.admins` email list (default `admin@example.com`).
 
@@ -107,4 +108,4 @@ Admins: `http.admins` email list (default `admin@example.com`).
 
 ## Next milestones
 
-Admin create-user form + FlowSync WBXML Sync write-back (Add/Change/Delete) shipped. Next: richer admin (disable/reset), broader WBXML field coverage, IMAP IDLE polish.
+Admin create/disable/reset + FlowSync WBXML Sync write-back with expanded contact/calendar/email field tags. Next: IMAP IDLE polish, Sieve UI, multi-tenant polish.

@@ -59,8 +59,12 @@ func extractAppDataFields(block string) map[string]string {
 	fields := map[string]string{}
 	keys := []string{
 		"Subject", "Location", "StartTime", "EndTime", "UID", "AllDayEvent",
-		"FileAs", "FirstName", "LastName", "Email1Address", "MobilePhoneNumber",
-		"Read", "Body",
+		"BusyStatus", "OrganizerEmail", "OrganizerName", "Sensitivity", "Timezone",
+		"FileAs", "FirstName", "LastName", "MiddleName", "NickName",
+		"Email1Address", "Email2Address", "Email3Address",
+		"MobilePhoneNumber", "HomePhoneNumber", "BusinessPhoneNumber",
+		"CompanyName", "JobTitle", "Department", "OfficeLocation", "WebPage",
+		"Read", "Importance", "To", "Cc", "ReplyTo", "Body",
 	}
 	for _, k := range keys {
 		if v := extractTag(block, k); v != "" {
@@ -206,12 +210,29 @@ func (h *easHandler) wbContacts(ctx context.Context, addressBookID string, op cl
 		if v := f["Email1Address"]; v != "" {
 			merged.Email = v
 		}
+		if v := f["Email2Address"]; v != "" {
+			merged.Email2 = v
+		}
 		if v := f["MobilePhoneNumber"]; v != "" {
 			merged.Tel = v
 		}
+		if v := f["HomePhoneNumber"]; v != "" {
+			merged.HomeTel = v
+		}
+		if v := f["BusinessPhoneNumber"]; v != "" {
+			merged.WorkTel = v
+		}
+		if v := f["CompanyName"]; v != "" {
+			merged.Org = v
+		}
+		if v := f["JobTitle"]; v != "" {
+			merged.Title = v
+		}
 		data := buildVCARD(existing.UID, map[string]string{
 			"FileAs": merged.FN, "FirstName": merged.FirstName, "LastName": merged.LastName,
-			"Email1Address": merged.Email, "MobilePhoneNumber": merged.Tel,
+			"Email1Address": merged.Email, "Email2Address": merged.Email2,
+			"MobilePhoneNumber": merged.Tel, "HomePhoneNumber": merged.HomeTel,
+			"BusinessPhoneNumber": merged.WorkTel, "CompanyName": merged.Org, "JobTitle": merged.Title,
 		})
 		_, err = h.store.UpsertAddressObject(ctx, &storage.AddressObject{
 			ID:            existing.ID,
@@ -352,12 +373,42 @@ func buildVCARD(uid string, f map[string]string) string {
 	if fn != "" {
 		fmt.Fprintf(&b, "FN:%s\r\n", icsEscape(fn))
 	}
-	fmt.Fprintf(&b, "N:%s;%s;;;\r\n", icsEscape(f["LastName"]), icsEscape(f["FirstName"]))
+	fmt.Fprintf(&b, "N:%s;%s;%s;;\r\n", icsEscape(f["LastName"]), icsEscape(f["FirstName"]), icsEscape(f["MiddleName"]))
+	if f["NickName"] != "" {
+		fmt.Fprintf(&b, "NICKNAME:%s\r\n", icsEscape(f["NickName"]))
+	}
 	if f["Email1Address"] != "" {
-		fmt.Fprintf(&b, "EMAIL:%s\r\n", icsEscape(f["Email1Address"]))
+		fmt.Fprintf(&b, "EMAIL;TYPE=INTERNET:%s\r\n", icsEscape(f["Email1Address"]))
+	}
+	if f["Email2Address"] != "" {
+		fmt.Fprintf(&b, "EMAIL;TYPE=INTERNET:%s\r\n", icsEscape(f["Email2Address"]))
+	}
+	if f["Email3Address"] != "" {
+		fmt.Fprintf(&b, "EMAIL;TYPE=INTERNET:%s\r\n", icsEscape(f["Email3Address"]))
 	}
 	if f["MobilePhoneNumber"] != "" {
-		fmt.Fprintf(&b, "TEL:%s\r\n", icsEscape(f["MobilePhoneNumber"]))
+		fmt.Fprintf(&b, "TEL;TYPE=CELL:%s\r\n", icsEscape(f["MobilePhoneNumber"]))
+	}
+	if f["HomePhoneNumber"] != "" {
+		fmt.Fprintf(&b, "TEL;TYPE=HOME:%s\r\n", icsEscape(f["HomePhoneNumber"]))
+	}
+	if f["BusinessPhoneNumber"] != "" {
+		fmt.Fprintf(&b, "TEL;TYPE=WORK:%s\r\n", icsEscape(f["BusinessPhoneNumber"]))
+	}
+	if f["CompanyName"] != "" {
+		fmt.Fprintf(&b, "ORG:%s\r\n", icsEscape(f["CompanyName"]))
+	}
+	if f["JobTitle"] != "" {
+		fmt.Fprintf(&b, "TITLE:%s\r\n", icsEscape(f["JobTitle"]))
+	}
+	if f["Department"] != "" {
+		fmt.Fprintf(&b, "X-DEPARTMENT:%s\r\n", icsEscape(f["Department"]))
+	}
+	if f["OfficeLocation"] != "" {
+		fmt.Fprintf(&b, "X-OFFICE:%s\r\n", icsEscape(f["OfficeLocation"]))
+	}
+	if f["WebPage"] != "" {
+		fmt.Fprintf(&b, "URL:%s\r\n", icsEscape(f["WebPage"]))
 	}
 	b.WriteString("END:VCARD\r\n")
 	return b.String()

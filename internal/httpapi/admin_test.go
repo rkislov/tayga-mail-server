@@ -101,8 +101,34 @@ func TestMeAndAdminQuota(t *testing.T) {
 		t.Fatalf("quota=%d", got.QuotaBytes)
 	}
 
+	reqDis := httptest.NewRequest(http.MethodPatch, "/api/v1/admin/users/"+user.ID, bytes.NewReader([]byte(`{"enabled":false}`)))
+	reqDis.Header.Set("Authorization", "Bearer "+token)
+	reqDis.Header.Set("Content-Type", "application/json")
+	wDis := httptest.NewRecorder()
+	h.ServeHTTP(wDis, reqDis)
+	if wDis.Code != http.StatusOK {
+		t.Fatalf("disable %d %s", wDis.Code, wDis.Body.String())
+	}
+	got, _ = store.GetUserByID(ctx, user.ID)
+	if got.Enabled {
+		t.Fatal("expected disabled")
+	}
+
+	reqPw := httptest.NewRequest(http.MethodPut, "/api/v1/admin/users/"+user.ID+"/password", bytes.NewReader([]byte(`{"password":"newsecret1"}`)))
+	reqPw.Header.Set("Authorization", "Bearer "+token)
+	reqPw.Header.Set("Content-Type", "application/json")
+	wPw := httptest.NewRecorder()
+	h.ServeHTTP(wPw, reqPw)
+	if wPw.Code != http.StatusOK {
+		t.Fatalf("password %d %s", wPw.Code, wPw.Body.String())
+	}
+	_ = store.UpdateUserEnabled(ctx, user.ID, true)
+	if _, err := layer.LoginWithPassword(ctx, "u@ex.com", "newsecret1"); err != nil {
+		t.Fatalf("login after reset: %v", err)
+	}
+
 	// non-admin forbidden
-	ures, err := layer.LoginWithPassword(ctx, "u@ex.com", "secret")
+	ures, err := layer.LoginWithPassword(ctx, "u@ex.com", "newsecret1")
 	if err != nil {
 		t.Fatal(err)
 	}
