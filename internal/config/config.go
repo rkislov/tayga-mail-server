@@ -26,7 +26,28 @@ type Config struct {
 	HTTP        HTTPConfig        `yaml:"http"`
 	Seed        SeedConfig        `yaml:"seed"`
 	HA          HAConfig          `yaml:"ha"`
+	Scan        ScanConfig        `yaml:"scan"`
 	Log         LogConfig         `yaml:"log"`
+}
+
+// ScanConfig configures antivirus scanning of inbound SMTP messages.
+type ScanConfig struct {
+	Enabled          bool          `yaml:"enabled"`
+	Backend          string        `yaml:"backend"` // clamav | exec | none
+	Action           string        `yaml:"action"`  // reject | quarantine | tag
+	QuarantineFolder string        `yaml:"quarantine_folder"`
+	Timeout          time.Duration `yaml:"timeout"`
+	FailOpen         bool          `yaml:"fail_open"` // deliver on scanner errors
+	ClamAV           ClamAVConfig  `yaml:"clamav"`
+	Exec             ExecScanConfig `yaml:"exec"`
+}
+
+type ClamAVConfig struct {
+	Address string `yaml:"address"` // host:port of clamd
+}
+
+type ExecScanConfig struct {
+	Command []string `yaml:"command"` // e.g. [clamdscan, --fdpass, --no-summary, -]
 }
 
 // HAConfig enables optional active/standby or per-user sticky writer fencing.
@@ -307,6 +328,15 @@ func Default() *Config {
 			Mode: "none", LeaseTTL: 5 * time.Second, Fence: "mx",
 			StickyTTL: 30 * time.Second,
 		},
+		Scan: ScanConfig{
+			Enabled:          false,
+			Backend:          "clamav",
+			Action:           "quarantine",
+			QuarantineFolder: "Quarantine",
+			Timeout:          30 * time.Second,
+			FailOpen:         false,
+			ClamAV:           ClamAVConfig{Address: "127.0.0.1:3310"},
+		},
 		Log: LogConfig{Level: "info", Format: "json"},
 	}
 }
@@ -463,6 +493,36 @@ func (c *Config) Validate() error {
 		}
 	default:
 		return fmt.Errorf("ha.mode must be none, active_standby, or sticky, got %q", c.HA.Mode)
+	}
+	if c.Scan.Enabled {
+		switch c.Scan.Backend {
+		case "", "clamav", "exec", "none", "noop":
+			if c.Scan.Backend == "" {
+				c.Scan.Backend = "clamav"
+			}
+		default:
+			return fmt.Errorf("scan.backend must be clamav, exec, or none, got %q", c.Scan.Backend)
+		}
+		switch c.Scan.Action {
+		case "", "reject", "quarantine", "tag":
+			if c.Scan.Action == "" {
+				c.Scan.Action = "quarantine"
+			}
+		default:
+			return fmt.Errorf("scan.action must be reject, quarantine, or tag, got %q", c.Scan.Action)
+		}
+		if c.Scan.QuarantineFolder == "" {
+			c.Scan.QuarantineFolder = "Quarantine"
+		}
+		if c.Scan.Timeout <= 0 {
+			c.Scan.Timeout = 30 * time.Second
+		}
+		if c.Scan.Backend == "clamav" && c.Scan.ClamAV.Address == "" {
+			c.Scan.ClamAV.Address = "127.0.0.1:3310"
+		}
+		if c.Scan.Backend == "exec" && len(c.Scan.Exec.Command) == 0 {
+			return fmt.Errorf("scan.exec.command is required when backend is exec")
+		}
 	}
 	return nil
 }
