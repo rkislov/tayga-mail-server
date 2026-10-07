@@ -9,6 +9,7 @@ storage:
   sqlite:
     path: ./data/tayga.db
   postgres:
+    # Shared DSN also enables cross-node IMAP IDLE (LISTEN/NOTIFY tayga_idle).
     dsn: "postgres://tayga:tayga@localhost:5432/tayga?sslmode=disable"
 
 mailstore:

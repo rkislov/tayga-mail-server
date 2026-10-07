@@ -60,14 +60,15 @@ Also available from the admin UI (Monitoring card) and:
 
 LB should mark a node unhealthy if `/readyz` fails.
 
-## IMAP IDLE
+## IMAP IDLE (cross-node)
 
-IDLE uses an in-process update hub. Notifications for a delivery on node A reach IDLE clients on node A only. With multiple nodes, use sticky load balancing for IMAP, or accept that some clients fall back to polling/NOOP.
+IDLE uses an in-process update hub. When `storage.driver` is **postgres**, Tayga also starts a **LISTEN/NOTIFY** bus on channel `tayga_idle`: a delivery on node A wakes IDLE clients on every peer that shares the same DSN. Each node ignores its own NOTIFY echo.
+
+SQLite builds stay single-node (no bus). Sticky IMAP affinity is still recommended so mailbox sessions stay on one frontend, but EXISTS notifications no longer require it for multi-node Postgres HA.
 
 ## What is not included yet
 
 - Automatic leader election / fencing
-- Cross-node IDLE fan-out
 - Built-in object-storage maildir backend
 - Point-in-time DB restore orchestration (use Postgres tooling)
 
