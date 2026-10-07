@@ -52,12 +52,26 @@ type Gateway interface {
 	SendBotMessage(ctx context.Context, botUserEmail, to, body, msgType string) error
 	PollBotInbox(ctx context.Context, botID string, limit int) ([]BotMessage, error)
 	ComponentDomains() []string
+	Status() Status
 
 	ListChatRoster(ctx context.Context, userID string) ([]RosterEntry, error)
 	UpsertChatRoster(ctx context.Context, userID, jid, name string) error
 	ChatHistory(ctx context.Context, ownerBare, withBare string, limit int) ([]HistoryMsg, error)
 	SendChatMessage(ctx context.Context, fromEmail, to, body string) (ChatEvent, error)
 	SubscribeChat(bare string) (<-chan ChatEvent, func())
+}
+
+// Status is a public summary of the XMPP module for the admin UI.
+type Status struct {
+	Enabled         bool     `json:"enabled"`
+	Listen          string   `json:"listen,omitempty"`
+	ListenTLS       string   `json:"listen_tls,omitempty"`
+	S2SListen       string   `json:"s2s_listen,omitempty"`
+	RequireTLS      bool     `json:"require_tls"`
+	ComponentListen string   `json:"component_listen,omitempty"`
+	Components      []string `json:"components,omitempty"`
+	WebChat         bool     `json:"web_chat"`
+	Hostname        string   `json:"hostname,omitempty"`
 }
 
 func (s *Server) ComponentDomains() []string {
@@ -71,6 +85,23 @@ func (s *Server) ComponentDomains() []string {
 		}
 	}
 	return out
+}
+
+// Status reports C2S/component listeners and whether web Chat is available.
+func (s *Server) Status() Status {
+	st := Status{WebChat: true}
+	if s == nil || s.cfg == nil {
+		return st
+	}
+	st.Enabled = s.cfg.XMPP.Enabled
+	st.Listen = s.cfg.XMPP.Listen
+	st.ListenTLS = s.cfg.XMPP.ListenTLS
+	st.S2SListen = s.cfg.XMPP.S2SListen
+	st.RequireTLS = s.cfg.XMPP.RequireTLS
+	st.ComponentListen = s.cfg.XMPP.ComponentListen
+	st.Components = s.ComponentDomains()
+	st.Hostname = s.cfg.Server.Hostname
+	return st
 }
 
 func (s *Server) CreateBot(ctx context.Context, userID, name, webhookURL string) (*BotInfo, error) {

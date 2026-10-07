@@ -22,6 +22,20 @@ func (s *Store) UpdateUserServiceClass(ctx context.Context, userID, serviceClass
 	return nil
 }
 
+func (s *Store) UpdateUserMigration(ctx context.Context, userID, migrationEnabled string) error {
+	migrationEnabled = normalizeMigrationPolicy(migrationEnabled)
+	q := s.rebind(`UPDATE users SET migration_enabled = ? WHERE id = ?`)
+	res, err := s.db.ExecContext(ctx, q, migrationEnabled, userID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (s *Store) ListUsersByDomain(ctx context.Context, domainID string) ([]*User, error) {
 	q := s.rebind(`SELECT ` + userCols + ` FROM users WHERE domain_id = ? ORDER BY email`)
 	rows, err := s.db.QueryContext(ctx, q, domainID)

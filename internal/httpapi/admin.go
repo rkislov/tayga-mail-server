@@ -55,16 +55,17 @@ func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 			}
 			used, _ := s.store.SumMailboxBytes(r.Context(), u.ID)
 			out = append(out, map[string]any{
-				"id":               u.ID,
-				"email":            u.Email,
-				"display_name":     u.DisplayName,
-				"quota_bytes":      u.QuotaBytes,
-				"used_bytes":       used,
-				"enabled":          u.Enabled,
-				"auth_source":      u.AuthSource,
-				"roles":            storage.ParseRoles(u.Roles),
-				"domain_id":        u.DomainID,
-				"service_class_id": u.ServiceClassID,
+				"id":                u.ID,
+				"email":             u.Email,
+				"display_name":      u.DisplayName,
+				"quota_bytes":       u.QuotaBytes,
+				"used_bytes":        used,
+				"enabled":           u.Enabled,
+				"auth_source":       u.AuthSource,
+				"roles":             storage.ParseRoles(u.Roles),
+				"domain_id":         u.DomainID,
+				"service_class_id":  u.ServiceClassID,
+				"migration_enabled": u.MigrationEnabled,
 			})
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"users": out})
@@ -171,10 +172,11 @@ func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 
 	case path != "" && r.Method == http.MethodPatch:
 		var req struct {
-			Enabled        *bool    `json:"enabled"`
-			Roles          []string `json:"roles"`
-			DomainIDs      []string `json:"domain_ids"`
-			ServiceClassID *string  `json:"service_class_id"`
+			Enabled          *bool    `json:"enabled"`
+			Roles            []string `json:"roles"`
+			DomainIDs        []string `json:"domain_ids"`
+			ServiceClassID   *string  `json:"service_class_id"`
+			MigrationEnabled *string  `json:"migration_enabled"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
@@ -211,6 +213,12 @@ func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.ServiceClassID != nil {
 			if err := s.store.UpdateUserServiceClass(r.Context(), path, *req.ServiceClassID); err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+				return
+			}
+		}
+		if req.MigrationEnabled != nil {
+			if err := s.store.UpdateUserMigration(r.Context(), path, *req.MigrationEnabled); err != nil {
 				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 				return
 			}
