@@ -1,15 +1,27 @@
 package smtp
 
 import (
+	"context"
+	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/tayga/tms/internal/config"
+	"github.com/tayga/tms/internal/storage"
 )
 
 func TestGreylistDeferThenPass(t *testing.T) {
-	p := &greylistPolicy{
-		delay: 50 * time.Millisecond, passTTL: time.Hour, ipv4Net: 32,
-		entries: map[string]*greyEntry{},
+	dir := t.TempDir()
+	store, err := storage.Open(context.Background(), config.StorageConfig{
+		Driver: "sqlite",
+		SQLite: config.SQLiteConfig{Path: filepath.Join(dir, "t.db")},
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
+	defer store.Close()
+
+	p := newGreylistPolicy(store, 50*time.Millisecond, time.Hour, 32, nil)
 	if err := p.check("203.0.113.1", "a@ex.com", "b@ex.com"); err == nil {
 		t.Fatal("expected defer")
 	}
@@ -34,11 +46,24 @@ func TestGreylistIPv4Net(t *testing.T) {
 	}
 }
 
-func TestGreylistCleanup(t *testing.T) {
-	p := &greylistPolicy{passTTL: time.Minute, entries: map[string]*greyEntry{}}
-	p.entries["x"] = &greyEntry{lastSeen: time.Now().UTC().Add(-2 * time.Hour)}
-	p.cleanup(time.Now().UTC())
-	if len(p.entries) != 0 {
-		t.Fatal("expected cleanup")
+func TestGreylistCleanupDB(t *testing.T) {
+	dir := t.TempDir()
+	ctx := context.Background()
+	store, err := storage.Open(ctx, config.StorageConfig{
+		Driver: "sqlite",
+		SQLite: config.SQLiteConfig{Path: filepath.Join(dir, "t.db")},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	_, _ = store.GreylistTouch(ctx, "1.2.3.4", "a@e", "b@e", time.Hour)
+	n, err := store.DeleteExpiredGreylist(ctx, time.Now().UTC().Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("deleted=%d", n)
 	}
 }

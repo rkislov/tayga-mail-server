@@ -58,6 +58,10 @@ smtp:
     org_name: "Tayga Mail"
     # contact: "tlsrpt-noreply@mail.example.com"
     interval: 24h
+  dane:
+    enabled: false           # TLSA _25._tcp.<mx> (RFC 7672); no plaintext fallback when TLSA present
+    timeout: 10s
+    fail_open: true          # deliver with normal STARTTLS if TLSA lookup fails
   dkim:
     enabled: false
     domain: example.com
@@ -172,10 +176,11 @@ spam:
   # tag_above: 4
 
 # Temporary defer of unknown (ip, MAIL FROM, RCPT) triplets on unauthenticated MX
+# Shared via greylist table (SQLite/Postgres) so HA nodes agree.
 greylist:
   enabled: false
   delay: 5m
-  pass_ttl: 36h
+  pass_ttl: 36h              # delete rows with last_seen older than this
   ipv4_net: 32               # e.g. 24 to greylist by /24
 
 # Inbound mail authentication on unauthenticated MX (before virus/spam)

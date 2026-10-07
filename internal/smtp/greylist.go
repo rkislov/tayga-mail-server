@@ -1,33 +1,31 @@
 package smtp
 
 import (
+	"context"
 	"log/slog"
 	"net"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	gosmtp "github.com/emersion/go-smtp"
+	"github.com/tayga/tms/internal/storage"
 )
 
+type greylistStore interface {
+	GreylistTouch(ctx context.Context, clientIP, envelopeFrom, rcpt string, delay time.Duration) (allowed bool, err error)
+	DeleteExpiredGreylist(ctx context.Context, olderThan time.Time) (int64, error)
+}
+
 type greylistPolicy struct {
+	store   greylistStore
 	delay   time.Duration
 	passTTL time.Duration
 	ipv4Net int // e.g. 24; 32 = exact IP
 	log     *slog.Logger
-
-	mu      sync.Mutex
-	entries map[string]*greyEntry
 }
 
-type greyEntry struct {
-	firstSeen time.Time
-	passed    bool
-	lastSeen  time.Time
-}
-
-func newGreylistPolicy(delay, passTTL time.Duration, ipv4Net int, log *slog.Logger) *greylistPolicy {
+func newGreylistPolicy(store greylistStore, delay, passTTL time.Duration, ipv4Net int, log *slog.Logger) *greylistPolicy {
 	if delay <= 0 {
 		delay = 5 * time.Minute
 	}
@@ -38,36 +36,31 @@ func newGreylistPolicy(delay, passTTL time.Duration, ipv4Net int, log *slog.Logg
 		ipv4Net = 32
 	}
 	p := &greylistPolicy{
-		delay: delay, passTTL: passTTL, ipv4Net: ipv4Net, log: log,
-		entries: map[string]*greyEntry{},
+		store: store, delay: delay, passTTL: passTTL, ipv4Net: ipv4Net, log: log,
 	}
 	go p.cleanupLoop()
 	return p
 }
 
 func (p *greylistPolicy) check(ipStr, from, rcpt string) error {
-	if p == nil {
+	if p == nil || p.store == nil {
 		return nil
 	}
-	key := greylistKey(ipStr, from, rcpt, p.ipv4Net)
-	now := time.Now().UTC()
+	ip := normalizeGreyIP(ipStr, p.ipv4Net)
+	from = strings.ToLower(strings.Trim(strings.TrimSpace(from), "<>"))
+	rcpt = strings.ToLower(strings.Trim(strings.TrimSpace(rcpt), "<>"))
 
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	e, ok := p.entries[key]
-	if !ok {
-		p.entries[key] = &greyEntry{firstSeen: now, lastSeen: now}
+	allowed, err := p.store.GreylistTouch(context.Background(), ip, from, rcpt, p.delay)
+	if err != nil {
+		if p.log != nil {
+			p.log.Warn("greylist touch failed; fail-open", "err", err)
+		}
+		return nil
+	}
+	if !allowed {
 		return greylistDefer()
 	}
-	e.lastSeen = now
-	if e.passed {
-		return nil
-	}
-	if now.Sub(e.firstSeen) >= p.delay {
-		e.passed = true
-		return nil
-	}
-	return greylistDefer()
+	return nil
 }
 
 func greylistDefer() error {
@@ -97,19 +90,19 @@ func (p *greylistPolicy) cleanupLoop() {
 	t := time.NewTicker(time.Hour)
 	defer t.Stop()
 	for range t.C {
-		p.cleanup(time.Now().UTC())
-	}
-}
-
-func (p *greylistPolicy) cleanup(now time.Time) {
-	if p == nil {
-		return
-	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	for k, e := range p.entries {
-		if now.Sub(e.lastSeen) > p.passTTL {
-			delete(p.entries, k)
+		if p.store == nil {
+			continue
+		}
+		cutoff := time.Now().UTC().Add(-p.passTTL)
+		if n, err := p.store.DeleteExpiredGreylist(context.Background(), cutoff); err != nil {
+			if p.log != nil {
+				p.log.Warn("greylist cleanup", "err", err)
+			}
+		} else if n > 0 && p.log != nil {
+			p.log.Debug("greylist cleanup", "deleted", n)
 		}
 	}
 }
+
+// Ensure storage.Driver satisfies greylistStore at compile time.
+var _ greylistStore = (storage.Driver)(nil)
