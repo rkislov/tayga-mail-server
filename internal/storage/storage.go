@@ -49,6 +49,7 @@ type Driver interface {
 
 	EnsureMailbox(ctx context.Context, userID, name, path string) (*Mailbox, error)
 	GetMailbox(ctx context.Context, userID, name string) (*Mailbox, error)
+	GetMailboxByID(ctx context.Context, id string) (*Mailbox, error)
 	ListMailboxes(ctx context.Context, userID string) ([]*Mailbox, error)
 	CreateMailbox(ctx context.Context, userID, name, path string) (*Mailbox, error)
 	DeleteMailbox(ctx context.Context, userID, name string) error

@@ -19,6 +19,7 @@ import (
 	"github.com/tayga/tms/internal/mailstore"
 	"github.com/tayga/tms/internal/scan"
 	"github.com/tayga/tms/internal/sieve"
+	"github.com/tayga/tms/internal/spam"
 	"github.com/tayga/tms/internal/storage"
 	"github.com/tayga/tms/internal/tlsutil"
 )
@@ -36,6 +37,7 @@ type Server struct {
 	fenceWriters bool
 	writers      ha.WriterGate
 	scan         *scanPolicy
+	spam         *spamPolicy
 	queue        *OutboundQueue
 	servers      []*gosmtp.Server
 }
@@ -73,6 +75,41 @@ func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth
 			srv.scan.folder = "Quarantine"
 		}
 		log.Info("smtp virus scan enabled", "backend", sc.Name(), "action", srv.scan.action)
+	}
+	sp, err := spam.New(spam.Config{
+		Enabled:         cfg.Spam.Enabled,
+		Backend:         cfg.Spam.Backend,
+		URL:             cfg.Spam.URL,
+		Password:        cfg.Spam.Password,
+		Timeout:         cfg.Spam.Timeout,
+		FailOpen:        cfg.Spam.FailOpen,
+		Folder:          cfg.Spam.Folder,
+		FollowRspamd:    cfg.Spam.FollowRspamd,
+		RejectAbove:     cfg.Spam.RejectAbove,
+		QuarantineAbove: cfg.Spam.QuarantineAbove,
+		TagAbove:        cfg.Spam.TagAbove,
+	})
+	if err != nil {
+		log.Error("spam config invalid; spam disabled", "err", err)
+	} else if sp != nil {
+		srv.spam = &spamPolicy{
+			checker: sp,
+			cfg: spam.Config{
+				Enabled:         cfg.Spam.Enabled,
+				Backend:         cfg.Spam.Backend,
+				URL:             cfg.Spam.URL,
+				Password:        cfg.Spam.Password,
+				Timeout:         cfg.Spam.Timeout,
+				FailOpen:        cfg.Spam.FailOpen,
+				Folder:          cfg.Spam.Folder,
+				FollowRspamd:    cfg.Spam.FollowRspamd,
+				RejectAbove:     cfg.Spam.RejectAbove,
+				QuarantineAbove: cfg.Spam.QuarantineAbove,
+				TagAbove:        cfg.Spam.TagAbove,
+			},
+			log: log,
+		}
+		log.Info("smtp spam check enabled", "backend", sp.Name(), "folder", srv.spam.cfg.Folder)
 	}
 	return srv
 }
@@ -155,6 +192,7 @@ func (s *Server) Start(ctx context.Context) error {
 			fenceWriters: s.fenceWriters,
 			writers:      s.writers,
 			scan:         s.scan,
+			spam:         s.spam,
 			out:          out,
 			dkim:         dkimSig,
 			queue:        oq,
@@ -236,6 +274,7 @@ type backend struct {
 	fenceWriters bool
 	writers      ha.WriterGate
 	scan         *scanPolicy
+	spam         *spamPolicy
 	out          outboundSender
 	dkim         *dkimSigner
 	queue        *OutboundQueue
@@ -432,6 +471,34 @@ func (s *session) deliver(ctx context.Context, rcpt string, data []byte, msgid s
 				return &gosmtp.SMTPError{Code: 552, EnhancedCode: gosmtp.EnhancedCode{5, 2, 2}, Message: "Mailbox full"}
 			}
 			return scanErr
+		}
+	}
+	if s.backend.spam != nil {
+		authUser := ""
+		if s.user != nil {
+			authUser = s.user.Email
+		}
+		meta := spam.Meta{
+			From:     s.from,
+			To:       rcpt,
+			IP:       stripPort(s.remote),
+			User:     authUser,
+			Hostname: s.backend.hostname,
+		}
+		var spamErr error
+		data, spamErr = s.backend.spam.apply(ctx, u, meta, data, msgid, s.deliverFolder)
+		if spamErr != nil {
+			if errors.Is(spamErr, errQuarantined) {
+				return nil
+			}
+			var smtpErr *gosmtp.SMTPError
+			if errors.As(spamErr, &smtpErr) {
+				return smtpErr
+			}
+			if errors.Is(spamErr, storage.ErrQuotaExceeded) {
+				return &gosmtp.SMTPError{Code: 552, EnhancedCode: gosmtp.EnhancedCode{5, 2, 2}, Message: "Mailbox full"}
+			}
+			return spamErr
 		}
 	}
 	if s.backend.sieve != nil {
