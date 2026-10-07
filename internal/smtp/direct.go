@@ -16,18 +16,19 @@ type directSender struct {
 	timeout  time.Duration
 	hostname string
 	sts      *stsResolver
+	dane     *daneResolver
 	tlsrpt   *tlsReporter
 	log      *slog.Logger
 }
 
-func newDirectSender(timeout time.Duration, hostname string, sts *stsResolver, tlsrpt *tlsReporter, log *slog.Logger) *directSender {
+func newDirectSender(timeout time.Duration, hostname string, sts *stsResolver, dane *daneResolver, tlsrpt *tlsReporter, log *slog.Logger) *directSender {
 	if timeout <= 0 {
 		timeout = 60 * time.Second
 	}
 	if hostname == "" {
 		hostname = "localhost"
 	}
-	return &directSender{timeout: timeout, hostname: hostname, sts: sts, tlsrpt: tlsrpt, log: log}
+	return &directSender{timeout: timeout, hostname: hostname, sts: sts, dane: dane, tlsrpt: tlsrpt, log: log}
 }
 
 func (d *directSender) Send(from string, to []string, data []byte) error {
@@ -89,15 +90,21 @@ func (d *directSender) sendDomain(from, domain string, rcpts []string, data []by
 	return last
 }
 
-func (d *directSender) sendHost(addr, serverName, policyDomain, from string, rcpts []string, data []byte, enforce bool) error {
+func (d *directSender) sendHost(addr, serverName, policyDomain, from string, rcpts []string, data []byte, stsEnforce bool) error {
+	daneReq := false
+	if d.dane != nil {
+		if _, req, err := d.dane.tlsConfigFor(serverName); err == nil {
+			daneReq = req
+		}
+	}
 	err := d.dialAndSend(addr, serverName, policyDomain, from, rcpts, data, true)
 	if err == nil {
 		return nil
 	}
-	if enforce {
+	if stsEnforce || daneReq {
 		return err
 	}
-	// Opportunistic / testing: plaintext fallback after TLS problems.
+	// Opportunistic / testing: plaintext fallback after TLS problems (not when DANE TLSA present).
 	if isTLSRelated(err) {
 		return d.dialAndSend(addr, serverName, policyDomain, from, rcpts, data, false)
 	}
@@ -109,7 +116,7 @@ func isTLSRelated(err error) bool {
 		return false
 	}
 	s := strings.ToLower(err.Error())
-	return strings.Contains(s, "starttls") || strings.Contains(s, "tls") || strings.Contains(s, "certificate")
+	return strings.Contains(s, "starttls") || strings.Contains(s, "tls") || strings.Contains(s, "certificate") || strings.Contains(s, "dane")
 }
 
 func (d *directSender) dialAndSend(addr, serverName, policyDomain, from string, rcpts []string, data []byte, wantTLS bool) error {
@@ -135,11 +142,30 @@ func (d *directSender) dialAndSend(addr, serverName, policyDomain, from string, 
 	if wantTLS {
 		if ok, _ := c.Extension("STARTTLS"); ok {
 			tlsCfg := &tls.Config{ServerName: serverName, MinVersion: tls.VersionTLS12}
+			daneReq := false
+			if d.dane != nil {
+				var derr error
+				tlsCfg, daneReq, derr = d.dane.tlsConfigFor(serverName)
+				if derr != nil {
+					d.recordTLS(&tlsEvent{
+						PolicyDomain: policyDomain, MXHost: serverName,
+						ResultType: "tlsa-invalid", SendingMTA: d.hostname, Count: 1,
+					})
+					return derr
+				}
+			}
 			if err := c.StartTLS(tlsCfg); err != nil {
+				result := "starttls-failure"
+				if daneReq || strings.Contains(strings.ToLower(err.Error()), "dane") {
+					result = "validation-failure"
+				}
 				d.recordTLS(&tlsEvent{
 					PolicyDomain: policyDomain, MXHost: serverName,
-					ResultType: "starttls-failure", SendingMTA: d.hostname, Count: 1,
+					ResultType: result, SendingMTA: d.hostname, Count: 1,
 				})
+				if daneReq {
+					return fmt.Errorf("dane starttls: %w", err)
+				}
 				return fmt.Errorf("starttls: %w", err)
 			}
 			d.recordTLS(&tlsEvent{

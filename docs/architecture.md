@@ -179,7 +179,7 @@ Admin: `GET /api/v1/admin/quarantine` (folders Quarantine+Junk), `POST …/{id}/
 
 On unauthenticated MX (before virus/spam), optional checks in order:
 
-1. `greylist:` — first-seen `(ip, MAIL FROM, RCPT)` deferred with `421` until `delay` elapses (in-memory; `ipv4_net` can key by /24)
+1. `greylist:` — first-seen `(ip, MAIL FROM, RCPT)` deferred with `421` until `delay` elapses (persisted in `greylist` table for HA; `ipv4_net` can key by /24)
 2. `helo:` — client HELO/EHLO syntax (`require_fqdn`, reject `localhost` / bare IP)
 3. `iprev:` — PTR + forward-confirmed reverse DNS (`Authentication-Results: … iprev=pass|fail`)
 4. `spf:` — `blitiri.com.ar/go/spf` against client IP + client HELO + MAIL FROM
@@ -219,3 +219,7 @@ To publish our own policy for inbound peers, set `smtp.mta_sts.publish.enabled`.
 - `mta-sts.<domain>` A/AAAA (and certificate SAN) pointing at the HTTPS listener
 - `_mta-sts.<domain>` TXT `v=STSv1; id=<publish.id>`
 - optional `_smtp._tls.<domain>` TXT `v=TLSRPTv1; rua=mailto:…` for inbound TLS reports from others
+
+## Outbound DANE (TLSA)
+
+With `smtp.dane.enabled`, direct MX delivery looks up `_25._tcp.<mx>` TLSA (via system resolvers). If records exist, STARTTLS is required and the peer certificate must match (usages 0–3, selectors 0–1, matching 0–2); plaintext fallback is disabled for that host. Usage 3 (DANE-EE) skips PKIX and trusts TLSA alone. Lookup failures follow `fail_open` (default true). Note: without DNSSEC validation this is opportunistic DANE (TLSA can be spoofed on the path to the resolver).

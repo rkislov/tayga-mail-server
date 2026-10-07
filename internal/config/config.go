@@ -216,6 +216,14 @@ type SMTPConfig struct {
 	Queue          SMTPQueueConfig     `yaml:"queue"`
 	MTASTS         MTASTSConfig        `yaml:"mta_sts"` // outbound MTA-STS (RFC 8461)
 	TLSRPT         TLSRPTConfig        `yaml:"tls_rpt"` // outbound TLS reporting (RFC 8460)
+	DANE           DANEConfig          `yaml:"dane"`    // outbound DANE/TLSA (RFC 6698/7672)
+}
+
+// DANEConfig verifies MX certificates against TLSA on direct outbound.
+type DANEConfig struct {
+	Enabled  bool          `yaml:"enabled"`
+	Timeout  time.Duration `yaml:"timeout"`
+	FailOpen bool          `yaml:"fail_open"` // continue without DANE if TLSA lookup fails
 }
 
 // MTASTSConfig enforces recipient MTA-STS policies on direct outbound.
@@ -450,6 +458,11 @@ func Default() *Config {
 				OrgName:  "Tayga Mail",
 				Interval: 24 * time.Hour,
 			},
+			DANE: DANEConfig{
+				Enabled:  false,
+				Timeout:  10 * time.Second,
+				FailOpen: true,
+			},
 		},
 		IMAP:        IMAPConfig{Listen: ":143", IMAPS: ":993"},
 		POP3:        POP3Config{Listen: ":110", POP3S: ":995"},
@@ -609,6 +622,9 @@ func (c *Config) Validate() error {
 	}
 	if c.SMTP.MTASTS.Enabled && c.SMTP.MTASTS.Timeout <= 0 {
 		c.SMTP.MTASTS.Timeout = 10 * time.Second
+	}
+	if c.SMTP.DANE.Enabled && c.SMTP.DANE.Timeout <= 0 {
+		c.SMTP.DANE.Timeout = 10 * time.Second
 	}
 	if c.SMTP.MTASTS.Publish.Enabled {
 		switch c.SMTP.MTASTS.Publish.Mode {

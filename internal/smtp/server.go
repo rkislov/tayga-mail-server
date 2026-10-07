@@ -175,7 +175,7 @@ func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth
 		log.Info("smtp helo check enabled", "action", action, "require_fqdn", cfg.Helo.RequireFQDN)
 	}
 	if cfg.Greylist.Enabled {
-		srv.greylist = newGreylistPolicy(cfg.Greylist.Delay, cfg.Greylist.PassTTL, cfg.Greylist.IPv4Net, log)
+		srv.greylist = newGreylistPolicy(store, cfg.Greylist.Delay, cfg.Greylist.PassTTL, cfg.Greylist.IPv4Net, log)
 		log.Info("smtp greylist enabled", "delay", cfg.Greylist.Delay.String(), "pass_ttl", cfg.Greylist.PassTTL.String(), "ipv4_net", cfg.Greylist.IPv4Net)
 	}
 	if cfg.DMARC.Enabled {
@@ -234,7 +234,12 @@ func (s *Server) outbound() (outboundSender, *dkimSigner, error) {
 			sts = newSTSResolver(s.cfg.SMTP.MTASTS.Timeout, s.cfg.SMTP.MTASTS.FailOpen, s.log)
 			s.log.Info("smtp mta-sts enabled", "fail_open", s.cfg.SMTP.MTASTS.FailOpen)
 		}
-		return newDirectSender(s.cfg.SMTP.WriteTimeout, s.cfg.Server.Hostname, sts, s.tlsrpt, s.log), sig, nil
+		var dane *daneResolver
+		if s.cfg.SMTP.DANE.Enabled {
+			dane = newDANEResolver(s.cfg.SMTP.DANE.Timeout, s.cfg.SMTP.DANE.FailOpen, s.log)
+			s.log.Info("smtp dane enabled", "fail_open", s.cfg.SMTP.DANE.FailOpen)
+		}
+		return newDirectSender(s.cfg.SMTP.WriteTimeout, s.cfg.Server.Hostname, sts, dane, s.tlsrpt, s.log), sig, nil
 	}
 	return nil, sig, nil
 }
