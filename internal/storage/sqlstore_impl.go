@@ -82,6 +82,34 @@ func (s *Store) GetTenantByName(ctx context.Context, name string) (*Tenant, erro
 	return t, nil
 }
 
+func (s *Store) GetTenantByID(ctx context.Context, id string) (*Tenant, error) {
+	t := &Tenant{}
+	q := s.rebind(`SELECT id, name, created_at FROM tenants WHERE id = ?`)
+	err := s.db.QueryRowContext(ctx, q, id).Scan(&t.ID, &t.Name, &t.CreatedAt)
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	return t, nil
+}
+
+func (s *Store) ListTenants(ctx context.Context) ([]*Tenant, error) {
+	q := s.rebind(`SELECT id, name, created_at FROM tenants ORDER BY name`)
+	rows, err := s.db.QueryContext(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*Tenant
+	for rows.Next() {
+		t := &Tenant{}
+		if err := rows.Scan(&t.ID, &t.Name, &t.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) CreateDomain(ctx context.Context, tenantID, name string) (*Domain, error) {
 	now := time.Now().UTC()
 	name = strings.ToLower(name)
@@ -107,6 +135,51 @@ func (s *Store) GetDomainByName(ctx context.Context, name string) (*Domain, erro
 		return nil, mapErr(err)
 	}
 	return d, nil
+}
+
+func (s *Store) ListDomainsByTenant(ctx context.Context, tenantID string) ([]*Domain, error) {
+	q := s.rebind(`SELECT id, tenant_id, name, created_at FROM domains WHERE tenant_id = ? ORDER BY name`)
+	rows, err := s.db.QueryContext(ctx, q, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*Domain
+	for rows.Next() {
+		d := &Domain{}
+		if err := rows.Scan(&d.ID, &d.TenantID, &d.Name, &d.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) CountUsersByDomain(ctx context.Context, domainID string) (int, error) {
+	q := s.rebind(`SELECT COUNT(*) FROM users WHERE domain_id = ?`)
+	var n int
+	err := s.db.QueryRowContext(ctx, q, domainID).Scan(&n)
+	return n, err
+}
+
+func (s *Store) DeleteDomain(ctx context.Context, tenantID, domainID string) error {
+	n, err := s.CountUsersByDomain(ctx, domainID)
+	if err != nil {
+		return err
+	}
+	if n > 0 {
+		return fmt.Errorf("domain still has %d users", n)
+	}
+	q := s.rebind(`DELETE FROM domains WHERE id = ? AND tenant_id = ?`)
+	res, err := s.db.ExecContext(ctx, q, domainID, tenantID)
+	if err != nil {
+		return mapErr(err)
+	}
+	aff, _ := res.RowsAffected()
+	if aff == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (s *Store) CreateUser(ctx context.Context, u *User) (*User, error) {
