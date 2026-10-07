@@ -63,7 +63,7 @@ func (h *easHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "foldersync":
 		xmlOut, binOut, err = h.folderSync(r.Context(), u, dev, useWBXML)
 	case "sync":
-		xmlOut, binOut, err = h.syncMail(r.Context(), u, dev, body, useWBXML)
+		xmlOut, binOut, err = h.syncCollection(r.Context(), u, dev, body, useWBXML)
 	case "provision":
 		xmlOut, binOut, err = h.provision(r.Context(), u, dev, useWBXML)
 	case "ping":
@@ -73,7 +73,7 @@ func (h *easHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			xmlOut = `<?xml version="1.0" encoding="utf-8"?><Ping xmlns="Ping:"><Status>1</Status></Ping>`
 		}
 	case "getitemestimate":
-		xmlOut, binOut, err = h.itemEstimate(r.Context(), u, useWBXML)
+		xmlOut, binOut, err = h.itemEstimate(r.Context(), u, body, useWBXML)
 	default:
 		http.Error(w, "unsupported command", http.StatusBadRequest)
 		return
@@ -94,10 +94,21 @@ func (h *easHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *easHandler) folderSync(ctx context.Context, u *storage.User, dev *storage.FlowSyncDevice, wbxml bool) (string, []byte, error) {
+	_ = h.store.EnsureDAVDefaults(ctx, u.ID)
+
 	mbs, err := h.store.ListMailboxes(ctx, u.ID)
 	if err != nil {
 		return "", nil, err
 	}
+	cals, err := h.store.ListCalendars(ctx, u.ID)
+	if err != nil {
+		return "", nil, err
+	}
+	abs, err := h.store.ListAddressBooks(ctx, u.ID)
+	if err != nil {
+		return "", nil, err
+	}
+
 	key, err := h.store.GetFlowSyncSyncKey(ctx, dev.ID, "hierarchy")
 	if err != nil {
 		return "", nil, err
@@ -107,13 +118,28 @@ func (h *easHandler) folderSync(ctx context.Context, u *storage.User, dev *stora
 		return "", nil, err
 	}
 
-	folders := make([]folderChange, 0, len(mbs))
+	folders := make([]folderChange, 0, len(mbs)+len(cals)+len(abs))
 	for _, mb := range mbs {
 		folders = append(folders, folderChange{
-			ServerID:    mb.ID, // mailbox UUID
-			ParentID:    "0",
-			DisplayName: mb.Name,
-			Type:        folderType(mb.Name),
+			ServerID: mb.ID, ParentID: "0", DisplayName: mb.Name, Type: folderType(mb.Name),
+		})
+	}
+	for _, cal := range cals {
+		name := cal.DisplayName
+		if name == "" {
+			name = cal.Name
+		}
+		folders = append(folders, folderChange{
+			ServerID: cal.ID, ParentID: "0", DisplayName: name, Type: folderTypeCalendar,
+		})
+	}
+	for _, ab := range abs {
+		name := ab.DisplayName
+		if name == "" {
+			name = ab.Name
+		}
+		folders = append(folders, folderChange{
+			ServerID: ab.ID, ParentID: "0", DisplayName: name, Type: folderTypeContacts,
 		})
 	}
 	if wbxml {
@@ -139,7 +165,37 @@ func (h *easHandler) folderSync(ctx context.Context, u *storage.User, dev *stora
 	return b.String(), nil, nil
 }
 
-func (h *easHandler) syncMail(ctx context.Context, u *storage.User, dev *storage.FlowSyncDevice, reqBody []byte, wbxml bool) (string, []byte, error) {
+func (h *easHandler) provision(ctx context.Context, u *storage.User, dev *storage.FlowSyncDevice, wbxml bool) (string, []byte, error) {
+	_ = u
+	policy := storage.NewID() // UUID policy key
+	if err := h.store.SetFlowSyncPolicyKey(ctx, dev.ID, policy); err != nil {
+		return "", nil, err
+	}
+	p := defaultDevicePolicy()
+	if wbxml {
+		return "", encodeProvisionWBXML(policy, p), nil
+	}
+	var b strings.Builder
+	b.WriteString(`<?xml version="1.0" encoding="utf-8"?>`)
+	b.WriteString(`<Provision xmlns="Provision:"><Status>1</Status><Policies><Policy>`)
+	b.WriteString(`<PolicyType>MS-EAS-Provisioning-WBXML</PolicyType><Status>1</Status>`)
+	fmt.Fprintf(&b, `<PolicyKey>%s</PolicyKey>`, xmlEscape(policy))
+	b.WriteString(`<Data>`)
+	fmt.Fprintf(&b, `<DevicePasswordEnabled>%d</DevicePasswordEnabled>`, bool01(p.DevicePasswordEnabled))
+	fmt.Fprintf(&b, `<MinDevicePasswordLength>%d</MinDevicePasswordLength>`, p.MinDevicePasswordLength)
+	fmt.Fprintf(&b, `<MaxInactivityTimeDeviceLock>%d</MaxInactivityTimeDeviceLock>`, p.MaxInactivityTimeDeviceLock)
+	fmt.Fprintf(&b, `<MaxDevicePasswordFailedAttempts>%d</MaxDevicePasswordFailedAttempts>`, p.MaxDevicePasswordFailedAttempts)
+	fmt.Fprintf(&b, `<AllowSimpleDevicePassword>%d</AllowSimpleDevicePassword>`, bool01(p.AllowSimpleDevicePassword))
+	fmt.Fprintf(&b, `<AlphanumericDevicePasswordRequired>%d</AlphanumericDevicePasswordRequired>`, bool01(p.AlphanumericDevicePasswordRequired))
+	fmt.Fprintf(&b, `<RequireDeviceEncryption>%d</RequireDeviceEncryption>`, bool01(p.RequireDeviceEncryption))
+	fmt.Fprintf(&b, `<AllowStorageCard>%d</AllowStorageCard>`, bool01(p.AllowStorageCard))
+	fmt.Fprintf(&b, `<AllowCamera>%d</AllowCamera>`, bool01(p.AllowCamera))
+	b.WriteString(`</Data></Policy></Policies></Provision>`)
+	return b.String(), nil, nil
+}
+
+func (h *easHandler) itemEstimate(ctx context.Context, u *storage.User, reqBody []byte, wbxml bool) (string, []byte, error) {
+	_ = h.store.EnsureDAVDefaults(ctx, u.ID)
 	collectionID := extractCollectionID(reqBody)
 	if collectionID == "" {
 		mb, err := h.store.GetMailbox(ctx, u.ID, "INBOX")
@@ -148,95 +204,36 @@ func (h *easHandler) syncMail(ctx context.Context, u *storage.User, dev *storage
 		}
 		collectionID = mb.ID
 	}
-	mb, err := h.mailboxByID(ctx, u.ID, collectionID)
+	kind, err := h.resolveCollection(ctx, u.ID, collectionID)
 	if err != nil {
 		return "", nil, err
 	}
-	key, err := h.store.GetFlowSyncSyncKey(ctx, dev.ID, collectionID)
-	if err != nil {
-		return "", nil, err
-	}
-	next := nextSyncKey(key)
-	if err := h.store.SetFlowSyncSyncKey(ctx, dev.ID, collectionID, next); err != nil {
-		return "", nil, err
-	}
-
-	msgs, err := h.store.ListMessages(ctx, mb.ID)
-	if err != nil {
-		return "", nil, err
-	}
-	window := 25
-	if len(msgs) > window {
-		msgs = msgs[len(msgs)-window:]
-	}
-
-	adds := make([]syncAdd, 0, len(msgs))
-	for _, m := range msgs {
-		hdr := readMsgHeaders(h.ms, m.FilePath)
-		adds = append(adds, syncAdd{
-			ServerID: m.ID, // message UUID
-			Subject:  hdr.Subject,
-			From:     hdr.From,
-			Date:     m.InternalDate.UTC().Format("2006-01-02T15:04:05.000Z"),
-			Read:     storage.HasFlag(m.Flags, `\Seen`),
-		})
-	}
-	if wbxml {
-		return "", encodeSyncWBXML(next, collectionID, adds), nil
-	}
-
-	var b strings.Builder
-	b.WriteString(`<?xml version="1.0" encoding="utf-8"?>`)
-	b.WriteString(`<Sync xmlns="AirSync:"><Collections><Collection>`)
-	fmt.Fprintf(&b, `<SyncKey>%s</SyncKey>`, xmlEscape(next))
-	fmt.Fprintf(&b, `<CollectionId>%s</CollectionId>`, xmlEscape(collectionID))
-	b.WriteString(`<Status>1</Status><Commands>`)
-	for _, a := range adds {
-		b.WriteString(`<Add>`)
-		fmt.Fprintf(&b, `<ServerId>%s</ServerId>`, xmlEscape(a.ServerID))
-		b.WriteString(`<ApplicationData>`)
-		fmt.Fprintf(&b, `<Email:Subject xmlns:Email="Email:">%s</Email:Subject>`, xmlEscape(a.Subject))
-		if a.From != "" {
-			fmt.Fprintf(&b, `<Email:From xmlns:Email="Email:">%s</Email:From>`, xmlEscape(a.From))
+	var n int
+	switch kind {
+	case kindCalendar:
+		objs, err := h.store.ListCalendarObjects(ctx, collectionID)
+		if err != nil {
+			return "", nil, err
 		}
-		fmt.Fprintf(&b, `<Email:DateReceived xmlns:Email="Email:">%s</Email:DateReceived>`, xmlEscape(a.Date))
-		fmt.Fprintf(&b, `<Email:Read xmlns:Email="Email:">%d</Email:Read>`, bool01(a.Read))
-		b.WriteString(`</ApplicationData></Add>`)
-	}
-	b.WriteString(`</Commands></Collection></Collections></Sync>`)
-	return b.String(), nil, nil
-}
-
-func (h *easHandler) provision(ctx context.Context, u *storage.User, dev *storage.FlowSyncDevice, wbxml bool) (string, []byte, error) {
-	_ = u
-	policy := storage.NewID() // UUID policy key
-	if err := h.store.SetFlowSyncPolicyKey(ctx, dev.ID, policy); err != nil {
-		return "", nil, err
-	}
-	if wbxml {
-		return "", encodeProvisionWBXML(policy), nil
-	}
-	return `<?xml version="1.0" encoding="utf-8"?>` +
-		`<Provision xmlns="Provision:"><Status>1</Status>` +
-		`<Policies><Policy><PolicyType>MS-EAS-Provisioning-WBXML</PolicyType>` +
-		`<Status>1</Status><PolicyKey>` + xmlEscape(policy) + `</PolicyKey>` +
-		`</Policy></Policies></Provision>`, nil, nil
-}
-
-func (h *easHandler) itemEstimate(ctx context.Context, u *storage.User, wbxml bool) (string, []byte, error) {
-	mb, err := h.store.GetMailbox(ctx, u.ID, "INBOX")
-	if err != nil {
-		return "", nil, err
-	}
-	msgs, err := h.store.ListMessages(ctx, mb.ID)
-	if err != nil {
-		return "", nil, err
+		n = len(objs)
+	case kindContacts:
+		objs, err := h.store.ListAddressObjects(ctx, collectionID)
+		if err != nil {
+			return "", nil, err
+		}
+		n = len(objs)
+	default:
+		msgs, err := h.store.ListMessages(ctx, collectionID)
+		if err != nil {
+			return "", nil, err
+		}
+		n = len(msgs)
 	}
 	if wbxml {
-		return "", encodeItemEstimateWBXML(mb.ID, len(msgs)), nil
+		return "", encodeItemEstimateWBXML(collectionID, n), nil
 	}
 	return fmt.Sprintf(`<?xml version="1.0" encoding="utf-8"?><GetItemEstimate xmlns="GetItemEstimate:"><Response><Status>1</Status><Collection><CollectionId>%s</CollectionId><Estimate>%d</Estimate></Collection></Response></GetItemEstimate>`,
-		xmlEscape(mb.ID), len(msgs)), nil, nil
+		xmlEscape(collectionID), n), nil, nil
 }
 
 func (h *easHandler) mailboxByID(ctx context.Context, userID, id string) (*storage.Mailbox, error) {
@@ -315,4 +312,31 @@ func extractTag(body, local string) string {
 		return ""
 	}
 	return strings.TrimSpace(rest[:closeIdx])
+}
+
+// devicePolicy is the FlowSync remote policy applied during Provision.
+type devicePolicy struct {
+	DevicePasswordEnabled              bool
+	MinDevicePasswordLength            int
+	MaxInactivityTimeDeviceLock        int // seconds
+	MaxDevicePasswordFailedAttempts    int
+	AllowSimpleDevicePassword          bool
+	AlphanumericDevicePasswordRequired bool
+	RequireDeviceEncryption            bool
+	AllowStorageCard                   bool
+	AllowCamera                        bool
+}
+
+func defaultDevicePolicy() devicePolicy {
+	return devicePolicy{
+		DevicePasswordEnabled:              true,
+		MinDevicePasswordLength:            4,
+		MaxInactivityTimeDeviceLock:        900,
+		MaxDevicePasswordFailedAttempts:    10,
+		AllowSimpleDevicePassword:          true,
+		AlphanumericDevicePasswordRequired: false,
+		RequireDeviceEncryption:            false,
+		AllowStorageCard:                   true,
+		AllowCamera:                        true,
+	}
 }

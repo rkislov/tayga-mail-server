@@ -23,7 +23,7 @@ func TestEncodeFolderSyncWBXMLContainsUUID(t *testing.T) {
 
 func TestExtractCollectionIDFromWBXML(t *testing.T) {
 	coll := "11111111-2222-3333-4444-555555555555"
-	bin := encodeSyncWBXML("2", coll, nil)
+	bin := encodeSyncWBXML("2", coll, "Email", nil)
 	got := extractWBXMLTagString(bin, "CollectionId")
 	if got != coll {
 		t.Fatalf("got %q want %q", got, coll)
