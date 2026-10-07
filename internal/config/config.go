@@ -133,12 +133,17 @@ type FlowSyncConfig struct {
 type TLSConfig struct {
 	CertFile string `yaml:"cert_file"`
 	KeyFile  string `yaml:"key_file"`
+	// AutoGenerate writes a self-signed cert when cert/key files are missing (dev only).
+	AutoGenerate bool `yaml:"auto_generate"`
 }
 
 type HTTPConfig struct {
-	Listen    string   `yaml:"listen"`
-	PublicURL string   `yaml:"public_url"` // e.g. http://127.0.0.1:8080 for OIDC redirects
-	Admins    []string `yaml:"admins"`     // emails allowed to call /api/v1/admin/*
+	Listen    string `yaml:"listen"`     // plain HTTP (optional when TLSListen is set)
+	TLSListen string `yaml:"tls_listen"` // HTTPS (implicit TLS), e.g. ":8443"
+	// RedirectHTTPToTLS, when true and both Listen and TLSListen are set, redirects HTTP→HTTPS.
+	RedirectHTTPToTLS bool     `yaml:"redirect_http_to_tls"`
+	PublicURL         string   `yaml:"public_url"` // e.g. https://127.0.0.1:8443 for OIDC redirects
+	Admins            []string `yaml:"admins"`     // emails allowed to call /api/v1/admin/*
 }
 
 type SeedConfig struct {
@@ -182,16 +187,21 @@ func Default() *Config {
 		},
 		Mailstore: MailstoreConfig{Root: "./data/maildir"},
 		SMTP: SMTPConfig{
-			Submission:   ":1587",
-			MX:           ":1025",
-			SMTPS:        "",
+			Submission:   ":587",
+			MX:           ":25",
+			SMTPS:        ":465",
 			MaxSize:      25 << 20,
 			ReadTimeout:  60 * time.Second,
 			WriteTimeout: 60 * time.Second,
 		},
-		IMAP:        IMAPConfig{Listen: ":1143"},
-		POP3:        POP3Config{Listen: ":1110"},
-		ManageSieve: ManageSieveConfig{Listen: ":14190"},
+		IMAP:        IMAPConfig{Listen: ":143", IMAPS: ":993"},
+		POP3:        POP3Config{Listen: ":110", POP3S: ":995"},
+		ManageSieve: ManageSieveConfig{Listen: ":4190"},
+		TLS: TLSConfig{
+			CertFile:     "./data/certs/server.crt",
+			KeyFile:      "./data/certs/server.key",
+			AutoGenerate: true,
+		},
 		LDAP: LDAPConfig{
 			CacheTTL: 5 * time.Minute,
 			Domains:  map[string]LDAPDomainConfig{},
@@ -209,9 +219,11 @@ func Default() *Config {
 		},
 		FlowSync: FlowSyncConfig{Enabled: true},
 		HTTP: HTTPConfig{
-			Listen:    ":8080",
-			PublicURL: "http://127.0.0.1:8080",
-			Admins:    []string{"admin@example.com"},
+			Listen:            ":80",
+			TLSListen:         ":443",
+			RedirectHTTPToTLS: true,
+			PublicURL:         "https://127.0.0.1",
+			Admins:            []string{"admin@example.com"},
 		},
 		Log: LogConfig{Level: "info", Format: "json"},
 	}

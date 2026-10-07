@@ -17,6 +17,7 @@ import (
 	"github.com/tayga/tms/internal/config"
 	"github.com/tayga/tms/internal/sieve"
 	"github.com/tayga/tms/internal/storage"
+	"github.com/tayga/tms/internal/tlsutil"
 )
 
 // Server implements a minimal ManageSieve (RFC 5804) listener.
@@ -94,14 +95,7 @@ func (s *Server) Shutdown(context.Context) error {
 }
 
 func (s *Server) loadTLS() (*tls.Config, error) {
-	if !s.cfg.TLSEnabled() {
-		return nil, nil
-	}
-	cert, err := tls.LoadX509KeyPair(s.cfg.TLS.CertFile, s.cfg.TLS.KeyFile)
-	if err != nil {
-		return nil, err
-	}
-	return &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}, nil
+	return tlsutil.Load(s.cfg)
 }
 
 type session struct {
