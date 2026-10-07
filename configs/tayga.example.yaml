@@ -45,6 +45,10 @@ smtp:
     domain: example.com
     selector: tayga
     private_key_file: ./data/dkim/private.pem
+  rate_limit:
+    per_ip: 0      # e.g. 60
+    per_user: 0    # e.g. 30
+    window: 1m
 
 imap:
   listen: ":143"       # STARTTLS when tls certs are present

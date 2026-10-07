@@ -87,6 +87,12 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 		s.log.Info("smtp outbound enabled", "mode", mode, "dkim", dkimSig != nil)
 	}
+	rl := s.cfg.SMTP.RateLimit
+	ipLim := newRateLimiter(rl.PerIP, rl.Window)
+	userLim := newRateLimiter(rl.PerUser, rl.Window)
+	if ipLim != nil || userLim != nil {
+		s.log.Info("smtp rate limits", "per_ip", rl.PerIP, "per_user", rl.PerUser, "window", rl.Window.String())
+	}
 
 	for _, spec := range specs {
 		be := &backend{
@@ -101,6 +107,8 @@ func (s *Server) Start(ctx context.Context) error {
 			ha:          s.ha,
 			out:         out,
 			dkim:        dkimSig,
+			ipLimit:     ipLim,
+			userLimit:   userLim,
 		}
 		srv := gosmtp.NewServer(be)
 		srv.Domain = s.cfg.Server.Hostname
@@ -173,9 +181,11 @@ type backend struct {
 	hostname    string
 	maxSize     int64
 	requireAuth bool
-	ha   ha.Gate
-	out  outboundSender
-	dkim *dkimSigner
+	ha        ha.Gate
+	out       outboundSender
+	dkim      *dkimSigner
+	ipLimit   *rateLimiter
+	userLimit *rateLimiter
 }
 
 func (b *backend) NewSession(c *gosmtp.Conn) (gosmtp.Session, error) {
@@ -281,6 +291,12 @@ func (s *session) Data(r io.Reader) error {
 	if len(s.toLocal) == 0 && len(s.toRemote) == 0 {
 		return &gosmtp.SMTPError{Code: 554, EnhancedCode: gosmtp.EnhancedCode{5, 5, 0}, Message: "No valid recipients"}
 	}
+	if ip := stripPort(s.remote); s.backend.ipLimit != nil && !s.backend.ipLimit.Allow(ip) {
+		return &gosmtp.SMTPError{Code: 421, EnhancedCode: gosmtp.EnhancedCode{4, 7, 0}, Message: "Rate limit exceeded"}
+	}
+	if s.user != nil && s.backend.userLimit != nil && !s.backend.userLimit.Allow(s.user.Email) {
+		return &gosmtp.SMTPError{Code: 421, EnhancedCode: gosmtp.EnhancedCode{4, 7, 0}, Message: "User rate limit exceeded"}
+	}
 	data, err := io.ReadAll(io.LimitReader(r, s.backend.maxSize+1))
 	if err != nil {
 		return err
@@ -383,6 +399,14 @@ func normalizeAddr(addr string) string {
 	addr = strings.TrimSpace(addr)
 	addr = strings.Trim(addr, "<>")
 	return strings.ToLower(addr)
+}
+
+func stripPort(addr string) string {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return addr
+	}
+	return host
 }
 
 func extractMessageID(data []byte) string {
