@@ -42,6 +42,11 @@ type MailNotifier interface {
 	Notify(email, mailbox string)
 }
 
+// DeliveryNotifier is an optional richer hook with message subject/from.
+type DeliveryNotifier interface {
+	NotifyDelivery(email, mailbox, subject, from string)
+}
+
 // Engine runs active Sieve scripts for local delivery.
 type Engine struct {
 	Store     storage.Driver
@@ -142,7 +147,9 @@ func (e *Engine) FileInto(ctx context.Context, user *storage.User, folder string
 	inserted, err := e.Store.InsertMessage(ctx, msg)
 	if err == nil {
 		_ = mailsearch.Index(ctx, e.Store, inserted.ID, data)
-		if e.Notifier != nil {
+		if dn, ok := e.Notifier.(DeliveryNotifier); ok {
+			dn.NotifyDelivery(user.Email, folder, msg.Subject, msg.FromAddr)
+		} else if e.Notifier != nil {
 			e.Notifier.Notify(user.Email, folder)
 		}
 	}
