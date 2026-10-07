@@ -62,6 +62,9 @@ func (s *Server) handleAdminDomains(w http.ResponseWriter, r *http.Request) {
 		}
 		out := make([]map[string]any, 0, len(domains))
 		for _, d := range domains {
+			if !s.adminCanManageDomain(r, admin, d.ID) {
+				continue
+			}
 			n, _ := s.store.CountUsersByDomain(r.Context(), d.ID)
 			out = append(out, map[string]any{
 				"id": d.ID, "name": d.Name, "user_count": n, "created_at": d.CreatedAt,
@@ -70,6 +73,10 @@ func (s *Server) handleAdminDomains(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"domains": out})
 
 	case r.Method == http.MethodPost && path == "":
+		if !s.isGlobalAdminUser(admin) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "global admin required"})
+			return
+		}
 		var req struct {
 			Name string `json:"name"`
 		}
@@ -113,6 +120,10 @@ func (s *Server) handleAdminDomains(w http.ResponseWriter, r *http.Request) {
 		}
 		if target == nil || target.TenantID != admin.TenantID {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
+		if !s.isGlobalAdminUser(admin) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "global admin required"})
 			return
 		}
 		if err := s.store.DeleteDomain(r.Context(), admin.TenantID, target.ID); err != nil {

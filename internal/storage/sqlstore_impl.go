@@ -229,12 +229,12 @@ func (s *Store) CreateUser(ctx context.Context, u *User) (*User, error) {
 	u.Roles = JoinRoles(ParseRoles(u.Roles))
 	q := s.rebind(`INSERT INTO users(
 		id, tenant_id, domain_id, email, local_part, display_name, password_hash,
-		auth_source, quota_bytes, enabled, roles, created_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		auth_source, quota_bytes, enabled, roles, service_class_id, created_at
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 
 	args := []any{
 		u.ID, u.TenantID, u.DomainID, u.Email, u.LocalPart, u.DisplayName, u.PasswordHash,
-		u.AuthSource, u.QuotaBytes, enabled, u.Roles, now,
+		u.AuthSource, u.QuotaBytes, enabled, u.Roles, u.ServiceClassID, now,
 	}
 	if _, err := s.db.ExecContext(ctx, q, args...); err != nil {
 		return nil, mapErr(err)
@@ -247,12 +247,13 @@ func (s *Store) scanUser(row interface{ Scan(dest ...any) error }) (*User, error
 	var enabled any
 	err := row.Scan(
 		&u.ID, &u.TenantID, &u.DomainID, &u.Email, &u.LocalPart, &u.DisplayName,
-		&u.PasswordHash, &u.AuthSource, &u.QuotaBytes, &enabled, &u.Roles, &u.CreatedAt,
+		&u.PasswordHash, &u.AuthSource, &u.QuotaBytes, &enabled, &u.Roles, &u.ServiceClassID, &u.CreatedAt,
 	)
 	if err != nil {
 		return nil, mapErr(err)
 	}
 	u.Enabled = asBool(enabled)
+	u.Roles = JoinRoles(ParseRoles(u.Roles))
 	return u, nil
 }
 
@@ -271,7 +272,7 @@ func asBool(v any) bool {
 	}
 }
 
-const userCols = `id, tenant_id, domain_id, email, local_part, display_name, password_hash, auth_source, quota_bytes, enabled, roles, created_at`
+const userCols = `id, tenant_id, domain_id, email, local_part, display_name, password_hash, auth_source, quota_bytes, enabled, roles, COALESCE(service_class_id,''), created_at`
 
 func (s *Store) GetUserByEmail(ctx context.Context, email string) (*User, error) {
 	email = strings.ToLower(email)

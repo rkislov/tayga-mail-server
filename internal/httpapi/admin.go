@@ -19,32 +19,14 @@ type adminCreateUserRequest struct {
 	QuotaBytes  int64  `json:"quota_bytes"`
 }
 
-func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) (*storage.User, bool) {
-	au, err := s.userFromBearer(r)
-	if err != nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
-		return nil, false
-	}
-	su, err := s.store.GetUserByID(r.Context(), au.ID)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "user lookup failed"})
-		return nil, false
-	}
-	if !s.isAdminUser(su) {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "admin required"})
-		return nil, false
-	}
-	return su, true
-}
-
-// adminTenantUser loads a user in the admin's tenant or writes an error response.
+// adminTenantUser loads a user in the admin's tenant/domain scope or writes an error response.
 func (s *Server) adminTenantUser(w http.ResponseWriter, r *http.Request, admin *storage.User, id string) *storage.User {
 	target, err := s.store.GetUserByID(r.Context(), id)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return nil
 	}
-	if target.TenantID != admin.TenantID {
+	if !s.adminCanManageUser(r, admin, target) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 		return nil
 	}
@@ -68,15 +50,21 @@ func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 		}
 		out := make([]map[string]any, 0, len(users))
 		for _, u := range users {
+			if !s.adminCanManageUser(r, admin, u) {
+				continue
+			}
 			used, _ := s.store.SumMailboxBytes(r.Context(), u.ID)
 			out = append(out, map[string]any{
-				"id":           u.ID,
-				"email":        u.Email,
-				"display_name": u.DisplayName,
-				"quota_bytes":  u.QuotaBytes,
-				"used_bytes":   used,
-				"enabled":      u.Enabled,
-				"auth_source":  u.AuthSource,
+				"id":               u.ID,
+				"email":            u.Email,
+				"display_name":     u.DisplayName,
+				"quota_bytes":      u.QuotaBytes,
+				"used_bytes":       used,
+				"enabled":          u.Enabled,
+				"auth_source":      u.AuthSource,
+				"roles":            storage.ParseRoles(u.Roles),
+				"domain_id":        u.DomainID,
+				"service_class_id": u.ServiceClassID,
 			})
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"users": out})
@@ -106,6 +94,10 @@ func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 		}
 		if dom.TenantID != admin.TenantID {
 			writeJSON(w, http.StatusForbidden, map[string]string{"error": "domain outside tenant"})
+			return
+		}
+		if !s.adminCanManageDomain(r, admin, dom.ID) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "domain outside admin scope"})
 			return
 		}
 		hash, err := s.authn.Hasher.Hash(req.Password)
@@ -179,7 +171,10 @@ func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 
 	case path != "" && r.Method == http.MethodPatch:
 		var req struct {
-			Enabled *bool `json:"enabled"`
+			Enabled        *bool    `json:"enabled"`
+			Roles          []string `json:"roles"`
+			DomainIDs      []string `json:"domain_ids"`
+			ServiceClassID *string  `json:"service_class_id"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
@@ -190,6 +185,32 @@ func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.Enabled != nil {
 			if err := s.store.UpdateUserEnabled(r.Context(), path, *req.Enabled); err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+				return
+			}
+		}
+		if req.Roles != nil {
+			if !s.isGlobalAdminUser(admin) {
+				writeJSON(w, http.StatusForbidden, map[string]string{"error": "global admin required to set roles"})
+				return
+			}
+			if err := s.store.UpdateUserRoles(r.Context(), path, storage.JoinRoles(req.Roles)); err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+				return
+			}
+		}
+		if req.DomainIDs != nil {
+			if !s.isGlobalAdminUser(admin) {
+				writeJSON(w, http.StatusForbidden, map[string]string{"error": "global admin required"})
+				return
+			}
+			if err := s.store.SetDomainAdminDomains(r.Context(), path, req.DomainIDs); err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+				return
+			}
+		}
+		if req.ServiceClassID != nil {
+			if err := s.store.UpdateUserServiceClass(r.Context(), path, *req.ServiceClassID); err != nil {
 				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 				return
 			}

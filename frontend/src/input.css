@@ -937,13 +937,54 @@ html[data-theme="moscow"] {
     }
   }
 
+  .mobile-only {
+    display: none !important;
+  }
+
+  .field-check {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0.5rem 0 0.75rem;
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 0.9rem;
+  }
+
   @media (max-width: 900px) {
+    .mobile-only {
+      display: inline-flex !important;
+    }
+
     .mail-layout,
     .cal-layout,
     .contacts-layout,
     .files-layout {
       grid-template-columns: 1fr;
       min-height: auto;
+    }
+
+    /* Master-detail: one surface at a time */
+    #view-account.pane-mode-list .mail-layout > .mail-folders,
+    #view-account.pane-mode-list .cal-layout > .mail-folders,
+    #view-account.pane-mode-list .contacts-layout > .mail-folders {
+      display: none;
+    }
+
+    #view-account.pane-mode-list .mail-layout > .mail-read,
+    #view-account.pane-mode-list .cal-layout > .mail-read,
+    #view-account.pane-mode-list .contacts-layout > .mail-read,
+    #view-account.pane-mode-list .files-layout > .mail-read {
+      display: none;
+    }
+
+    #view-account.pane-mode-read .mail-layout > .mail-folders,
+    #view-account.pane-mode-read .cal-layout > .mail-folders,
+    #view-account.pane-mode-read .contacts-layout > .mail-folders,
+    #view-account.pane-mode-read .mail-layout > .mail-list,
+    #view-account.pane-mode-read .cal-layout > .mail-list,
+    #view-account.pane-mode-read .contacts-layout > .mail-list,
+    #view-account.pane-mode-read .files-layout > .mail-list {
+      display: none;
     }
 
     .msg-list-head,
