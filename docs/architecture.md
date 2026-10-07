@@ -115,6 +115,17 @@ Embedded at `/` (`internal/frontend/dist`): sign-in, TOTP + WebAuthn MFA, passke
 | `GET /api/v1/admin/tls` | active certificate status |
 | `PUT /api/v1/admin/tls` | install PEM certificate + private key (hot reload) |
 | `POST /api/v1/admin/tls` | generate self-signed cert (`hosts`, `days`) |
+| `GET /api/v1/admin/status` | monitoring snapshot (tenant + server counters) |
+| `GET /api/v1/admin/backup?include_mail=1` | download tenant backup `.tar.gz` |
+
+Prometheus: `/metrics` includes `tayga_*` gauges (users, messages, bytes, …).
+
+CLI backup:
+
+```bash
+./tayga-mail backup -config configs/tayga.example.yaml -out backup.tar.gz
+./tayga-mail backup -config configs/tayga.example.yaml -out backup.tar.gz -tenant <uuid> -include-mail=false
+```
 
 Admins: `http.admins` email list (default `admin@example.com`).
 
@@ -126,4 +137,4 @@ Admins: `http.admins` email list (default `admin@example.com`).
 
 ## Next milestones
 
-Tenant domain admin + richer Autodiscover (POX/JSON/Mozilla). Next: monitoring dashboards, backup tooling.
+Monitoring dashboard + Prometheus `tayga_*` metrics + tenant backup (UI/API/CLI). Next: restore tooling, HA notes.

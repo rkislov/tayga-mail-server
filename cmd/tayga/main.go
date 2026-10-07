@@ -11,12 +11,14 @@ import (
 	"time"
 
 	"github.com/tayga/tms/internal/auth"
+	"github.com/tayga/tms/internal/backup"
 	"github.com/tayga/tms/internal/config"
 	"github.com/tayga/tms/internal/httpapi"
 	imapserver "github.com/tayga/tms/internal/imap"
 	"github.com/tayga/tms/internal/logging"
 	"github.com/tayga/tms/internal/mailstore"
 	"github.com/tayga/tms/internal/managesieve"
+	"github.com/tayga/tms/internal/metrics"
 	"github.com/tayga/tms/internal/pop3"
 	"github.com/tayga/tms/internal/seed"
 	"github.com/tayga/tms/internal/sieve"
@@ -26,6 +28,14 @@ import (
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "backup" {
+		if err := runBackup(os.Args[2:]); err != nil {
+			fmt.Fprintf(os.Stderr, "tayga backup: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	cfgPath := flag.String("config", "configs/tayga.example.yaml", "path to YAML config")
 	flag.Parse()
 
@@ -33,6 +43,46 @@ func main() {
 		fmt.Fprintf(os.Stderr, "tayga: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func runBackup(args []string) error {
+	fs := flag.NewFlagSet("backup", flag.ExitOnError)
+	cfgPath := fs.String("config", "configs/tayga.example.yaml", "path to YAML config")
+	out := fs.String("out", "", "output .tar.gz path (required)")
+	tenant := fs.String("tenant", "", "limit to tenant UUID (default: all)")
+	includeMail := fs.Bool("include-mail", true, "include maildir files")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *out == "" {
+		return fmt.Errorf("-out is required")
+	}
+	cfg, err := config.Load(*cfgPath)
+	if err != nil {
+		return err
+	}
+	ctx := context.Background()
+	store, err := storage.Open(ctx, cfg.Storage)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+
+	f, err := os.Create(*out)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	opts := backup.Options{
+		TenantID:    *tenant,
+		IncludeMail: *includeMail,
+		MailRoot:    cfg.Mailstore.Root,
+	}
+	if err := backup.WriteTarGz(ctx, store, opts, f); err != nil {
+		return err
+	}
+	fmt.Printf("wrote %s\n", *out)
+	return nil
 }
 
 func run(cfgPath string) error {
@@ -60,6 +110,8 @@ func run(cfgPath string) error {
 		return err
 	}
 	defer store.Close()
+
+	metrics.Register(store)
 
 	authn := auth.NewLayer(store, cfg.LDAP, cfg.MFA, cfg.OIDC)
 	ms := mailstore.New(cfg.Mailstore.Root)

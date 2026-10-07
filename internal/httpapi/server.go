@@ -65,6 +65,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/admin/domains", s.handleAdminDomains)
 	mux.HandleFunc("/api/v1/admin/domains/", s.handleAdminDomains)
 	mux.HandleFunc("/api/v1/admin/tls", s.handleAdminTLS)
+	mux.HandleFunc("/api/v1/admin/status", s.handleAdminStatus)
+	mux.HandleFunc("/api/v1/admin/backup", s.handleAdminBackup)
 
 	dav.Mount(mux, s.store, s.authn)
 	flowsync.Mount(mux, s.cfg, s.log, s.store, s.authn, s.ms)
