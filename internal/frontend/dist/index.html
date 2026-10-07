@@ -15,7 +15,13 @@
       <section id="view-login" class="auth-card panel">
         <p class="brand">Tayga <span>Mail</span></p>
         <h2 class="heading" data-i18n="login_title">Вход</h2>
-        <p class="lede auth-lede" data-i18n="login_lede">Почта, календарь, контакты и файлы.</p>
+        <p class="lede auth-lede" data-i18n="login_lede">Почта, календарь, чат, контакты и файлы в одном окне.</p>
+        <div class="auth-promo" aria-hidden="true">
+          <span class="auth-promo-shot" style="background-image:url('/assets/taiga-forest.jpg')"></span>
+          <span class="auth-promo-shot" style="background-image:url('/assets/moscow-city.jpg')"></span>
+          <span class="auth-promo-shot" style="background-image:url('/assets/street-art.jpg')"></span>
+          <span class="auth-promo-shot" style="background-image:url('/assets/teriberka.jpg')"></span>
+        </div>
         <form id="form-login">
           <label class="field-label" for="email" data-i18n="email">Email</label>
           <input class="field-input" id="email" type="email" autocomplete="username" required placeholder="admin@example.com" />
@@ -64,26 +70,35 @@
 
     <div class="nav-backdrop" id="nav-backdrop" hidden></div>
     <aside class="app-nav" id="app-nav" aria-hidden="true">
+      <div class="nav-user" id="nav-user">
+        <span class="nav-avatar" id="nav-avatar" aria-hidden="true">T</span>
+        <div class="nav-user-meta">
+          <strong class="nav-user-email" id="nav-user-email">—</strong>
+          <span class="nav-user-role" id="nav-user-role" data-i18n="role_user">Пользователь</span>
+        </div>
+      </div>
       <nav class="nav-list">
-        <button type="button" class="nav-btn is-active" data-app="mail" data-i18n="nav_mail">Почта</button>
-        <button type="button" class="nav-btn" data-app="calendar" data-i18n="nav_calendar">Календарь</button>
-        <button type="button" class="nav-btn" data-app="contacts" data-i18n="nav_contacts">Контакты</button>
-        <button type="button" class="nav-btn" data-app="files" data-i18n="nav_files">Файлы</button>
+        <p class="nav-group" data-i18n="nav_apps">Приложения</p>
+        <button type="button" class="nav-btn is-active" data-app="mail"><span class="nav-ico" data-ico="mail" aria-hidden="true"></span><span data-i18n="nav_mail">Почта</span></button>
+        <button type="button" class="nav-btn" data-app="calendar"><span class="nav-ico" data-ico="cal" aria-hidden="true"></span><span data-i18n="nav_calendar">Календарь</span></button>
+        <button type="button" class="nav-btn" data-app="contacts"><span class="nav-ico" data-ico="people" aria-hidden="true"></span><span data-i18n="nav_contacts">Контакты</span></button>
+        <button type="button" class="nav-btn" data-app="files"><span class="nav-ico" data-ico="files" aria-hidden="true"></span><span data-i18n="nav_files">Файлы</span></button>
+        <button type="button" class="nav-btn" data-app="chat"><span class="nav-ico" data-ico="chat" aria-hidden="true"></span><span data-i18n="nav_chat">Чат</span></button>
         <p class="nav-group" data-i18n="nav_settings">Настройки</p>
-        <button type="button" class="nav-btn" data-app="profile" data-i18n="nav_profile">Профиль</button>
-        <button type="button" class="nav-btn" data-app="security" data-i18n="nav_security">Безопасность</button>
-        <button type="button" class="nav-btn" data-app="appearance" data-i18n="nav_appearance">Внешний вид</button>
-        <button type="button" class="nav-btn" data-app="filters" data-i18n="nav_filters">Фильтры</button>
-        <button type="button" class="nav-btn" data-app="language" data-i18n="nav_language">Язык</button>
+        <button type="button" class="nav-btn" data-app="profile"><span class="nav-ico" data-ico="user" aria-hidden="true"></span><span data-i18n="nav_profile">Профиль</span></button>
+        <button type="button" class="nav-btn" data-app="security"><span class="nav-ico" data-ico="lock" aria-hidden="true"></span><span data-i18n="nav_security">Безопасность</span></button>
+        <button type="button" class="nav-btn" data-app="appearance"><span class="nav-ico" data-ico="theme" aria-hidden="true"></span><span data-i18n="nav_appearance">Внешний вид</span></button>
+        <button type="button" class="nav-btn" data-app="filters"><span class="nav-ico" data-ico="filter" aria-hidden="true"></span><span data-i18n="nav_filters">Фильтры</span></button>
+        <button type="button" class="nav-btn" data-app="language"><span class="nav-ico" data-ico="lang" aria-hidden="true"></span><span data-i18n="nav_language">Язык</span></button>
         <div id="nav-admin" class="hidden">
           <p class="nav-group" data-i18n="nav_admin">Админ</p>
-          <button type="button" class="nav-btn" data-app="monitor" data-i18n="nav_monitor">Мониторинг</button>
-          <button type="button" class="nav-btn" data-app="tenants" data-i18n="nav_tenants">Домены и пользователи</button>
-          <button type="button" class="nav-btn" data-app="tls" data-i18n="nav_tls">TLS</button>
-          <button type="button" class="nav-btn" data-app="server" data-i18n="nav_server">Сервер</button>
+          <button type="button" class="nav-btn" data-app="monitor"><span class="nav-ico" data-ico="chart" aria-hidden="true"></span><span data-i18n="nav_monitor">Мониторинг</span></button>
+          <button type="button" class="nav-btn" data-app="tenants"><span class="nav-ico" data-ico="domains" aria-hidden="true"></span><span data-i18n="nav_tenants">Домены и пользователи</span></button>
+          <button type="button" class="nav-btn" data-app="tls"><span class="nav-ico" data-ico="tls" aria-hidden="true"></span><span data-i18n="nav_tls">УЦ</span></button>
+          <button type="button" class="nav-btn" data-app="server"><span class="nav-ico" data-ico="server" aria-hidden="true"></span><span data-i18n="nav_server">Сервер</span></button>
         </div>
       </nav>
-      <button type="button" class="btn-secondary w-full" id="btn-logout" data-i18n="logout">Выйти</button>
+      <button type="button" class="btn-secondary w-full nav-logout btn-ico" id="btn-logout" data-i18n-title="logout" title="Выйти" aria-label="Выйти"><span class="ico" data-ico="logout" aria-hidden="true"></span></button>
     </aside>
 
     <div class="app-main">
@@ -92,14 +107,17 @@
         <div class="mail-folders panel-pane">
           <div class="pane-head">
             <strong data-i18n="folders">Папки</strong>
-            <button type="button" class="btn-spray btn-sm" id="btn-compose" data-i18n="compose">Написать</button>
+            <button type="button" class="btn-spray btn-sm btn-ico" id="btn-compose" data-i18n-title="compose" title="Написать" aria-label="Написать"><span class="ico" data-ico="compose" aria-hidden="true"></span></button>
           </div>
           <ul id="mail-folder-list" class="folder-list"></ul>
         </div>
         <div class="mail-list panel-pane mail-list-pane">
           <div class="pane-head mail-list-toolbar">
             <strong id="mail-folder-title">INBOX</strong>
-            <button type="button" class="btn-secondary btn-sm" id="btn-mail-refresh" data-i18n="refresh">Обновить</button>
+            <div class="mail-search-wrap">
+              <input type="search" class="field-input field-input-sm" id="mail-search" data-i18n-placeholder="mail_search_placeholder" placeholder="Поиск…" autocomplete="off" />
+            </div>
+            <button type="button" class="btn-secondary btn-sm btn-ico" id="btn-mail-refresh" data-i18n-title="refresh" title="Обновить" aria-label="Обновить"><span class="ico" data-ico="refresh" aria-hidden="true"></span></button>
           </div>
           <div class="msg-list-head" aria-hidden="true">
             <span data-i18n="col_from">От</span>
@@ -112,9 +130,10 @@
           <div id="mail-empty" class="empty-state" data-i18n="select_message">Выберите письмо</div>
           <div id="mail-reader" class="hidden">
             <div class="reader-actions">
-              <button type="button" class="btn-secondary btn-sm mobile-only" data-pane-back data-i18n="back_list">К списку</button>
-              <button type="button" class="btn-secondary btn-sm" id="btn-mail-reply" data-i18n="reply">Ответить</button>
-              <button type="button" class="btn-secondary btn-sm" id="btn-mail-delete" data-i18n="delete">Удалить</button>
+              <button type="button" class="btn-secondary btn-sm btn-ico mobile-only" data-pane-back data-i18n-title="back_list" title="К списку" aria-label="К списку"><span class="ico" data-ico="back" aria-hidden="true"></span></button>
+              <button type="button" class="btn-secondary btn-sm btn-ico" id="btn-mail-reply" data-i18n-title="reply" title="Ответить" aria-label="Ответить"><span class="ico" data-ico="reply" aria-hidden="true"></span></button>
+              <button type="button" class="btn-secondary btn-sm btn-ico" id="btn-mail-archive" data-i18n-title="archive" title="Архив" aria-label="Архив"><span class="ico" data-ico="archive" aria-hidden="true"></span></button>
+              <button type="button" class="btn-secondary btn-sm btn-ico" id="btn-mail-delete" data-i18n-title="delete" title="Удалить" aria-label="Удалить"><span class="ico" data-ico="delete" aria-hidden="true"></span></button>
             </div>
             <h2 class="heading reader-subject" id="mail-subject"></h2>
             <dl class="reader-headers" id="mail-headers">
@@ -139,8 +158,8 @@
           <label class="field-label" data-i18n="attach_file">Вложение (крупное → ссылка)</label>
           <input class="field-input" type="file" id="compose-attach" />
           <div class="actions">
-            <button type="button" class="btn-spray" id="btn-compose-send" data-i18n="send">Отправить</button>
-            <button type="button" class="btn-secondary" id="btn-compose-close" data-i18n="back">Назад</button>
+            <button type="button" class="btn-spray btn-ico" id="btn-compose-send" data-i18n-title="send" title="Отправить" aria-label="Отправить"><span class="ico" data-ico="send" aria-hidden="true"></span></button>
+            <button type="button" class="btn-secondary btn-ico" id="btn-compose-close" data-i18n-title="back" title="Назад" aria-label="Назад"><span class="ico" data-ico="back" aria-hidden="true"></span></button>
           </div>
           <p id="compose-msg" class="msg"></p>
         </div>
@@ -151,14 +170,14 @@
         <div class="mail-folders panel-pane">
           <div class="pane-head">
             <strong data-i18n="calendars">Календари</strong>
-            <button type="button" class="btn-spray btn-sm" id="btn-cal-new" data-i18n="new_event">Событие</button>
+            <button type="button" class="btn-spray btn-sm btn-ico" id="btn-cal-new" data-i18n-title="new_event" title="Событие" aria-label="Событие"><span class="ico" data-ico="event" aria-hidden="true"></span></button>
           </div>
           <ul id="cal-folder-list" class="folder-list"></ul>
         </div>
         <div class="mail-list panel-pane mail-list-pane">
           <div class="pane-head mail-list-toolbar">
             <strong id="cal-folder-title" data-i18n="calendar_title">Календарь</strong>
-            <button type="button" class="btn-secondary btn-sm" id="btn-cal-refresh" data-i18n="refresh">Обновить</button>
+            <button type="button" class="btn-secondary btn-sm btn-ico" id="btn-cal-refresh" data-i18n-title="refresh" title="Обновить" aria-label="Обновить"><span class="ico" data-ico="refresh" aria-hidden="true"></span></button>
           </div>
           <div class="msg-list-head cal-list-head" aria-hidden="true">
             <span data-i18n="col_summary">Тема</span>
@@ -171,8 +190,8 @@
           <div id="cal-empty" class="empty-state" data-i18n="select_event">Выберите событие</div>
           <div id="cal-reader" class="hidden">
             <div class="reader-actions">
-              <button type="button" class="btn-secondary btn-sm mobile-only" data-pane-back data-i18n="back_list">К списку</button>
-              <button type="button" class="btn-secondary btn-sm" id="btn-cal-delete" data-i18n="delete">Удалить</button>
+              <button type="button" class="btn-secondary btn-sm btn-ico mobile-only" data-pane-back data-i18n-title="back_list" title="К списку" aria-label="К списку"><span class="ico" data-ico="back" aria-hidden="true"></span></button>
+              <button type="button" class="btn-secondary btn-sm btn-ico" id="btn-cal-delete" data-i18n-title="delete" title="Удалить" aria-label="Удалить"><span class="ico" data-ico="delete" aria-hidden="true"></span></button>
             </div>
             <h2 class="heading reader-subject" id="cal-subject"></h2>
             <dl class="reader-headers" id="cal-headers">
@@ -200,8 +219,8 @@
             <label class="field-label" data-i18n="col_description">Описание</label>
             <textarea class="field-input-mono" id="cal-description" rows="4"></textarea>
             <div class="actions">
-              <button type="submit" class="btn-spray" data-i18n="save">Сохранить</button>
-              <button type="button" class="btn-secondary" id="btn-cal-close" data-i18n="back">Назад</button>
+              <button type="submit" class="btn-spray btn-ico" data-i18n-title="save" title="Сохранить" aria-label="Сохранить"><span class="ico" data-ico="save" aria-hidden="true"></span></button>
+              <button type="button" class="btn-secondary btn-ico" id="btn-cal-close" data-i18n-title="back" title="Назад" aria-label="Назад"><span class="ico" data-ico="back" aria-hidden="true"></span></button>
             </div>
             <p id="cal-msg" class="msg"></p>
           </form>
@@ -213,14 +232,14 @@
         <div class="mail-folders panel-pane">
           <div class="pane-head">
             <strong data-i18n="address_books">Книги</strong>
-            <button type="button" class="btn-spray btn-sm" id="btn-contact-new" data-i18n="new_contact">Контакт</button>
+            <button type="button" class="btn-spray btn-sm btn-ico" id="btn-contact-new" data-i18n-title="new_contact" title="Контакт" aria-label="Контакт"><span class="ico" data-ico="contact" aria-hidden="true"></span></button>
           </div>
           <ul id="contact-book-list" class="folder-list"></ul>
         </div>
         <div class="mail-list panel-pane mail-list-pane">
           <div class="pane-head mail-list-toolbar">
             <strong id="contact-book-title" data-i18n="contacts_title">Контакты</strong>
-            <button type="button" class="btn-secondary btn-sm" id="btn-contacts-refresh" data-i18n="refresh">Обновить</button>
+            <button type="button" class="btn-secondary btn-sm btn-ico" id="btn-contacts-refresh" data-i18n-title="refresh" title="Обновить" aria-label="Обновить"><span class="ico" data-ico="refresh" aria-hidden="true"></span></button>
           </div>
           <div class="msg-list-head contact-list-head" aria-hidden="true">
             <span data-i18n="col_name">Имя</span>
@@ -233,8 +252,8 @@
           <div id="contact-empty" class="empty-state" data-i18n="select_contact">Выберите контакт</div>
           <div id="contact-reader" class="hidden">
             <div class="reader-actions">
-              <button type="button" class="btn-secondary btn-sm mobile-only" data-pane-back data-i18n="back_list">К списку</button>
-              <button type="button" class="btn-secondary btn-sm" id="btn-contact-delete" data-i18n="delete">Удалить</button>
+              <button type="button" class="btn-secondary btn-sm btn-ico mobile-only" data-pane-back data-i18n-title="back_list" title="К списку" aria-label="К списку"><span class="ico" data-ico="back" aria-hidden="true"></span></button>
+              <button type="button" class="btn-secondary btn-sm btn-ico" id="btn-contact-delete" data-i18n-title="delete" title="Удалить" aria-label="Удалить"><span class="ico" data-ico="delete" aria-hidden="true"></span></button>
             </div>
             <h2 class="heading reader-subject" id="contact-subject"></h2>
             <dl class="reader-headers">
@@ -262,8 +281,8 @@
             <label class="field-label" data-i18n="col_note">Заметка</label>
             <textarea class="field-input-mono" id="contact-note" rows="3"></textarea>
             <div class="actions">
-              <button type="submit" class="btn-spray" data-i18n="save">Сохранить</button>
-              <button type="button" class="btn-secondary" id="btn-contact-close" data-i18n="back">Назад</button>
+              <button type="submit" class="btn-spray btn-ico" data-i18n-title="save" title="Сохранить" aria-label="Сохранить"><span class="ico" data-ico="save" aria-hidden="true"></span></button>
+              <button type="button" class="btn-secondary btn-ico" id="btn-contact-close" data-i18n-title="back" title="Назад" aria-label="Назад"><span class="ico" data-ico="back" aria-hidden="true"></span></button>
             </div>
             <p id="contact-msg" class="msg"></p>
           </form>
@@ -279,10 +298,10 @@
               <span class="meta" id="files-path">/</span>
             </div>
             <div class="toolbar-actions">
-              <button type="button" class="btn-secondary btn-sm" id="btn-files-refresh" data-i18n="refresh">Обновить</button>
-              <button type="button" class="btn-secondary btn-sm" id="btn-files-mkdir" data-i18n="mkdir">Папка</button>
-              <label class="btn-spray btn-sm btn-file">
-                <span data-i18n="upload">Загрузить</span>
+              <button type="button" class="btn-secondary btn-sm btn-ico" id="btn-files-refresh" data-i18n-title="refresh" title="Обновить" aria-label="Обновить"><span class="ico" data-ico="refresh" aria-hidden="true"></span></button>
+              <button type="button" class="btn-secondary btn-sm btn-ico" id="btn-files-mkdir" data-i18n-title="mkdir" title="Папка" aria-label="Папка"><span class="ico" data-ico="mkdir" aria-hidden="true"></span></button>
+              <label class="btn-spray btn-sm btn-file btn-ico" data-i18n-title="upload" title="Загрузить" aria-label="Загрузить">
+                <span class="ico" data-ico="upload" aria-hidden="true"></span>
                 <input type="file" id="files-upload" />
               </label>
             </div>
@@ -299,10 +318,10 @@
           <div id="files-empty" class="empty-state" data-i18n="select_file">Выберите файл</div>
           <div id="files-reader" class="hidden">
             <div class="reader-actions">
-              <button type="button" class="btn-secondary btn-sm mobile-only" data-pane-back data-i18n="back_list">К списку</button>
-              <button type="button" class="btn-spray btn-sm" id="btn-files-download" data-i18n="download">Скачать</button>
-              <button type="button" class="btn-secondary btn-sm" id="btn-files-open" data-i18n="open">Открыть</button>
-              <button type="button" class="btn-secondary btn-sm" id="btn-files-delete" data-i18n="delete">Удалить</button>
+              <button type="button" class="btn-secondary btn-sm btn-ico mobile-only" data-pane-back data-i18n-title="back_list" title="К списку" aria-label="К списку"><span class="ico" data-ico="back" aria-hidden="true"></span></button>
+              <button type="button" class="btn-spray btn-sm btn-ico" id="btn-files-download" data-i18n-title="download" title="Скачать" aria-label="Скачать"><span class="ico" data-ico="download" aria-hidden="true"></span></button>
+              <button type="button" class="btn-secondary btn-sm btn-ico" id="btn-files-open" data-i18n-title="open" title="Открыть" aria-label="Открыть"><span class="ico" data-ico="open" aria-hidden="true"></span></button>
+              <button type="button" class="btn-secondary btn-sm btn-ico" id="btn-files-delete" data-i18n-title="delete" title="Удалить" aria-label="Удалить"><span class="ico" data-ico="delete" aria-hidden="true"></span></button>
             </div>
             <h2 class="heading reader-subject" id="files-subject"></h2>
             <dl class="reader-headers">
@@ -310,6 +329,47 @@
               <div><dt data-i18n="col_size">Размер</dt><dd id="files-read-size"></dd></div>
               <div><dt data-i18n="col_type">Тип</dt><dd id="files-read-type"></dd></div>
             </dl>
+          </div>
+        </div>
+      </div>
+
+      <!-- CHAT -->
+      <div id="app-chat" class="app-page hidden mail-layout chat-layout">
+        <div class="mail-list panel-pane mail-list-pane chat-roster-pane">
+          <div class="pane-head mail-list-toolbar">
+            <strong data-i18n="chat_title">Чат</strong>
+            <button type="button" class="btn-spray btn-sm btn-ico" id="btn-chat-new" data-i18n-title="chat_new" title="Диалог" aria-label="Диалог"><span class="ico" data-ico="chat" aria-hidden="true"></span></button>
+          </div>
+          <ul id="chat-roster" class="msg-list"></ul>
+          <p id="chat-roster-msg" class="msg files-msg"></p>
+        </div>
+        <div class="mail-read panel-pane chat-thread-pane">
+          <div id="chat-empty" class="empty-state" data-i18n="chat_select">Выберите диалог</div>
+          <div id="chat-thread" class="hidden chat-thread">
+            <div class="reader-actions chat-thread-head">
+              <button type="button" class="btn-secondary btn-sm btn-ico mobile-only" data-pane-back data-i18n-title="back_list" title="К списку" aria-label="К списку"><span class="ico" data-ico="back" aria-hidden="true"></span></button>
+              <h2 class="heading reader-subject" id="chat-peer"></h2>
+            </div>
+            <div class="chat-messages" id="chat-messages"></div>
+            <form id="form-chat-send" class="chat-compose">
+              <input class="field-input" id="chat-body" data-i18n-placeholder="chat_placeholder" placeholder="Сообщение…" autocomplete="off" />
+              <button type="submit" class="btn-spray btn-ico" data-i18n-title="send" title="Отправить" aria-label="Отправить"><span class="ico" data-ico="send" aria-hidden="true"></span></button>
+            </form>
+            <p id="chat-msg" class="msg"></p>
+          </div>
+        </div>
+      </div>
+
+      <div id="chat-backdrop" class="compose-backdrop hidden">
+        <div class="compose-panel" role="dialog" aria-modal="true">
+          <h3 class="heading" data-i18n="chat_new">Диалог</h3>
+          <label class="field-label" data-i18n="chat_peer_jid">Email / JID</label>
+          <input class="field-input" id="chat-new-jid" type="email" placeholder="user@example.com" />
+          <label class="field-label" data-i18n="col_name">Имя</label>
+          <input class="field-input" id="chat-new-name" />
+          <div class="actions">
+            <button type="button" class="btn-spray btn-ico" id="btn-chat-start" data-i18n-title="chat_start" title="Открыть" aria-label="Открыть"><span class="ico" data-ico="open" aria-hidden="true"></span></button>
+            <button type="button" class="btn-secondary btn-ico" id="btn-chat-cancel" data-i18n-title="back" title="Назад" aria-label="Назад"><span class="ico" data-ico="back" aria-hidden="true"></span></button>
           </div>
         </div>
       </div>
@@ -356,11 +416,12 @@
       </div>
 
       <!-- APPEARANCE -->
-      <div id="app-appearance" class="app-page hidden panel-page">
+      <div id="app-appearance" class="app-page hidden panel-page panel-page-wide">
         <div class="card" id="card-appearance">
           <h3 class="heading" data-i18n="appearance_title">Внешний вид</h3>
-          <label class="field-label" for="theme-select" data-i18n="theme">Тема</label>
-          <select class="field-input" id="theme-select">
+          <p class="meta" data-i18n="appearance_hint">Выберите фон рабочего стола — превью обновляется сразу.</p>
+          <label class="field-label sr-only" for="theme-select" data-i18n="theme">Тема</label>
+          <select class="field-input sr-only" id="theme-select" tabindex="-1" aria-hidden="true">
             <option value="taiga">Тайга</option>
             <option value="cosmos">Космос</option>
             <option value="city">Город</option>
@@ -370,6 +431,7 @@
             <option value="street">Стрит-арт</option>
             <option value="teriberka">Териберка</option>
           </select>
+          <div class="theme-gallery" id="theme-gallery" role="listbox" aria-label="Themes"></div>
           <div class="theme-preview" id="theme-preview" aria-hidden="true"></div>
         </div>
       </div>
@@ -512,23 +574,66 @@ keep;</textarea>
         </div>
       </div>
 
-      <!-- ADMIN TLS -->
-      <div id="app-tls" class="app-page hidden panel-page">
+      <!-- ADMIN CA / TLS -->
+      <div id="app-tls" class="app-page hidden panel-page panel-page-wide">
         <div class="card" id="card-tls">
-          <h3 class="heading">TLS</h3>
+          <h3 class="heading" data-i18n="ca_title">Удостоверяющий центр</h3>
+          <p class="meta" data-i18n="ca_lede">Каталог сертификатов: самоподписанные, коммерческие PEM и Let’s Encrypt (ACME).</p>
           <p class="meta" id="tls-status">Loading…</p>
-          <label class="field-label" for="tls-cert">Certificate PEM</label>
-          <textarea class="field-input-mono" id="tls-cert" spellcheck="false"></textarea>
-          <label class="field-label" for="tls-key">Private key PEM</label>
-          <textarea class="field-input-mono" id="tls-key" spellcheck="false"></textarea>
-          <label class="field-label" for="tls-hosts">Self-signed hosts</label>
-          <input class="field-input" id="tls-hosts" type="text" />
           <div class="actions">
-            <button type="button" class="btn-spray" id="btn-tls-upload">Install PEM</button>
-            <button type="button" class="btn-secondary" id="btn-tls-generate">Generate self-signed</button>
-            <button type="button" class="btn-secondary" id="btn-tls-refresh">Refresh</button>
+            <button type="button" class="btn-secondary btn-sm" id="btn-tls-refresh" data-i18n="refresh">Обновить</button>
           </div>
           <p id="tls-msg" class="msg"></p>
+
+          <h4 class="heading" style="font-size:1rem;margin-top:1rem" data-i18n="ca_list">Сертификаты</h4>
+          <ul class="creds" id="ca-cert-list"></ul>
+
+          <div class="ca-panels">
+            <section class="ca-panel">
+              <h4 class="heading" style="font-size:1rem" data-i18n="ca_self_signed">Самоподписанный</h4>
+              <label class="field-label" for="ca-ss-name" data-i18n="ca_name">Имя</label>
+              <input class="field-input" id="ca-ss-name" type="text" />
+              <label class="field-label" for="ca-ss-hosts" data-i18n="ca_hosts">Хосты / домены</label>
+              <input class="field-input" id="ca-ss-hosts" type="text" placeholder="mail.example.com, localhost" />
+              <label class="field-label" for="ca-ss-days" data-i18n="ca_days">Срок (дней)</label>
+              <input class="field-input" id="ca-ss-days" type="number" value="365" min="1" max="3650" />
+              <label class="field-check"><input type="checkbox" id="ca-ss-activate" checked /> <span data-i18n="ca_activate">Сделать активным</span></label>
+              <div class="actions">
+                <button type="button" class="btn-spray" id="btn-ca-ss" data-i18n="ca_issue">Выпустить</button>
+              </div>
+            </section>
+
+            <section class="ca-panel">
+              <h4 class="heading" style="font-size:1rem" data-i18n="ca_upload">Коммерческий (PEM)</h4>
+              <label class="field-label" for="ca-up-name" data-i18n="ca_name">Имя</label>
+              <input class="field-input" id="ca-up-name" type="text" />
+              <label class="field-label" for="tls-cert" data-i18n="ca_cert_pem">Сертификат (PEM)</label>
+              <textarea class="field-input-mono" id="tls-cert" spellcheck="false" rows="5"></textarea>
+              <label class="field-label" for="tls-key" data-i18n="ca_key_pem">Закрытый ключ (PEM)</label>
+              <textarea class="field-input-mono" id="tls-key" spellcheck="false" rows="5"></textarea>
+              <label class="field-check"><input type="checkbox" id="ca-up-activate" checked /> <span data-i18n="ca_activate">Сделать активным</span></label>
+              <div class="actions">
+                <button type="button" class="btn-spray" id="btn-ca-upload" data-i18n="ca_add">Добавить</button>
+              </div>
+            </section>
+
+            <section class="ca-panel">
+              <h4 class="heading" style="font-size:1rem" data-i18n="ca_acme">Let’s Encrypt</h4>
+              <label class="field-label" for="ca-acme-name" data-i18n="ca_name">Имя</label>
+              <input class="field-input" id="ca-acme-name" type="text" />
+              <label class="field-label" for="ca-acme-domains" data-i18n="ca_hosts">Хосты / домены</label>
+              <input class="field-input" id="ca-acme-domains" type="text" placeholder="mail.example.com" />
+              <label class="field-label" for="ca-acme-email" data-i18n="ca_email">Email ACME</label>
+              <input class="field-input" id="ca-acme-email" type="email" />
+              <label class="field-check"><input type="checkbox" id="ca-acme-staging" /> <span data-i18n="ca_staging">Staging (тест)</span></label>
+              <label class="field-check"><input type="checkbox" id="ca-acme-activate" checked /> <span data-i18n="ca_activate">Сделать активным</span></label>
+              <p class="meta">HTTP-01: домен должен указывать на этот сервер, порт 80 должен быть доступен снаружи.</p>
+              <div class="actions">
+                <button type="button" class="btn-spray" id="btn-ca-acme" data-i18n="ca_issue">Выпустить</button>
+              </div>
+            </section>
+          </div>
+          <input type="hidden" id="tls-hosts" />
         </div>
       </div>
 
@@ -539,8 +644,18 @@ keep;</textarea>
           <p class="meta hidden" id="settings-restart">Нужен перезапуск tayga-mail.</p>
           <label class="field-label" for="settings-section">Секция</label>
           <select class="field-input" id="settings-section"></select>
-          <label class="field-label" for="settings-json">JSON</label>
-          <textarea class="field-input-mono" id="settings-json" spellcheck="false" rows="16"></textarea>
+          <div id="settings-tls-panel" class="hidden">
+            <label class="field-label" for="settings-tls-cert" data-i18n="ca_pick">Сертификат для сервисов</label>
+            <p class="meta" data-i18n="ca_pick_hint">Один активный сертификат используется HTTPS, IMAPS, SMTPS и остальными TLS-слушателями.</p>
+            <select class="field-input" id="settings-tls-cert"></select>
+            <label class="field-label" for="settings-tls-email" data-i18n="ca_email">Email ACME</label>
+            <input class="field-input" id="settings-tls-email" type="email" />
+            <label class="field-check"><input type="checkbox" id="settings-tls-staging" /> <span data-i18n="ca_staging">Staging (тест)</span></label>
+          </div>
+          <div id="settings-json-wrap">
+            <label class="field-label" for="settings-json">JSON</label>
+            <textarea class="field-input-mono" id="settings-json" spellcheck="false" rows="16"></textarea>
+          </div>
           <div class="actions">
             <button type="button" class="btn-spray" id="btn-settings-save" data-i18n="save">Сохранить</button>
             <button type="button" class="btn-secondary" id="btn-settings-refresh">Reload</button>

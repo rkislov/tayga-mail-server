@@ -34,10 +34,16 @@ func (s *Server) handleAdminTLS(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "certificate and private_key PEM required"})
 			return
 		}
-		if err := s.tls.InstallPEM([]byte(certPEM), []byte(keyPEM)); err != nil {
+		e, err := s.tls.AddUploadedCert("active", []byte(certPEM), []byte(keyPEM))
+		if err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
+		if _, err := s.tls.ActivateCert(e.ID); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		s.persistTLSActiveID(r.Context(), e.ID)
 		writeJSON(w, http.StatusOK, s.tls.Status())
 
 	case http.MethodPost:
@@ -46,10 +52,16 @@ func (s *Server) handleAdminTLS(w http.ResponseWriter, r *http.Request) {
 			Days  int      `json:"days"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&req)
-		if err := s.tls.GenerateSelfSigned(req.Hosts, req.Days); err != nil {
+		e, err := s.tls.AddSelfSignedCert("", req.Hosts, req.Days)
+		if err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
+		if _, err := s.tls.ActivateCert(e.ID); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		s.persistTLSActiveID(r.Context(), e.ID)
 		writeJSON(w, http.StatusOK, s.tls.Status())
 
 	default:

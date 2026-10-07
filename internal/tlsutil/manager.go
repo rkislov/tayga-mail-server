@@ -24,10 +24,11 @@ import (
 
 // Manager holds the active server certificate and supports hot reload for all listeners.
 type Manager struct {
-	mu   sync.RWMutex
-	cfg  *config.Config
-	cert *tls.Certificate
-	leaf *x509.Certificate
+	mu         sync.RWMutex
+	cfg        *config.Config
+	cert       *tls.Certificate
+	leaf       *x509.Certificate
+	challenges challengeStore
 }
 
 // Info is a public summary of the active certificate (no private key material).
@@ -57,11 +58,13 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 		}
 	}
 	if !fileExists(cfg.TLS.CertFile) || !fileExists(cfg.TLS.KeyFile) {
+		_ = m.EnsureCatalogSeed()
 		return m, nil
 	}
 	if err := m.reloadFromDisk(); err != nil {
 		return nil, err
 	}
+	_ = m.EnsureCatalogSeed()
 	return m, nil
 }
 

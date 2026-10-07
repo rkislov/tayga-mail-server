@@ -29,6 +29,7 @@ import (
 	"github.com/tayga/tms/internal/storage"
 	"github.com/tayga/tms/internal/tlsutil"
 	"github.com/tayga/tms/internal/version"
+	"github.com/tayga/tms/internal/xmpp"
 )
 
 func main() {
@@ -414,7 +415,13 @@ func run(cfgPath string) error {
 		return fmt.Errorf("managesieve: %w", err)
 	}
 
+	xmppSrv := xmpp.New(cfg, log, store, authn, tlsMgr)
+	if err := xmppSrv.Start(ctx); err != nil {
+		return fmt.Errorf("xmpp: %w", err)
+	}
+
 	httpSrv := httpapi.New(cfg, log, store, authn, ms, tlsMgr, hub)
+	httpSrv.SetXMPP(xmppSrv)
 	if err := httpSrv.Start(ctx); err != nil {
 		return fmt.Errorf("http: %w", err)
 	}
@@ -431,6 +438,7 @@ func run(cfgPath string) error {
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	_ = xmppSrv.Shutdown(shutdownCtx)
 	_ = msieveSrv.Shutdown(shutdownCtx)
 	_ = pop3Srv.Shutdown(shutdownCtx)
 	_ = imapSrv.Shutdown(shutdownCtx)
