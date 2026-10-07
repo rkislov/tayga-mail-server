@@ -10,16 +10,17 @@ import (
 
 // Config is the top-level server configuration loaded from YAML.
 type Config struct {
-	Server    ServerConfig    `yaml:"server"`
-	Storage   StorageConfig   `yaml:"storage"`
-	Mailstore MailstoreConfig `yaml:"mailstore"`
-	SMTP      SMTPConfig      `yaml:"smtp"`
-	IMAP      IMAPConfig      `yaml:"imap"`
-	POP3      POP3Config      `yaml:"pop3"`
-	TLS       TLSConfig       `yaml:"tls"`
-	HTTP      HTTPConfig      `yaml:"http"`
-	Seed      SeedConfig      `yaml:"seed"`
-	Log       LogConfig       `yaml:"log"`
+	Server      ServerConfig      `yaml:"server"`
+	Storage     StorageConfig     `yaml:"storage"`
+	Mailstore   MailstoreConfig   `yaml:"mailstore"`
+	SMTP        SMTPConfig        `yaml:"smtp"`
+	IMAP        IMAPConfig        `yaml:"imap"`
+	POP3        POP3Config        `yaml:"pop3"`
+	ManageSieve ManageSieveConfig `yaml:"managesieve"`
+	TLS         TLSConfig         `yaml:"tls"`
+	HTTP        HTTPConfig        `yaml:"http"`
+	Seed        SeedConfig        `yaml:"seed"`
+	Log         LogConfig         `yaml:"log"`
 }
 
 type ServerConfig struct {
@@ -61,6 +62,10 @@ type IMAPConfig struct {
 type POP3Config struct {
 	Listen string `yaml:"listen"`
 	POP3S  string `yaml:"pop3s"`
+}
+
+type ManageSieveConfig struct {
+	Listen string `yaml:"listen"`
 }
 
 type TLSConfig struct {
@@ -120,10 +125,11 @@ func Default() *Config {
 			ReadTimeout:  60 * time.Second,
 			WriteTimeout: 60 * time.Second,
 		},
-		IMAP: IMAPConfig{Listen: ":1143"},
-		POP3: POP3Config{Listen: ":1110"},
-		HTTP: HTTPConfig{Listen: ":8080"},
-		Log:  LogConfig{Level: "info", Format: "json"},
+		IMAP:        IMAPConfig{Listen: ":1143"},
+		POP3:        POP3Config{Listen: ":1110"},
+		ManageSieve: ManageSieveConfig{Listen: ":14190"},
+		HTTP:        HTTPConfig{Listen: ":8080"},
+		Log:         LogConfig{Level: "info", Format: "json"},
 	}
 }
 

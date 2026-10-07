@@ -15,6 +15,7 @@ import (
 	"github.com/tayga/tms/internal/auth"
 	"github.com/tayga/tms/internal/config"
 	"github.com/tayga/tms/internal/mailstore"
+	"github.com/tayga/tms/internal/sieve"
 	"github.com/tayga/tms/internal/storage"
 )
 
@@ -25,11 +26,12 @@ type Server struct {
 	store     storage.Driver
 	authn     *auth.Layer
 	mailstore *mailstore.Store
+	sieve     *sieve.Engine
 	servers   []*gosmtp.Server
 }
 
-func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth.Layer, ms *mailstore.Store) *Server {
-	return &Server{cfg: cfg, log: log, store: store, authn: authn, mailstore: ms}
+func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth.Layer, ms *mailstore.Store, eng *sieve.Engine) *Server {
+	return &Server{cfg: cfg, log: log, store: store, authn: authn, mailstore: ms, sieve: eng}
 }
 
 func (s *Server) Start(ctx context.Context) error {
@@ -61,6 +63,7 @@ func (s *Server) Start(ctx context.Context) error {
 			store:       s.store,
 			authn:       s.authn,
 			mailstore:   s.mailstore,
+			sieve:       s.sieve,
 			hostname:    s.cfg.Server.Hostname,
 			maxSize:     s.cfg.SMTP.MaxSize,
 			requireAuth: spec.requireAuth,
@@ -137,6 +140,7 @@ type backend struct {
 	store       storage.Driver
 	authn       *auth.Layer
 	mailstore   *mailstore.Store
+	sieve       *sieve.Engine
 	hostname    string
 	maxSize     int64
 	requireAuth bool
@@ -229,6 +233,10 @@ func (s *session) Data(r io.Reader) error {
 	msgid := extractMessageID(data)
 	for _, rcpt := range s.to {
 		if err := s.deliver(ctx, rcpt, data, msgid); err != nil {
+			var smtpErr *gosmtp.SMTPError
+			if errors.As(err, &smtpErr) {
+				return smtpErr
+			}
 			s.backend.log.Error("delivery failed", "rcpt", rcpt, "err", err)
 			return &gosmtp.SMTPError{Code: 451, EnhancedCode: gosmtp.EnhancedCode{4, 3, 0}, Message: "Delivery failed"}
 		}
@@ -245,6 +253,13 @@ func (s *session) Data(r io.Reader) error {
 func (s *session) deliver(ctx context.Context, rcpt string, data []byte, msgid string) error {
 	u, err := s.backend.store.ResolveRecipient(ctx, rcpt)
 	if err != nil {
+		return err
+	}
+	if s.backend.sieve != nil {
+		err := s.backend.sieve.Deliver(ctx, u, s.from, rcpt, data, msgid)
+		if errors.Is(err, sieve.ErrRejected) {
+			return &gosmtp.SMTPError{Code: 550, EnhancedCode: gosmtp.EnhancedCode{5, 7, 1}, Message: "Message rejected by filter"}
+		}
 		return err
 	}
 	if _, err := s.backend.mailstore.EnsureUser(u.Email); err != nil {
