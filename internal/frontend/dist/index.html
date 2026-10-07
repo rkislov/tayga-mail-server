@@ -10,42 +10,34 @@
   <link rel="stylesheet" href="/assets/app.css" />
 </head>
 <body>
-  <div class="grid min-h-full grid-rows-[auto_1fr_auto]">
-    <header class="flex items-start justify-between gap-4 px-6 pt-5">
-      <p class="brand">Tayga <span>Mail</span></p>
-      <div class="flex items-center gap-2">
-        <button type="button" class="theme-toggle" id="btn-theme" title="Сменить тему фона">Тема: тайга</button>
-      </div>
-    </header>
-
-    <main class="grid place-items-center px-6 py-6">
-      <!-- Login -->
-      <section id="view-login" class="panel w-full max-w-[420px]">
-        <h2 class="heading">Вход</h2>
-        <p class="lede mb-5">Почта, MFA и доступ для IMAP / FlowSync.</p>
+  <div id="auth-layout" class="auth-layout">
+    <main class="auth-stage">
+      <section id="view-login" class="auth-card panel">
+        <p class="brand">Tayga <span>Mail</span></p>
+        <h2 class="heading" data-i18n="login_title">Вход</h2>
+        <p class="lede auth-lede" data-i18n="login_lede">Почта, календарь, контакты и файлы.</p>
         <form id="form-login">
-          <label class="field-label" for="email">Email</label>
-          <input class="field-input" id="email" name="email" type="email" autocomplete="username" required placeholder="admin@example.com" />
-          <label class="field-label" for="password">Пароль</label>
-          <input class="field-input" id="password" name="password" type="password" autocomplete="current-password" required />
+          <label class="field-label" for="email" data-i18n="email">Email</label>
+          <input class="field-input" id="email" type="email" autocomplete="username" required placeholder="admin@example.com" />
+          <label class="field-label" for="password" data-i18n="password">Пароль</label>
+          <input class="field-input" id="password" type="password" autocomplete="current-password" required />
           <div class="actions">
-            <button type="submit" class="btn-spray">Продолжить</button>
+            <button type="submit" class="btn-spray" data-i18n="continue">Продолжить</button>
           </div>
           <p id="login-msg" class="msg" role="status"></p>
         </form>
       </section>
-
-      <!-- MFA -->
-      <section id="view-mfa" class="panel hidden w-full max-w-[420px]">
-        <h2 class="heading">Подтвердите вход</h2>
-        <p class="lede mb-5">Второй фактор для завершения входа.</p>
-        <div id="mfa-methods" class="mb-3 flex flex-wrap gap-2"></div>
+      <section id="view-mfa" class="auth-card panel hidden">
+        <p class="brand">Tayga <span>Mail</span></p>
+        <h2 class="heading" data-i18n="mfa_title">Подтвердите вход</h2>
+        <p class="lede auth-lede" data-i18n="mfa_lede">Второй фактор для завершения входа.</p>
+        <div id="mfa-methods" class="auth-chips"></div>
         <form id="form-totp" class="hidden">
-          <label class="field-label" for="totp">Код приложения</label>
-          <input class="field-input" id="totp" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" />
+          <label class="field-label" for="totp" data-i18n="totp_code">Код приложения</label>
+          <input class="field-input" id="totp" inputmode="numeric" autocomplete="one-time-code" />
           <div class="actions">
-            <button type="submit" class="btn">Проверить</button>
-            <button type="button" class="btn-secondary" id="btn-back-login">Назад</button>
+            <button type="submit" class="btn" data-i18n="verify">Проверить</button>
+            <button type="button" class="btn-secondary" id="btn-back-login" data-i18n="back">Назад</button>
           </div>
         </form>
         <div class="actions hidden" id="mfa-webauthn-actions">
@@ -53,34 +45,259 @@
         </div>
         <p id="mfa-msg" class="msg" role="status"></p>
       </section>
+    </main>
+    <footer class="auth-foot">
+      © Кислов Роман Сергеевич · Tayga Mail · Apache-2.0 · фоны © Алиса Кислова
+    </footer>
+  </div>
 
-      <!-- Account / Admin -->
-      <section id="view-account" class="hidden w-full max-w-4xl grid gap-4">
-        <div class="card">
-          <div class="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h3 class="heading" id="acct-email">—</h3>
-              <p class="meta" id="acct-meta">Сессия активна · токены для IMAP XOAUTH2 / FlowSync</p>
-              <p class="meta" id="acct-quota"></p>
-            </div>
-            <span class="chip" id="acct-role">live</span>
+  <section id="view-account" class="app-shell hidden">
+    <header class="app-topbar">
+      <button type="button" class="burger" id="btn-nav-toggle" aria-expanded="false" aria-controls="app-nav" aria-label="Menu">
+        <span class="burger-lines" aria-hidden="true">
+          <span></span><span></span><span></span>
+        </span>
+      </button>
+      <p class="brand-sm">Tayga <span>Mail</span></p>
+      <p class="app-topbar-title" id="app-topbar-title" data-i18n="nav_mail">Почта</p>
+    </header>
+
+    <div class="nav-backdrop" id="nav-backdrop" hidden></div>
+    <aside class="app-nav" id="app-nav" aria-hidden="true">
+      <nav class="nav-list">
+        <button type="button" class="nav-btn is-active" data-app="mail" data-i18n="nav_mail">Почта</button>
+        <button type="button" class="nav-btn" data-app="calendar" data-i18n="nav_calendar">Календарь</button>
+        <button type="button" class="nav-btn" data-app="contacts" data-i18n="nav_contacts">Контакты</button>
+        <button type="button" class="nav-btn" data-app="files" data-i18n="nav_files">Файлы</button>
+        <p class="nav-group" data-i18n="nav_settings">Настройки</p>
+        <button type="button" class="nav-btn" data-app="profile" data-i18n="nav_profile">Профиль</button>
+        <button type="button" class="nav-btn" data-app="security" data-i18n="nav_security">Безопасность</button>
+        <button type="button" class="nav-btn" data-app="appearance" data-i18n="nav_appearance">Внешний вид</button>
+        <button type="button" class="nav-btn" data-app="filters" data-i18n="nav_filters">Фильтры</button>
+        <button type="button" class="nav-btn" data-app="language" data-i18n="nav_language">Язык</button>
+        <div id="nav-admin" class="hidden">
+          <p class="nav-group" data-i18n="nav_admin">Админ</p>
+          <button type="button" class="nav-btn" data-app="monitor" data-i18n="nav_monitor">Мониторинг</button>
+          <button type="button" class="nav-btn" data-app="tenants" data-i18n="nav_tenants">Домены и пользователи</button>
+          <button type="button" class="nav-btn" data-app="tls" data-i18n="nav_tls">TLS</button>
+          <button type="button" class="nav-btn" data-app="server" data-i18n="nav_server">Сервер</button>
+        </div>
+      </nav>
+      <button type="button" class="btn-secondary w-full" id="btn-logout" data-i18n="logout">Выйти</button>
+    </aside>
+
+    <div class="app-main">
+      <!-- MAIL -->
+      <div id="app-mail" class="app-page mail-layout">
+        <div class="mail-folders panel-pane">
+          <div class="pane-head">
+            <strong data-i18n="folders">Папки</strong>
+            <button type="button" class="btn-spray btn-sm" id="btn-compose" data-i18n="compose">Написать</button>
           </div>
-          <div class="actions">
-            <button type="button" class="btn-secondary" id="btn-logout">Выйти</button>
-            <button type="button" class="btn-secondary" id="btn-refresh-me">Обновить</button>
+          <ul id="mail-folder-list" class="folder-list"></ul>
+        </div>
+        <div class="mail-list panel-pane">
+          <div class="pane-head">
+            <strong id="mail-folder-title">INBOX</strong>
+            <button type="button" class="btn-secondary btn-sm" id="btn-mail-refresh" data-i18n="refresh">Обновить</button>
+          </div>
+          <ul id="mail-msg-list" class="msg-list"></ul>
+        </div>
+        <div class="mail-read panel-pane">
+          <div id="mail-empty" class="empty-state" data-i18n="select_message">Выберите письмо</div>
+          <div id="mail-reader" class="hidden">
+            <div class="reader-actions">
+              <button type="button" class="btn-secondary btn-sm" id="btn-mail-reply" data-i18n="reply">Ответить</button>
+              <button type="button" class="btn-secondary btn-sm" id="btn-mail-delete" data-i18n="delete">Удалить</button>
+            </div>
+            <h2 class="heading" id="mail-subject"></h2>
+            <p class="meta" id="mail-meta"></p>
+            <div class="reader-body" id="mail-body"></div>
           </div>
         </div>
+      </div>
 
-        <div class="card hidden" id="card-monitor">
-          <h3 class="heading">Мониторинг</h3>
-          <p class="meta">Статистика. Prometheus: <code class="text-sun">/metrics</code>.</p>
-          <div id="monitor-grid" class="meta my-3 grid grid-cols-2 gap-x-4 gap-y-2"></div>
-          <h3 class="heading mt-4">Исходящая очередь</h3>
-          <p class="meta">Повтор доставки. DSN после исчерпания попыток.</p>
+      <div id="compose-backdrop" class="compose-backdrop hidden">
+        <div id="compose-panel" class="compose-panel" role="dialog" aria-modal="true">
+          <h3 class="heading" data-i18n="compose">Написать</h3>
+          <label class="field-label" data-i18n="to">Кому</label>
+          <input class="field-input" id="compose-to" />
+          <label class="field-label" data-i18n="subject">Тема</label>
+          <input class="field-input" id="compose-subject" />
+          <label class="field-label" data-i18n="body">Текст</label>
+          <textarea class="field-input-mono" id="compose-body" rows="10"></textarea>
+          <div class="actions">
+            <button type="button" class="btn-spray" id="btn-compose-send" data-i18n="send">Отправить</button>
+            <button type="button" class="btn-secondary" id="btn-compose-close" data-i18n="back">Назад</button>
+          </div>
+          <p id="compose-msg" class="msg"></p>
+        </div>
+      </div>
+
+      <!-- CALENDAR -->
+      <div id="app-calendar" class="app-page hidden panel-page">
+        <div class="page-toolbar">
+          <h2 class="heading" data-i18n="calendar_title">Календарь</h2>
+          <button type="button" class="btn-spray btn-sm" id="btn-cal-refresh" data-i18n="refresh">Обновить</button>
+        </div>
+        <form id="form-cal-event" class="card">
+          <h3 class="heading heading-sm" data-i18n="new_event">Событие</h3>
+          <label class="field-label">Summary</label>
+          <input class="field-input" id="cal-summary" required />
+          <label class="field-label">Start (RFC3339)</label>
+          <input class="field-input" id="cal-start" placeholder="2026-10-07T10:00:00Z" />
+          <label class="field-label">End</label>
+          <input class="field-input" id="cal-end" placeholder="2026-10-07T11:00:00Z" />
+          <div class="actions">
+            <button type="submit" class="btn-spray" data-i18n="save">Сохранить</button>
+          </div>
+          <p id="cal-msg" class="msg"></p>
+        </form>
+        <ul id="cal-event-list" class="creds"></ul>
+      </div>
+
+      <!-- CONTACTS -->
+      <div id="app-contacts" class="app-page hidden panel-page">
+        <div class="page-toolbar">
+          <h2 class="heading" data-i18n="contacts_title">Контакты</h2>
+          <button type="button" class="btn-secondary btn-sm" id="btn-contacts-refresh" data-i18n="refresh">Обновить</button>
+        </div>
+        <form id="form-contact" class="card">
+          <h3 class="heading heading-sm" data-i18n="new_contact">Контакт</h3>
+          <label class="field-label">FN</label>
+          <input class="field-input" id="contact-fn" required />
+          <label class="field-label">Email</label>
+          <input class="field-input" id="contact-email" type="email" />
+          <label class="field-label">Tel</label>
+          <input class="field-input" id="contact-tel" />
+          <div class="actions">
+            <button type="submit" class="btn-spray" data-i18n="save">Сохранить</button>
+          </div>
+          <p id="contact-msg" class="msg"></p>
+        </form>
+        <ul id="contact-list" class="creds"></ul>
+      </div>
+
+      <!-- FILES -->
+      <div id="app-files" class="app-page hidden panel-page panel-page-wide">
+        <div class="page-toolbar">
+          <h2 class="heading" data-i18n="files_title">Файлы</h2>
+          <div class="toolbar-actions">
+            <button type="button" class="btn-secondary btn-sm" id="btn-files-refresh" data-i18n="refresh">Обновить</button>
+            <label class="btn-spray btn-sm btn-file">
+              <span data-i18n="upload">Загрузить</span>
+              <input type="file" id="files-upload" />
+            </label>
+          </div>
+        </div>
+        <p class="meta" id="files-path">/</p>
+        <form id="form-mkdir" class="row-form">
+          <input class="field-input" id="mkdir-name" placeholder="new-folder" />
+          <button type="submit" class="btn-secondary" data-i18n="mkdir">Папка</button>
+        </form>
+        <ul id="files-list" class="creds"></ul>
+        <p id="files-msg" class="msg"></p>
+      </div>
+
+      <!-- PROFILE -->
+      <div id="app-profile" class="app-page hidden panel-page">
+        <div class="card">
+          <h2 class="heading" data-i18n="profile_title">Профиль</h2>
+          <h3 class="heading heading-gap" id="acct-email">—</h3>
+          <p class="meta" id="acct-meta" data-i18n="session_active">Сессия активна · IMAP XOAUTH2 / FlowSync</p>
+          <p class="meta" id="acct-quota"></p>
+          <span class="chip" id="acct-role">live</span>
+          <div class="actions">
+            <button type="button" class="btn-secondary" id="btn-refresh-me" data-i18n="refresh">Обновить</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECURITY -->
+      <div id="app-security" class="app-page hidden panel-page stack-gap">
+        <div class="card">
+          <h3 class="heading">Authenticator (TOTP)</h3>
+          <div class="actions">
+            <button type="button" class="btn" id="btn-totp-setup">Начать</button>
+            <button type="button" class="btn-secondary" id="btn-totp-confirm">Подтвердить код</button>
+          </div>
+          <div id="totp-setup-box" class="hidden">
+            <code class="secret" id="totp-uri"></code>
+            <p class="meta" id="totp-backup"></p>
+            <label class="field-label" for="totp-confirm">Код</label>
+            <input class="field-input" id="totp-confirm" inputmode="numeric" />
+          </div>
+          <p id="totp-msg" class="msg"></p>
+        </div>
+        <div class="card">
+          <h3 class="heading">Passkeys (WebAuthn)</h3>
+          <div class="actions">
+            <button type="button" class="btn-spray" id="btn-passkey-add">Добавить</button>
+            <button type="button" class="btn-secondary" id="btn-passkey-refresh" data-i18n="refresh">Обновить</button>
+          </div>
+          <ul class="creds" id="cred-list"></ul>
+          <p id="passkey-msg" class="msg"></p>
+        </div>
+      </div>
+
+      <!-- APPEARANCE -->
+      <div id="app-appearance" class="app-page hidden panel-page">
+        <div class="card" id="card-appearance">
+          <h3 class="heading" data-i18n="appearance_title">Внешний вид</h3>
+          <label class="field-label" for="theme-select" data-i18n="theme">Тема</label>
+          <select class="field-input" id="theme-select">
+            <option value="taiga">Тайга</option>
+            <option value="cosmos">Космос</option>
+            <option value="city">Город</option>
+            <option value="kalyazin">Колязин</option>
+            <option value="temple">Храм на Нерли</option>
+            <option value="moscow">Москва-Сити</option>
+          </select>
+          <div class="theme-preview" id="theme-preview" aria-hidden="true"></div>
+        </div>
+      </div>
+
+      <!-- LANGUAGE -->
+      <div id="app-language" class="app-page hidden panel-page">
+        <div class="card">
+          <h3 class="heading" data-i18n="language_title">Язык</h3>
+          <p class="meta" data-i18n="language_hint">Язык интерфейса сохраняется в браузере.</p>
+          <label class="field-label" for="lang-select" data-i18n="language_title">Язык</label>
+          <select class="field-input" id="lang-select">
+            <option value="ru">Русский</option>
+            <option value="en">English</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- FILTERS / SIEVE -->
+      <div id="app-filters" class="app-page hidden panel-page">
+        <div class="card">
+          <h3 class="heading" data-i18n="filters_title">Фильтры Sieve</h3>
+          <label class="field-label" for="sieve-name">Имя скрипта</label>
+          <input class="field-input" id="sieve-name" type="text" value="default" />
+          <label class="field-label" for="sieve-body">Скрипт</label>
+          <textarea class="field-input-mono" id="sieve-body" spellcheck="false">require ["fileinto"];
+keep;</textarea>
+          <div class="actions">
+            <button type="button" class="btn-spray" id="btn-sieve-save">Save &amp; activate</button>
+            <button type="button" class="btn-secondary" id="btn-sieve-refresh" data-i18n="refresh">Обновить</button>
+          </div>
+          <ul class="creds" id="sieve-list"></ul>
+          <p id="sieve-msg" class="msg"></p>
+        </div>
+      </div>
+
+      <!-- ADMIN MONITOR -->
+      <div id="app-monitor" class="app-page hidden panel-page panel-page-wide">
+        <div class="card" id="card-monitor">
+          <h3 class="heading" data-i18n="nav_monitor">Мониторинг</h3>
+          <p class="meta">Prometheus: <code>/metrics</code></p>
+          <div id="monitor-grid" class="meta monitor-grid"></div>
+          <h3 class="heading heading-gap">Исходящая очередь</h3>
           <ul class="creds" id="outbound-list"></ul>
-          <h3 class="heading mt-4">Карантин / Junk</h3>
-          <p class="meta">Вирус и спам. Release → INBOX.</p>
-          <div class="mt-2 flex flex-wrap items-end gap-3">
+          <h3 class="heading heading-gap">Карантин / Junk</h3>
+          <div class="filter-bar">
             <div>
               <label class="field-label" for="q-folder">Папка</label>
               <select class="field-input" id="q-folder">
@@ -97,142 +314,96 @@
                 <option value="spam">Spam</option>
               </select>
             </div>
-            <div class="min-w-[10rem] flex-1">
+            <div>
               <label class="field-label" for="q-search">Поиск</label>
-              <input class="field-input" id="q-search" type="search" placeholder="subject, from…" />
+              <input class="field-input" id="q-search" type="search" />
             </div>
             <button type="button" class="btn-secondary" id="btn-q-refresh">Фильтр</button>
           </div>
           <ul class="creds" id="quarantine-list"></ul>
-          <pre class="secret hidden max-h-56 overflow-auto whitespace-pre-wrap" id="q-preview"></pre>
+          <pre class="secret preview-box hidden" id="q-preview"></pre>
           <div class="actions">
-            <button type="button" class="btn-secondary" id="btn-monitor-refresh">Обновить</button>
-            <button type="button" class="btn-spray" id="btn-backup">Скачать backup</button>
+            <button type="button" class="btn-secondary" id="btn-monitor-refresh" data-i18n="refresh">Обновить</button>
+            <button type="button" class="btn-spray" id="btn-backup">Backup</button>
             <button type="button" class="btn-secondary" id="btn-backup-mail">Backup + mail</button>
           </div>
-          <label class="field-label" for="restore-file">Restore из .tar.gz</label>
+          <label class="field-label" for="restore-file">Restore</label>
           <input class="field-input" id="restore-file" type="file" accept=".gz,application/gzip" />
           <div class="actions">
             <button type="button" class="btn-secondary" id="btn-restore">Restore</button>
           </div>
-          <p id="monitor-msg" class="msg" role="status"></p>
+          <p id="monitor-msg" class="msg"></p>
         </div>
+      </div>
 
-        <div class="card hidden" id="card-admin">
+      <!-- ADMIN TENANTS -->
+      <div id="app-tenants" class="app-page hidden panel-page">
+        <div class="card" id="card-admin">
           <h3 class="heading">Tenant</h3>
           <p class="meta" id="tenant-meta">Loading…</p>
-          <h3 class="heading mt-4">Домены</h3>
-          <p class="meta">Нужны до создания пользователей.</p>
+          <h3 class="heading heading-gap">Домены</h3>
           <form id="form-create-domain">
             <label class="field-label" for="nd-name">Новый домен</label>
             <input class="field-input" id="nd-name" type="text" required placeholder="example.com" />
-            <div class="actions">
-              <button type="submit" class="btn-spray">Добавить</button>
-            </div>
+            <div class="actions"><button type="submit" class="btn-spray">Добавить</button></div>
           </form>
           <ul class="creds" id="admin-domain-list"></ul>
-          <h3 class="heading mt-4">Пользователи</h3>
-          <p class="meta">Квота 0 = без лимита.</p>
+          <h3 class="heading heading-gap">Пользователи</h3>
           <form id="form-create-user">
             <label class="field-label" for="nu-email">Email</label>
-            <input class="field-input" id="nu-email" type="email" required placeholder="user@example.com" />
+            <input class="field-input" id="nu-email" type="email" required />
             <label class="field-label" for="nu-name">Имя</label>
-            <input class="field-input" id="nu-name" type="text" placeholder="User" />
+            <input class="field-input" id="nu-name" type="text" />
             <label class="field-label" for="nu-pass">Пароль</label>
             <input class="field-input" id="nu-pass" type="password" required autocomplete="new-password" />
             <label class="field-label" for="nu-quota">Quota bytes</label>
             <input class="field-input" id="nu-quota" type="number" min="0" value="0" />
-            <div class="actions">
-              <button type="submit" class="btn-spray">Создать</button>
-            </div>
+            <div class="actions"><button type="submit" class="btn-spray">Создать</button></div>
           </form>
           <ul class="creds" id="admin-user-list"></ul>
-          <p id="admin-msg" class="msg" role="status"></p>
+          <p id="admin-msg" class="msg"></p>
         </div>
+      </div>
 
-        <div class="card hidden" id="card-tls">
+      <!-- ADMIN TLS -->
+      <div id="app-tls" class="app-page hidden panel-page">
+        <div class="card" id="card-tls">
           <h3 class="heading">TLS</h3>
-          <p class="meta">HTTPS, IMAPS, POP3S, SMTPS, submission STARTTLS. Без перезапуска.</p>
           <p class="meta" id="tls-status">Loading…</p>
           <label class="field-label" for="tls-cert">Certificate PEM</label>
-          <textarea class="field-input-mono" id="tls-cert" spellcheck="false" placeholder="-----BEGIN CERTIFICATE-----"></textarea>
+          <textarea class="field-input-mono" id="tls-cert" spellcheck="false"></textarea>
           <label class="field-label" for="tls-key">Private key PEM</label>
-          <textarea class="field-input-mono" id="tls-key" spellcheck="false" placeholder="-----BEGIN PRIVATE KEY-----"></textarea>
+          <textarea class="field-input-mono" id="tls-key" spellcheck="false"></textarea>
           <label class="field-label" for="tls-hosts">Self-signed hosts</label>
-          <input class="field-input" id="tls-hosts" type="text" placeholder="mail.example.com, localhost" />
+          <input class="field-input" id="tls-hosts" type="text" />
           <div class="actions">
             <button type="button" class="btn-spray" id="btn-tls-upload">Install PEM</button>
             <button type="button" class="btn-secondary" id="btn-tls-generate">Generate self-signed</button>
             <button type="button" class="btn-secondary" id="btn-tls-refresh">Refresh</button>
           </div>
-          <p id="tls-msg" class="msg" role="status"></p>
+          <p id="tls-msg" class="msg"></p>
         </div>
+      </div>
 
-        <div class="card hidden" id="card-settings">
-          <h3 class="heading">Настройки сервера</h3>
-          <p class="meta">Конфиг в БД. В YAML только storage и mailstore.root. Большинство изменений — после restart.</p>
-          <p class="meta hidden text-sun" id="settings-restart">Нужен перезапуск tayga-mail.</p>
+      <!-- ADMIN SERVER -->
+      <div id="app-server" class="app-page hidden panel-page panel-page-wide">
+        <div class="card" id="card-settings">
+          <h3 class="heading" data-i18n="nav_server">Сервер</h3>
+          <p class="meta hidden" id="settings-restart">Нужен перезапуск tayga-mail.</p>
           <label class="field-label" for="settings-section">Секция</label>
           <select class="field-input" id="settings-section"></select>
           <label class="field-label" for="settings-json">JSON</label>
           <textarea class="field-input-mono" id="settings-json" spellcheck="false" rows="16"></textarea>
           <div class="actions">
-            <button type="button" class="btn-spray" id="btn-settings-save">Сохранить</button>
+            <button type="button" class="btn-spray" id="btn-settings-save" data-i18n="save">Сохранить</button>
             <button type="button" class="btn-secondary" id="btn-settings-refresh">Reload</button>
           </div>
-          <p id="settings-msg" class="msg" role="status"></p>
+          <p id="settings-msg" class="msg"></p>
         </div>
+      </div>
+    </div>
+  </section>
 
-        <div class="card">
-          <h3 class="heading">Authenticator (TOTP)</h3>
-          <p class="meta">Aegis, Google Authenticator и т.п.</p>
-          <div class="actions">
-            <button type="button" class="btn" id="btn-totp-setup">Начать</button>
-            <button type="button" class="btn-secondary" id="btn-totp-confirm">Подтвердить код</button>
-          </div>
-          <div id="totp-setup-box" class="hidden">
-            <code class="secret" id="totp-uri"></code>
-            <p class="meta mt-2" id="totp-backup"></p>
-            <label class="field-label" for="totp-confirm">Код</label>
-            <input class="field-input" id="totp-confirm" inputmode="numeric" />
-          </div>
-          <p id="totp-msg" class="msg" role="status"></p>
-        </div>
-
-        <div class="card">
-          <h3 class="heading">Passkeys (WebAuthn)</h3>
-          <p class="meta">Платформенный ключ или security key.</p>
-          <div class="actions">
-            <button type="button" class="btn-spray" id="btn-passkey-add">Добавить</button>
-            <button type="button" class="btn-secondary" id="btn-passkey-refresh">Обновить</button>
-          </div>
-          <ul class="creds" id="cred-list"></ul>
-          <p id="passkey-msg" class="msg" role="status"></p>
-        </div>
-
-        <div class="card">
-          <h3 class="heading">Sieve</h3>
-          <p class="meta">Фильтры доставки (тот же store, что ManageSieve).</p>
-          <label class="field-label" for="sieve-name">Имя скрипта</label>
-          <input class="field-input" id="sieve-name" type="text" value="default" />
-          <label class="field-label" for="sieve-body">Скрипт</label>
-          <textarea class="field-input-mono" id="sieve-body" spellcheck="false">require ["fileinto"];
-# sample: fileinto "Archive";
-keep;</textarea>
-          <div class="actions">
-            <button type="button" class="btn-spray" id="btn-sieve-save">Save &amp; activate</button>
-            <button type="button" class="btn-secondary" id="btn-sieve-refresh">Обновить</button>
-          </div>
-          <ul class="creds" id="sieve-list"></ul>
-          <p id="sieve-msg" class="msg" role="status"></p>
-        </div>
-      </section>
-    </main>
-
-    <footer class="px-6 pb-5 pt-2 text-xs text-white/55">
-      © Кислов Роман Сергеевич · Tayga Mail · Apache-2.0 · фоны © Алиса Кислова
-    </footer>
-  </div>
   <script src="/assets/app.js"></script>
 </body>
 </html>
