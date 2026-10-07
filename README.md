@@ -17,6 +17,7 @@ CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o tayga-mail ./cmd/tayga
 - SMTP MX: `localhost:1025`
 - IMAP: `localhost:1143`
 - POP3: `localhost:1110`
+- ManageSieve: `localhost:14190`
 
 ## License
 
