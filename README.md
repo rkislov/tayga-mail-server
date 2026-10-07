@@ -48,6 +48,7 @@ Seed: `admin@example.com` / `changeme`. TLS: `tls.auto_generate` or `scripts/gen
 - SMTP rate limits: `smtp.rate_limit.per_ip` / `per_user`
 - Outbound queue + DSN: `smtp.queue` retries failed remote delivery; bounces local senders; admin `/api/v1/admin/outbound`
 - Object store: optional S3/MinIO write-through for maildir (`mailstore.object_store`); `tayga-mail sync-objects` to reconcile
+- Virus scan: `scan.enabled` with ClamAV/exec → reject, quarantine folder, or tag headers
 - WebAuthn MFA: `/api/v1/auth/webauthn/*` (passkeys; UUID credential/session IDs)
 - Account API: `GET /api/v1/me`; admin: `/api/v1/admin/users` (`http.admins`)
 - IDs: all entity PKs/FKs are UUIDs (fresh DB required after integer-ID builds)

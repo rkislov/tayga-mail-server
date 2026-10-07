@@ -100,14 +100,15 @@ func (e *Engine) Deliver(ctx context.Context, user *storage.User, envelopeFrom, 
 		if folder == "" {
 			folder = "INBOX"
 		}
-		if err := e.fileInto(ctx, user, folder, d.Flags, data, msgid); err != nil {
+		if err := e.FileInto(ctx, user, folder, d.Flags, data, msgid); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (e *Engine) fileInto(ctx context.Context, user *storage.User, folder string, flags []string, data []byte, msgid string) error {
+// FileInto delivers a message into a mailbox folder (used by Sieve and quarantine).
+func (e *Engine) FileInto(ctx context.Context, user *storage.User, folder string, flags []string, data []byte, msgid string) error {
 	if err := storage.EnsureQuota(ctx, e.Store, user, int64(len(data))); err != nil {
 		return err
 	}
@@ -148,7 +149,7 @@ func (e *Engine) redirectLocal(ctx context.Context, fromUser *storage.User, addr
 		return fmt.Errorf("non-local redirect not supported yet: %w", err)
 	}
 	_ = fromUser
-	return e.fileInto(ctx, u, "INBOX", nil, data, msgid)
+	return e.FileInto(ctx, u, "INBOX", nil, data, msgid)
 }
 
 // Execute loads and runs a Sieve script, returning normalized actions.
