@@ -24,7 +24,8 @@ CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o tayga-mail ./cmd/tayga
 - IMAP/SMTP: SASL `XOAUTH2` / `OAUTHBEARER` with access tokens from the auth API
 - CalDAV: `http://127.0.0.1:8080/dav/cal/` (Basic/Bearer); `/.well-known/caldav`
 - CardDAV: `http://127.0.0.1:8080/dav/card/` (Basic/Bearer); `/.well-known/carddav`
-- IDs: all entity PKs/FKs are UUIDs (fresh DB required after this change)
+- FlowSync (proprietary): ActiveSync `/Microsoft-Server-ActiveSync`, EWS `/EWS/Exchange.asmx`, Autodiscover
+- IDs: all entity PKs/FKs are UUIDs (fresh DB required after integer-ID builds)
 
 ## License
 

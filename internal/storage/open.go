@@ -61,9 +61,19 @@ func migrate(ctx context.Context, db *sql.DB, dialect Dialect) error {
 	var files []string
 	switch dialect {
 	case DialectSQLite:
-		files = []string{"001_init.sqlite.sql", "002_mfa_oauth.sqlite.sql", "003_dav.sqlite.sql"}
+		files = []string{
+			"001_init.sqlite.sql",
+			"002_mfa_oauth.sqlite.sql",
+			"003_dav.sqlite.sql",
+			"004_flowsync.sqlite.sql",
+		}
 	case DialectPostgres:
-		files = []string{"001_init.postgres.sql", "002_mfa_oauth.postgres.sql", "003_dav.postgres.sql"}
+		files = []string{
+			"001_init.postgres.sql",
+			"002_mfa_oauth.postgres.sql",
+			"003_dav.postgres.sql",
+			"004_flowsync.postgres.sql",
+		}
 	default:
 		return fmt.Errorf("unsupported dialect")
 	}
