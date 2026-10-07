@@ -41,6 +41,7 @@ type Server struct {
 	dkimVerify   *dkimVerifyPolicy
 	spf          *spfPolicy
 	dmarc        *dmarcPolicy
+	dmarcReport  *dmarcReporter
 	queue        *OutboundQueue
 	servers      []*gosmtp.Server
 }
@@ -155,6 +156,10 @@ func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth
 		}
 		srv.dmarc = &dmarcPolicy{action: action, failOpen: cfg.DMARC.FailOpen, authservID: authserv, log: log}
 		log.Info("smtp dmarc check enabled", "action", action)
+		if cfg.DMARC.Report.Enabled {
+			srv.dmarcReport = newDMARCReporter(store, cfg.DMARC.Report.OrgName, cfg.DMARC.Report.Contact, cfg.Server.Hostname, cfg.DMARC.Report.Interval, log)
+			srv.dmarc.recorder = srv.dmarcReport
+		}
 	}
 	return srv
 }
@@ -215,6 +220,10 @@ func (s *Server) Start(ctx context.Context) error {
 		oq.SetWriters(s.writers)
 		s.queue = oq
 		oq.Start(ctx)
+	}
+	if s.dmarcReport != nil {
+		s.dmarcReport.SetOutbound(oq, out)
+		s.dmarcReport.Start(ctx)
 	}
 	rl := s.cfg.SMTP.RateLimit
 	ipLim := newRateLimiter(rl.PerIP, rl.Window)
@@ -535,7 +544,7 @@ func (s *session) deliver(ctx context.Context, rcpt string, data []byte, msgid s
 			}
 		}
 		if s.backend.dmarc != nil {
-			data, authErr = s.backend.dmarc.apply(data, s.from, spfRes, dkimDomains)
+			data, authErr = s.backend.dmarc.apply(data, s.from, stripPort(s.remote), spfRes, dkimDomains)
 			if authErr != nil {
 				var smtpErr *gosmtp.SMTPError
 				if errors.As(authErr, &smtpErr) {

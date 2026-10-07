@@ -54,10 +54,19 @@ type SPFConfig struct {
 
 // DMARCConfig evaluates DMARC using SPF + DKIM alignment.
 type DMARCConfig struct {
-	Enabled    bool   `yaml:"enabled"`
-	Action     string `yaml:"action"` // tag | reject | follow (honor p=reject)
-	FailOpen   bool   `yaml:"fail_open"`
-	AuthservID string `yaml:"authserv_id"`
+	Enabled    bool              `yaml:"enabled"`
+	Action     string            `yaml:"action"` // tag | reject | follow (honor p=reject)
+	FailOpen   bool              `yaml:"fail_open"`
+	AuthservID string            `yaml:"authserv_id"`
+	Report     DMARCReportConfig `yaml:"report"`
+}
+
+// DMARCReportConfig sends RFC 7489 aggregate (rua) reports.
+type DMARCReportConfig struct {
+	Enabled  bool          `yaml:"enabled"`
+	OrgName  string        `yaml:"org_name"` // report_metadata/org_name
+	Contact  string        `yaml:"contact"`  // report From / metadata email
+	Interval time.Duration `yaml:"interval"` // flush cadence (default 24h)
 }
 
 // SpamConfig configures Rspamd (or similar) scoring for inbound SMTP.
@@ -425,6 +434,11 @@ func Default() *Config {
 			Enabled:  false,
 			Action:   "tag",
 			FailOpen: true,
+			Report: DMARCReportConfig{
+				Enabled:  false,
+				OrgName:  "Tayga Mail",
+				Interval: 24 * time.Hour,
+			},
 		},
 		Log: LogConfig{Level: "info", Format: "json"},
 	}
@@ -694,6 +708,17 @@ func (c *Config) Validate() error {
 		}
 		if c.DMARC.AuthservID == "" {
 			c.DMARC.AuthservID = c.Server.Hostname
+		}
+	}
+	if c.DMARC.Report.Enabled {
+		if c.DMARC.Report.OrgName == "" {
+			c.DMARC.Report.OrgName = "Tayga Mail"
+		}
+		if c.DMARC.Report.Contact == "" {
+			c.DMARC.Report.Contact = "dmarc-noreply@" + c.Server.Hostname
+		}
+		if c.DMARC.Report.Interval <= 0 {
+			c.DMARC.Report.Interval = 24 * time.Hour
 		}
 	}
 	return nil

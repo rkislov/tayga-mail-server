@@ -20,10 +20,28 @@ type dmarcPolicy struct {
 	failOpen   bool
 	authservID string
 	lookup     func(domain string) (*dmarc.Record, error)
+	recorder   dmarcRecorder
 	log        *slog.Logger
 }
 
-func (p *dmarcPolicy) apply(data []byte, envelopeFrom string, spfRes spf.Result, dkimPassDomains []string) ([]byte, error) {
+type dmarcRecorder interface {
+	Record(ev *dmarcEvent)
+}
+
+// dmarcEvent is one inbound DMARC evaluation for aggregate reporting.
+type dmarcEvent struct {
+	Domain         string
+	HeaderFrom     string
+	SourceIP       string
+	EnvelopeDomain string
+	SPFResult      string // pass|fail|none
+	DKIMResult     string // pass|fail|none
+	Disposition    string // none|quarantine|reject
+	Policy         string
+	RUA            []string
+}
+
+func (p *dmarcPolicy) apply(data []byte, envelopeFrom, clientIP string, spfRes spf.Result, dkimPassDomains []string) ([]byte, error) {
 	if p == nil {
 		return data, nil
 	}
@@ -31,6 +49,22 @@ func (p *dmarcPolicy) apply(data []byte, envelopeFrom string, spfRes spf.Result,
 	if fromDomain == "" {
 		fromDomain = emailDomain(envelopeFrom)
 	}
+	ev := &dmarcEvent{
+		Domain:         fromDomain,
+		HeaderFrom:     fromDomain,
+		SourceIP:       clientIP,
+		EnvelopeDomain: emailDomain(envelopeFrom),
+		SPFResult:      spfResultString(spfRes),
+		DKIMResult:     dkimResultString(dkimPassDomains, fromDomain),
+		Disposition:    "none",
+		Policy:         "none",
+	}
+	defer func() {
+		if p.recorder != nil && fromDomain != "" {
+			p.recorder.Record(ev)
+		}
+	}()
+
 	if fromDomain == "" {
 		data = scan.InjectHeader(data, "Authentication-Results", p.authservID+"; dmarc=none")
 		return data, nil
@@ -63,6 +97,12 @@ func (p *dmarcPolicy) apply(data []byte, envelopeFrom string, spfRes spf.Result,
 		return data, nil
 	}
 
+	ev.Policy = string(rec.Policy)
+	if ev.Policy == "" {
+		ev.Policy = "none"
+	}
+	ev.RUA = append([]string{}, rec.ReportURIAggregate...)
+
 	// Only Pass counts for DMARC SPF alignment (RFC 7489).
 	spfAligned := aligned(emailDomain(envelopeFrom), fromDomain, rec.SPFAlignment) && spfRes == spf.Pass
 
@@ -85,22 +125,52 @@ func (p *dmarcPolicy) apply(data []byte, envelopeFrom string, spfRes spf.Result,
 	data = scan.InjectHeader(data, "Authentication-Results", ar)
 
 	if pass {
+		ev.Disposition = "none"
 		return data, nil
 	}
 	policy := rec.Policy
 	if policy == "" {
 		policy = dmarc.PolicyNone
 	}
-	// Subdomain policy when From is a subdomain of organizational domain — keep simple: use p=.
 	switch p.action {
 	case "reject":
+		ev.Disposition = "reject"
 		return nil, &gosmtp.SMTPError{Code: 550, EnhancedCode: gosmtp.EnhancedCode{5, 7, 1}, Message: "DMARC validation failed"}
 	case "follow":
 		if policy == dmarc.PolicyReject {
+			ev.Disposition = "reject"
 			return nil, &gosmtp.SMTPError{Code: 550, EnhancedCode: gosmtp.EnhancedCode{5, 7, 1}, Message: "Message rejected by DMARC policy"}
+		}
+		if policy == dmarc.PolicyQuarantine {
+			ev.Disposition = "quarantine"
 		}
 	}
 	return data, nil
+}
+
+func spfResultString(r spf.Result) string {
+	switch r {
+	case spf.Pass:
+		return "pass"
+	case spf.Fail, spf.SoftFail:
+		return "fail"
+	case spf.None, "":
+		return "none"
+	default:
+		return "fail"
+	}
+}
+
+func dkimResultString(passDomains []string, fromDomain string) string {
+	if len(passDomains) == 0 {
+		return "none"
+	}
+	for _, d := range passDomains {
+		if aligned(d, fromDomain, dmarc.AlignmentRelaxed) {
+			return "pass"
+		}
+	}
+	return "fail"
 }
 
 func headerFromDomain(data []byte) string {
@@ -140,6 +210,5 @@ func aligned(authDomain, fromDomain string, mode dmarc.AlignmentMode) bool {
 	if mode == dmarc.AlignmentStrict {
 		return false
 	}
-	// Relaxed: share organizational domain (simple suffix match).
 	return strings.HasSuffix(fromDomain, "."+authDomain) || strings.HasSuffix(authDomain, "."+fromDomain)
 }
