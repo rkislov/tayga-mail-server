@@ -142,6 +142,10 @@ type Driver interface {
 	GreylistTouch(ctx context.Context, clientIP, envelopeFrom, rcpt string, delay time.Duration) (allowed bool, err error)
 	DeleteExpiredGreylist(ctx context.Context, olderThan time.Time) (int64, error)
 
+	GetSetting(ctx context.Context, key string) (value string, ok bool, err error)
+	ListSettings(ctx context.Context) (map[string]string, error)
+	PutSetting(ctx context.Context, key, value string) error
+
 	// TryAcquireUserWriter grabs or renews a per-user maildir writer lease for nodeID.
 	// acquired=false means another live node holds it (holder is that node_id).
 	TryAcquireUserWriter(ctx context.Context, userID, nodeID string, ttl time.Duration) (acquired bool, holder string, err error)

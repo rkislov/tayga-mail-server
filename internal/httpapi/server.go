@@ -17,6 +17,7 @@ import (
 	"github.com/tayga/tms/internal/flowsync"
 	"github.com/tayga/tms/internal/frontend"
 	"github.com/tayga/tms/internal/mailstore"
+	"github.com/tayga/tms/internal/settings"
 	"github.com/tayga/tms/internal/storage"
 	"github.com/tayga/tms/internal/tlsutil"
 )
@@ -25,6 +26,7 @@ import (
 type Server struct {
 	log     *slog.Logger
 	cfg     *config.Config
+	hub     *settings.Hub
 	store   storage.Driver
 	authn   *auth.Layer
 	ms      *mailstore.Store
@@ -32,8 +34,18 @@ type Server struct {
 	servers []*http.Server
 }
 
-func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth.Layer, ms *mailstore.Store, tlsMgr *tlsutil.Manager) *Server {
-	return &Server{cfg: cfg, log: log, store: store, authn: authn, ms: ms, tls: tlsMgr}
+func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth.Layer, ms *mailstore.Store, tlsMgr *tlsutil.Manager, hub *settings.Hub) *Server {
+	return &Server{cfg: cfg, log: log, store: store, authn: authn, ms: ms, tls: tlsMgr, hub: hub}
+}
+
+// cfgLive returns DB-merged config when the settings hub is present.
+func (s *Server) cfgLive() *config.Config {
+	if s.hub != nil {
+		if c := s.hub.Config(); c != nil {
+			return c
+		}
+	}
+	return s.cfg
 }
 
 // Handler builds the HTTP mux (health, auth, DAV, FlowSync, admin UI).
@@ -73,6 +85,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/admin/quarantine/", s.handleAdminQuarantine)
 	mux.HandleFunc("/api/v1/admin/backup", s.handleAdminBackup)
 	mux.HandleFunc("/api/v1/admin/backup/restore", s.handleAdminBackupRestore)
+	mux.HandleFunc("/api/v1/admin/settings", s.handleAdminSettings)
+	mux.HandleFunc("/api/v1/admin/settings/", s.handleAdminSettings)
 
 	dav.Mount(mux, s.store, s.authn)
 	flowsync.Mount(mux, s.cfg, s.log, s.store, s.authn, s.ms)
