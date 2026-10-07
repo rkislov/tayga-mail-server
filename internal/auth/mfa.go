@@ -18,7 +18,7 @@ type MFAService struct {
 }
 
 // BeginSetup creates (or replaces) a pending TOTP secret. Does not enable MFA yet.
-func (m *MFAService) BeginSetup(ctx context.Context, userID int64, email string) (secret, uri string, backupPlain []string, err error) {
+func (m *MFAService) BeginSetup(ctx context.Context, userID, email string) (secret, uri string, backupPlain []string, err error) {
 	secret, err = GenerateTOTPSecret()
 	if err != nil {
 		return "", "", nil, err
@@ -43,7 +43,7 @@ func (m *MFAService) BeginSetup(ctx context.Context, userID int64, email string)
 }
 
 // ConfirmSetup enables TOTP after the user proves they can generate a valid code.
-func (m *MFAService) ConfirmSetup(ctx context.Context, userID int64, code string) error {
+func (m *MFAService) ConfirmSetup(ctx context.Context, userID, code string) error {
 	mfa, err := m.Store.GetUserMFA(ctx, userID)
 	if err != nil {
 		return err
@@ -59,7 +59,7 @@ func (m *MFAService) ConfirmSetup(ctx context.Context, userID int64, code string
 }
 
 // Disable turns off TOTP for the user (requires a valid code or backup).
-func (m *MFAService) Disable(ctx context.Context, userID int64, code string) error {
+func (m *MFAService) Disable(ctx context.Context, userID, code string) error {
 	mfa, err := m.Store.GetUserMFA(ctx, userID)
 	if err != nil {
 		return err
@@ -74,7 +74,7 @@ func (m *MFAService) Disable(ctx context.Context, userID int64, code string) err
 }
 
 // IsEnabled reports whether the user has TOTP active.
-func (m *MFAService) IsEnabled(ctx context.Context, userID int64) bool {
+func (m *MFAService) IsEnabled(ctx context.Context, userID string) bool {
 	mfa, err := m.Store.GetUserMFA(ctx, userID)
 	return err == nil && mfa.TOTPEnabled
 }

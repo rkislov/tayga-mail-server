@@ -76,6 +76,9 @@ tls:
 http:
   listen: ":8080"
   public_url: "http://127.0.0.1:8080"
+  # CalDAV:  /dav/cal/{email}/calendars/default/
+  # CardDAV: /dav/card/{email}/addressbooks/default/
+  # Discovery: /.well-known/caldav | /.well-known/carddav
 
 seed:
   enabled: true
