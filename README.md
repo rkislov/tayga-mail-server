@@ -45,13 +45,13 @@ Seed: `admin@example.com` / `changeme`. TLS: `tls.auto_generate` or `scripts/gen
 - Backup/restore: `./tayga-mail backup|restore -config …` or Admin UI; see [docs/ha.md](docs/ha.md)
 - HA: Postgres + shared maildir; cross-node IMAP IDLE; `ha.mode: active_standby` (`fence: mx|writers`) or `sticky` per-user writers
 - Outbound: `smtp.relay` / `smtp.outbound_direct` + optional `smtp.dkim` for authenticated external recipients
-- MTA-STS / TLS-RPT: `smtp.mta_sts` enforce on direct MX; `publish` serves `/.well-known/mta-sts.txt`; `smtp.tls_rpt` aggregate reports
+- MTA-STS / TLS-RPT / DANE: `smtp.mta_sts` (+ `publish`), `smtp.tls_rpt`, `smtp.dane` TLSA on direct MX
 - SMTP rate limits: `smtp.rate_limit.per_ip` / `per_user`
 - Outbound queue + DSN: `smtp.queue` retries failed remote delivery; bounces local senders; admin `/api/v1/admin/outbound`
 - Object store: optional S3/MinIO write-through for maildir (`mailstore.object_store`); `tayga-mail sync-objects` to reconcile
 - Virus scan: `scan.enabled` with ClamAV/exec → reject, quarantine folder, or tag headers
 - Spam: `spam.enabled` Rspamd `/checkv2` → reject / greylist / tag / Junk quarantine; admin `/api/v1/admin/quarantine`
-- Inbound auth: optional `greylist`; then `helo` → `iprev` → `spf` → `dkim_verify` → ARC → `dmarc` on MX
+- Inbound auth: optional DB-backed `greylist`; then `helo` → `iprev` → `spf` → `dkim_verify` → ARC → `dmarc` on MX
 - DMARC rua/ruf: aggregate XML (`report.enabled`) and AFRF failure reports (`report.failure`)
 - DMARC ARC trust: `dmarc.arc_trust` softens fail when ARC `cv=pass`
 - ARC: `arc.enabled` verify/seal (RFC 8617) on inbound MX

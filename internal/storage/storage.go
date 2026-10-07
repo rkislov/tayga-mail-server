@@ -138,6 +138,10 @@ type Driver interface {
 	DeleteDMARCAggByDay(ctx context.Context, day string) error
 	ListDMARCAggDaysBefore(ctx context.Context, beforeDay string) ([]string, error)
 
+	// GreylistTouch records/updates a triplet; allowed=false means defer (421).
+	GreylistTouch(ctx context.Context, clientIP, envelopeFrom, rcpt string, delay time.Duration) (allowed bool, err error)
+	DeleteExpiredGreylist(ctx context.Context, olderThan time.Time) (int64, error)
+
 	// TryAcquireUserWriter grabs or renews a per-user maildir writer lease for nodeID.
 	// acquired=false means another live node holds it (holder is that node_id).
 	TryAcquireUserWriter(ctx context.Context, userID, nodeID string, ttl time.Duration) (acquired bool, holder string, err error)
