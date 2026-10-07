@@ -36,11 +36,17 @@ type Delivery struct {
 	Copy    bool
 }
 
+// MailNotifier is called after a message is filed into a mailbox (IMAP IDLE wakeups).
+type MailNotifier interface {
+	Notify(email, mailbox string)
+}
+
 // Engine runs active Sieve scripts for local delivery.
 type Engine struct {
 	Store     storage.Driver
 	Mailstore *mailstore.Store
 	Log       *slog.Logger
+	Notifier  MailNotifier
 }
 
 func New(store storage.Driver, ms *mailstore.Store, log *slog.Logger) *Engine {
@@ -129,6 +135,9 @@ func (e *Engine) fileInto(ctx context.Context, user *storage.User, folder string
 		FilePath:     rel,
 		MessageID:    msgid,
 	})
+	if err == nil && e.Notifier != nil {
+		e.Notifier.Notify(user.Email, folder)
+	}
 	return err
 }
 
