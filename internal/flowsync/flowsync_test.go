@@ -1,6 +1,7 @@
 package flowsync_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"log/slog"
@@ -79,6 +80,21 @@ func TestFlowSyncFolderSyncUsesUUIDs(t *testing.T) {
 	}
 	if w.Header().Get("X-FlowSync") != "Tayga-Proprietary" {
 		t.Fatal("missing proprietary header")
+	}
+
+	reqWB := httptest.NewRequest(http.MethodPost, "/Microsoft-Server-ActiveSync?Cmd=FolderSync&DeviceId=dev2&DeviceType=Test", nil)
+	reqWB.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("u@ex.com:secret")))
+	reqWB.Header.Set("Accept", "application/vnd.ms-sync.wbxml")
+	w2 := httptest.NewRecorder()
+	mux.ServeHTTP(w2, reqWB)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("wbxml status %d", w2.Code)
+	}
+	if ct := w2.Header().Get("Content-Type"); !strings.Contains(ct, "wbxml") {
+		t.Fatalf("expected wbxml content-type, got %q", ct)
+	}
+	if !bytes.Contains(w2.Body.Bytes(), []byte(mb.ID)) {
+		t.Fatal("expected mailbox UUID inside WBXML body")
 	}
 }
 
