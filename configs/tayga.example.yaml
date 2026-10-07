@@ -32,10 +32,24 @@ seed:
 #   tls_listen: ":443"
 #   public_url: "https://mail.example.com"
 #   admins: ["admin@example.com"]
+# xmpp:
+#   enabled: false
+#   listen: ":5222"
+#   listen_tls: ":5223"
+#   require_tls: true
+#   component_listen: ":5347"
+#   components:
+#     - name: support-bot
+#       subdomain: bots
+#       secret: change-me-component-secret
 # log:
 #   level: info
 #   format: json
 # tls:
 #   cert_file: ./data/certs/server.crt
 #   key_file: ./data/certs/server.key
+#   certs_dir: ./data/certs/store
 #   auto_generate: true
+#   acme:
+#     email: admin@example.com
+#     staging: false

@@ -6,6 +6,7 @@
 
 # Data
 /data/
+**/data/certs/
 *.db
 *.db-*
 

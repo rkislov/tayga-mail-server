@@ -20,6 +20,7 @@ import (
 	"github.com/tayga/tms/internal/settings"
 	"github.com/tayga/tms/internal/storage"
 	"github.com/tayga/tms/internal/tlsutil"
+	"github.com/tayga/tms/internal/xmpp"
 )
 
 // Server exposes health, metrics, auth API, and the embedded Web UI.
@@ -31,6 +32,7 @@ type Server struct {
 	authn   *auth.Layer
 	ms      *mailstore.Store
 	tls     *tlsutil.Manager
+	xmpp    xmpp.Gateway
 	servers []*http.Server
 }
 
@@ -91,6 +93,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/admin/domains", s.handleAdminDomains)
 	mux.HandleFunc("/api/v1/admin/domains/", s.handleAdminDomains)
 	mux.HandleFunc("/api/v1/admin/tls", s.handleAdminTLS)
+	mux.HandleFunc("/api/v1/admin/certs", s.handleAdminCerts)
+	mux.HandleFunc("/api/v1/admin/certs/", s.handleAdminCerts)
 	mux.HandleFunc("/api/v1/admin/status", s.handleAdminStatus)
 	mux.HandleFunc("/api/v1/admin/outbound", s.handleAdminOutbound)
 	mux.HandleFunc("/api/v1/admin/outbound/", s.handleAdminOutbound)
@@ -100,11 +104,20 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/admin/backup/restore", s.handleAdminBackupRestore)
 	mux.HandleFunc("/api/v1/admin/settings", s.handleAdminSettings)
 	mux.HandleFunc("/api/v1/admin/settings/", s.handleAdminSettings)
+	mux.HandleFunc("/api/v1/admin/bots", s.handleAdminBots)
+	mux.HandleFunc("/api/v1/admin/bots/", s.handleAdminBots)
+	mux.HandleFunc("/api/v1/bots/xmpp", s.handleBotXMPP)
+	mux.HandleFunc("/api/v1/bots/xmpp/", s.handleBotXMPP)
+	mux.HandleFunc("/api/v1/chat/", s.handleChat)
+	mux.HandleFunc("/api/v1/chat", s.handleChat)
 
 	dav.Mount(mux, s.store, s.authn)
 	flowsync.Mount(mux, s.cfg, s.log, s.store, s.authn, s.ms)
 
 	mux.Handle("/", frontend.Handler())
+	if s.tls != nil {
+		return s.tls.HTTPChallengeHandler(mux)
+	}
 	return mux
 }
 

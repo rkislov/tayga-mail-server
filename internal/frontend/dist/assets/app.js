@@ -2,7 +2,7 @@ const I18N = {
   ru: {
     brand: "Tayga Mail",
     login_title: "Вход",
-    login_lede: "Почта, календарь, контакты и файлы.",
+    login_lede: "Почта, календарь, чат, контакты и файлы в одном окне.",
     email: "Email",
     password: "Пароль",
     continue: "Продолжить",
@@ -11,10 +11,19 @@ const I18N = {
     totp_code: "Код приложения",
     verify: "Проверить",
     back: "Назад",
+    nav_apps: "Приложения",
     nav_mail: "Почта",
     nav_calendar: "Календарь",
     nav_contacts: "Контакты",
     nav_files: "Файлы",
+    nav_chat: "Чат",
+    chat_title: "Чат",
+    chat_new: "Диалог",
+    chat_select: "Выберите диалог",
+    chat_placeholder: "Сообщение…",
+    chat_peer_jid: "Email / JID",
+    chat_start: "Открыть",
+    chat_empty: "Нет сообщений",
     nav_settings: "Настройки",
     nav_profile: "Профиль",
     nav_security: "Безопасность",
@@ -24,8 +33,32 @@ const I18N = {
     nav_admin: "Админ",
     nav_monitor: "Мониторинг",
     nav_tenants: "Домены и пользователи",
-    nav_tls: "TLS",
+    nav_tls: "УЦ",
     nav_server: "Сервер",
+    ca_title: "Удостоверяющий центр",
+    ca_lede: "Каталог сертификатов: самоподписанные, коммерческие PEM и Let’s Encrypt (ACME).",
+    ca_list: "Сертификаты",
+    ca_active: "Активный",
+    ca_self_signed: "Самоподписанный",
+    ca_upload: "Коммерческий (PEM)",
+    ca_acme: "Let’s Encrypt",
+    ca_name: "Имя",
+    ca_hosts: "Хосты / домены",
+    ca_days: "Срок (дней)",
+    ca_cert_pem: "Сертификат (PEM)",
+    ca_key_pem: "Закрытый ключ (PEM)",
+    ca_email: "Email ACME",
+    ca_staging: "Staging (тест)",
+    ca_activate: "Сделать активным",
+    ca_renew: "Продлить",
+    ca_delete: "Удалить",
+    ca_issue: "Выпустить",
+    ca_add: "Добавить",
+    ca_empty: "Нет сертификатов в каталоге",
+    ca_pick: "Сертификат для сервисов",
+    ca_pick_hint: "Один активный сертификат используется HTTPS, IMAPS, SMTPS и остальными TLS-слушателями.",
+    role_user: "Пользователь",
+    role_admin: "Администратор",
     logout: "Выйти",
     compose: "Написать",
     send: "Отправить",
@@ -40,6 +73,9 @@ const I18N = {
     col_subject: "Тема",
     col_date: "Дата",
     reply: "Ответить",
+    archive: "Архив",
+    mail_search_placeholder: "Поиск писем…",
+    mail_search_empty: "Ничего не найдено",
     delete: "Удалить",
     calendar_title: "Календарь",
     calendars: "Календари",
@@ -75,6 +111,7 @@ const I18N = {
     profile_title: "Профиль",
     security_title: "Безопасность",
     appearance_title: "Внешний вид",
+    appearance_hint: "Выберите фон рабочего стола — превью обновляется сразу.",
     theme: "Тема",
     language_title: "Язык",
     language_hint: "Язык интерфейса сохраняется в браузере.",
@@ -92,7 +129,7 @@ const I18N = {
   en: {
     brand: "Tayga Mail",
     login_title: "Sign in",
-    login_lede: "Mail, calendar, contacts, and files.",
+    login_lede: "Mail, calendar, chat, contacts, and files in one place.",
     email: "Email",
     password: "Password",
     continue: "Continue",
@@ -101,10 +138,19 @@ const I18N = {
     totp_code: "Authenticator code",
     verify: "Verify",
     back: "Back",
+    nav_apps: "Apps",
     nav_mail: "Mail",
     nav_calendar: "Calendar",
     nav_contacts: "Contacts",
     nav_files: "Files",
+    nav_chat: "Chat",
+    chat_title: "Chat",
+    chat_new: "Conversation",
+    chat_select: "Select a conversation",
+    chat_placeholder: "Message…",
+    chat_peer_jid: "Email / JID",
+    chat_start: "Open",
+    chat_empty: "No messages",
     nav_settings: "Settings",
     nav_profile: "Profile",
     nav_security: "Security",
@@ -114,8 +160,33 @@ const I18N = {
     nav_admin: "Admin",
     nav_monitor: "Monitoring",
     nav_tenants: "Domains & users",
-    nav_tls: "TLS",
+    nav_tls: "CA",
     nav_server: "Server",
+    ca_title: "Certificate authority",
+    ca_lede: "Certificate catalog: self-signed, commercial PEM, and Let’s Encrypt (ACME).",
+    ca_list: "Certificates",
+    ca_active: "Active",
+    ca_self_signed: "Self-signed",
+    ca_upload: "Commercial (PEM)",
+    ca_acme: "Let’s Encrypt",
+    ca_name: "Name",
+    ca_hosts: "Hosts / domains",
+    ca_days: "Validity (days)",
+    ca_cert_pem: "Certificate (PEM)",
+    ca_key_pem: "Private key (PEM)",
+    ca_email: "ACME email",
+    ca_staging: "Staging (test)",
+    ca_activate: "Activate",
+    ca_renew: "Renew",
+    ca_delete: "Delete",
+    ca_issue: "Issue",
+    ca_add: "Add",
+    ca_empty: "No certificates in catalog",
+    ca_pick: "Certificate for services",
+    ca_pick_hint: "One active certificate is used by HTTPS, IMAPS, SMTPS, and other TLS listeners.",
+    role_user: "User",
+    role_admin: "Administrator",
+    appearance_hint: "Pick a desktop backdrop — preview updates instantly.",
     logout: "Log out",
     compose: "Compose",
     send: "Send",
@@ -130,6 +201,9 @@ const I18N = {
     col_subject: "Subject",
     col_date: "Date",
     reply: "Reply",
+    archive: "Archive",
+    mail_search_placeholder: "Search mail…",
+    mail_search_empty: "No matches",
     delete: "Delete",
     calendar_title: "Calendar",
     calendars: "Calendars",
@@ -192,10 +266,17 @@ function applyLang(next) {
   localStorage.setItem("tayga.lang", lang);
   document.documentElement.lang = lang;
   document.querySelectorAll("[data-i18n]").forEach((el) => {
+    // Icon-only buttons keep a visual glyph; don't overwrite with text.
+    if (el.classList.contains("btn-ico") || el.querySelector(":scope > .ico")) return;
     el.textContent = t(el.getAttribute("data-i18n"));
   });
   document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
     el.placeholder = t(el.getAttribute("data-i18n-placeholder"));
+  });
+  document.querySelectorAll("[data-i18n-title]").forEach((el) => {
+    const label = t(el.getAttribute("data-i18n-title"));
+    el.title = label;
+    el.setAttribute("aria-label", label);
   });
   const sel = document.getElementById("lang-select");
   if (sel) sel.value = lang;
@@ -221,45 +302,96 @@ const $ = (id) => document.getElementById(id);
 const THEMES = {
   taiga: {
     label: "Тайга",
+    labelEn: "Taiga",
+    blurb: "Северная тайга",
+    blurbEn: "Northern forest",
     image: "/assets/taiga-forest.jpg",
     image2x: "/assets/taiga-forest@2x.jpg",
   },
   cosmos: {
     label: "Космос",
+    labelEn: "Cosmos",
+    blurb: "Абстрактный космос",
+    blurbEn: "Abstract space",
     image: "/assets/cosmic-abstract.jpg",
     image2x: "/assets/cosmic-abstract@2x.jpg",
   },
   city: {
     label: "Город",
+    labelEn: "City",
+    blurb: "Вечерний город",
+    blurbEn: "City at dusk",
     image: "/assets/city.jpg",
     image2x: "/assets/city@2x.jpg",
   },
   kalyazin: {
     label: "Колязин",
+    labelEn: "Kalyazin",
+    blurb: "Затопленная колокольня",
+    blurbEn: "Flooded bell tower",
     image: "/assets/kalyazin.jpg",
     image2x: "/assets/kalyazin@2x.jpg",
   },
   temple: {
     label: "Храм на Нерли",
+    labelEn: "Nerl Temple",
+    blurb: "Покрова на Нерли",
+    blurbEn: "Church on the Nerl",
     image: "/assets/temple-nerl.jpg",
     image2x: "/assets/temple-nerl@2x.jpg",
   },
   moscow: {
     label: "Москва-Сити",
+    labelEn: "Moscow City",
+    blurb: "Небоскрёбы на закате",
+    blurbEn: "Skyline at sunset",
     image: "/assets/moscow-city.jpg",
     image2x: "/assets/moscow-city@2x.jpg",
   },
   street: {
     label: "Стрит-арт",
+    labelEn: "Street art",
+    blurb: "Mail + новый Chat",
+    blurbEn: "Mail + new Chat",
     image: "/assets/street-art.jpg",
     image2x: "/assets/street-art@2x.jpg",
   },
   teriberka: {
     label: "Териберка",
+    labelEn: "Teriberka",
+    blurb: "Берег Баренцева моря",
+    blurbEn: "Barents Sea coast",
     image: "/assets/teriberka.jpg",
     image2x: "/assets/teriberka@2x.jpg",
   },
 };
+
+function themeLabel(theme) {
+  return (lang === "en" ? theme.labelEn : theme.label) || theme.label;
+}
+
+function themeBlurb(theme) {
+  return (lang === "en" ? theme.blurbEn : theme.blurb) || theme.blurb || "";
+}
+
+function renderThemeGallery(active) {
+  const gallery = document.getElementById("theme-gallery");
+  if (!gallery) return;
+  gallery.innerHTML = "";
+  Object.entries(THEMES).forEach(([key, theme]) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "theme-tile" + (key === active ? " is-active" : "");
+    btn.dataset.theme = key;
+    btn.setAttribute("role", "option");
+    btn.setAttribute("aria-selected", key === active ? "true" : "false");
+    btn.innerHTML =
+      `<span class="theme-tile-shot" style="background-image:url('${theme.image}')"></span>` +
+      `<span class="theme-tile-meta"><strong>${themeLabel(theme)}</strong><em>${themeBlurb(theme)}</em></span>`;
+    btn.addEventListener("click", () => applyTheme(key));
+    gallery.appendChild(btn);
+  });
+}
 
 function applyTheme(name) {
   const theme = THEMES[name] || THEMES.taiga;
@@ -274,6 +406,21 @@ function applyTheme(name) {
   const preview = document.getElementById("theme-preview");
   if (preview) preview.style.backgroundImage = `url('${theme.image}')`;
   localStorage.setItem("tayga.theme", key);
+  renderThemeGallery(key);
+}
+
+function updateNavUser(email, isAdmin) {
+  const mail = email || state.email || localStorage.getItem("tayga.email") || "";
+  const avatar = $("nav-avatar");
+  const emailEl = $("nav-user-email");
+  const roleEl = $("nav-user-role");
+  if (avatar) avatar.textContent = (mail.trim()[0] || "T").toUpperCase();
+  if (emailEl) emailEl.textContent = mail || "—";
+  if (roleEl) {
+    const key = isAdmin ? "role_admin" : "role_user";
+    roleEl.setAttribute("data-i18n", key);
+    roleEl.textContent = t(key);
+  }
 }
 
 (function initTheme() {
@@ -285,15 +432,16 @@ function applyTheme(name) {
 })();
 
 const APPS = [
-  "mail", "calendar", "contacts", "files",
+  "mail", "calendar", "contacts", "files", "chat",
   "profile", "security", "appearance", "filters", "language",
   "monitor", "tenants", "tls", "server",
 ];
 
-const mailState = { mailboxID: "", messageID: "", mailboxes: [] };
+const mailState = { mailboxID: "", messageID: "", mailboxes: [], searchQ: "" };
 const calState = { calendarID: "", eventID: "", calendars: [], events: [] };
 const contactState = { bookID: "", cardID: "", books: [], cards: [] };
 const filesState = { path: "", selected: null, entries: [] };
+const chatState = { peer: "", roster: [], messages: [], es: null, me: "" };
 
 function show(id) {
   const account = id === "view-account";
@@ -310,6 +458,7 @@ const APP_I18N = {
   calendar: "nav_calendar",
   contacts: "nav_contacts",
   files: "nav_files",
+  chat: "nav_chat",
   profile: "nav_profile",
   security: "nav_security",
   appearance: "nav_appearance",
@@ -352,6 +501,8 @@ function showApp(name) {
   if (app === "calendar") refreshCalendar();
   if (app === "contacts") refreshContacts();
   if (app === "files") refreshFiles();
+  if (app === "chat") { refreshChat(); startChatLive(); }
+  else stopChatLive();
   if (app === "filters") { refreshSieve(); refreshVacation(); }
   if (app === "monitor") { refreshMonitor(); startMonitorLive(); }
   else stopMonitorLive();
@@ -553,6 +704,7 @@ async function loadMe() {
     $("acct-quota").textContent = q;
     $("acct-role").textContent = me.is_admin ? "admin" : "live";
     $("nav-admin")?.classList.toggle("hidden", !me.is_admin);
+    updateNavUser(me.email, !!me.is_admin);
   } catch (err) {
     if (err.status === 401) return;
     $("acct-meta").textContent = err.message;
@@ -1086,66 +1238,157 @@ async function refreshAdminUsers() {
 
 function renderTLSStatus(info) {
   if (!info || !info.configured) {
-    $("tls-status").textContent = "No certificate loaded. Upload PEM or generate a self-signed cert.";
+    $("tls-status").textContent = lang === "en"
+      ? "No active certificate. Issue, upload, or obtain via Let’s Encrypt below."
+      : "Нет активного сертификата. Выпустите, загрузите PEM или получите через Let’s Encrypt.";
     return;
   }
   const sans = [].concat(info.dns_names || [], info.ip_sans || []).join(", ") || "—";
   $("tls-status").innerHTML =
     "<strong>" + escapeHtml(info.subject || "") + "</strong><br/>" +
-    "<span class=\"meta\">Valid " + escapeHtml(info.not_before || "") + " → " + escapeHtml(info.not_after || "") +
-    " · " + (info.expires_in_hours != null ? info.expires_in_hours + "h left" : "") + "</span><br/>" +
+    "<span class=\"meta\">" + escapeHtml(info.not_before || "") + " → " + escapeHtml(info.not_after || "") +
+    (info.expires_in_hours != null ? " · " + info.expires_in_hours + "h" : "") + "</span><br/>" +
     "<span class=\"meta\">SANs: " + escapeHtml(sans) + "</span><br/>" +
     "<span class=\"meta\">SHA-256: " + escapeHtml(info.fingerprint_sha256 || "") + "</span>";
 }
 
+function sourceLabel(src) {
+  if (src === "self_signed") return t("ca_self_signed");
+  if (src === "acme") return t("ca_acme");
+  if (src === "uploaded") return t("ca_upload");
+  return src || "—";
+}
+
+function renderCertList(certs) {
+  const list = $("ca-cert-list");
+  if (!list) return;
+  if (!certs || !certs.length) {
+    list.innerHTML = `<li class="meta">${t("ca_empty")}</li>`;
+    return;
+  }
+  list.innerHTML = certs.map((c) => `
+    <li class="ca-cert-item${c.active ? " is-active" : ""}">
+      <div>
+        <strong>${escapeHtml(c.name || c.id)}</strong>
+        ${c.active ? `<span class="badge">${t("ca_active")}</span>` : ""}
+        <div class="meta">${escapeHtml(sourceLabel(c.source))} · ${(c.domains || []).join(", ") || "—"}</div>
+        <div class="meta">${escapeHtml(c.not_before || "")} → ${escapeHtml(c.not_after || "")}</div>
+      </div>
+      <div class="actions">
+        ${c.active ? "" : `<button type="button" class="btn-secondary btn-sm" data-ca-act="${escapeHtml(c.id)}">${t("ca_activate")}</button>`}
+        ${c.source === "acme" ? `<button type="button" class="btn-secondary btn-sm" data-ca-renew="${escapeHtml(c.id)}">${t("ca_renew")}</button>` : ""}
+        ${c.active ? "" : `<button type="button" class="btn-secondary btn-sm" data-ca-del="${escapeHtml(c.id)}">${t("ca_delete")}</button>`}
+      </div>
+    </li>`).join("");
+  list.querySelectorAll("[data-ca-act]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      try {
+        await api("/api/v1/admin/certs/" + encodeURIComponent(btn.dataset.caAct) + "/activate", { method: "POST" });
+        setMsg($("tls-msg"), t("ca_activate") + " OK", "ok");
+        refreshTLS();
+      } catch (err) { setMsg($("tls-msg"), err.message, "err"); }
+    });
+  });
+  list.querySelectorAll("[data-ca-renew]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      setMsg($("tls-msg"), "…");
+      try {
+        await api("/api/v1/admin/certs/" + encodeURIComponent(btn.dataset.caRenew) + "/renew", { method: "POST" });
+        setMsg($("tls-msg"), t("ca_renew") + " OK", "ok");
+        refreshTLS();
+      } catch (err) { setMsg($("tls-msg"), err.message, "err"); }
+    });
+  });
+  list.querySelectorAll("[data-ca-del]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      if (!confirm(t("ca_delete") + "?")) return;
+      try {
+        await api("/api/v1/admin/certs/" + encodeURIComponent(btn.dataset.caDel), { method: "DELETE" });
+        refreshTLS();
+      } catch (err) { setMsg($("tls-msg"), err.message, "err"); }
+    });
+  });
+}
+
 async function refreshTLS() {
   try {
-    const info = await api("/api/v1/admin/tls");
-    renderTLSStatus(info);
-    if (!$("tls-hosts").value && info) {
-      const hosts = [].concat(info.dns_names || [], info.ip_sans || []);
-      if (hosts.length) $("tls-hosts").value = hosts.join(", ");
+    const data = await api("/api/v1/admin/certs");
+    renderTLSStatus(data.active);
+    renderCertList(data.certificates || []);
+    const hosts = [].concat((data.active && data.active.dns_names) || []);
+    if ($("ca-ss-hosts") && !$("ca-ss-hosts").value && hosts.length) {
+      $("ca-ss-hosts").value = hosts.join(", ");
+    }
+    if ($("ca-acme-domains") && !$("ca-acme-domains").value && hosts.length) {
+      $("ca-acme-domains").value = hosts.filter((h) => !/^\d|localhost|:/.test(h)).join(", ");
     }
   } catch (err) {
-    $("tls-status").textContent = err.message;
-    setMsg($("tls-msg"), err.message, "err");
+    try {
+      const info = await api("/api/v1/admin/tls");
+      renderTLSStatus(info);
+      renderCertList([]);
+    } catch (e2) {
+      $("tls-status").textContent = err.message;
+      setMsg($("tls-msg"), err.message, "err");
+    }
   }
 }
 
-$("btn-tls-refresh").addEventListener("click", () => refreshTLS());
-$("btn-tls-upload").addEventListener("click", async () => {
-  setMsg($("tls-msg"), "Installing…");
+$("btn-tls-refresh")?.addEventListener("click", () => refreshTLS());
+$("btn-ca-ss")?.addEventListener("click", async () => {
+  const hosts = ($("ca-ss-hosts")?.value || "").split(",").map((s) => s.trim()).filter(Boolean);
+  setMsg($("tls-msg"), "…");
   try {
-    const info = await api("/api/v1/admin/tls", {
-      method: "PUT",
+    await api("/api/v1/admin/certs/self-signed", {
+      method: "POST",
       body: JSON.stringify({
-        certificate: $("tls-cert").value,
-        private_key: $("tls-key").value,
+        name: $("ca-ss-name")?.value || "",
+        hosts,
+        days: parseInt($("ca-ss-days")?.value || "365", 10) || 365,
+        activate: !!$("ca-ss-activate")?.checked,
       }),
     });
-    renderTLSStatus(info);
-    $("tls-key").value = "";
-    setMsg($("tls-msg"), "Certificate installed (hot-reloaded).", "ok");
-  } catch (err) {
-    setMsg($("tls-msg"), err.message, "err");
-  }
+    setMsg($("tls-msg"), "OK", "ok");
+    refreshTLS();
+  } catch (err) { setMsg($("tls-msg"), err.message, "err"); }
 });
-$("btn-tls-generate").addEventListener("click", async () => {
-  const hosts = $("tls-hosts").value.split(",").map((s) => s.trim()).filter(Boolean);
-  setMsg($("tls-msg"), "Generating…");
+$("btn-ca-upload")?.addEventListener("click", async () => {
+  setMsg($("tls-msg"), "…");
   try {
-    const info = await api("/api/v1/admin/tls", {
+    await api("/api/v1/admin/certs/upload", {
       method: "POST",
-      body: JSON.stringify({ hosts, days: 365 }),
+      body: JSON.stringify({
+        name: $("ca-up-name")?.value || "",
+        certificate: $("tls-cert")?.value || "",
+        private_key: $("tls-key")?.value || "",
+        activate: !!$("ca-up-activate")?.checked,
+      }),
     });
-    renderTLSStatus(info);
-    setMsg($("tls-msg"), "Self-signed certificate generated and activated.", "ok");
-  } catch (err) {
-    setMsg($("tls-msg"), err.message, "err");
-  }
+    if ($("tls-key")) $("tls-key").value = "";
+    setMsg($("tls-msg"), "OK", "ok");
+    refreshTLS();
+  } catch (err) { setMsg($("tls-msg"), err.message, "err"); }
+});
+$("btn-ca-acme")?.addEventListener("click", async () => {
+  const domains = ($("ca-acme-domains")?.value || "").split(",").map((s) => s.trim()).filter(Boolean);
+  setMsg($("tls-msg"), "ACME…");
+  try {
+    await api("/api/v1/admin/certs/acme", {
+      method: "POST",
+      body: JSON.stringify({
+        name: $("ca-acme-name")?.value || "",
+        domains,
+        email: $("ca-acme-email")?.value || "",
+        staging: !!$("ca-acme-staging")?.checked,
+        activate: !!$("ca-acme-activate")?.checked,
+      }),
+    });
+    setMsg($("tls-msg"), "OK", "ok");
+    refreshTLS();
+  } catch (err) { setMsg($("tls-msg"), err.message, "err"); }
 });
 
-const settingsState = { all: null };
+const settingsState = { all: null, certs: [] };
 
 function fillSettingsSectionSelect(sections) {
   const sel = $("settings-section");
@@ -1161,10 +1404,41 @@ function fillSettingsSectionSelect(sections) {
   else if (sections && sections.length) sel.value = sections.includes("spam") ? "spam" : sections[0];
 }
 
+async function fillSettingsCertSelect(activeId) {
+  const sel = $("settings-tls-cert");
+  if (!sel) return;
+  try {
+    const data = await api("/api/v1/admin/certs");
+    settingsState.certs = data.certificates || [];
+    sel.innerHTML = "";
+    settingsState.certs.forEach((c) => {
+      const opt = document.createElement("option");
+      opt.value = c.id;
+      opt.textContent = (c.active ? "★ " : "") + (c.name || c.id) + " (" + (c.source || "") + ")";
+      if (c.id === activeId || c.active) opt.selected = true;
+      sel.appendChild(opt);
+    });
+  } catch (_) {
+    sel.innerHTML = "";
+  }
+}
+
 function showSettingsSection(name) {
   if (!settingsState.all || !settingsState.all.settings) return;
   const val = settingsState.all.settings[name] || {};
-  $("settings-json").value = JSON.stringify(val, null, 2);
+  const tlsPanel = $("settings-tls-panel");
+  const jsonWrap = $("settings-json-wrap");
+  if (name === "tls") {
+    tlsPanel?.classList.remove("hidden");
+    jsonWrap?.classList.add("hidden");
+    if ($("settings-tls-email")) $("settings-tls-email").value = val.acme?.email || "";
+    if ($("settings-tls-staging")) $("settings-tls-staging").checked = !!val.acme?.staging;
+    fillSettingsCertSelect(val.active_id || "");
+  } else {
+    tlsPanel?.classList.add("hidden");
+    jsonWrap?.classList.remove("hidden");
+    $("settings-json").value = JSON.stringify(val, null, 2);
+  }
 }
 
 async function refreshSettings() {
@@ -1187,11 +1461,33 @@ $("btn-settings-refresh").addEventListener("click", () => refreshSettings());
 $("btn-settings-save").addEventListener("click", async () => {
   const section = $("settings-section").value;
   let parsed;
-  try {
-    parsed = JSON.parse($("settings-json").value);
-  } catch (err) {
-    setMsg($("settings-msg"), "Invalid JSON: " + err.message, "err");
-    return;
+  if (section === "tls") {
+    const cur = (settingsState.all && settingsState.all.settings && settingsState.all.settings.tls) || {};
+    const certId = $("settings-tls-cert")?.value || "";
+    parsed = {
+      ...cur,
+      active_id: certId,
+      acme: {
+        ...(cur.acme || {}),
+        email: $("settings-tls-email")?.value || "",
+        staging: !!$("settings-tls-staging")?.checked,
+      },
+    };
+    if (certId) {
+      try {
+        await api("/api/v1/admin/certs/" + encodeURIComponent(certId) + "/activate", { method: "POST" });
+      } catch (err) {
+        setMsg($("settings-msg"), err.message, "err");
+        return;
+      }
+    }
+  } else {
+    try {
+      parsed = JSON.parse($("settings-json").value);
+    } catch (err) {
+      setMsg($("settings-msg"), "Invalid JSON: " + err.message, "err");
+      return;
+    }
   }
   setMsg($("settings-msg"), "Saving…");
   try {
@@ -1526,6 +1822,8 @@ async function refreshMail() {
       btn.addEventListener("click", () => {
         mailState.mailboxID = btn.dataset.mb;
         mailState.messageID = "";
+        mailState.searchQ = "";
+        if ($("mail-search")) $("mail-search").value = "";
         refreshMailMessages();
         list.querySelectorAll(".folder-btn").forEach((b) => b.classList.toggle("is-active", b.dataset.mb === mailState.mailboxID));
       });
@@ -1573,12 +1871,21 @@ async function refreshMailMessages() {
   const list = $("mail-msg-list");
   if (!list || !mailState.mailboxID) return;
   const mb = mailState.mailboxes.find((m) => m.id === mailState.mailboxID);
-  if ($("mail-folder-title")) $("mail-folder-title").textContent = mb?.name || "INBOX";
+  const q = (mailState.searchQ || "").trim();
+  if ($("mail-folder-title")) {
+    $("mail-folder-title").textContent = q ? (lang === "en" ? "Search" : "Поиск") : (mb?.name || "INBOX");
+  }
   try {
-    const data = await api("/api/v1/mail/mailboxes/" + encodeURIComponent(mailState.mailboxID) + "/messages?limit=80");
+    let data;
+    if (q) {
+      const params = new URLSearchParams({ q, limit: "80" });
+      data = await api("/api/v1/mail/search?" + params.toString());
+    } else {
+      data = await api("/api/v1/mail/mailboxes/" + encodeURIComponent(mailState.mailboxID) + "/messages?limit=80");
+    }
     const msgs = data.messages || [];
     if (!msgs.length) {
-      list.innerHTML = `<li class="msg-empty meta">${t("empty_mailbox")}</li>`;
+      list.innerHTML = `<li class="msg-empty meta">${t(q ? "mail_search_empty" : "empty_mailbox")}</li>`;
       showMailReader(null);
       return;
     }
@@ -1587,7 +1894,7 @@ async function refreshMailMessages() {
         <button type="button" class="msg-item${!m.seen ? " unread" : ""}${m.id === mailState.messageID ? " is-active" : ""}" data-msg="${escapeHtml(m.id)}" title="${escapeHtml(m.from || "")}">
           <span class="msg-flag" aria-hidden="true"></span>
           <span class="msg-from">${escapeHtml(mailFromDisplay(m.from))}</span>
-          <span class="msg-subject">${escapeHtml(m.subject || "(no subject)")}</span>
+          <span class="msg-subject">${escapeHtml(m.subject || "(no subject)")}${m.snippet ? `<span class="msg-snippet meta"> — ${escapeHtml(m.snippet)}</span>` : ""}</span>
           <span class="msg-date">${escapeHtml(mailDateShort(m.internal_date))}</span>
         </button>
       </li>`).join("");
@@ -1642,6 +1949,32 @@ async function openMailMessage(id) {
 }
 
 $("btn-mail-refresh")?.addEventListener("click", () => refreshMail());
+let mailSearchTimer = null;
+$("mail-search")?.addEventListener("input", () => {
+  clearTimeout(mailSearchTimer);
+  mailSearchTimer = setTimeout(() => {
+    mailState.searchQ = $("mail-search")?.value || "";
+    mailState.messageID = "";
+    refreshMailMessages();
+  }, 280);
+});
+$("mail-search")?.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    $("mail-search").value = "";
+    mailState.searchQ = "";
+    refreshMailMessages();
+  }
+});
+$("btn-mail-archive")?.addEventListener("click", async () => {
+  if (!mailState.messageID) return;
+  try {
+    await api("/api/v1/mail/messages/" + encodeURIComponent(mailState.messageID) + "/archive", { method: "POST" });
+    mailState.messageID = "";
+    await refreshMail();
+  } catch (err) {
+    alert(err.message);
+  }
+});
 $("btn-compose")?.addEventListener("click", () => {
   $("compose-backdrop")?.classList.remove("hidden");
   $("compose-to").value = "";
@@ -2092,6 +2425,148 @@ async function downloadFile(name) {
   URL.revokeObjectURL(a.href);
 }
 
+function chatBare(jid) {
+  return String(jid || "").split("/")[0].toLowerCase();
+}
+
+function stopChatLive() {
+  if (chatState.es) {
+    try { chatState.es.close(); } catch {}
+    chatState.es = null;
+  }
+}
+
+function startChatLive() {
+  stopChatLive();
+  const tok = state.tokens?.access_token;
+  if (!tok || typeof EventSource === "undefined") return;
+  const es = new EventSource("/api/v1/chat/events?access_token=" + encodeURIComponent(tok));
+  chatState.es = es;
+  es.addEventListener("message", (ev) => {
+    let data;
+    try { data = JSON.parse(ev.data); } catch { return; }
+    if (data.type !== "message" && !data.body) return;
+    const from = chatBare(data.from);
+    const to = chatBare(data.to);
+    const me = chatBare(chatState.me || state.email);
+    const peer = from === me ? to : from;
+    if (!peer) return;
+    if (!chatState.roster.some((r) => chatBare(r.jid) === peer)) {
+      chatState.roster.unshift({ jid: peer, name: "", subscription: "both" });
+      renderChatRoster();
+    }
+    if (chatBare(chatState.peer) === peer) {
+      appendChatBubble(data);
+      scrollChatBottom();
+    }
+  });
+}
+
+function appendChatBubble(m) {
+  const box = $("chat-messages");
+  if (!box) return;
+  const me = chatBare(chatState.me || state.email);
+  const mine = chatBare(m.from) === me;
+  const div = document.createElement("div");
+  div.className = "chat-bubble" + (mine ? " is-mine" : "");
+  div.innerHTML = `<p>${escapeHtml(m.body || "")}</p><time>${escapeHtml(m.at ? new Date(m.at).toLocaleString() : "")}</time>`;
+  box.appendChild(div);
+}
+
+function scrollChatBottom() {
+  const box = $("chat-messages");
+  if (box) box.scrollTop = box.scrollHeight;
+}
+
+function renderChatRoster() {
+  const list = $("chat-roster");
+  if (!list) return;
+  const peer = chatBare(chatState.peer);
+  list.innerHTML = chatState.roster.map((r) => {
+    const jid = chatBare(r.jid);
+    const label = r.name || jid;
+    return `<li>
+      <button type="button" class="msg-item${jid === peer ? " is-active" : ""}" data-jid="${escapeHtml(jid)}">
+        <span class="msg-subject">${escapeHtml(label)}</span>
+        <span class="msg-date">${escapeHtml(jid)}</span>
+      </button>
+    </li>`;
+  }).join("") || `<li class="meta msg-empty">${escapeHtml(t("chat_select"))}</li>`;
+  list.querySelectorAll("[data-jid]").forEach((btn) => {
+    btn.addEventListener("click", () => openChatPeer(btn.dataset.jid));
+  });
+}
+
+async function refreshChat() {
+  try {
+    const data = await api("/api/v1/chat/roster");
+    chatState.roster = data.roster || [];
+    chatState.me = data.me || state.email;
+    renderChatRoster();
+    if (chatState.peer) await openChatPeer(chatState.peer, true);
+  } catch (err) {
+    setMsg($("chat-roster-msg"), err.message, "err");
+  }
+}
+
+async function openChatPeer(jid, keepPane) {
+  chatState.peer = chatBare(jid);
+  renderChatRoster();
+  $("chat-empty")?.classList.add("hidden");
+  $("chat-thread")?.classList.remove("hidden");
+  if ($("chat-peer")) $("chat-peer").textContent = chatState.peer;
+  const box = $("chat-messages");
+  if (box) box.innerHTML = "";
+  try {
+    const data = await api("/api/v1/chat/history?with=" + encodeURIComponent(chatState.peer) + "&limit=80");
+    chatState.messages = data.messages || [];
+    if (!chatState.messages.length) {
+      if (box) box.innerHTML = `<p class="meta chat-empty-hint">${escapeHtml(t("chat_empty"))}</p>`;
+    } else {
+      chatState.messages.forEach((m) => appendChatBubble(m));
+      scrollChatBottom();
+    }
+  } catch (err) {
+    setMsg($("chat-msg"), err.message, "err");
+  }
+  if (!keepPane) setMobilePane("read");
+}
+
+$("btn-chat-new")?.addEventListener("click", () => {
+  $("chat-backdrop")?.classList.remove("hidden");
+  $("chat-new-jid")?.focus();
+});
+$("btn-chat-cancel")?.addEventListener("click", () => $("chat-backdrop")?.classList.add("hidden"));
+$("btn-chat-start")?.addEventListener("click", async () => {
+  const jid = ($("chat-new-jid")?.value || "").trim();
+  const name = ($("chat-new-name")?.value || "").trim();
+  if (!jid) return;
+  try {
+    await api("/api/v1/chat/roster", { method: "POST", body: JSON.stringify({ jid, name }) });
+    $("chat-backdrop")?.classList.add("hidden");
+    await refreshChat();
+    await openChatPeer(jid);
+  } catch (err) {
+    setMsg($("chat-roster-msg"), err.message, "err");
+  }
+});
+$("form-chat-send")?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const body = ($("chat-body")?.value || "").trim();
+  if (!body || !chatState.peer) return;
+  try {
+    const ev = await api("/api/v1/chat/send", {
+      method: "POST",
+      body: JSON.stringify({ to: chatState.peer, body }),
+    });
+    if ($("chat-body")) $("chat-body").value = "";
+    appendChatBubble(ev);
+    scrollChatBottom();
+  } catch (err) {
+    setMsg($("chat-msg"), err.message, "err");
+  }
+});
+
 async function refreshFiles() {
   const list = $("files-list");
   if (!list) return;
@@ -2217,8 +2692,14 @@ document.addEventListener("keydown", (e) => {
     setNavOpen(false);
   }
 });
-$("lang-select")?.addEventListener("change", (e) => applyLang(e.target.value));
+$("lang-select")?.addEventListener("change", (e) => {
+  applyLang(e.target.value);
+  renderThemeGallery(localStorage.getItem("tayga.theme") || "taiga");
+  updateNavUser(state.email, !$("nav-admin")?.classList.contains("hidden"));
+});
 applyLang(lang);
+renderThemeGallery(localStorage.getItem("tayga.theme") || "taiga");
+updateNavUser(state.email || localStorage.getItem("tayga.email") || "", false);
 
 // Restore session — invalid/expired tokens send user back to login
 (async function restoreSession() {

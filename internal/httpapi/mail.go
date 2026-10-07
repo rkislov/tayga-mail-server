@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tayga/tms/internal/mailsearch"
 	"github.com/tayga/tms/internal/storage"
 )
 
@@ -33,12 +35,16 @@ func (s *Server) handleMail(w http.ResponseWriter, r *http.Request) {
 		s.handleMailboxACL(w, r, au, parts[1])
 	case r.Method == http.MethodGet && len(parts) == 3 && parts[0] == "mailboxes" && parts[2] == "messages":
 		s.mailListMessages(w, r, au, parts[1])
+	case r.Method == http.MethodGet && len(parts) == 1 && parts[0] == "search":
+		s.mailSearch(w, r, au)
 	case r.Method == http.MethodGet && len(parts) == 2 && parts[0] == "messages":
 		s.mailGetMessage(w, r, au, parts[1])
 	case r.Method == http.MethodPatch && len(parts) == 2 && parts[0] == "messages":
 		s.mailPatchMessage(w, r, au, parts[1])
 	case r.Method == http.MethodPost && len(parts) == 3 && parts[0] == "messages" && parts[2] == "move":
 		s.mailMoveMessage(w, r, au, parts[1])
+	case r.Method == http.MethodPost && len(parts) == 3 && parts[0] == "messages" && parts[2] == "archive":
+		s.mailArchiveMessage(w, r, au, parts[1])
 	case r.Method == http.MethodDelete && len(parts) == 2 && parts[0] == "messages":
 		s.mailDeleteMessage(w, r, au, parts[1])
 	case r.Method == http.MethodPost && len(parts) == 1 && parts[0] == "send":
@@ -72,7 +78,7 @@ func (s *Server) mailListMailboxes(w http.ResponseWriter, r *http.Request, au *a
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	for _, name := range []string{"Sent", "Drafts", "Trash", "Junk"} {
+	for _, name := range []string{"Sent", "Drafts", "Trash", "Junk", "Archive"} {
 		p, err := s.ms.EnsureFolder(au.Email, name)
 		if err != nil {
 			continue
@@ -186,15 +192,31 @@ func (s *Server) mailListMessages(w http.ResponseWriter, r *http.Request, au *au
 	slice := msgs[offset:end]
 	out := make([]map[string]any, 0, len(slice))
 	for _, m := range slice {
-		hdr := s.parseMsgHeaders(m.FilePath)
+		subject, from, to, date := m.Subject, m.FromAddr, m.ToAddr, m.DateHdr
+		if subject == "" && from == "" {
+			hdr := s.parseMsgHeaders(m.FilePath)
+			subject, from, to, date = hdr.Subject, hdr.From, hdr.To, hdr.Date
+			if subject != "" || from != "" {
+				_ = s.store.UpdateMessageHeaders(r.Context(), m.ID, subject, from, to, date)
+				raw, _ := s.ms.Read(m.FilePath)
+				if len(raw) > 0 {
+					_ = mailsearch.Index(r.Context(), s.store, m.ID, raw)
+				}
+			}
+		}
+		if subject == "" {
+			subject = "(no subject)"
+		}
 		out = append(out, map[string]any{
 			"id": m.ID, "uid": m.UID, "mailbox_id": m.MailboxID,
 			"size": m.Size, "flags": m.Flags,
 			"internal_date": m.InternalDate.UTC().Format(time.RFC3339),
 			"message_id":   m.MessageID,
-			"subject":      hdr.Subject,
-			"from":         hdr.From,
-			"to":           hdr.To,
+			"subject":      subject,
+			"from":         from,
+			"to":           to,
+			"date":         date,
+			"archived":     m.Archived,
 			"seen":         strings.Contains(strings.ToUpper(m.Flags), `\SEEN`),
 		})
 	}
@@ -312,12 +334,126 @@ func (s *Server) mailMoveMessage(w http.ResponseWriter, r *http.Request, au *aut
 		writeJSON(w, code, map[string]string{"error": http.StatusText(code)})
 		return
 	}
+	if strings.EqualFold(dst.Name, "Archive") {
+		if err := s.doArchiveMessage(r.Context(), au, msg, dst); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		moved, _ := s.store.GetMessageByID(r.Context(), msg.ID)
+		writeJSON(w, http.StatusOK, map[string]any{"id": moved.ID, "mailbox_id": moved.MailboxID, "uid": moved.UID, "archived": true})
+		return
+	}
+	if msg.Archived {
+		raw, err := s.ms.Read(msg.FilePath)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "read failed"})
+			return
+		}
+		newRel, size, _, err := s.ms.UnarchiveToFolder(au.Email, msg.FilePath, dst.Name)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		doc := mailsearch.ParseDocument(raw)
+		_ = s.store.UpdateMessageArchiveMeta(r.Context(), msg.ID, newRel, size, false, doc.Subject, doc.From, doc.To, doc.Date)
+		moved, err := s.store.MoveMessage(r.Context(), msg.ID, dst.ID)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		_ = mailsearch.Index(r.Context(), s.store, msg.ID, raw)
+		writeJSON(w, http.StatusOK, map[string]any{"id": moved.ID, "mailbox_id": moved.MailboxID, "uid": moved.UID, "archived": false})
+		return
+	}
 	moved, err := s.store.MoveMessage(r.Context(), msg.ID, dst.ID)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"id": moved.ID, "mailbox_id": moved.MailboxID, "uid": moved.UID})
+}
+
+func (s *Server) mailArchiveMessage(w http.ResponseWriter, r *http.Request, au *authUser, messageID string) {
+	msg, _, code := s.messageOwned(r, au, messageID)
+	if code != 0 {
+		writeJSON(w, code, map[string]string{"error": http.StatusText(code)})
+		return
+	}
+	archPath, _ := s.ms.EnsureFolder(au.Email, "Archive")
+	archMB, err := s.store.EnsureMailbox(r.Context(), au.ID, "Archive", archPath)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if err := s.doArchiveMessage(r.Context(), au, msg, archMB); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	moved, _ := s.store.GetMessageByID(r.Context(), msg.ID)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"id": moved.ID, "mailbox_id": moved.MailboxID, "uid": moved.UID, "archived": true, "size": moved.Size,
+	})
+}
+
+func (s *Server) doArchiveMessage(ctx context.Context, au *authUser, msg *storage.Message, archMB *storage.Mailbox) error {
+	newRel, size, raw, err := s.ms.MoveToArchive(au.Email, msg.FilePath)
+	if err != nil {
+		return err
+	}
+	doc := mailsearch.ParseDocument(raw)
+	if _, err := s.store.MoveMessage(ctx, msg.ID, archMB.ID); err != nil {
+		return err
+	}
+	if err := s.store.UpdateMessageArchiveMeta(ctx, msg.ID, newRel, size, true, doc.Subject, doc.From, doc.To, doc.Date); err != nil {
+		return err
+	}
+	return mailsearch.Index(ctx, s.store, msg.ID, raw)
+}
+
+func (s *Server) mailSearch(w http.ResponseWriter, r *http.Request, au *authUser) {
+	q := r.URL.Query().Get("q")
+	mailboxID := r.URL.Query().Get("mailbox_id")
+	limit := 50
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 200 {
+			limit = n
+		}
+	}
+	if mailboxID != "" {
+		if _, code := s.mailboxOwned(r, au, mailboxID); code != 0 {
+			writeJSON(w, code, map[string]string{"error": http.StatusText(code)})
+			return
+		}
+	}
+	pq := mailsearch.ParseQuery(q)
+	hits, err := s.store.SearchMessages(r.Context(), au.ID, mailboxID, pq.From, pq.To, pq.Subject, pq.FTSQuery(), limit)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	out := make([]map[string]any, 0, len(hits))
+	for _, h := range hits {
+		m := h.Message
+		subj := m.Subject
+		if subj == "" {
+			subj = "(no subject)"
+		}
+		out = append(out, map[string]any{
+			"id": m.ID, "uid": m.UID, "mailbox_id": m.MailboxID,
+			"size": m.Size, "flags": m.Flags,
+			"internal_date": m.InternalDate.UTC().Format(time.RFC3339),
+			"message_id":   m.MessageID,
+			"subject":      subj,
+			"from":         m.FromAddr,
+			"to":           m.ToAddr,
+			"date":         m.DateHdr,
+			"archived":     m.Archived,
+			"snippet":      h.Snippet,
+			"rank":         h.Rank,
+			"seen":         strings.Contains(strings.ToUpper(m.Flags), `\SEEN`),
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"messages": out, "q": q, "total": len(out)})
 }
 
 func (s *Server) mailDeleteMessage(w http.ResponseWriter, r *http.Request, au *authUser, messageID string) {
@@ -382,10 +518,14 @@ func (s *Server) mailSend(w http.ResponseWriter, r *http.Request, au *authUser) 
 	sentMB, err := s.store.EnsureMailbox(r.Context(), user.ID, "Sent", sentPath)
 	if err == nil {
 		if rel, size, derr := s.ms.Deliver(user.Email, "Sent", raw); derr == nil {
-			_, _ = s.store.InsertMessage(r.Context(), &storage.Message{
+			sm := &storage.Message{
 				MailboxID: sentMB.ID, Size: size, Flags: `\Seen`,
 				InternalDate: time.Now().UTC(), FilePath: rel, MessageID: msgid,
-			})
+			}
+			mailsearch.ApplyHeaders(sm, raw)
+			if inserted, ierr := s.store.InsertMessage(r.Context(), sm); ierr == nil {
+				_ = mailsearch.Index(r.Context(), s.store, inserted.ID, raw)
+			}
 		}
 	}
 
@@ -410,10 +550,14 @@ func (s *Server) mailSend(w http.ResponseWriter, r *http.Request, au *authUser) 
 			continue
 		}
 		if rel, size, derr := s.ms.Deliver(ru.Email, "INBOX", raw); derr == nil {
-			_, _ = s.store.InsertMessage(r.Context(), &storage.Message{
+			im := &storage.Message{
 				MailboxID: mb.ID, Size: size, Flags: "",
 				InternalDate: time.Now().UTC(), FilePath: rel, MessageID: msgid,
-			})
+			}
+			mailsearch.ApplyHeaders(im, raw)
+			if inserted, ierr := s.store.InsertMessage(r.Context(), im); ierr == nil {
+				_ = mailsearch.Index(r.Context(), s.store, inserted.ID, raw)
+			}
 		}
 	}
 	for _, rcpt := range remote {

@@ -11,6 +11,7 @@ cmd/tayga
   ├─ auth (local Argon2id; LDAP hybrid; OIDC; TOTP + WebAuthn MFA; opaque tokens)
   ├─ mailstore (Maildir++)
   ├─ smtp / imap / pop3 / managesieve
+  ├─ xmpp (C2S + web Chat REST/SSE; OMEMO later — docs/xmpp.md, TMS-XMPP-001)
   ├─ sieve (foxcpp/go-sieve on delivery)
   ├─ dav (CalDAV + CardDAV via emersion/go-webdav)
   ├─ flowsync (original FlowSync engine — ActiveSync/EWS wire; Apache-2.0)
@@ -68,7 +69,7 @@ Enable: `flowsync.enabled: true` (default).
 
 ## Protocols (standard ports)
 
-Privileged ports (<1024) require root or `CAP_NET_BIND_SERVICE`. TLS certs: `tls.cert_file` / `tls.key_file` (`auto_generate: true` creates a self-signed pair for lab use).
+Privileged ports (<1024) require root or `CAP_NET_BIND_SERVICE`. TLS: catalog under `tls.certs_dir` (self-signed / PEM upload / ACME Let’s Encrypt); active pair written to `tls.cert_file` / `tls.key_file` with hot reload. Admin **УЦ / CA** UI + `GET/POST /api/v1/admin/certs*`. Service settings (`tls` section) only pick the active certificate. Details (RU): [ca.md](./ca.md).
 
 | Protocol | Port | TLS |
 |----------|------|-----|
@@ -80,8 +81,14 @@ Privileged ports (<1024) require root or `CAP_NET_BIND_SERVICE`. TLS certs: `tls
 | POP3 | `110` | STLS |
 | POP3S | `995` | implicit TLS |
 | ManageSieve | `4190` | STARTTLS |
+| XMPP C2S | `5222` | STARTTLS (`xmpp.enabled`) |
+| XMPP C2S TLS | `5223` | implicit TLS |
+| XMPP component | `5347` | XEP-0114 bots/bridges |
+| XMPP S2S | `5269` | planned (federation) |
 | HTTP | `80` | redirect → HTTPS when enabled |
 | HTTPS | `443` | implicit TLS (HTTP/2 ALPN) |
+
+XMPP + OMEMO: [docs/xmpp.md](./xmpp.md), TZ [docs/tms-xmpp-001.md](./tms-xmpp-001.md). Server routes opaque `<encrypted/>` only; private keys stay on clients.
 
 ## Build
 
@@ -89,7 +96,7 @@ Privileged ports (<1024) require root or `CAP_NET_BIND_SERVICE`. TLS certs: `tls
 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o tayga-mail ./cmd/tayga
 ./tayga-mail version
 ./tayga-mail -config configs/tayga.example.yaml
-# Cross builds: VERSION=v0.6.0 ./scripts/crossbuild.sh
+# Cross builds: VERSION=v0.7.0 ./scripts/crossbuild.sh
 ```
 
 Seed: `admin@example.com` / `changeme`. UUID schema requires a fresh DB when upgrading from integer IDs.
@@ -108,7 +115,7 @@ Enable: `mfa.webauthn.enabled: true` (RP ID from `http.public_url`).
 
 ## Web UI
 
-Embedded at `/` (`internal/frontend/dist`): app shell with **mail**, **calendar**, **contacts**, **files** (Outlook-style panes; ≤900px master-detail), user settings (profile / security / appearance / Sieve+vacation / language ru|en), and admin (monitor charts / tenants / TLS / server / CoS). Roles: `global_admin`, `domain_admin`, `user`. Unauthenticated users are sent to the login card. Themes via `localStorage` (`tayga.theme`). Thunderbird companion: `extensions/thunderbird-tayga/`.
+Embedded at `/` (`internal/frontend/dist`): app shell with **mail**, **calendar**, **contacts**, **files**, **chat** (Outlook-style panes; ≤900px master-detail), user settings (profile / security / appearance / Sieve+vacation / language ru|en), and admin (monitor charts / tenants / TLS / server / CoS). Roles: `global_admin`, `domain_admin`, `user`. Unauthenticated users are sent to the login card. Themes via `localStorage` (`tayga.theme`); street-art theme promotes Chat/Messenger. Thunderbird companion: `extensions/thunderbird-tayga/`. Chat API: `/api/v1/chat/*` (roster, history, send, SSE events).
 
 ### User apps API
 
@@ -116,8 +123,11 @@ Embedded at `/` (`internal/frontend/dist`): app shell with **mail**, **calendar*
 |----------|------|
 | `GET /api/v1/mail/mailboxes` | list mailboxes (+ shared) |
 | `GET/PUT/DELETE …/mailboxes/{id}/acl` | folder ACL |
-| `GET /api/v1/mail/mailboxes/{id}/messages` | list messages |
+| `GET /api/v1/mail/mailboxes/{id}/messages` | list messages (DB metadata; body on open) |
+| `GET /api/v1/mail/search?q=` | FTS search (`from:`/`to:`/`subject:` + free text) |
 | `GET/PATCH/DELETE /api/v1/mail/messages/{id}` | read / flags / delete |
+| `POST /api/v1/mail/messages/{id}/move` | move (Archive → gzip on disk) |
+| `POST /api/v1/mail/messages/{id}/archive` | move into Archive + compress |
 | `POST /api/v1/mail/send` | send (local + outbound queue) |
 | `GET/PUT /api/v1/mail/vacation` | out-of-office (Sieve vacation) |
 | `GET/POST/DELETE /api/v1/mail/delegates` | secretary / delegate access |
@@ -151,9 +161,10 @@ Embedded at `/` (`internal/frontend/dist`): app shell with **mail**, **calendar*
 | `PATCH /api/v1/admin/users/{uuid}` | enable/disable / roles / domain_ids / service_class_id |
 | `PUT /api/v1/admin/users/{uuid}/password` | reset local password (min 8 chars) |
 | `GET/POST/PUT/DELETE /api/v1/admin/service-classes` | CoS templates (`global_admin` write) |
-| `GET /api/v1/admin/tls` | active certificate status (`global_admin`) |
-| `PUT /api/v1/admin/tls` | install PEM certificate + private key (hot reload) |
-| `POST /api/v1/admin/tls` | generate self-signed cert (`hosts`, `days`) |
+| `GET /api/v1/admin/certs` | certificate catalog + active status |
+| `POST /api/v1/admin/certs/self-signed\|upload\|acme` | issue / import / Let’s Encrypt |
+| `POST /api/v1/admin/certs/{id}/activate\|renew` | activate / renew ACME |
+| `GET/PUT/POST /api/v1/admin/tls` | legacy status / install / generate (activates catalog entry) |
 | `GET /api/v1/admin/status` | monitoring snapshot (tenant + server counters) |
 | `GET /api/v1/admin/outbound` | list outbound retry queue |
 | `POST /api/v1/admin/outbound/{uuid}/retry` | schedule immediate retry |
@@ -186,6 +197,16 @@ Admins: `http.admins` email list (default `admin@example.com`).
 Local Maildir++ under `mailstore.root`. Optional S3-compatible write-through (`mailstore.object_store`): messages mirrored to the bucket; cache miss on `Read` pulls from object storage.
 
 CLI: `tayga-mail sync-objects` reconciles indexed message paths between local maildir and the object store.
+
+### Archive mailbox
+
+System folder **Archive** (auto-created with Sent/Drafts/Trash/Junk). Moving a message into Archive (HTTP `…/archive` or `…/move` to that mailbox) writes a **gzip**-compressed RFC822 file (`.eml.gz`) under `.Archive/`, updates `messages.file_path` / `size` / `archived`, and keeps denormalized `subject` / `from_addr` / `to_addr` / `date_hdr` so lists never open the body. `mailstore.Read` transparently gunzips when the path ends in `.gz` or the file starts with gzip magic, so IMAP FETCH / HTTP open / FlowSync stay unchanged. Unarchive (move out of Archive) restores a plain `.eml`.
+
+### Mail search
+
+Hybrid index (no external engine): denormalized header columns for `from:` / `to:` / `subject:` filters; full-text on subject + addresses + body text via **SQLite FTS5** (`message_fts`, `bm25`) or **Postgres** `tsvector` + GIN (`message_search`, `ts_rank_cd`). Indexing (`internal/mailsearch`): parse MIME → prefer `text/plain`, else strip HTML → lowercase → upsert on deliver/archive; delete on permanent delete. Query (`GET /api/v1/mail/search?q=`): parse prefixes → SQL `LIKE` on columns; remaining tokens → FTS `MATCH` / `plainto_tsquery` (AND); return IDs + metadata + short snippet (full body only on open).
+
+Русская инструкция по настройке и описание работы: [mail-archive-search.md](./mail-archive-search.md).
 
 ## HA fencing
 

@@ -6,16 +6,19 @@ import (
 	"time"
 )
 
-const msgCols = `id, mailbox_id, uid, size, flags, internal_date, file_path, message_id, created_at`
+const msgCols = `id, mailbox_id, uid, size, flags, internal_date, file_path, message_id, subject, from_addr, to_addr, date_hdr, archived, created_at`
 
 func (s *Store) scanMessage(row interface{ Scan(dest ...any) error }) (*Message, error) {
 	m := &Message{}
+	var archived int
 	err := row.Scan(
-		&m.ID, &m.MailboxID, &m.UID, &m.Size, &m.Flags, &m.InternalDate, &m.FilePath, &m.MessageID, &m.CreatedAt,
+		&m.ID, &m.MailboxID, &m.UID, &m.Size, &m.Flags, &m.InternalDate, &m.FilePath, &m.MessageID,
+		&m.Subject, &m.FromAddr, &m.ToAddr, &m.DateHdr, &archived, &m.CreatedAt,
 	)
 	if err != nil {
 		return nil, mapErr(err)
 	}
+	m.Archived = archived != 0
 	return m, nil
 }
 
@@ -137,6 +140,34 @@ func (s *Store) UpdateMessagePath(ctx context.Context, messageID, filePath strin
 	return nil
 }
 
+// UpdateMessageArchiveMeta sets path/size/archived and denormalized headers after archive/unarchive.
+func (s *Store) UpdateMessageArchiveMeta(ctx context.Context, messageID, filePath string, size int64, archived bool, subject, fromAddr, toAddr, dateHdr string) error {
+	arch := 0
+	if archived {
+		arch = 1
+	}
+	q := s.rebind(`UPDATE messages SET file_path = ?, size = ?, archived = ?, subject = ?, from_addr = ?, to_addr = ?, date_hdr = ? WHERE id = ?`)
+	res, err := s.db.ExecContext(ctx, q, filePath, size, arch, subject, fromAddr, toAddr, dateHdr, messageID)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// UpdateMessageHeaders fills denormalized header columns.
+func (s *Store) UpdateMessageHeaders(ctx context.Context, messageID, subject, fromAddr, toAddr, dateHdr string) error {
+	q := s.rebind(`UPDATE messages SET subject = ?, from_addr = ?, to_addr = ?, date_hdr = ? WHERE id = ?`)
+	_, err := s.db.ExecContext(ctx, q, subject, fromAddr, toAddr, dateHdr, messageID)
+	return err
+}
+
 // MoveMessage assigns a new UID in dstMailboxID and updates mailbox_id (FlowSync MoveItems).
 func (s *Store) MoveMessage(ctx context.Context, messageID, dstMailboxID string) (*Message, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -154,7 +185,7 @@ func (s *Store) MoveMessage(ctx context.Context, messageID, dstMailboxID string)
 	}
 
 	var uid int64
-	lockQ := s.rebind(`SELECT uidnext FROM mailboxes WHERE id = ?`)
+	lockQ := s.rebind(`SELECT uidnext from mailboxes WHERE id = ?`)
 	if s.dialect == DialectPostgres {
 		lockQ = `SELECT uidnext FROM mailboxes WHERE id = $1 FOR UPDATE`
 	}
@@ -178,6 +209,7 @@ func (s *Store) MoveMessage(ctx context.Context, messageID, dstMailboxID string)
 }
 
 func (s *Store) DeleteMessage(ctx context.Context, messageID string) error {
+	_ = s.DeleteMessageSearch(ctx, messageID)
 	q := s.rebind(`DELETE FROM messages WHERE id = ?`)
 	res, err := s.db.ExecContext(ctx, q, messageID)
 	if err != nil {
