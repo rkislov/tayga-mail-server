@@ -1,0 +1,89 @@
+package imapserver
+
+import (
+	"context"
+	"sync"
+
+	"github.com/emersion/go-imap"
+	"github.com/emersion/go-imap/backend"
+	"github.com/tayga/tms/internal/storage"
+)
+
+// Hub broadcasts mailbox status changes to IDLE/NOOP clients (go-imap BackendUpdater).
+// Each Updates() call creates a fan-out subscription (one per IMAP listener).
+type Hub struct {
+	store storage.Driver
+	mu    sync.Mutex
+	subs  []chan backend.Update
+}
+
+func NewHub(store storage.Driver) *Hub {
+	return &Hub{store: store}
+}
+
+func (h *Hub) Updates() <-chan backend.Update {
+	ch := make(chan backend.Update, 64)
+	h.mu.Lock()
+	h.subs = append(h.subs, ch)
+	h.mu.Unlock()
+	return ch
+}
+
+// Notify pushes an EXISTS-capable mailbox status update for username@mailbox.
+func (h *Hub) Notify(email, mailbox string) {
+	if h == nil {
+		return
+	}
+	status, err := h.mailboxStatus(email, mailbox)
+	if err != nil || status == nil {
+		return
+	}
+	h.publish(&backend.MailboxUpdate{
+		Update:        backend.NewUpdate(email, mailbox),
+		MailboxStatus: status,
+	})
+}
+
+func (h *Hub) publish(upd backend.Update) {
+	h.mu.Lock()
+	subs := append([]chan backend.Update(nil), h.subs...)
+	h.mu.Unlock()
+	for _, ch := range subs {
+		select {
+		case ch <- upd:
+		default:
+		}
+	}
+}
+
+func (h *Hub) mailboxStatus(email, mailbox string) (*imap.MailboxStatus, error) {
+	ctx := context.Background()
+	u, err := h.store.GetUserByEmail(ctx, email)
+	if err != nil {
+		return nil, err
+	}
+	mb, err := h.store.GetMailbox(ctx, u.ID, mailbox)
+	if err != nil {
+		return nil, err
+	}
+	msgs, err := h.store.ListMessages(ctx, mb.ID)
+	if err != nil {
+		return nil, err
+	}
+	items := []imap.StatusItem{imap.StatusMessages, imap.StatusRecent, imap.StatusUidNext}
+	status := imap.NewMailboxStatus(mailbox, items)
+	status.Flags = []string{imap.SeenFlag, imap.AnsweredFlag, imap.FlaggedFlag, imap.DeletedFlag, imap.DraftFlag}
+	status.PermanentFlags = []string{"\\*"}
+	status.Messages = uint32(len(msgs))
+	status.UidNext = uint32(mb.UIDNext)
+	status.UidValidity = uint32(mb.UIDValidity)
+	var recent uint32
+	for _, msg := range msgs {
+		if storage.MessageIsRecent(msg) {
+			recent++
+		}
+	}
+	status.Recent = recent
+	status.UnseenSeqNum = unseenSeq(msgs)
+	return status, nil
+}
