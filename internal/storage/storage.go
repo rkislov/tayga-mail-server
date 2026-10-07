@@ -36,6 +36,7 @@ type Driver interface {
 
 	CreateUser(ctx context.Context, u *User) (*User, error)
 	UpdateUserRoles(ctx context.Context, userID, roles string) error
+	UpdateUserServiceClass(ctx context.Context, userID, serviceClassID string) error
 	GetUserByEmail(ctx context.Context, email string) (*User, error)
 	GetUserByID(ctx context.Context, id string) (*User, error)
 	UpdateUserPassword(ctx context.Context, userID, passwordHash string) error
@@ -43,7 +44,43 @@ type Driver interface {
 	UpdateUserQuota(ctx context.Context, userID string, quotaBytes int64) error
 	UpdateUserEnabled(ctx context.Context, userID string, enabled bool) error
 	ListUsersByTenant(ctx context.Context, tenantID string) ([]*User, error)
+	ListUsersByDomain(ctx context.Context, domainID string) ([]*User, error)
 	SumMailboxBytes(ctx context.Context, userID string) (int64, error)
+
+	SetDomainAdminDomains(ctx context.Context, userID string, domainIDs []string) error
+	ListDomainAdminDomains(ctx context.Context, userID string) ([]string, error)
+	UserAdministersDomain(ctx context.Context, userID, domainID string) (bool, error)
+
+	CreateFileShare(ctx context.Context, sh *FileShare) (*FileShare, error)
+	GetFileShareByToken(ctx context.Context, token string) (*FileShare, error)
+	GetFileShareByID(ctx context.Context, id string) (*FileShare, error)
+	ListFileShares(ctx context.Context, userID string) ([]*FileShare, error)
+	DeleteFileShare(ctx context.Context, userID, id string) error
+	IncrementFileShareDownload(ctx context.Context, id string) error
+
+	UpsertMailboxDelegate(ctx context.Context, d *MailboxDelegate) error
+	ListMailboxDelegates(ctx context.Context, ownerID string) ([]*MailboxDelegate, error)
+	ListDelegationsFor(ctx context.Context, delegateID string) ([]*MailboxDelegate, error)
+	GetMailboxDelegate(ctx context.Context, ownerID, delegateID string) (*MailboxDelegate, error)
+	DeleteMailboxDelegate(ctx context.Context, ownerID, delegateID string) error
+
+	SetMailboxACL(ctx context.Context, mailboxID, granteeUserID, rights string) error
+	DeleteMailboxACL(ctx context.Context, mailboxID, granteeUserID string) error
+	ListMailboxACL(ctx context.Context, mailboxID string) ([]*MailboxACLEntry, error)
+	MailboxRightsForUser(ctx context.Context, mailboxID, userID string) (string, error)
+	ListSharedMailboxes(ctx context.Context, userID string) ([]*Mailbox, error)
+
+	SetCalendarACL(ctx context.Context, calendarID, granteeUserID, rights string) error
+	DeleteCalendarACL(ctx context.Context, calendarID, granteeUserID string) error
+	ListCalendarACL(ctx context.Context, calendarID string) ([]*CalendarACLEntry, error)
+	CalendarRightsForUser(ctx context.Context, calendarID, userID string) (string, error)
+	ListSharedCalendars(ctx context.Context, userID string) ([]*Calendar, error)
+
+	CreateServiceClass(ctx context.Context, sc *ServiceClass) (*ServiceClass, error)
+	UpdateServiceClass(ctx context.Context, sc *ServiceClass) error
+	DeleteServiceClass(ctx context.Context, tenantID, id string) error
+	GetServiceClass(ctx context.Context, id string) (*ServiceClass, error)
+	ListServiceClasses(ctx context.Context, tenantID string) ([]*ServiceClass, error)
 
 	CreateAlias(ctx context.Context, domainID, userID, localPart string) (*Alias, error)
 	ResolveRecipient(ctx context.Context, email string) (*User, error)
@@ -171,18 +208,63 @@ type Domain struct {
 }
 
 type User struct {
-	ID           string
-	TenantID     string
-	DomainID     string
-	Email        string
-	LocalPart    string
-	DisplayName  string
-	PasswordHash string
-	AuthSource   string // local | ldap | oidc
-	QuotaBytes   int64
-	Enabled      bool
-	Roles        string // comma-separated: admin, …
-	CreatedAt    time.Time
+	ID             string
+	TenantID       string
+	DomainID       string
+	Email          string
+	LocalPart      string
+	DisplayName    string
+	PasswordHash   string
+	AuthSource     string // local | ldap | oidc
+	QuotaBytes     int64
+	Enabled        bool
+	Roles          string // comma-separated: global_admin, domain_admin, …
+	ServiceClassID string
+	CreatedAt      time.Time
+}
+
+type DomainAdminBinding struct {
+	UserID   string
+	DomainID string
+}
+
+type FileShare struct {
+	ID            string
+	UserID        string
+	Path          string
+	Token         string
+	ExpiresAt     *time.Time
+	MaxDownloads  int
+	DownloadCount int
+	CreatedAt     time.Time
+}
+
+type MailboxDelegate struct {
+	OwnerID          string
+	DelegateID       string
+	CanRead          bool
+	CanSendAs        bool
+	CanSendOnBehalf  bool
+}
+
+type MailboxACLEntry struct {
+	MailboxID     string
+	GranteeUserID string
+	Rights        string
+}
+
+type CalendarACLEntry struct {
+	CalendarID    string
+	GranteeUserID string
+	Rights        string // read | write | freebusy
+}
+
+type ServiceClass struct {
+	ID        string
+	TenantID  string
+	Name      string
+	Config    string // JSON
+	CreatedAt time.Time
 }
 
 type Alias struct {

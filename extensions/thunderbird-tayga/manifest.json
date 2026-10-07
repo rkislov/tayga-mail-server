@@ -1,0 +1,33 @@
+{
+  "manifest_version": 2,
+  "name": "Tayga Mail",
+  "description": "Auto-setup, Tayga theme, large-file links, and Sieve/vacation for Tayga Mail Server.",
+  "version": "0.9.0",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "tayga@mail.local",
+      "strict_min_version": "115.0"
+    }
+  },
+  "permissions": [
+    "accountsRead",
+    "accountsFolders",
+    "messagesRead",
+    "compose",
+    "storage",
+    "theme",
+    "menus",
+    "<all_urls>"
+  ],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "browser_action": {
+    "default_title": "Tayga Mail",
+    "default_popup": "popup.html"
+  }
+}

@@ -79,6 +79,12 @@ const I18N = {
     language_title: "Язык",
     language_hint: "Язык интерфейса сохраняется в браузере.",
     filters_title: "Фильтры Sieve",
+    vacation_title: "Автоответ (отпуск)",
+    vacation_enabled: "Включить",
+    vacation_subject: "Тема",
+    vacation_body: "Текст",
+    attach_file: "Вложение (крупное → ссылка)",
+    back_list: "К списку",
     session_active: "Сессия активна · IMAP XOAUTH2 / FlowSync",
     session_expired: "Войдите снова",
     save: "Сохранить",
@@ -163,6 +169,12 @@ const I18N = {
     language_title: "Language",
     language_hint: "Interface language is stored in this browser.",
     filters_title: "Sieve filters",
+    vacation_title: "Out of office",
+    vacation_enabled: "Enable",
+    vacation_subject: "Subject",
+    vacation_body: "Message",
+    attach_file: "Attachment (large → link)",
+    back_list: "Back to list",
     session_active: "Session active · IMAP XOAUTH2 / FlowSync",
     session_expired: "Please sign in again",
     save: "Save",
@@ -330,7 +342,7 @@ function showApp(name) {
   if (app === "calendar") refreshCalendar();
   if (app === "contacts") refreshContacts();
   if (app === "files") refreshFiles();
-  if (app === "filters") refreshSieve();
+  if (app === "filters") { refreshSieve(); refreshVacation(); }
   if (app === "monitor") { refreshMonitor(); startMonitorLive(); }
   else stopMonitorLive();
   if (app === "tenants") { refreshTenant(); refreshAdminUsers(); }
@@ -338,6 +350,36 @@ function showApp(name) {
   if (app === "server") refreshSettings();
   if (app === "security") refreshPasskeys();
   if (app === "profile") loadMe();
+  setMobilePane("list");
+}
+
+const LARGE_ATTACH_BYTES = 10 * 1024 * 1024;
+
+function isMobilePane() {
+  return window.matchMedia && window.matchMedia("(max-width: 900px)").matches;
+}
+
+function setMobilePane(mode) {
+  const root = $("view-account");
+  if (!root) return;
+  root.classList.toggle("pane-mode-list", mode === "list");
+  root.classList.toggle("pane-mode-read", mode === "read");
+  root.classList.toggle("pane-mode-folders", mode === "folders");
+}
+
+async function uploadLargeAttach(file) {
+  const path = "mail-out/" + Date.now() + "-" + file.name.replace(/[^\w.\-]+/g, "_");
+  const headers = { "Content-Type": "application/octet-stream" };
+  if (state.tokens?.access_token) headers.Authorization = "Bearer " + state.tokens.access_token;
+  const put = await fetch("/api/v1/files/content?path=" + encodeURIComponent(path), {
+    method: "PUT", headers, body: file,
+  });
+  if (!put.ok) throw new Error(await put.text());
+  const sh = await api("/api/v1/files/shares", {
+    method: "POST",
+    body: JSON.stringify({ path, ttl_hours: 168 }),
+  });
+  return sh.url || (location.origin + "/s/" + sh.token);
 }
 
 function setMsg(el, text, kind) {
@@ -1233,6 +1275,33 @@ async function refreshSieve() {
 }
 
 $("btn-sieve-refresh").addEventListener("click", () => refreshSieve());
+
+async function refreshVacation() {
+  try {
+    const d = await api("/api/v1/mail/vacation");
+    if ($("vacation-enabled")) $("vacation-enabled").checked = !!d.enabled;
+    if ($("vacation-subject")) $("vacation-subject").value = d.subject || "";
+    if ($("vacation-body")) $("vacation-body").value = d.body || "";
+  } catch (err) {
+    setMsg($("vacation-msg"), err.message, "err");
+  }
+}
+$("btn-vacation-save")?.addEventListener("click", async () => {
+  setMsg($("vacation-msg"), "…");
+  try {
+    await api("/api/v1/mail/vacation", {
+      method: "PUT",
+      body: JSON.stringify({
+        enabled: !!$("vacation-enabled")?.checked,
+        subject: $("vacation-subject")?.value || "",
+        body: $("vacation-body")?.value || "",
+      }),
+    });
+    setMsg($("vacation-msg"), "OK", "ok");
+  } catch (err) {
+    setMsg($("vacation-msg"), err.message, "err");
+  }
+});
 $("btn-sieve-save").addEventListener("click", async () => {
   const name = $("sieve-name").value.trim();
   const script = $("sieve-body").value;
@@ -1529,10 +1598,12 @@ function showMailReader(msg) {
   if (!msg) {
     empty.classList.remove("hidden");
     reader.classList.add("hidden");
+    setMobilePane("list");
     return;
   }
   empty.classList.add("hidden");
   reader.classList.remove("hidden");
+  setMobilePane("read");
   $("mail-subject").textContent = msg.subject || "(no subject)";
   if ($("mail-from")) $("mail-from").textContent = msg.from || "—";
   if ($("mail-to")) $("mail-to").textContent = msg.to || "—";
@@ -1576,15 +1647,26 @@ $("btn-compose-send")?.addEventListener("click", async () => {
   const to = ($("compose-to").value || "").split(/[,;]/).map((s) => s.trim()).filter(Boolean);
   setMsg($("compose-msg"), "…");
   try {
+    let text = $("compose-body").value || "";
+    const file = $("compose-attach")?.files?.[0];
+    if (file && file.size >= LARGE_ATTACH_BYTES) {
+      setMsg($("compose-msg"), "Uploading…");
+      const url = await uploadLargeAttach(file);
+      text += `\n\n${file.name}: ${url}\n`;
+    } else if (file && file.size > 0) {
+      setMsg($("compose-msg"), "large attachments only via link (≥10 MiB); smaller files: use Files app", "err");
+      return;
+    }
     await api("/api/v1/mail/send", {
       method: "POST",
       body: JSON.stringify({
         to,
         subject: $("compose-subject").value,
-        text: $("compose-body").value,
+        text,
       }),
     });
     setMsg($("compose-msg"), "OK", "ok");
+    if ($("compose-attach")) $("compose-attach").value = "";
     $("compose-backdrop")?.classList.add("hidden");
     refreshMail();
   } catch (err) {
@@ -1714,10 +1796,12 @@ function showCalReader(ev) {
   if (!ev) {
     empty.classList.remove("hidden");
     reader.classList.add("hidden");
+    setMobilePane("list");
     return;
   }
   empty.classList.add("hidden");
   reader.classList.remove("hidden");
+  setMobilePane("read");
   $("cal-subject").textContent = ev.summary || "—";
   $("cal-read-start").textContent = fmtCalWhen(ev.start);
   $("cal-read-end").textContent = fmtCalWhen(ev.end);
@@ -1805,10 +1889,12 @@ function showContactReader(c) {
   if (!c) {
     empty.classList.remove("hidden");
     reader.classList.add("hidden");
+    setMobilePane("list");
     return;
   }
   empty.classList.add("hidden");
   reader.classList.remove("hidden");
+  setMobilePane("read");
   $("contact-subject").textContent = c.fn || "—";
   $("contact-read-email").textContent = c.email || "—";
   $("contact-read-tel").textContent = c.tel || "—";
@@ -1956,10 +2042,12 @@ function showFileReader(entry) {
   if (!entry) {
     empty.classList.remove("hidden");
     reader.classList.add("hidden");
+    setMobilePane("list");
     return;
   }
   empty.classList.add("hidden");
   reader.classList.remove("hidden");
+  setMobilePane("read");
   $("files-subject").textContent = entry.name || "—";
   $("files-read-path").textContent = "/" + joinPath(filesState.path, entry.name);
   $("files-read-size").textContent = entry.is_dir ? "—" : fmtBytes(entry.size || 0);
@@ -2106,6 +2194,9 @@ $("files-upload")?.addEventListener("change", async (e) => {
 /* —— Nav / i18n —— */
 document.querySelectorAll(".nav-btn").forEach((btn) => {
   btn.addEventListener("click", () => showApp(btn.dataset.app));
+});
+document.querySelectorAll("[data-pane-back]").forEach((btn) => {
+  btn.addEventListener("click", () => setMobilePane("list"));
 });
 $("btn-nav-toggle")?.addEventListener("click", () => {
   setNavOpen(!$("view-account")?.classList.contains("nav-open"));
