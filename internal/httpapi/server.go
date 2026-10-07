@@ -54,6 +54,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/auth/webauthn/credentials/", s.handleWebAuthnCredentials)
 	mux.HandleFunc("/api/v1/auth/oidc/", s.handleOIDCRoutes)
 	mux.HandleFunc("/api/v1/me", s.handleMe)
+	mux.HandleFunc("/api/v1/sieve/scripts", s.handleSieveScripts)
+	mux.HandleFunc("/api/v1/sieve/scripts/", s.handleSieveScripts)
 	mux.HandleFunc("/api/v1/admin/users", s.handleAdminUsers)
 	mux.HandleFunc("/api/v1/admin/users/", s.handleAdminUsers)
 
