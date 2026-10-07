@@ -18,12 +18,13 @@ CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o tayga-mail ./cmd/tayga
 sudo ./tayga-mail -config configs/tayga.example.yaml
 ```
 
-Полный сценарий ввода в эксплуатацию: [docs/setup.md](docs/setup.md).
+Полный сценарий ввода в эксплуатацию: [docs/setup.md](docs/setup.md).  
+Консоль: `./tayga-mail menu -config …` — [docs/cli-menu.md](docs/cli-menu.md).
 
 ### Cross-platform release builds
 
 ```bash
-VERSION=v0.7.1 ./scripts/crossbuild.sh   # → dist/*.tar.gz|zip + checksums.txt
+VERSION=v0.7.3 ./scripts/crossbuild.sh   # → dist/*.tar.gz|zip + checksums.txt
 ```
 
 GitHub Releases: push a `v*` tag; [GoReleaser](https://goreleaser.com) (`.github/workflows/release.yml`) publishes linux/darwin/windows/freebsd amd64+arm64 archives.
@@ -66,6 +67,7 @@ Seed: `admin@example.com` / `changeme`. TLS: `tls.auto_generate` or `scripts/gen
 - Archive mailbox (gzip on disk) + FTS mail search — [docs/mail-archive-search.md](docs/mail-archive-search.md) (RU), [architecture.md](docs/architecture.md#archive-mailbox) (EN)
 - Initial server setup (RU): [docs/setup.md](docs/setup.md)
 - User migration IMAP/CalDAV/CardDAV: [docs/migration.md](docs/migration.md)
+- In-app / browser notifications (new mail, upcoming calendar) via SSE `/api/v1/notifications/stream`
 - Certificate authority (УЦ): self-signed / commercial PEM / Let’s Encrypt ACME — [docs/ca.md](docs/ca.md)
 - XMPP (optional C2S) + web Chat; bots via XEP-0114 / HTTP — see [docs/xmpp.md](docs/xmpp.md)
 - UI screenshots: [docs/screenshots/](docs/screenshots/)

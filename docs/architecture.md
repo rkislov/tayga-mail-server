@@ -98,7 +98,8 @@ XMPP + OMEMO: [docs/xmpp.md](./xmpp.md), TZ [docs/tms-xmpp-001.md](./tms-xmpp-00
 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o tayga-mail ./cmd/tayga
 ./tayga-mail version
 ./tayga-mail -config configs/tayga.example.yaml
-# Cross builds: VERSION=v0.7.1 ./scripts/crossbuild.sh
+# Cross builds: VERSION=v0.7.3 ./scripts/crossbuild.sh
+# Ops console: ./tayga-mail menu -config configs/tayga.example.yaml
 ```
 
 Seed: `admin@example.com` / `changeme`. UUID schema requires a fresh DB when upgrading from integer IDs.
