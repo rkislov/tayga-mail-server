@@ -62,7 +62,9 @@ func run(cfgPath string) error {
 
 	authn := auth.NewLayer(store, cfg.LDAP, cfg.MFA, cfg.OIDC)
 	ms := mailstore.New(cfg.Mailstore.Root)
+	imapHub := imapserver.NewHub(store)
 	sieveEng := sieve.New(store, ms, log)
+	sieveEng.Notifier = imapHub
 
 	if err := seed.Run(ctx, cfg.Seed, store, authn.Hasher, ms, log); err != nil {
 		return fmt.Errorf("seed: %w", err)
@@ -73,7 +75,7 @@ func run(cfgPath string) error {
 		return fmt.Errorf("smtp: %w", err)
 	}
 
-	imapSrv := imapserver.New(cfg, log, store, authn, ms)
+	imapSrv := imapserver.New(cfg, log, store, authn, ms, imapHub)
 	if err := imapSrv.Start(ctx); err != nil {
 		return fmt.Errorf("imap: %w", err)
 	}

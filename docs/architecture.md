@@ -59,7 +59,7 @@ Enable: `flowsync.enabled: true` (default).
 | Protocol | Default |
 |----------|---------|
 | SMTP MX / submission | `:1025` / `:1587` |
-| IMAP / POP3 / ManageSieve | `:1143` / `:1110` / `:14190` |
+| IMAP (IDLE/EXISTS hub) / POP3 / ManageSieve | `:1143` / `:1110` / `:14190` |
 | HTTP / DAV / FlowSync | `:8080` |
 
 ## Build
@@ -108,4 +108,4 @@ Admins: `http.admins` email list (default `admin@example.com`).
 
 ## Next milestones
 
-Admin create/disable/reset + FlowSync WBXML Sync write-back with expanded contact/calendar/email field tags. Next: IMAP IDLE polish, Sieve UI, multi-tenant polish.
+IMAP IDLE/EXISTS via update hub (SMTP/Sieve delivery + mailbox mutations). Next: Sieve UI, multi-tenant polish.
