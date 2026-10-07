@@ -78,10 +78,20 @@ type SMTPConfig struct {
 	MaxSize        int64           `yaml:"max_size"` // bytes; 0 = default 25 MiB
 	ReadTimeout    time.Duration   `yaml:"read_timeout"`
 	WriteTimeout   time.Duration   `yaml:"write_timeout"`
-	OutboundDirect bool              `yaml:"outbound_direct"` // MX lookup when relay.host empty
-	Relay          SMTPRelayConfig   `yaml:"relay"`
-	DKIM           SMTPDKIMConfig    `yaml:"dkim"`
+	OutboundDirect bool                `yaml:"outbound_direct"` // MX lookup when relay.host empty
+	Relay          SMTPRelayConfig     `yaml:"relay"`
+	DKIM           SMTPDKIMConfig      `yaml:"dkim"`
 	RateLimit      SMTPRateLimitConfig `yaml:"rate_limit"`
+	Queue          SMTPQueueConfig     `yaml:"queue"`
+}
+
+// SMTPQueueConfig enables durable outbound retries and DSN bounces.
+type SMTPQueueConfig struct {
+	Enabled      bool          `yaml:"enabled"` // default true when outbound is configured
+	Workers      int           `yaml:"workers"`
+	PollInterval time.Duration `yaml:"poll_interval"`
+	MaxAttempts  int           `yaml:"max_attempts"`
+	BatchSize    int           `yaml:"batch_size"`
 }
 
 // SMTPRateLimitConfig limits accepted messages per remote IP and authenticated user.
@@ -241,6 +251,13 @@ func Default() *Config {
 			MaxSize:      25 << 20,
 			ReadTimeout:  60 * time.Second,
 			WriteTimeout: 60 * time.Second,
+			Queue: SMTPQueueConfig{
+				Enabled:      true,
+				Workers:      1,
+				PollInterval: 5 * time.Second,
+				MaxAttempts:  8,
+				BatchSize:    10,
+			},
 		},
 		IMAP:        IMAPConfig{Listen: ":143", IMAPS: ":993"},
 		POP3:        POP3Config{Listen: ":110", POP3S: ":995"},
@@ -325,6 +342,18 @@ func (c *Config) Validate() error {
 		if c.SMTP.RateLimit.Window <= 0 {
 			c.SMTP.RateLimit.Window = time.Minute
 		}
+	}
+	if c.SMTP.Queue.Workers <= 0 {
+		c.SMTP.Queue.Workers = 1
+	}
+	if c.SMTP.Queue.PollInterval <= 0 {
+		c.SMTP.Queue.PollInterval = 5 * time.Second
+	}
+	if c.SMTP.Queue.MaxAttempts <= 0 {
+		c.SMTP.Queue.MaxAttempts = 8
+	}
+	if c.SMTP.Queue.BatchSize <= 0 {
+		c.SMTP.Queue.BatchSize = 10
 	}
 	if c.LDAP.CacheTTL <= 0 {
 		c.LDAP.CacheTTL = 5 * time.Minute
