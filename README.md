@@ -19,7 +19,7 @@ sudo ./tayga-mail -config configs/tayga.example.yaml
 ### Cross-platform release builds
 
 ```bash
-VERSION=v0.3.0 ./scripts/crossbuild.sh   # → dist/*.tar.gz|zip + checksums.txt
+VERSION=v0.4.0 ./scripts/crossbuild.sh   # → dist/*.tar.gz|zip + checksums.txt
 ```
 
 GitHub Releases: push a `v*` tag; [GoReleaser](https://goreleaser.com) (`.github/workflows/release.yml`) publishes linux/darwin/windows/freebsd amd64+arm64 archives.
@@ -64,4 +64,4 @@ Seed: `admin@example.com` / `changeme`. TLS: `tls.auto_generate` or `scripts/gen
 
 Copyright © Кислов Роман Сергеевич. Licensed under the Apache License, Version 2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
-UI abstract backdrop art © Кислов Роман Сергеевич.
+UI backdrop art (taiga / cosmos themes) © Алиса Кислова.
