@@ -20,6 +20,18 @@ Tayga Mail is a **single-binary** server. This document describes practical HA a
 3. Fail over VIP / DNS to the standby; start or promote the standby process.
 4. Run regular backups (`tayga-mail backup`) from the active node.
 
+### 1b. Automatic MX fencing (`ha.mode: active_standby`)
+
+Requires `storage.driver: postgres`. Nodes share a session advisory lock; only the lease holder accepts **unauthenticated MX** mail (others reply `421`). Authenticated submission, IMAP, and HTTP stay up on every node.
+
+```yaml
+ha:
+  mode: active_standby
+  lease_ttl: 5s
+```
+
+Metric: `tayga_ha_is_leader` (1 = this process holds the MX lease).
+
 ### 2. Multiple frontends, shared Postgres + shared maildir
 
 1. N identical Tayga nodes behind L4/L7 load balancer (sticky sessions help IMAP IDLE).
@@ -95,7 +107,7 @@ Or set `mailstore.object_store.sync_interval: 1h` for an in-process ticker.
 
 ## What is not included yet
 
-- Automatic leader election / fencing
+- Fencing of authenticated submission / IMAP writers (only MX is gated today)
 - Point-in-time DB restore orchestration (use Postgres tooling)
 
 ## Checklist before production HA

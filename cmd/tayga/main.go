@@ -14,6 +14,7 @@ import (
 	"github.com/tayga/tms/internal/auth"
 	"github.com/tayga/tms/internal/backup"
 	"github.com/tayga/tms/internal/config"
+	"github.com/tayga/tms/internal/ha"
 	"github.com/tayga/tms/internal/httpapi"
 	imapserver "github.com/tayga/tms/internal/imap"
 	"github.com/tayga/tms/internal/logging"
@@ -283,7 +284,34 @@ func run(cfgPath string) error {
 		return fmt.Errorf("seed: %w", err)
 	}
 
-	smtpSrv := smtp.New(cfg, log, store, authn, ms, sieveEng, tlsMgr)
+	var gate ha.Gate = ha.AlwaysLeader{}
+	if cfg.HA.Mode == "active_standby" {
+		lease, err := ha.NewPGLease(ctx, ha.LeaseConfig{
+			DSN: cfg.Storage.Postgres.DSN,
+			TTL: cfg.HA.LeaseTTL,
+			Log: log,
+		})
+		if err != nil {
+			return fmt.Errorf("ha lease: %w", err)
+		}
+		lease.Start(ctx)
+		gate = lease
+		go func() {
+			t := time.NewTicker(time.Second)
+			defer t.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-t.C:
+					metrics.SetHALeader(lease.IsLeader())
+				}
+			}
+		}()
+		log.Info("ha active_standby enabled", "lease_ttl", cfg.HA.LeaseTTL.String(), "is_leader", lease.IsLeader())
+	}
+
+	smtpSrv := smtp.New(cfg, log, store, authn, ms, sieveEng, tlsMgr, gate)
 	if err := smtpSrv.Start(ctx); err != nil {
 		return fmt.Errorf("smtp: %w", err)
 	}

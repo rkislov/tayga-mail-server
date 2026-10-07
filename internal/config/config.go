@@ -25,7 +25,14 @@ type Config struct {
 	TLS         TLSConfig         `yaml:"tls"`
 	HTTP        HTTPConfig        `yaml:"http"`
 	Seed        SeedConfig        `yaml:"seed"`
+	HA          HAConfig          `yaml:"ha"`
 	Log         LogConfig         `yaml:"log"`
+}
+
+// HAConfig enables optional active/standby MX fencing (Postgres advisory lock).
+type HAConfig struct {
+	Mode     string        `yaml:"mode"`      // none | active_standby
+	LeaseTTL time.Duration `yaml:"lease_ttl"` // re-check interval (default 5s)
 }
 
 type ServerConfig struct {
@@ -239,6 +246,7 @@ func Default() *Config {
 			PublicURL:         "https://127.0.0.1",
 			Admins:            []string{"admin@example.com"},
 		},
+		HA:  HAConfig{Mode: "none", LeaseTTL: 5 * time.Second},
 		Log: LogConfig{Level: "info", Format: "json"},
 	}
 }
@@ -348,6 +356,19 @@ func (c *Config) Validate() error {
 	}
 	if c.MFA.WebAuthn.Enabled && (c.MFA.WebAuthn.RPID == "" || len(c.MFA.WebAuthn.RPOrigins) == 0) {
 		return fmt.Errorf("mfa.webauthn: rp_id and rp_origins required when enabled (set http.public_url)")
+	}
+	switch c.HA.Mode {
+	case "", "none":
+		c.HA.Mode = "none"
+	case "active_standby":
+		if c.Storage.Driver != "postgres" {
+			return fmt.Errorf("ha.mode active_standby requires storage.driver postgres")
+		}
+		if c.HA.LeaseTTL <= 0 {
+			c.HA.LeaseTTL = 5 * time.Second
+		}
+	default:
+		return fmt.Errorf("ha.mode must be none or active_standby, got %q", c.HA.Mode)
 	}
 	return nil
 }
