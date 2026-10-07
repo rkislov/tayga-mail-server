@@ -26,6 +26,7 @@ CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o tayga-mail ./cmd/tayga
 - CardDAV: `http://127.0.0.1:8080/dav/card/` (Basic/Bearer); `/.well-known/carddav`
 - FlowSync (proprietary): ActiveSync `/Microsoft-Server-ActiveSync` (mail + calendar + contacts), EWS `/EWS/Exchange.asmx`, Autodiscover
 - WebAuthn MFA: `/api/v1/auth/webauthn/*` (passkeys; UUID credential/session IDs)
+- Admin UI: `http://127.0.0.1:8080/` (login, TOTP, passkeys)
 - IDs: all entity PKs/FKs are UUIDs (fresh DB required after integer-ID builds)
 
 ## License

@@ -44,9 +44,10 @@ func (s *Server) handleWebAuthnRegisterBegin(w http.ResponseWriter, r *http.Requ
 		writeAuthError(w, err)
 		return
 	}
+	// opts is *protocol.CredentialCreation with json:"publicKey" — browsers use options.publicKey.
 	writeJSON(w, http.StatusOK, map[string]any{
 		"session_id": sid,
-		"publicKey":  opts,
+		"options":    opts,
 	})
 }
 
@@ -110,7 +111,7 @@ func (s *Server) handleWebAuthnLoginBegin(w http.ResponseWriter, r *http.Request
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"session_id": sid,
-		"publicKey":  opts,
+		"options":    opts,
 	})
 }
 
