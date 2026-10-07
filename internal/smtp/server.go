@@ -155,11 +155,19 @@ func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth
 		if action == "" {
 			action = "tag"
 		}
-		srv.dmarc = &dmarcPolicy{action: action, failOpen: cfg.DMARC.FailOpen, authservID: authserv, log: log}
-		log.Info("smtp dmarc check enabled", "action", action)
-		if cfg.DMARC.Report.Enabled {
-			srv.dmarcReport = newDMARCReporter(store, cfg.DMARC.Report.OrgName, cfg.DMARC.Report.Contact, cfg.Server.Hostname, cfg.DMARC.Report.Interval, log)
-			srv.dmarc.recorder = srv.dmarcReport
+		srv.dmarc = &dmarcPolicy{
+			action: action, failOpen: cfg.DMARC.FailOpen, arcTrust: cfg.DMARC.ARCTrust,
+			authservID: authserv, log: log,
+		}
+		log.Info("smtp dmarc check enabled", "action", action, "arc_trust", cfg.DMARC.ARCTrust)
+		if cfg.DMARC.Report.Enabled || cfg.DMARC.Report.Failure {
+			srv.dmarcReport = newDMARCReporter(store, cfg.DMARC.Report.OrgName, cfg.DMARC.Report.Contact, cfg.Server.Hostname, cfg.DMARC.Report.Interval, cfg.DMARC.Report.Enabled, cfg.DMARC.Report.Failure, log)
+			if cfg.DMARC.Report.Enabled {
+				srv.dmarc.recorder = srv.dmarcReport
+			}
+			if cfg.DMARC.Report.Failure {
+				srv.dmarc.failures = srv.dmarcReport
+			}
 		}
 	}
 	if cfg.ARC.Enabled {
@@ -531,11 +539,12 @@ func (s *session) deliver(ctx context.Context, rcpt string, data []byte, msgid s
 			return &gosmtp.SMTPError{Code: 421, EnhancedCode: gosmtp.EnhancedCode{4, 3, 2}, Message: "Not writer for recipient; try later"}
 		}
 	}
-	// Inbound mail auth (SPF → DKIM → DMARC) for unauthenticated MX only.
+	// Inbound mail auth (SPF → DKIM → ARC verify → DMARC → ARC seal) for unauthenticated MX only.
 	if s.user == nil {
 		var (
 			spfRes      = spfNoneResult()
 			dkimDomains []string
+			arcCV       = "none"
 			authErr     error
 		)
 		if s.backend.spf != nil {
@@ -558,8 +567,18 @@ func (s *session) deliver(ctx context.Context, rcpt string, data []byte, msgid s
 				return authErr
 			}
 		}
+		if s.backend.arc != nil {
+			data, arcCV, authErr = s.backend.arc.applyVerify(ctx, data)
+			if authErr != nil {
+				var smtpErr *gosmtp.SMTPError
+				if errors.As(authErr, &smtpErr) {
+					return smtpErr
+				}
+				return authErr
+			}
+		}
 		if s.backend.dmarc != nil {
-			data, authErr = s.backend.dmarc.apply(data, s.from, stripPort(s.remote), spfRes, dkimDomains)
+			data, authErr = s.backend.dmarc.apply(ctx, data, s.from, stripPort(s.remote), spfRes, dkimDomains, arcCV)
 			if authErr != nil {
 				var smtpErr *gosmtp.SMTPError
 				if errors.As(authErr, &smtpErr) {
@@ -569,7 +588,7 @@ func (s *session) deliver(ctx context.Context, rcpt string, data []byte, msgid s
 			}
 		}
 		if s.backend.arc != nil {
-			data, authErr = s.backend.arc.apply(ctx, data)
+			data, authErr = s.backend.arc.applySeal(ctx, data)
 			if authErr != nil {
 				var smtpErr *gosmtp.SMTPError
 				if errors.As(authErr, &smtpErr) {
