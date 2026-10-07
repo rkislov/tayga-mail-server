@@ -280,6 +280,9 @@
           <h3>Outbound queue</h3>
           <p class="meta">Failed remote deliveries waiting for retry. DSN after max attempts.</p>
           <ul class="creds" id="outbound-list"></ul>
+          <h3>Quarantine / Junk</h3>
+          <p class="meta">Virus and spam holds. Release moves to INBOX; delete removes the message.</p>
+          <ul class="creds" id="quarantine-list"></ul>
           <div class="actions">
             <button type="button" class="secondary" id="btn-monitor-refresh">Refresh</button>
             <button type="button" class="spray" id="btn-backup">Download backup</button>
@@ -553,8 +556,56 @@ keep;</textarea>
           `<div><span class="meta">${escapeHtml(k)}</span><br/><strong>${escapeHtml(String(v))}</strong></div>`
         ).join("");
         await refreshOutbound();
+        await refreshQuarantine();
       } catch (err) {
         setMsg($("monitor-msg"), err.message, "err");
+      }
+    }
+
+    async function refreshQuarantine() {
+      const list = $("quarantine-list");
+      if (!list) return;
+      try {
+        const d = await api("/api/v1/admin/quarantine?limit=40");
+        const items = d.items || [];
+        if (!items.length) {
+          list.innerHTML = "<li class=\"meta\">No quarantined messages.</li>";
+          return;
+        }
+        list.innerHTML = items.map((it) => {
+          const subj = it.subject || "(no subject)";
+          const from = it.from || "—";
+          return `<li>
+            <strong>${escapeHtml(subj)}</strong>
+            <span class="meta"> · ${escapeHtml(it.folder)} · ${escapeHtml(it.email)}</span><br/>
+            <span class="meta">from ${escapeHtml(from)} · ${escapeHtml(it.date || "")} · ${fmtBytes(it.size || 0)}</span>
+            <div class="actions" style="margin-top:0.35rem">
+              <button type="button" class="secondary" data-q-rel="${escapeHtml(it.id)}">Release</button>
+              <button type="button" class="secondary" data-q-del="${escapeHtml(it.id)}">Delete</button>
+            </div>
+          </li>`;
+        }).join("");
+        list.querySelectorAll("[data-q-rel]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            try {
+              await api("/api/v1/admin/quarantine/" + btn.getAttribute("data-q-rel") + "/release", { method: "POST" });
+              setMsg($("monitor-msg"), "Released to INBOX.", "ok");
+              refreshMonitor();
+            } catch (err) { setMsg($("monitor-msg"), err.message, "err"); }
+          });
+        });
+        list.querySelectorAll("[data-q-del]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            if (!confirm("Permanently delete this quarantined message?")) return;
+            try {
+              await api("/api/v1/admin/quarantine/" + btn.getAttribute("data-q-del"), { method: "DELETE" });
+              setMsg($("monitor-msg"), "Deleted.", "ok");
+              refreshMonitor();
+            } catch (err) { setMsg($("monitor-msg"), err.message, "err"); }
+          });
+        });
+      } catch (err) {
+        list.innerHTML = `<li class="meta">${escapeHtml(err.message)}</li>`;
       }
     }
 
