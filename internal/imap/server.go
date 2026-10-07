@@ -29,12 +29,19 @@ type Server struct {
 	store     storage.Driver
 	authn     *auth.Layer
 	mailstore *mailstore.Store
+	hub       *Hub
 	servers   []*imapserv.Server
 }
 
-func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth.Layer, ms *mailstore.Store) *Server {
-	return &Server{cfg: cfg, log: log, store: store, authn: authn, mailstore: ms}
+func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth.Layer, ms *mailstore.Store, hub *Hub) *Server {
+	if hub == nil {
+		hub = NewHub(store)
+	}
+	return &Server{cfg: cfg, log: log, store: store, authn: authn, mailstore: ms, hub: hub}
 }
+
+// Hub returns the update hub used for IDLE/EXISTS notifications.
+func (s *Server) Hub() *Hub { return s.hub }
 
 func (s *Server) Start(ctx context.Context) error {
 	tlsCfg, err := s.loadTLS()
@@ -42,7 +49,7 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	}
 
-	be := &Backend{log: s.log, store: s.store, authn: s.authn, ms: s.mailstore}
+	be := &Backend{log: s.log, store: s.store, authn: s.authn, ms: s.mailstore, hub: s.hub}
 
 	type spec struct {
 		addr     string
@@ -124,12 +131,17 @@ func (s *Server) loadTLS() (*tls.Config, error) {
 	return &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}, nil
 }
 
-// Backend implements backend.Backend.
+// Backend implements backend.Backend and backend.BackendUpdater.
 type Backend struct {
 	log   *slog.Logger
 	store storage.Driver
 	authn *auth.Layer
 	ms    *mailstore.Store
+	hub   *Hub
+}
+
+func (b *Backend) Updates() <-chan backend.Update {
+	return b.hub.Updates()
 }
 
 func (s *Server) enableOAuth(srv *imapserv.Server, be *Backend) {
@@ -286,8 +298,10 @@ func (u *User) RenameMailbox(existingName, newName string) error {
 func (u *User) Logout() error { return nil }
 
 type Mailbox struct {
-	user *User
-	mb   *storage.Mailbox
+	user         *User
+	mb           *storage.Mailbox
+	lastMessages uint32
+	lastUIDNext  uint32
 }
 
 func (m *Mailbox) Name() string { return m.mb.Name }
@@ -372,6 +386,42 @@ func unseenSeq(msgs []*storage.Message) uint32 {
 func (m *Mailbox) SetSubscribed(bool) error { return nil }
 func (m *Mailbox) Check() error             { return nil }
 
+// Poll implements backend.MailboxPoller for NOOP-driven refresh during IDLE gaps.
+func (m *Mailbox) Poll() error {
+	status, err := m.Status([]imap.StatusItem{imap.StatusMessages, imap.StatusRecent, imap.StatusUidNext})
+	if err != nil {
+		return err
+	}
+	if status.Messages == m.lastMessages && status.UidNext == m.lastUIDNext {
+		return nil
+	}
+	m.lastMessages = status.Messages
+	m.lastUIDNext = status.UidNext
+	m.notifyStatus(status)
+	return nil
+}
+
+func (m *Mailbox) notify() {
+	status, err := m.Status([]imap.StatusItem{imap.StatusMessages, imap.StatusRecent, imap.StatusUidNext})
+	if err != nil {
+		return
+	}
+	m.lastMessages = status.Messages
+	m.lastUIDNext = status.UidNext
+	m.notifyStatus(status)
+}
+
+func (m *Mailbox) notifyStatus(status *imap.MailboxStatus) {
+	hub := m.user.backend.hub
+	if hub == nil {
+		return
+	}
+	hub.publish(&backend.MailboxUpdate{
+		Update:        backend.NewUpdate(m.user.user.Email, m.mb.Name),
+		MailboxStatus: status,
+	})
+}
+
 func (m *Mailbox) ListMessages(uid bool, seqset *imap.SeqSet, items []imap.FetchItem, ch chan<- *imap.Message) error {
 	defer close(ch)
 	msgs, err := m.messages()
@@ -443,6 +493,9 @@ func (m *Mailbox) CreateMessage(flags []string, date time.Time, body imap.Litera
 		FilePath:     rel,
 	})
 	_ = m.reload()
+	if err == nil {
+		m.notify()
+	}
 	return err
 }
 
@@ -470,6 +523,7 @@ func (m *Mailbox) UpdateMessagesFlags(uid bool, seqset *imap.SeqSet, op imap.Fla
 			_ = m.user.backend.store.UpdateMessagePath(ctx, msg.ID, newRel)
 		}
 	}
+	m.notify()
 	return nil
 }
 
@@ -549,6 +603,7 @@ func (m *Mailbox) CopyMessages(uid bool, seqset *imap.SeqSet, dest string) error
 			return err
 		}
 	}
+	dst.notify()
 	return nil
 }
 
@@ -561,5 +616,6 @@ func (m *Mailbox) Expunge() error {
 	for _, msg := range deleted {
 		_ = m.user.backend.ms.Delete(msg.FilePath)
 	}
+	m.notify()
 	return nil
 }
