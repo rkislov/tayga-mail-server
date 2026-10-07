@@ -1,4 +1,5 @@
-# Tayga Mail Server — example configuration (local development)
+# Tayga Mail Server — example configuration
+# Standard ports (<1024) need root or CAP_NET_BIND_SERVICE.
 
 server:
   hostname: mail.example.com
@@ -14,24 +15,23 @@ mailstore:
   root: ./data/maildir
 
 smtp:
-  # Non-privileged ports for local development
-  mx: ":1025"
-  submission: ":1587"
-  smtps: "" # e.g. ":1465" when TLS certs are set
+  mx: ":25"
+  submission: ":587"   # STARTTLS when tls certs are present
+  smtps: ":465"        # implicit TLS
   max_size: 26214400 # 25 MiB
   read_timeout: 60s
   write_timeout: 60s
 
 imap:
-  listen: ":1143"
-  imaps: ""
+  listen: ":143"       # STARTTLS when tls certs are present
+  imaps: ":993"        # implicit TLS
 
 pop3:
-  listen: ":1110"
-  pop3s: ""
+  listen: ":110"       # STLS when tls certs are present
+  pop3s: ":995"        # implicit TLS
 
 managesieve:
-  listen: ":14190"
+  listen: ":4190"      # STARTTLS when tls certs are present
 
 # Per-domain LDAP (hybrid with local users). Disabled by default.
 ldap:
@@ -57,7 +57,7 @@ oidc:
     #   issuer: "https://login.example.com"
     #   client_id: "tayga"
     #   client_secret: "secret"
-    #   redirect_url: "http://127.0.0.1:8080/api/v1/auth/oidc/callback"
+    #   redirect_url: "https://mail.example.com/api/v1/auth/oidc/callback"
     #   scopes: [openid, email, profile]
 
 # FlowSync — original Tayga sync engine (ActiveSync- and EWS-compatible wire; Apache-2.0)
@@ -76,16 +76,20 @@ mfa:
     enabled: true
     # rp_id / rp_origins default from http.public_url host
     # rp_display_name: "Tayga Mail"
-    # rp_id: "127.0.0.1"
-    # rp_origins: ["http://127.0.0.1:8080"]
+    # rp_id: "mail.example.com"
+    # rp_origins: ["https://mail.example.com"]
 
 tls:
-  cert_file: ""
-  key_file: ""
+  cert_file: ./data/certs/server.crt
+  key_file: ./data/certs/server.key
+  # Dev only: create a self-signed cert if files are missing
+  auto_generate: true
 
 http:
-  listen: ":8080"
-  public_url: "http://127.0.0.1:8080"
+  listen: ":80"
+  tls_listen: ":443"
+  redirect_http_to_tls: true
+  public_url: "https://mail.example.com"
   admins:
     - admin@example.com
   # CalDAV:  /dav/cal/{email}/calendars/default/
