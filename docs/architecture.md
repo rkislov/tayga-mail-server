@@ -43,8 +43,9 @@ Original sync engine by Кислов Роман Сергеевич (Apache-2.0).
 
 | Endpoint | Role |
 |----------|------|
-| `/Autodiscover/Autodiscover.xml` | POX Autodiscover → FlowSync URLs |
-| `/autodiscover/autodiscover.json/…` | JSON Autodiscover |
+| `/Autodiscover/Autodiscover.xml` | Outlook POX (IMAP/SMTP/POP + EXPR/EXCH FlowSync) |
+| `/autodiscover/autodiscover.json/…` | Mobile JSON Autodiscover |
+| `/.well-known/autoconfig/mail/config-v1.1.xml` | Mozilla/Thunderbird autoconfig |
 | `/Microsoft-Server-ActiveSync` | FolderSync/Create/Delete/Update, Sync, MoveItems, Ping, Provision, GetItemEstimate (XML + WBXML) |
 | `/EWS/Exchange.asmx` | Find/Get/Create/Update/Delete + SyncFolderItems for mail, calendar, contacts; FindFolder |
 
@@ -103,6 +104,9 @@ Embedded at `/` (`internal/frontend/dist`): sign-in, TOTP + WebAuthn MFA, passke
 | `GET/PATCH /api/v1/me` | profile + `quota_bytes` / `used_bytes` |
 | `GET/PUT/DELETE /api/v1/sieve/scripts[/{name}]` | list / save / delete Sieve scripts |
 | `POST /api/v1/sieve/scripts/{name}/activate` | set active script |
+| `GET /api/v1/admin/tenant` | current tenant + domains |
+| `GET/POST /api/v1/admin/domains` | list / add mail domains |
+| `DELETE /api/v1/admin/domains/{name}` | remove empty domain |
 | `GET /api/v1/admin/users` | list tenant users (admins only) |
 | `POST /api/v1/admin/users` | create local user |
 | `PUT /api/v1/admin/users/{uuid}/quota` | set quota (0 = unlimited) |
@@ -122,4 +126,4 @@ Admins: `http.admins` email list (default `admin@example.com`).
 
 ## Next milestones
 
-TLS cert hot-reload via admin UI/API. Next: multi-tenant polish, richer Autodiscover.
+Tenant domain admin + richer Autodiscover (POX/JSON/Mozilla). Next: monitoring dashboards, backup tooling.

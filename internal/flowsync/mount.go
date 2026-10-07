@@ -22,13 +22,17 @@ func Mount(mux *http.ServeMux, cfg *config.Config, log *slog.Logger, store stora
 		public = "http://127.0.0.1" + cfg.HTTP.Listen
 	}
 
-	ad := &autodiscover{publicURL: public, hostname: cfg.Server.Hostname}
+	ad := &autodiscover{publicURL: public, hostname: cfg.Server.Hostname, cfg: cfg, store: store}
 	eas := &easHandler{store: store, ms: ms}
 	ews := &ewsHandler{store: store, ms: ms, publicURL: public}
 
 	mux.HandleFunc("/Autodiscover/Autodiscover.xml", ad.handlePOX)
 	mux.HandleFunc("/autodiscover/autodiscover.xml", ad.handlePOX)
+	mux.HandleFunc("/Autodiscover/", ad.handlePOX)
+	mux.HandleFunc("/autodiscover/autodiscover.json", ad.handleJSON)
 	mux.HandleFunc("/autodiscover/autodiscover.json/", ad.handleJSON)
+	mux.HandleFunc("/.well-known/autoconfig/mail/config-v1.1.xml", ad.handleMozilla)
+	mux.HandleFunc("/mail/config-v1.1.xml", ad.handleMozilla)
 
 	mux.Handle("/Microsoft-Server-ActiveSync", authMiddleware(authn, eas))
 	mux.Handle("/Microsoft-Server-ActiveSync/", authMiddleware(authn, eas))
@@ -39,6 +43,8 @@ func Mount(mux *http.ServeMux, cfg *config.Config, log *slog.Logger, store stora
 		"engine", "FlowSync/1.0",
 		"activesync", "/Microsoft-Server-ActiveSync",
 		"ews", "/EWS/Exchange.asmx",
+		"autodiscover", "/Autodiscover/Autodiscover.xml",
+		"mozilla_autoconfig", "/.well-known/autoconfig/mail/config-v1.1.xml",
 		"proprietary", true,
 	)
 }
