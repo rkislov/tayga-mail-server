@@ -180,6 +180,12 @@ func (s *Store) GetCalendarObject(ctx context.Context, calendarID, hrefName stri
 	return s.scanCalObject(s.db.QueryRowContext(ctx, q, calendarID, hrefName))
 }
 
+func (s *Store) GetCalendarObjectByID(ctx context.Context, id string) (*CalendarObject, error) {
+	q := s.rebind(`SELECT id, calendar_id, uid, href_name, etag, data, size, component, dtstart, dtend, updated_at
+		FROM calendar_objects WHERE id = ?`)
+	return s.scanCalObject(s.db.QueryRowContext(ctx, q, id))
+}
+
 func (s *Store) UpsertCalendarObject(ctx context.Context, o *CalendarObject) (*CalendarObject, error) {
 	now := time.Now().UTC()
 	o.UpdatedAt = now
@@ -362,6 +368,11 @@ func (s *Store) ListAddressObjects(ctx context.Context, addressBookID string) ([
 func (s *Store) GetAddressObject(ctx context.Context, addressBookID, hrefName string) (*AddressObject, error) {
 	q := s.rebind(`SELECT id, addressbook_id, uid, href_name, etag, data, size, updated_at FROM address_objects WHERE addressbook_id = ? AND href_name = ?`)
 	return s.scanAddrObject(s.db.QueryRowContext(ctx, q, addressBookID, hrefName))
+}
+
+func (s *Store) GetAddressObjectByID(ctx context.Context, id string) (*AddressObject, error) {
+	q := s.rebind(`SELECT id, addressbook_id, uid, href_name, etag, data, size, updated_at FROM address_objects WHERE id = ?`)
+	return s.scanAddrObject(s.db.QueryRowContext(ctx, q, id))
 }
 
 func (s *Store) UpsertAddressObject(ctx context.Context, o *AddressObject) (*AddressObject, error) {

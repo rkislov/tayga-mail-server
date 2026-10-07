@@ -77,6 +77,7 @@ type Driver interface {
 	GetCalendarByID(ctx context.Context, userID, id string) (*Calendar, error)
 	ListCalendarObjects(ctx context.Context, calendarID string) ([]*CalendarObject, error)
 	GetCalendarObject(ctx context.Context, calendarID, hrefName string) (*CalendarObject, error)
+	GetCalendarObjectByID(ctx context.Context, id string) (*CalendarObject, error)
 	UpsertCalendarObject(ctx context.Context, o *CalendarObject) (*CalendarObject, error)
 	DeleteCalendarObject(ctx context.Context, calendarID, hrefName string) error
 
@@ -88,6 +89,7 @@ type Driver interface {
 	DeleteAddressBook(ctx context.Context, userID, name string) error
 	ListAddressObjects(ctx context.Context, addressBookID string) ([]*AddressObject, error)
 	GetAddressObject(ctx context.Context, addressBookID, hrefName string) (*AddressObject, error)
+	GetAddressObjectByID(ctx context.Context, id string) (*AddressObject, error)
 	UpsertAddressObject(ctx context.Context, o *AddressObject) (*AddressObject, error)
 	DeleteAddressObject(ctx context.Context, addressBookID, hrefName string) error
 	EnsureDAVDefaults(ctx context.Context, userID string) error
