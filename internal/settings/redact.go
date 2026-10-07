@@ -36,6 +36,11 @@ func redactConfig(cfg *config.Config) {
 			cfg.OIDC.Domains[k] = d
 		}
 	}
+	for i := range cfg.XMPP.Components {
+		if cfg.XMPP.Components[i].Secret != "" {
+			cfg.XMPP.Components[i].Secret = redacted
+		}
+	}
 }
 
 // preserveSecrets copies secret fields from old into neu when neu has empty or redacted values.
@@ -65,6 +70,14 @@ func preserveSecrets(old, neu *config.Config) {
 		if oldD, ok := old.OIDC.Domains[k]; ok && isSecretUnset(d.ClientSecret) {
 			d.ClientSecret = oldD.ClientSecret
 			neu.OIDC.Domains[k] = d
+		}
+	}
+	for i := range neu.XMPP.Components {
+		if !isSecretUnset(neu.XMPP.Components[i].Secret) {
+			continue
+		}
+		if i < len(old.XMPP.Components) {
+			neu.XMPP.Components[i].Secret = old.XMPP.Components[i].Secret
 		}
 	}
 }

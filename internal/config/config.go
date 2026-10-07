@@ -168,7 +168,8 @@ func (c HAConfig) StickyWriters() bool {
 }
 
 type ServerConfig struct {
-	Hostname string `yaml:"hostname"`
+	Hostname   string `yaml:"hostname"`
+	SecretsKey string `yaml:"secrets_key"` // AEAD key material for migration passwords etc.; empty → auto file
 }
 
 type StorageConfig struct {

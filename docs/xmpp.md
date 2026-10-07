@@ -11,6 +11,7 @@ Canonical requirements: [tms-xmpp-001.md](./tms-xmpp-001.md).
 | 3 | MAM archive + query (`urn:xmpp:mam:2`); message carbons enable/sent | **done** (lab) |
 | Bots | XEP-0114 components + HTTP bot tokens | **done** (lab) |
 | Web UI | Built-in **Chat** app (plaintext over REST + SSE) | **done** (lab) |
+| Admin | Админка **XMPP**: C2S, компоненты, HTTP-боты | **done** |
 | — | S2S federation | pending |
 | 4–5 | Client OMEMO (WASM/JS); private keys never on server | pending |
 | 6 | Interop Gajim / Conversations / Dino | pending |
@@ -31,6 +32,19 @@ In the shell nav: **Чат / Chat**.
 
 Messages are stored in MAM as XMPP stanzas and fan out to online C2S sessions, components, and other web SSE subscribers. **OMEMO in the browser is not enabled yet** — treat web chat as plaintext until Stage 4–5.
 
+## Admin UI
+
+В навбаре админа: **XMPP** (между УЦ и Сервер).
+
+| Действие | Как |
+|----------|-----|
+| Включить C2S / порты | чекбокс + listen / listen_tls / component_listen → **Сохранить C2S** (`PUT /api/v1/admin/settings/xmpp`) |
+| Статус | `GET /api/v1/admin/bots` → `status` + список ботов и доменов компонентов |
+| HTTP-бот | форма на странице → `POST /api/v1/admin/bots` (токен один раз) |
+| Компоненты (секреты) | секция `xmpp` на странице **Сервер** (JSON) или YAML |
+
+Смена слушателей требует **перезапуска** `tayga-mail`. Веб-чат работает и при `xmpp.enabled: false`.
+
 ## Bots
 
 ### 1. XMPP Component (XEP-0114)
@@ -49,7 +63,8 @@ Handshake: SHA-1 hex of `streamID + secret`.
 
 ### 2. HTTP bot API (mailbox-linked)
 
-- `POST /api/v1/admin/bots` → `token` once
+- Admin UI **XMPP** или `POST /api/v1/admin/bots` → `token` once
+- `DELETE /api/v1/admin/bots/{id}`
 - `POST /api/v1/bots/xmpp/send`, `GET /api/v1/bots/xmpp/inbox`
 
 ## Server vs client crypto
