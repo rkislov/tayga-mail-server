@@ -40,6 +40,12 @@ func (h *ewsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		soap, err = h.findItem(r.Context(), u, string(body))
 	case "GetItem":
 		soap, err = h.getItem(r.Context(), u, string(body))
+	case "CreateItem":
+		soap, err = h.createItem(r.Context(), u, string(body))
+	case "UpdateItem":
+		soap, err = h.updateItem(r.Context(), u, string(body))
+	case "DeleteItem":
+		soap, err = h.deleteItem(r.Context(), u, string(body))
 	case "SyncFolderItems":
 		soap, err = h.syncFolderItems(r.Context(), u, string(body))
 	case "GetFolder", "FindFolder":
@@ -310,7 +316,7 @@ func (h *ewsHandler) syncFolderItems(ctx context.Context, u *storage.User, body 
 }
 
 func detectEWSOp(body string) string {
-	for _, op := range []string{"SyncFolderItems", "FindItem", "GetItem", "FindFolder", "GetFolder"} {
+	for _, op := range []string{"SyncFolderItems", "CreateItem", "UpdateItem", "DeleteItem", "FindItem", "GetItem", "FindFolder", "GetFolder"} {
 		if strings.Contains(body, op) {
 			return op
 		}

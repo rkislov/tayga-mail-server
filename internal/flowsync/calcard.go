@@ -88,6 +88,8 @@ func (h *easHandler) syncCollection(ctx context.Context, u *storage.User, dev *s
 		return "", nil, err
 	}
 
+	wbResults := h.applyWritebacks(ctx, u, kind, collectionID, parseSyncClientOps(reqBody))
+
 	key, err := h.store.GetFlowSyncSyncKey(ctx, dev.ID, collectionID)
 	if err != nil {
 		return "", nil, err
@@ -99,15 +101,15 @@ func (h *easHandler) syncCollection(ctx context.Context, u *storage.User, dev *s
 
 	switch kind {
 	case kindCalendar:
-		return h.syncCalendar(ctx, collectionID, next, wbxml)
+		return h.syncCalendar(ctx, collectionID, next, wbxml, wbResults)
 	case kindContacts:
-		return h.syncContacts(ctx, collectionID, next, wbxml)
+		return h.syncContacts(ctx, collectionID, next, wbxml, wbResults)
 	default:
-		return h.syncMailCollection(ctx, u, collectionID, next, wbxml)
+		return h.syncMailCollection(ctx, u, collectionID, next, wbxml, wbResults)
 	}
 }
 
-func (h *easHandler) syncMailCollection(ctx context.Context, u *storage.User, collectionID, next string, wbxml bool) (string, []byte, error) {
+func (h *easHandler) syncMailCollection(ctx context.Context, u *storage.User, collectionID, next string, wbxml bool, wb []writebackResult) (string, []byte, error) {
 	mb, err := h.mailboxByID(ctx, u.ID, collectionID)
 	if err != nil {
 		return "", nil, err
@@ -134,10 +136,10 @@ func (h *easHandler) syncMailCollection(ctx context.Context, u *storage.User, co
 	if wbxml {
 		return "", encodeSyncWBXML(next, collectionID, "Email", adds), nil
 	}
-	return renderMailSyncXML(next, collectionID, adds), nil, nil
+	return renderMailSyncXML(next, collectionID, adds, wb), nil, nil
 }
 
-func (h *easHandler) syncCalendar(ctx context.Context, collectionID, next string, wbxml bool) (string, []byte, error) {
+func (h *easHandler) syncCalendar(ctx context.Context, collectionID, next string, wbxml bool, wb []writebackResult) (string, []byte, error) {
 	objs, err := h.store.ListCalendarObjects(ctx, collectionID)
 	if err != nil {
 		return "", nil, err
@@ -169,10 +171,10 @@ func (h *easHandler) syncCalendar(ctx context.Context, collectionID, next string
 	if wbxml {
 		return "", encodeCalendarSyncWBXML(next, collectionID, adds), nil
 	}
-	return renderCalendarSyncXML(next, collectionID, adds), nil, nil
+	return renderCalendarSyncXML(next, collectionID, adds, wb), nil, nil
 }
 
-func (h *easHandler) syncContacts(ctx context.Context, collectionID, next string, wbxml bool) (string, []byte, error) {
+func (h *easHandler) syncContacts(ctx context.Context, collectionID, next string, wbxml bool, wb []writebackResult) (string, []byte, error) {
 	objs, err := h.store.ListAddressObjects(ctx, collectionID)
 	if err != nil {
 		return "", nil, err
@@ -199,16 +201,18 @@ func (h *easHandler) syncContacts(ctx context.Context, collectionID, next string
 	if wbxml {
 		return "", encodeContactsSyncWBXML(next, collectionID, adds), nil
 	}
-	return renderContactsSyncXML(next, collectionID, adds), nil, nil
+	return renderContactsSyncXML(next, collectionID, adds, wb), nil, nil
 }
 
-func renderMailSyncXML(syncKey, collectionID string, adds []syncAdd) string {
+func renderMailSyncXML(syncKey, collectionID string, adds []syncAdd, wb []writebackResult) string {
 	var b strings.Builder
 	b.WriteString(`<?xml version="1.0" encoding="utf-8"?>`)
 	b.WriteString(`<Sync xmlns="AirSync:"><Collections><Collection>`)
 	fmt.Fprintf(&b, `<Class>Email</Class><SyncKey>%s</SyncKey>`, xmlEscape(syncKey))
 	fmt.Fprintf(&b, `<CollectionId>%s</CollectionId>`, xmlEscape(collectionID))
-	b.WriteString(`<Status>1</Status><Commands>`)
+	b.WriteString(`<Status>1</Status>`)
+	b.WriteString(renderWritebackResponses(wb))
+	b.WriteString(`<Commands>`)
 	for _, a := range adds {
 		b.WriteString(`<Add>`)
 		fmt.Fprintf(&b, `<ServerId>%s</ServerId>`, xmlEscape(a.ServerID))
@@ -225,13 +229,15 @@ func renderMailSyncXML(syncKey, collectionID string, adds []syncAdd) string {
 	return b.String()
 }
 
-func renderCalendarSyncXML(syncKey, collectionID string, adds []calendarAdd) string {
+func renderCalendarSyncXML(syncKey, collectionID string, adds []calendarAdd, wb []writebackResult) string {
 	var b strings.Builder
 	b.WriteString(`<?xml version="1.0" encoding="utf-8"?>`)
 	b.WriteString(`<Sync xmlns="AirSync:"><Collections><Collection>`)
 	fmt.Fprintf(&b, `<Class>Calendar</Class><SyncKey>%s</SyncKey>`, xmlEscape(syncKey))
 	fmt.Fprintf(&b, `<CollectionId>%s</CollectionId>`, xmlEscape(collectionID))
-	b.WriteString(`<Status>1</Status><Commands>`)
+	b.WriteString(`<Status>1</Status>`)
+	b.WriteString(renderWritebackResponses(wb))
+	b.WriteString(`<Commands>`)
 	for _, a := range adds {
 		b.WriteString(`<Add>`)
 		fmt.Fprintf(&b, `<ServerId>%s</ServerId>`, xmlEscape(a.ServerID))
@@ -254,13 +260,15 @@ func renderCalendarSyncXML(syncKey, collectionID string, adds []calendarAdd) str
 	return b.String()
 }
 
-func renderContactsSyncXML(syncKey, collectionID string, adds []contactAdd) string {
+func renderContactsSyncXML(syncKey, collectionID string, adds []contactAdd, wb []writebackResult) string {
 	var b strings.Builder
 	b.WriteString(`<?xml version="1.0" encoding="utf-8"?>`)
 	b.WriteString(`<Sync xmlns="AirSync:"><Collections><Collection>`)
 	fmt.Fprintf(&b, `<Class>Contacts</Class><SyncKey>%s</SyncKey>`, xmlEscape(syncKey))
 	fmt.Fprintf(&b, `<CollectionId>%s</CollectionId>`, xmlEscape(collectionID))
-	b.WriteString(`<Status>1</Status><Commands>`)
+	b.WriteString(`<Status>1</Status>`)
+	b.WriteString(renderWritebackResponses(wb))
+	b.WriteString(`<Commands>`)
 	for _, a := range adds {
 		b.WriteString(`<Add>`)
 		fmt.Fprintf(&b, `<ServerId>%s</ServerId>`, xmlEscape(a.ServerID))
