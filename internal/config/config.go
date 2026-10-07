@@ -29,6 +29,8 @@ type Config struct {
 	Scan        ScanConfig        `yaml:"scan"`
 	Spam        SpamConfig        `yaml:"spam"`
 	DKIMVerify  DKIMVerifyConfig  `yaml:"dkim_verify"`
+	SPF         SPFConfig         `yaml:"spf"`
+	DMARC       DMARCConfig       `yaml:"dmarc"`
 	Log         LogConfig         `yaml:"log"`
 }
 
@@ -39,6 +41,22 @@ type DKIMVerifyConfig struct {
 	RequireSignature bool   `yaml:"require_signature"` // reject/fail when no DKIM-Signature
 	FailOpen         bool   `yaml:"fail_open"`         // temperror → deliver (tag temperror)
 	AuthservID       string `yaml:"authserv_id"`       // Authentication-Results id (default server.hostname)
+}
+
+// SPFConfig checks inbound SPF for unauthenticated MX.
+type SPFConfig struct {
+	Enabled    bool   `yaml:"enabled"`
+	Action     string `yaml:"action"` // tag | reject
+	FailOpen   bool   `yaml:"fail_open"`
+	AuthservID string `yaml:"authserv_id"`
+}
+
+// DMARCConfig evaluates DMARC using SPF + DKIM alignment.
+type DMARCConfig struct {
+	Enabled    bool   `yaml:"enabled"`
+	Action     string `yaml:"action"` // tag | reject | follow (honor p=reject)
+	FailOpen   bool   `yaml:"fail_open"`
+	AuthservID string `yaml:"authserv_id"`
 }
 
 // SpamConfig configures Rspamd (or similar) scoring for inbound SMTP.
@@ -377,6 +395,16 @@ func Default() *Config {
 			Action:   "tag",
 			FailOpen: true,
 		},
+		SPF: SPFConfig{
+			Enabled:  false,
+			Action:   "tag",
+			FailOpen: true,
+		},
+		DMARC: DMARCConfig{
+			Enabled:  false,
+			Action:   "tag",
+			FailOpen: true,
+		},
 		Log: LogConfig{Level: "info", Format: "json"},
 	}
 }
@@ -594,6 +622,32 @@ func (c *Config) Validate() error {
 		}
 		if c.DKIMVerify.AuthservID == "" {
 			c.DKIMVerify.AuthservID = c.Server.Hostname
+		}
+	}
+	if c.SPF.Enabled {
+		switch c.SPF.Action {
+		case "", "tag", "reject":
+			if c.SPF.Action == "" {
+				c.SPF.Action = "tag"
+			}
+		default:
+			return fmt.Errorf("spf.action must be tag or reject, got %q", c.SPF.Action)
+		}
+		if c.SPF.AuthservID == "" {
+			c.SPF.AuthservID = c.Server.Hostname
+		}
+	}
+	if c.DMARC.Enabled {
+		switch c.DMARC.Action {
+		case "", "tag", "reject", "follow":
+			if c.DMARC.Action == "" {
+				c.DMARC.Action = "tag"
+			}
+		default:
+			return fmt.Errorf("dmarc.action must be tag, reject, or follow, got %q", c.DMARC.Action)
+		}
+		if c.DMARC.AuthservID == "" {
+			c.DMARC.AuthservID = c.Server.Hostname
 		}
 	}
 	return nil

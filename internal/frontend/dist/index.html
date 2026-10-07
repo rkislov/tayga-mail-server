@@ -282,7 +282,31 @@
           <ul class="creds" id="outbound-list"></ul>
           <h3>Quarantine / Junk</h3>
           <p class="meta">Virus and spam holds. Release moves to INBOX; delete removes the message.</p>
+          <div class="row" style="gap:0.75rem;align-items:flex-end;flex-wrap:wrap;margin:0.5rem 0">
+            <div>
+              <label for="q-folder">Folder</label>
+              <select id="q-folder">
+                <option value="">All</option>
+                <option value="Quarantine">Quarantine</option>
+                <option value="Junk">Junk</option>
+              </select>
+            </div>
+            <div>
+              <label for="q-kind">Kind</label>
+              <select id="q-kind">
+                <option value="">All</option>
+                <option value="virus">Virus</option>
+                <option value="spam">Spam</option>
+              </select>
+            </div>
+            <div style="flex:1;min-width:10rem">
+              <label for="q-search">Search</label>
+              <input id="q-search" type="search" placeholder="subject, from, mailbox…" />
+            </div>
+            <button type="button" class="secondary" id="btn-q-refresh">Filter</button>
+          </div>
           <ul class="creds" id="quarantine-list"></ul>
+          <pre class="secret hidden" id="q-preview" style="max-height:14rem;overflow:auto;white-space:pre-wrap;margin-top:0.75rem"></pre>
           <div class="actions">
             <button type="button" class="secondary" id="btn-monitor-refresh">Refresh</button>
             <button type="button" class="spray" id="btn-backup">Download backup</button>
@@ -564,9 +588,21 @@ keep;</textarea>
 
     async function refreshQuarantine() {
       const list = $("quarantine-list");
+      const preview = $("q-preview");
       if (!list) return;
+      if (preview) {
+        preview.classList.add("hidden");
+        preview.textContent = "";
+      }
       try {
-        const d = await api("/api/v1/admin/quarantine?limit=40");
+        const params = new URLSearchParams({ limit: "40" });
+        const folder = $("q-folder")?.value || "";
+        const kind = $("q-kind")?.value || "";
+        const q = ($("q-search")?.value || "").trim();
+        if (folder) params.set("folder", folder);
+        if (kind) params.set("kind", kind);
+        if (q) params.set("q", q);
+        const d = await api("/api/v1/admin/quarantine?" + params.toString());
         const items = d.items || [];
         if (!items.length) {
           list.innerHTML = "<li class=\"meta\">No quarantined messages.</li>";
@@ -575,16 +611,49 @@ keep;</textarea>
         list.innerHTML = items.map((it) => {
           const subj = it.subject || "(no subject)";
           const from = it.from || "—";
+          const chips = [];
+          if (it.kind) chips.push(it.kind);
+          if (it.spam_score) chips.push("score " + it.spam_score);
+          if (it.virus_name) chips.push(it.virus_name);
+          if (it.spam_status) chips.push(it.spam_status);
+          if (it.virus_status && !it.virus_name) chips.push(it.virus_status);
+          const chipHtml = chips.length
+            ? `<br/><span class="meta">${chips.map((c) => escapeHtml(String(c))).join(" · ")}</span>`
+            : "";
           return `<li>
             <strong>${escapeHtml(subj)}</strong>
             <span class="meta"> · ${escapeHtml(it.folder)} · ${escapeHtml(it.email)}</span><br/>
             <span class="meta">from ${escapeHtml(from)} · ${escapeHtml(it.date || "")} · ${fmtBytes(it.size || 0)}</span>
+            ${chipHtml}
             <div class="actions" style="margin-top:0.35rem">
+              <button type="button" class="secondary" data-q-prev="${escapeHtml(it.id)}">Preview</button>
               <button type="button" class="secondary" data-q-rel="${escapeHtml(it.id)}">Release</button>
               <button type="button" class="secondary" data-q-del="${escapeHtml(it.id)}">Delete</button>
             </div>
           </li>`;
         }).join("");
+        list.querySelectorAll("[data-q-prev]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            try {
+              const it = await api("/api/v1/admin/quarantine/" + btn.getAttribute("data-q-prev"));
+              const lines = [
+                "From: " + (it.from || ""),
+                "Subject: " + (it.subject || ""),
+                "Kind: " + (it.kind || ""),
+                it.spam_score ? "Spam-Score: " + it.spam_score : "",
+                it.spam_status ? "Spam-Status: " + it.spam_status : "",
+                it.virus_name ? "Virus: " + it.virus_name : "",
+                it.auth_results ? "Auth: " + it.auth_results : "",
+                "",
+                it.preview || "(empty body)",
+              ].filter((x, i, a) => x !== "" || (i > 0 && a[i - 1] !== ""));
+              if (preview) {
+                preview.textContent = lines.join("\n");
+                preview.classList.remove("hidden");
+              }
+            } catch (err) { setMsg($("monitor-msg"), err.message, "err"); }
+          });
+        });
         list.querySelectorAll("[data-q-rel]").forEach((btn) => {
           btn.addEventListener("click", async () => {
             try {
@@ -608,6 +677,14 @@ keep;</textarea>
         list.innerHTML = `<li class="meta">${escapeHtml(err.message)}</li>`;
       }
     }
+
+    $("btn-q-refresh")?.addEventListener("click", () => refreshQuarantine());
+    $("q-search")?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        refreshQuarantine();
+      }
+    });
 
     async function refreshOutbound() {
       const list = $("outbound-list");

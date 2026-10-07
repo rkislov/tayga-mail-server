@@ -131,13 +131,26 @@ spam:
   # quarantine_above: 6
   # tag_above: 4
 
-# Inbound DKIM verification on unauthenticated MX (before virus/spam)
+# Inbound mail authentication on unauthenticated MX (before virus/spam)
+# Order: SPF → DKIM → DMARC. Each may add Authentication-Results.
+spf:
+  enabled: false
+  action: tag                # tag | reject
+  fail_open: true
+  # authserv_id: ""
+
 dkim_verify:
   enabled: false
   action: tag                # tag | reject
   require_signature: false   # reject unsigned when action=reject
   fail_open: true            # temperror (DNS) → deliver with dkim=temperror
   # authserv_id: ""          # default: server.hostname (Authentication-Results)
+
+dmarc:
+  enabled: false
+  action: tag                # tag | reject | follow (honor DNS p=reject)
+  fail_open: true
+  # authserv_id: ""
 
 # FlowSync — original Tayga sync engine (ActiveSync- and EWS-compatible wire; Apache-2.0)
 flowsync:

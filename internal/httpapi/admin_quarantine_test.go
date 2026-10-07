@@ -56,7 +56,7 @@ func TestAdminQuarantine(t *testing.T) {
 
 	ms := mailstore.New(filepath.Join(dir, "mail"))
 	eng := sieve.New(store, ms, nil)
-	raw := []byte("From: spammer@evil.test\r\nSubject: buy pills\r\n\r\nxx\r\n")
+	raw := []byte("From: spammer@evil.test\r\nSubject: buy pills\r\nX-Virus-Status: Quarantined\r\nX-Virus-Name: Eicar\r\n\r\nxx\r\n")
 	if err := eng.FileInto(ctx, user, "Quarantine", nil, raw, "<q@ex.com>"); err != nil {
 		t.Fatal(err)
 	}
@@ -77,9 +77,11 @@ func TestAdminQuarantine(t *testing.T) {
 	}
 	var body struct {
 		Items []struct {
-			ID      string `json:"id"`
-			Subject string `json:"subject"`
-			Folder  string `json:"folder"`
+			ID        string `json:"id"`
+			Subject   string `json:"subject"`
+			Folder    string `json:"folder"`
+			Kind      string `json:"kind"`
+			VirusName string `json:"virus_name"`
 		} `json:"items"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
@@ -88,7 +90,34 @@ func TestAdminQuarantine(t *testing.T) {
 	if len(body.Items) != 1 || body.Items[0].Subject != "buy pills" || body.Items[0].Folder != "Quarantine" {
 		t.Fatalf("%+v", body.Items)
 	}
+	if body.Items[0].Kind != "virus" || body.Items[0].VirusName != "Eicar" {
+		t.Fatalf("meta %+v", body.Items[0])
+	}
 	id := body.Items[0].ID
+
+	reqMeta := httptest.NewRequest(http.MethodGet, "/api/v1/admin/quarantine/"+id, nil)
+	reqMeta.Header.Set("Authorization", "Bearer "+token)
+	wMeta := httptest.NewRecorder()
+	h.ServeHTTP(wMeta, reqMeta)
+	if wMeta.Code != http.StatusOK {
+		t.Fatalf("preview %d %s", wMeta.Code, wMeta.Body.String())
+	}
+	var one map[string]any
+	if err := json.Unmarshal(wMeta.Body.Bytes(), &one); err != nil {
+		t.Fatal(err)
+	}
+	if one["preview"] == nil || one["preview"] == "" {
+		t.Fatalf("preview missing: %v", one)
+	}
+
+	reqKind := httptest.NewRequest(http.MethodGet, "/api/v1/admin/quarantine?kind=spam", nil)
+	reqKind.Header.Set("Authorization", "Bearer "+token)
+	wKind := httptest.NewRecorder()
+	h.ServeHTTP(wKind, reqKind)
+	_ = json.Unmarshal(wKind.Body.Bytes(), &body)
+	if len(body.Items) != 0 {
+		t.Fatalf("kind=spam should be empty got %+v", body.Items)
+	}
 
 	req2 := httptest.NewRequest(http.MethodPost, "/api/v1/admin/quarantine/"+id+"/release", nil)
 	req2.Header.Set("Authorization", "Bearer "+token)

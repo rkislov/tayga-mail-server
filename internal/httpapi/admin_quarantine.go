@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/tayga/tms/internal/storage"
 )
@@ -24,6 +25,8 @@ func (s *Server) handleAdminQuarantine(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case path == "" && r.Method == http.MethodGet:
 		s.listQuarantine(w, r, admin)
+	case path != "" && !strings.Contains(path, "/") && r.Method == http.MethodGet:
+		s.getQuarantine(w, r, admin, path)
 	case path != "" && r.Method == http.MethodDelete:
 		s.deleteQuarantine(w, r, admin, path)
 	case path != "" && r.Method == http.MethodPost && strings.HasSuffix(path, "/release"):
@@ -53,6 +56,26 @@ func quarantineFolders(r *http.Request) []string {
 	return out
 }
 
+type quarantineItem struct {
+	ID          string `json:"id"`
+	UserID      string `json:"user_id"`
+	Email       string `json:"email"`
+	Folder      string `json:"folder"`
+	UID         int64  `json:"uid"`
+	Size        int64  `json:"size"`
+	MessageID   string `json:"message_id"`
+	From        string `json:"from"`
+	Subject     string `json:"subject"`
+	Date        string `json:"date"`
+	Kind        string `json:"kind"` // virus | spam | unknown
+	SpamStatus  string `json:"spam_status,omitempty"`
+	SpamScore   string `json:"spam_score,omitempty"`
+	VirusStatus string `json:"virus_status,omitempty"`
+	VirusName   string `json:"virus_name,omitempty"`
+	AuthResults string `json:"auth_results,omitempty"`
+	Preview     string `json:"preview,omitempty"`
+}
+
 func (s *Server) listQuarantine(w http.ResponseWriter, r *http.Request, admin *storage.User) {
 	limit := 50
 	if v := r.URL.Query().Get("limit"); v != "" {
@@ -64,25 +87,21 @@ func (s *Server) listQuarantine(w http.ResponseWriter, r *http.Request, admin *s
 		limit = 200
 	}
 	folders := quarantineFolders(r)
+	q := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
+	kindFilter := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("kind"))) // virus|spam|all|""
+
 	users, err := s.store.ListUsersByTenant(r.Context(), admin.TenantID)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	type item struct {
-		ID        string `json:"id"`
-		UserID    string `json:"user_id"`
-		Email     string `json:"email"`
-		Folder    string `json:"folder"`
-		UID       int64  `json:"uid"`
-		Size      int64  `json:"size"`
-		MessageID string `json:"message_id"`
-		From      string `json:"from"`
-		Subject   string `json:"subject"`
-		Date      string `json:"date"`
-	}
-	out := make([]item, 0, limit)
+	emailFilter := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("email")))
+
+	out := make([]quarantineItem, 0, limit)
 	for _, u := range users {
+		if emailFilter != "" && !strings.Contains(strings.ToLower(u.Email), emailFilter) {
+			continue
+		}
 		for _, folder := range folders {
 			mb, err := s.store.GetMailbox(r.Context(), u.ID, folder)
 			if err != nil {
@@ -99,14 +118,24 @@ func (s *Server) listQuarantine(w http.ResponseWriter, r *http.Request, admin *s
 			}
 			for i := len(msgs) - 1; i >= 0 && len(out) < limit; i-- {
 				m := msgs[i]
-				it := item{
+				it := quarantineItem{
 					ID: m.ID, UserID: u.ID, Email: u.Email, Folder: folder,
 					UID: m.UID, Size: m.Size, MessageID: m.MessageID,
 					Date: m.InternalDate.UTC().Format(time.RFC3339),
+					Kind: "unknown",
 				}
 				if s.ms != nil && m.FilePath != "" {
 					if raw, rerr := s.ms.Read(m.FilePath); rerr == nil {
-						it.From, it.Subject = parseMailHeaders(raw)
+						fillQuarantineMeta(&it, raw)
+					}
+				}
+				if kindFilter != "" && kindFilter != "all" && it.Kind != kindFilter {
+					continue
+				}
+				if q != "" {
+					hay := strings.ToLower(it.Subject + " " + it.From + " " + it.Email + " " + it.VirusName + " " + it.SpamStatus)
+					if !strings.Contains(hay, q) {
+						continue
 					}
 				}
 				out = append(out, it)
@@ -120,6 +149,31 @@ func (s *Server) listQuarantine(w http.ResponseWriter, r *http.Request, admin *s
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": out, "folders": folders})
+}
+
+func (s *Server) getQuarantine(w http.ResponseWriter, r *http.Request, admin *storage.User, id string) {
+	msg, owner, mb, ok := s.quarantineOwned(w, r, admin, id)
+	if !ok {
+		return
+	}
+	it := quarantineItem{
+		ID: msg.ID, UserID: owner.ID, Email: owner.Email, Folder: mb.Name,
+		UID: msg.UID, Size: msg.Size, MessageID: msg.MessageID,
+		Date: msg.InternalDate.UTC().Format(time.RFC3339),
+		Kind: "unknown",
+	}
+	var raw []byte
+	if s.ms != nil && msg.FilePath != "" {
+		var err error
+		raw, err = s.ms.Read(msg.FilePath)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		fillQuarantineMeta(&it, raw)
+		it.Preview = messagePreview(raw, 4<<10)
+	}
+	writeJSON(w, http.StatusOK, it)
 }
 
 func (s *Server) quarantineOwned(w http.ResponseWriter, r *http.Request, admin *storage.User, id string) (*storage.Message, *storage.User, *storage.Mailbox, bool) {
@@ -189,11 +243,51 @@ func (s *Server) releaseQuarantine(w http.ResponseWriter, r *http.Request, admin
 	writeJSON(w, http.StatusOK, map[string]string{"status": "released", "folder": "INBOX"})
 }
 
-func parseMailHeaders(raw []byte) (from, subject string) {
+func fillQuarantineMeta(it *quarantineItem, raw []byte) {
 	tr := textproto.NewReader(bufio.NewReader(bytes.NewReader(raw)))
 	hdr, err := tr.ReadMIMEHeader()
 	if err != nil {
-		return "", ""
+		return
 	}
-	return hdr.Get("From"), hdr.Get("Subject")
+	it.From = hdr.Get("From")
+	it.Subject = hdr.Get("Subject")
+	it.SpamStatus = hdr.Get("X-Spam-Status")
+	it.SpamScore = hdr.Get("X-Spam-Score")
+	it.VirusStatus = hdr.Get("X-Virus-Status")
+	it.VirusName = hdr.Get("X-Virus-Name")
+	it.AuthResults = hdr.Get("Authentication-Results")
+	switch {
+	case it.VirusStatus != "" || it.VirusName != "":
+		it.Kind = "virus"
+	case it.SpamStatus != "" || it.SpamScore != "":
+		it.Kind = "spam"
+	case strings.EqualFold(it.Folder, "Junk"):
+		it.Kind = "spam"
+	case strings.EqualFold(it.Folder, "Quarantine"):
+		it.Kind = "virus"
+	default:
+		it.Kind = "unknown"
+	}
+}
+
+func messagePreview(raw []byte, max int) string {
+	if max <= 0 {
+		max = 4096
+	}
+	// Strip headers for body preview when possible.
+	body := raw
+	if idx := bytes.Index(raw, []byte("\r\n\r\n")); idx >= 0 {
+		body = raw[idx+4:]
+	} else if idx := bytes.Index(raw, []byte("\n\n")); idx >= 0 {
+		body = raw[idx+2:]
+	}
+	if len(body) > max {
+		body = body[:max]
+	}
+	if !utf8.Valid(body) {
+		return "[binary content]"
+	}
+	s := string(body)
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	return s
 }
