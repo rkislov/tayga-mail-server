@@ -19,7 +19,7 @@ func (s *Store) scanMessage(row interface{ Scan(dest ...any) error }) (*Message,
 	return m, nil
 }
 
-func (s *Store) ListMailboxes(ctx context.Context, userID int64) ([]*Mailbox, error) {
+func (s *Store) ListMailboxes(ctx context.Context, userID string) ([]*Mailbox, error) {
 	q := s.rebind(`SELECT id, user_id, name, path, uidnext, uidvalidity, created_at
 		FROM mailboxes WHERE user_id = ? ORDER BY name`)
 	rows, err := s.db.QueryContext(ctx, q, userID)
@@ -39,11 +39,11 @@ func (s *Store) ListMailboxes(ctx context.Context, userID int64) ([]*Mailbox, er
 	return out, rows.Err()
 }
 
-func (s *Store) CreateMailbox(ctx context.Context, userID int64, name, path string) (*Mailbox, error) {
+func (s *Store) CreateMailbox(ctx context.Context, userID, name, path string) (*Mailbox, error) {
 	return s.EnsureMailbox(ctx, userID, name, path)
 }
 
-func (s *Store) DeleteMailbox(ctx context.Context, userID int64, name string) error {
+func (s *Store) DeleteMailbox(ctx context.Context, userID, name string) error {
 	if strings.EqualFold(name, "INBOX") {
 		return ErrUnauthorized
 	}
@@ -62,7 +62,7 @@ func (s *Store) DeleteMailbox(ctx context.Context, userID int64, name string) er
 	return nil
 }
 
-func (s *Store) RenameMailbox(ctx context.Context, userID int64, oldName, newName, newPath string) error {
+func (s *Store) RenameMailbox(ctx context.Context, userID, oldName, newName, newPath string) error {
 	if strings.EqualFold(oldName, "INBOX") {
 		return ErrUnauthorized
 	}
@@ -81,12 +81,12 @@ func (s *Store) RenameMailbox(ctx context.Context, userID int64, oldName, newNam
 	return nil
 }
 
-func (s *Store) GetMessageByUID(ctx context.Context, mailboxID, uid int64) (*Message, error) {
+func (s *Store) GetMessageByUID(ctx context.Context, mailboxID string, uid int64) (*Message, error) {
 	q := s.rebind(`SELECT ` + msgCols + ` FROM messages WHERE mailbox_id = ? AND uid = ?`)
 	return s.scanMessage(s.db.QueryRowContext(ctx, q, mailboxID, uid))
 }
 
-func (s *Store) ListMessages(ctx context.Context, mailboxID int64) ([]*Message, error) {
+func (s *Store) ListMessages(ctx context.Context, mailboxID string) ([]*Message, error) {
 	q := s.rebind(`SELECT ` + msgCols + ` FROM messages WHERE mailbox_id = ? ORDER BY uid`)
 	rows, err := s.db.QueryContext(ctx, q, mailboxID)
 	if err != nil {
@@ -105,7 +105,7 @@ func (s *Store) ListMessages(ctx context.Context, mailboxID int64) ([]*Message, 
 	return out, rows.Err()
 }
 
-func (s *Store) UpdateMessageFlags(ctx context.Context, messageID int64, flags string) error {
+func (s *Store) UpdateMessageFlags(ctx context.Context, messageID, flags string) error {
 	q := s.rebind(`UPDATE messages SET flags = ? WHERE id = ?`)
 	res, err := s.db.ExecContext(ctx, q, flags, messageID)
 	if err != nil {
@@ -121,7 +121,7 @@ func (s *Store) UpdateMessageFlags(ctx context.Context, messageID int64, flags s
 	return nil
 }
 
-func (s *Store) UpdateMessagePath(ctx context.Context, messageID int64, filePath string) error {
+func (s *Store) UpdateMessagePath(ctx context.Context, messageID, filePath string) error {
 	q := s.rebind(`UPDATE messages SET file_path = ? WHERE id = ?`)
 	res, err := s.db.ExecContext(ctx, q, filePath, messageID)
 	if err != nil {
@@ -137,7 +137,7 @@ func (s *Store) UpdateMessagePath(ctx context.Context, messageID int64, filePath
 	return nil
 }
 
-func (s *Store) DeleteMessage(ctx context.Context, messageID int64) error {
+func (s *Store) DeleteMessage(ctx context.Context, messageID string) error {
 	q := s.rebind(`DELETE FROM messages WHERE id = ?`)
 	res, err := s.db.ExecContext(ctx, q, messageID)
 	if err != nil {
@@ -153,7 +153,7 @@ func (s *Store) DeleteMessage(ctx context.Context, messageID int64) error {
 	return nil
 }
 
-func (s *Store) ExpungeMailbox(ctx context.Context, mailboxID int64) ([]*Message, error) {
+func (s *Store) ExpungeMailbox(ctx context.Context, mailboxID string) ([]*Message, error) {
 	msgs, err := s.ListMessages(ctx, mailboxID)
 	if err != nil {
 		return nil, err
@@ -207,7 +207,7 @@ func ParseFlags(flags string) []string {
 	return strings.Fields(flags)
 }
 
-// EnsureRecentFlag is unused helper kept for mailbox RECENT heuristics.
+// MessageIsRecent approximates IMAP \Recent for listing heuristics.
 func MessageIsRecent(m *Message) bool {
 	if m == nil {
 		return false
@@ -215,6 +215,5 @@ func MessageIsRecent(m *Message) bool {
 	if HasFlag(m.Flags, `\Seen`) {
 		return false
 	}
-	// Treat messages younger than a session as recent-ish; IMAP Recent is approximate here.
 	return time.Since(m.InternalDate) < 24*time.Hour && strings.Contains(m.FilePath, "/new/")
 }

@@ -1,6 +1,6 @@
 -- +goose Up
 CREATE TABLE IF NOT EXISTS user_mfa (
-    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     totp_secret TEXT NOT NULL DEFAULT '',
     totp_enabled INTEGER NOT NULL DEFAULT 0,
     backup_codes TEXT NOT NULL DEFAULT '',
@@ -8,8 +8,8 @@ CREATE TABLE IF NOT EXISTS user_mfa (
 );
 
 CREATE TABLE IF NOT EXISTS oauth_tokens (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     access_token TEXT NOT NULL UNIQUE,
     refresh_token TEXT NOT NULL UNIQUE,
     expires_at TIMESTAMP NOT NULL,
@@ -22,7 +22,7 @@ CREATE INDEX IF NOT EXISTS idx_oauth_tokens_access ON oauth_tokens(access_token)
 
 CREATE TABLE IF NOT EXISTS mfa_challenges (
     token TEXT PRIMARY KEY,
-    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     expires_at TIMESTAMP NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

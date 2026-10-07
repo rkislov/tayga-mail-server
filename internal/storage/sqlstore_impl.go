@@ -64,24 +64,11 @@ func (s *Store) rebind(query string) string {
 
 func (s *Store) CreateTenant(ctx context.Context, name string) (*Tenant, error) {
 	now := time.Now().UTC()
-	t := &Tenant{Name: name, CreatedAt: now}
-	q := s.rebind(`INSERT INTO tenants(name, created_at) VALUES (?, ?)`)
-	if s.dialect == DialectPostgres {
-		err := s.db.QueryRowContext(ctx, q+` RETURNING id`, name, now).Scan(&t.ID)
-		if err != nil {
-			return nil, mapErr(err)
-		}
-		return t, nil
-	}
-	res, err := s.db.ExecContext(ctx, q, name, now)
-	if err != nil {
+	t := &Tenant{ID: NewID(), Name: name, CreatedAt: now}
+	q := s.rebind(`INSERT INTO tenants(id, name, created_at) VALUES (?, ?, ?)`)
+	if _, err := s.db.ExecContext(ctx, q, t.ID, name, now); err != nil {
 		return nil, mapErr(err)
 	}
-	id, err := res.LastInsertId()
-	if err != nil {
-		return nil, err
-	}
-	t.ID = id
 	return t, nil
 }
 
@@ -95,27 +82,14 @@ func (s *Store) GetTenantByName(ctx context.Context, name string) (*Tenant, erro
 	return t, nil
 }
 
-func (s *Store) CreateDomain(ctx context.Context, tenantID int64, name string) (*Domain, error) {
+func (s *Store) CreateDomain(ctx context.Context, tenantID, name string) (*Domain, error) {
 	now := time.Now().UTC()
 	name = strings.ToLower(name)
-	d := &Domain{TenantID: tenantID, Name: name, CreatedAt: now}
-	q := s.rebind(`INSERT INTO domains(tenant_id, name, created_at) VALUES (?, ?, ?)`)
-	if s.dialect == DialectPostgres {
-		err := s.db.QueryRowContext(ctx, q+` RETURNING id`, tenantID, name, now).Scan(&d.ID)
-		if err != nil {
-			return nil, mapErr(err)
-		}
-		return d, nil
-	}
-	res, err := s.db.ExecContext(ctx, q, tenantID, name, now)
-	if err != nil {
+	d := &Domain{ID: NewID(), TenantID: tenantID, Name: name, CreatedAt: now}
+	q := s.rebind(`INSERT INTO domains(id, tenant_id, name, created_at) VALUES (?, ?, ?, ?)`)
+	if _, err := s.db.ExecContext(ctx, q, d.ID, tenantID, name, now); err != nil {
 		return nil, mapErr(err)
 	}
-	id, err := res.LastInsertId()
-	if err != nil {
-		return nil, err
-	}
-	d.ID = id
 	return d, nil
 }
 
@@ -142,6 +116,9 @@ func (s *Store) CreateUser(ctx context.Context, u *User) (*User, error) {
 	if u.AuthSource == "" {
 		u.AuthSource = "local"
 	}
+	if u.ID == "" {
+		u.ID = NewID()
+	}
 	u.CreatedAt = now
 	enabled := 1
 	if !u.Enabled {
@@ -149,31 +126,17 @@ func (s *Store) CreateUser(ctx context.Context, u *User) (*User, error) {
 	}
 
 	q := s.rebind(`INSERT INTO users(
-		tenant_id, domain_id, email, local_part, display_name, password_hash,
+		id, tenant_id, domain_id, email, local_part, display_name, password_hash,
 		auth_source, quota_bytes, enabled, created_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 
 	args := []any{
-		u.TenantID, u.DomainID, u.Email, u.LocalPart, u.DisplayName, u.PasswordHash,
+		u.ID, u.TenantID, u.DomainID, u.Email, u.LocalPart, u.DisplayName, u.PasswordHash,
 		u.AuthSource, u.QuotaBytes, enabled, now,
 	}
-
-	if s.dialect == DialectPostgres {
-		err := s.db.QueryRowContext(ctx, q+` RETURNING id`, args...).Scan(&u.ID)
-		if err != nil {
-			return nil, mapErr(err)
-		}
-		return u, nil
-	}
-	res, err := s.db.ExecContext(ctx, q, args...)
-	if err != nil {
+	if _, err := s.db.ExecContext(ctx, q, args...); err != nil {
 		return nil, mapErr(err)
 	}
-	id, err := res.LastInsertId()
-	if err != nil {
-		return nil, err
-	}
-	u.ID = id
 	return u, nil
 }
 
@@ -219,12 +182,12 @@ func (s *Store) GetUserByEmail(ctx context.Context, email string) (*User, error)
 	return s.scanUser(s.db.QueryRowContext(ctx, q, email))
 }
 
-func (s *Store) GetUserByID(ctx context.Context, id int64) (*User, error) {
+func (s *Store) GetUserByID(ctx context.Context, id string) (*User, error) {
 	q := s.rebind(`SELECT ` + userCols + ` FROM users WHERE id = ?`)
 	return s.scanUser(s.db.QueryRowContext(ctx, q, id))
 }
 
-func (s *Store) UpdateUserPassword(ctx context.Context, userID int64, passwordHash string) error {
+func (s *Store) UpdateUserPassword(ctx context.Context, userID, passwordHash string) error {
 	q := s.rebind(`UPDATE users SET password_hash = ? WHERE id = ?`)
 	res, err := s.db.ExecContext(ctx, q, passwordHash, userID)
 	if err != nil {
@@ -240,7 +203,7 @@ func (s *Store) UpdateUserPassword(ctx context.Context, userID int64, passwordHa
 	return nil
 }
 
-func (s *Store) UpdateUserProfile(ctx context.Context, userID int64, displayName string) error {
+func (s *Store) UpdateUserProfile(ctx context.Context, userID, displayName string) error {
 	q := s.rebind(`UPDATE users SET display_name = ? WHERE id = ?`)
 	res, err := s.db.ExecContext(ctx, q, displayName, userID)
 	if err != nil {
@@ -256,7 +219,7 @@ func (s *Store) UpdateUserProfile(ctx context.Context, userID int64, displayName
 	return nil
 }
 
-func (s *Store) SumMailboxBytes(ctx context.Context, userID int64) (int64, error) {
+func (s *Store) SumMailboxBytes(ctx context.Context, userID string) (int64, error) {
 	q := s.rebind(`SELECT COALESCE(SUM(m.size), 0) FROM messages m
 		JOIN mailboxes b ON m.mailbox_id = b.id WHERE b.user_id = ?`)
 	var total int64
@@ -266,27 +229,14 @@ func (s *Store) SumMailboxBytes(ctx context.Context, userID int64) (int64, error
 	return total, nil
 }
 
-func (s *Store) CreateAlias(ctx context.Context, domainID, userID int64, localPart string) (*Alias, error) {
+func (s *Store) CreateAlias(ctx context.Context, domainID, userID, localPart string) (*Alias, error) {
 	now := time.Now().UTC()
 	localPart = strings.ToLower(localPart)
-	a := &Alias{DomainID: domainID, UserID: userID, LocalPart: localPart, CreatedAt: now}
-	q := s.rebind(`INSERT INTO aliases(domain_id, user_id, local_part, created_at) VALUES (?, ?, ?, ?)`)
-	if s.dialect == DialectPostgres {
-		err := s.db.QueryRowContext(ctx, q+` RETURNING id`, domainID, userID, localPart, now).Scan(&a.ID)
-		if err != nil {
-			return nil, mapErr(err)
-		}
-		return a, nil
-	}
-	res, err := s.db.ExecContext(ctx, q, domainID, userID, localPart, now)
-	if err != nil {
+	a := &Alias{ID: NewID(), DomainID: domainID, UserID: userID, LocalPart: localPart, CreatedAt: now}
+	q := s.rebind(`INSERT INTO aliases(id, domain_id, user_id, local_part, created_at) VALUES (?, ?, ?, ?, ?)`)
+	if _, err := s.db.ExecContext(ctx, q, a.ID, domainID, userID, localPart, now); err != nil {
 		return nil, mapErr(err)
 	}
-	id, err := res.LastInsertId()
-	if err != nil {
-		return nil, err
-	}
-	a.ID = id
 	return a, nil
 }
 
@@ -314,7 +264,7 @@ func (s *Store) ResolveRecipient(ctx context.Context, email string) (*User, erro
 		return nil, err
 	}
 
-	var userID int64
+	var userID string
 	var q string
 	if s.dialect == DialectPostgres {
 		q = `SELECT user_id FROM aliases WHERE domain_id = $1 AND LOWER(local_part) = LOWER($2)`
@@ -335,7 +285,7 @@ func (s *Store) ResolveRecipient(ctx context.Context, email string) (*User, erro
 	return u, nil
 }
 
-func (s *Store) EnsureMailbox(ctx context.Context, userID int64, name, path string) (*Mailbox, error) {
+func (s *Store) EnsureMailbox(ctx context.Context, userID, name, path string) (*Mailbox, error) {
 	mb, err := s.GetMailbox(ctx, userID, name)
 	if err == nil {
 		return mb, nil
@@ -346,6 +296,7 @@ func (s *Store) EnsureMailbox(ctx context.Context, userID int64, name, path stri
 
 	now := time.Now().UTC()
 	mb = &Mailbox{
+		ID:          NewID(),
 		UserID:      userID,
 		Name:        name,
 		Path:        path,
@@ -353,36 +304,19 @@ func (s *Store) EnsureMailbox(ctx context.Context, userID int64, name, path stri
 		UIDValidity: time.Now().Unix(),
 		CreatedAt:   now,
 	}
-	q := s.rebind(`INSERT INTO mailboxes(user_id, name, path, uidnext, uidvalidity, created_at)
-		VALUES (?, ?, ?, ?, ?, ?)`)
-	args := []any{userID, name, path, mb.UIDNext, mb.UIDValidity, now}
-	if s.dialect == DialectPostgres {
-		err = s.db.QueryRowContext(ctx, q+` RETURNING id`, args...).Scan(&mb.ID)
-		if err != nil {
-			// race: another writer created it
-			if existing, gerr := s.GetMailbox(ctx, userID, name); gerr == nil {
-				return existing, nil
-			}
-			return nil, mapErr(err)
-		}
-		return mb, nil
-	}
-	res, err := s.db.ExecContext(ctx, q, args...)
-	if err != nil {
+	q := s.rebind(`INSERT INTO mailboxes(id, user_id, name, path, uidnext, uidvalidity, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`)
+	args := []any{mb.ID, userID, name, path, mb.UIDNext, mb.UIDValidity, now}
+	if _, err := s.db.ExecContext(ctx, q, args...); err != nil {
 		if existing, gerr := s.GetMailbox(ctx, userID, name); gerr == nil {
 			return existing, nil
 		}
 		return nil, mapErr(err)
 	}
-	id, err := res.LastInsertId()
-	if err != nil {
-		return nil, err
-	}
-	mb.ID = id
 	return mb, nil
 }
 
-func (s *Store) GetMailbox(ctx context.Context, userID int64, name string) (*Mailbox, error) {
+func (s *Store) GetMailbox(ctx context.Context, userID, name string) (*Mailbox, error) {
 	mb := &Mailbox{}
 	q := s.rebind(`SELECT id, user_id, name, path, uidnext, uidvalidity, created_at
 		FROM mailboxes WHERE user_id = ? AND name = ?`)
@@ -411,6 +345,9 @@ func (s *Store) InsertMessage(ctx context.Context, msg *Message) (*Message, erro
 		return nil, mapErr(err)
 	}
 	msg.UID = uid
+	if msg.ID == "" {
+		msg.ID = NewID()
+	}
 	if msg.InternalDate.IsZero() {
 		msg.InternalDate = time.Now().UTC()
 	}
@@ -421,19 +358,10 @@ func (s *Store) InsertMessage(ctx context.Context, msg *Message) (*Message, erro
 		return nil, err
 	}
 
-	ins := s.rebind(`INSERT INTO messages(mailbox_id, uid, size, flags, internal_date, file_path, message_id, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-	args := []any{msg.MailboxID, msg.UID, msg.Size, msg.Flags, msg.InternalDate, msg.FilePath, msg.MessageID, msg.CreatedAt}
-	if s.dialect == DialectPostgres {
-		err = tx.QueryRowContext(ctx, ins+` RETURNING id`, args...).Scan(&msg.ID)
-	} else {
-		res, e := tx.ExecContext(ctx, ins, args...)
-		if e != nil {
-			return nil, mapErr(e)
-		}
-		msg.ID, err = res.LastInsertId()
-	}
-	if err != nil {
+	ins := s.rebind(`INSERT INTO messages(id, mailbox_id, uid, size, flags, internal_date, file_path, message_id, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	args := []any{msg.ID, msg.MailboxID, msg.UID, msg.Size, msg.Flags, msg.InternalDate, msg.FilePath, msg.MessageID, msg.CreatedAt}
+	if _, err := tx.ExecContext(ctx, ins, args...); err != nil {
 		return nil, mapErr(err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -442,7 +370,7 @@ func (s *Store) InsertMessage(ctx context.Context, msg *Message) (*Message, erro
 	return msg, nil
 }
 
-func (s *Store) GetMessageByID(ctx context.Context, id int64) (*Message, error) {
+func (s *Store) GetMessageByID(ctx context.Context, id string) (*Message, error) {
 	m := &Message{}
 	q := s.rebind(`SELECT id, mailbox_id, uid, size, flags, internal_date, file_path, message_id, created_at
 		FROM messages WHERE id = ?`)

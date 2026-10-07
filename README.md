@@ -22,6 +22,9 @@ CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o tayga-mail ./cmd/tayga
 - Quotas: set `users.quota_bytes` (0 = unlimited); SMTP returns `552` when full
 - Auth API: `POST /api/v1/auth/login` → opaque tokens; TOTP MFA; OIDC per-domain
 - IMAP/SMTP: SASL `XOAUTH2` / `OAUTHBEARER` with access tokens from the auth API
+- CalDAV: `http://127.0.0.1:8080/dav/cal/` (Basic/Bearer); `/.well-known/caldav`
+- CardDAV: `http://127.0.0.1:8080/dav/card/` (Basic/Bearer); `/.well-known/carddav`
+- IDs: all entity PKs/FKs are UUIDs (fresh DB required after this change)
 
 ## License
 

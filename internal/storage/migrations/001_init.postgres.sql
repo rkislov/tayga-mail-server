@@ -5,14 +5,14 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 );
 
 CREATE TABLE IF NOT EXISTS tenants (
-    id BIGSERIAL PRIMARY KEY,
+    id TEXT PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS domains (
-    id BIGSERIAL PRIMARY KEY,
-    tenant_id BIGINT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -20,9 +20,9 @@ CREATE TABLE IF NOT EXISTS domains (
 CREATE INDEX IF NOT EXISTS idx_domains_tenant ON domains(tenant_id);
 
 CREATE TABLE IF NOT EXISTS users (
-    id BIGSERIAL PRIMARY KEY,
-    tenant_id BIGINT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    domain_id BIGINT NOT NULL REFERENCES domains(id) ON DELETE CASCADE,
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    domain_id TEXT NOT NULL REFERENCES domains(id) ON DELETE CASCADE,
     email TEXT NOT NULL UNIQUE,
     local_part TEXT NOT NULL,
     display_name TEXT NOT NULL DEFAULT '',
@@ -39,17 +39,17 @@ CREATE INDEX IF NOT EXISTS idx_users_domain ON users(domain_id);
 CREATE INDEX IF NOT EXISTS idx_users_email_lower ON users (LOWER(email));
 
 CREATE TABLE IF NOT EXISTS aliases (
-    id BIGSERIAL PRIMARY KEY,
-    domain_id BIGINT NOT NULL REFERENCES domains(id) ON DELETE CASCADE,
-    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    id TEXT PRIMARY KEY,
+    domain_id TEXT NOT NULL REFERENCES domains(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     local_part TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE(domain_id, local_part)
 );
 
 CREATE TABLE IF NOT EXISTS mailboxes (
-    id BIGSERIAL PRIMARY KEY,
-    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     path TEXT NOT NULL,
     uidnext BIGINT NOT NULL DEFAULT 1,
@@ -59,8 +59,8 @@ CREATE TABLE IF NOT EXISTS mailboxes (
 );
 
 CREATE TABLE IF NOT EXISTS messages (
-    id BIGSERIAL PRIMARY KEY,
-    mailbox_id BIGINT NOT NULL REFERENCES mailboxes(id) ON DELETE CASCADE,
+    id TEXT PRIMARY KEY,
+    mailbox_id TEXT NOT NULL REFERENCES mailboxes(id) ON DELETE CASCADE,
     uid BIGINT NOT NULL,
     size BIGINT NOT NULL DEFAULT 0,
     flags TEXT NOT NULL DEFAULT '',
@@ -74,8 +74,8 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE INDEX IF NOT EXISTS idx_messages_mailbox ON messages(mailbox_id);
 
 CREATE TABLE IF NOT EXISTS sieve_scripts (
-    id BIGSERIAL PRIMARY KEY,
-    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     script TEXT NOT NULL DEFAULT '',
     active BOOLEAN NOT NULL DEFAULT FALSE,
@@ -84,8 +84,8 @@ CREATE TABLE IF NOT EXISTS sieve_scripts (
 );
 
 CREATE TABLE IF NOT EXISTS jobs (
-    id BIGSERIAL PRIMARY KEY,
-    tenant_id BIGINT REFERENCES tenants(id) ON DELETE SET NULL,
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT REFERENCES tenants(id) ON DELETE SET NULL,
     kind TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending',
     payload TEXT NOT NULL DEFAULT '',
