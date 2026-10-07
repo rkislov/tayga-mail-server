@@ -135,6 +135,43 @@ func scanOutboundRows(rows *sql.Rows) ([]*OutboundItem, error) {
 	return out, rows.Err()
 }
 
+func (s *Store) ListOutbound(ctx context.Context, limit int) ([]*OutboundItem, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	q := s.rebind(`SELECT id, envelope_from, envelope_to, message_id, data, attempts, max_attempts,
+		next_attempt_at, last_error, created_at, updated_at
+		FROM outbound_queue ORDER BY next_attempt_at LIMIT ?`)
+	rows, err := s.db.QueryContext(ctx, q, limit)
+	if err != nil {
+		return nil, err
+	}
+	return scanOutboundRows(rows)
+}
+
+func (s *Store) GetOutbound(ctx context.Context, id string) (*OutboundItem, error) {
+	q := s.rebind(`SELECT id, envelope_from, envelope_to, message_id, data, attempts, max_attempts,
+		next_attempt_at, last_error, created_at, updated_at
+		FROM outbound_queue WHERE id = ?`)
+	row := s.db.QueryRowContext(ctx, q, id)
+	it := &OutboundItem{}
+	err := row.Scan(
+		&it.ID, &it.EnvelopeFrom, &it.EnvelopeTo, &it.MessageID, &it.Data,
+		&it.Attempts, &it.MaxAttempts, &it.NextAttempt, &it.LastError,
+		&it.CreatedAt, &it.UpdatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return it, nil
+}
+
 func (s *Store) RescheduleOutbound(ctx context.Context, id string, attempts int, nextAttempt time.Time, lastError string) error {
 	now := time.Now().UTC()
 	q := s.rebind(`UPDATE outbound_queue SET attempts = ?, next_attempt_at = ?, last_error = ?, updated_at = ? WHERE id = ?`)
