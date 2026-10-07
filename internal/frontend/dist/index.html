@@ -274,8 +274,20 @@
         </div>
 
         <div class="card hidden" id="card-admin">
+          <h3>Tenant</h3>
+          <p class="meta" id="tenant-meta">Loading…</p>
+          <h3>Mail domains</h3>
+          <p class="meta">Domains hosted by this tenant (required before creating users).</p>
+          <form id="form-create-domain">
+            <label for="nd-name">New domain</label>
+            <input id="nd-name" type="text" required placeholder="example.com" />
+            <div class="actions">
+              <button type="submit" class="spray">Add domain</button>
+            </div>
+          </form>
+          <ul class="creds" id="admin-domain-list"></ul>
           <h3>Tenant users</h3>
-          <p class="meta">Admin: create users and set mailbox quotas (0 = unlimited).</p>
+          <p class="meta">Create users and set mailbox quotas (0 = unlimited).</p>
           <form id="form-create-user">
             <label for="nu-email">New user email</label>
             <input id="nu-email" type="email" required placeholder="user@example.com" />
@@ -482,6 +494,7 @@ keep;</textarea>
         $("card-admin").classList.toggle("hidden", !me.is_admin);
         $("card-tls").classList.toggle("hidden", !me.is_admin);
         if (me.is_admin) {
+          refreshTenant();
           refreshAdminUsers();
           refreshTLS();
         }
@@ -489,6 +502,53 @@ keep;</textarea>
         $("acct-meta").textContent = err.message;
       }
     }
+
+    async function refreshTenant() {
+      try {
+        const data = await api("/api/v1/admin/tenant");
+        const t = data.tenant || {};
+        $("tenant-meta").textContent = (t.name || "") + " · " + (t.user_count || 0) + " users · " + (t.id || "");
+        const list = $("admin-domain-list");
+        list.innerHTML = (data.domains || []).map((d) => `
+          <li>
+            <span>
+              <strong>${escapeHtml(d.name)}</strong><br/>
+              <span class="meta">${d.user_count || 0} users · ${escapeHtml(d.id)}</span>
+            </span>
+            <button type="button" class="secondary" data-del-domain="${escapeHtml(d.name)}" ${d.user_count > 0 ? "disabled" : ""}>Remove</button>
+          </li>`).join("") || "<li><span class=\"meta\">No domains yet.</span></li>";
+        list.querySelectorAll("[data-del-domain]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            if (!confirm("Remove domain " + btn.dataset.delDomain + "?")) return;
+            try {
+              await api("/api/v1/admin/domains/" + encodeURIComponent(btn.dataset.delDomain), { method: "DELETE" });
+              setMsg($("admin-msg"), "Domain removed.", "ok");
+              refreshTenant();
+            } catch (err) {
+              setMsg($("admin-msg"), err.message, "err");
+            }
+          });
+        });
+      } catch (err) {
+        $("tenant-meta").textContent = err.message;
+      }
+    }
+
+    $("form-create-domain").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      setMsg($("admin-msg"), "Adding domain…");
+      try {
+        await api("/api/v1/admin/domains", {
+          method: "POST",
+          body: JSON.stringify({ name: $("nd-name").value.trim() }),
+        });
+        setMsg($("admin-msg"), "Domain added.", "ok");
+        $("form-create-domain").reset();
+        refreshTenant();
+      } catch (err) {
+        setMsg($("admin-msg"), err.message, "err");
+      }
+    });
 
     async function refreshAdminUsers() {
       try {
