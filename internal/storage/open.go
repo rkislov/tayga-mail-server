@@ -72,6 +72,7 @@ func migrate(ctx context.Context, db *sql.DB, dialect Dialect) error {
 			"008_user_roles.sqlite.sql",
 			"009_dmarc_reports.sqlite.sql",
 			"010_greylist.sqlite.sql",
+			"011_settings.sqlite.sql",
 		}
 	case DialectPostgres:
 		files = []string{
@@ -85,6 +86,7 @@ func migrate(ctx context.Context, db *sql.DB, dialect Dialect) error {
 			"008_user_roles.postgres.sql",
 			"009_dmarc_reports.postgres.sql",
 			"010_greylist.postgres.sql",
+			"011_settings.postgres.sql",
 		}
 	default:
 		return fmt.Errorf("unsupported dialect")

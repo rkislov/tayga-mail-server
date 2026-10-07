@@ -23,6 +23,7 @@ import (
 	"github.com/tayga/tms/internal/metrics"
 	"github.com/tayga/tms/internal/pop3"
 	"github.com/tayga/tms/internal/seed"
+	"github.com/tayga/tms/internal/settings"
 	"github.com/tayga/tms/internal/sieve"
 	"github.com/tayga/tms/internal/smtp"
 	"github.com/tayga/tms/internal/storage"
@@ -295,6 +296,12 @@ func run(cfgPath string) error {
 	}
 	defer store.Close()
 
+	hub := settings.NewHub(store, cfg)
+	if err := hub.Load(ctx); err != nil {
+		return fmt.Errorf("settings: %w", err)
+	}
+	cfg = hub.Config()
+
 	metrics.Register(store)
 
 	authn := auth.NewLayer(store, cfg.LDAP, cfg.MFA, cfg.OIDC)
@@ -407,7 +414,7 @@ func run(cfgPath string) error {
 		return fmt.Errorf("managesieve: %w", err)
 	}
 
-	httpSrv := httpapi.New(cfg, log, store, authn, ms, tlsMgr)
+	httpSrv := httpapi.New(cfg, log, store, authn, ms, tlsMgr, hub)
 	if err := httpSrv.Start(ctx); err != nil {
 		return fmt.Errorf("http: %w", err)
 	}

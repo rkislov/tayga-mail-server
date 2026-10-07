@@ -57,7 +57,7 @@ func TestAdminOutboundQueue(t *testing.T) {
 	}
 
 	ms := mailstore.New(filepath.Join(dir, "mail"))
-	h := httpapi.New(cfg, slog.Default(), store, layer, ms, nil).Handler()
+	h := httpapi.New(cfg, slog.Default(), store, layer, ms, nil, nil).Handler()
 	res, err := layer.LoginWithPassword(ctx, "admin@ex.com", "secret")
 	if err != nil {
 		t.Fatal(err)

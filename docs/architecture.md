@@ -6,7 +6,7 @@ TMS is a single-binary mail server (`tayga-mail`) built in Go with `CGO_ENABLED=
 
 ```
 cmd/tayga
-  ├─ config (YAML)
+  ├─ config (bootstrap YAML) + settings hub (DB overlay)
   ├─ storage (sqlite | postgres; UUID PKs everywhere)
   ├─ auth (local Argon2id; LDAP hybrid; OIDC; TOTP + WebAuthn MFA; opaque tokens)
   ├─ mailstore (Maildir++)
@@ -17,11 +17,22 @@ cmd/tayga
   └─ httpapi (/healthz, /readyz, /metrics, /api/v1/auth/*, /dav/*, FlowSync, embedded admin UI)
 ```
 
+## Configuration
+
+**Bootstrap YAML** (required to open the DB): `server.hostname`, `storage.*`, `mailstore.root`. Optional: `seed`, `http`/`tls`/`log` emergency overrides.
+
+**Runtime settings** live in the `settings` table (JSON per section: `spam`, `scan`, `dmarc`, `smtp`, `ldap`, …). Admins edit them in the UI (**Server settings**) or via:
+
+- `GET /api/v1/admin/settings`
+- `GET|PUT /api/v1/admin/settings/{section}`
+
+Secrets are redacted on GET (`***`); PUT with empty/`***` keeps the previous value. Changing most sections sets `restart_required` (listeners and SMTP policies are applied at process start). `storage` and `mailstore.root` stay file-only.
+
 ## Storage
 
 - **All entity primary keys and FKs are UUID strings (`TEXT`)**, including FlowSync device rows, policy keys, and sync-state tokens. IMAP `uid` / `uidnext` / `uidvalidity` stay numeric protocol counters.
 - Shared schema with `tenant_id` isolation.
-- Migrations: `001_init`, `002_mfa_oauth`, `003_dav`, `004_flowsync`, `005_webauthn`.
+- Migrations through `011_settings` (plus greylist, DMARC agg, sticky, outbound, …).
 
 ## Auth
 
