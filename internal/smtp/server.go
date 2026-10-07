@@ -42,13 +42,18 @@ func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth
 	return &Server{cfg: cfg, log: log, store: store, authn: authn, mailstore: ms, sieve: eng, tls: tlsMgr, ha: gate}
 }
 
-func (s *Server) outbound() (*outboundRelay, *dkimSigner, error) {
-	rel := newOutboundRelay(s.cfg.SMTP.Relay, s.cfg.SMTP.WriteTimeout)
+func (s *Server) outbound() (outboundSender, *dkimSigner, error) {
 	sig, err := newDKIMSigner(s.cfg.SMTP.DKIM)
 	if err != nil {
 		return nil, nil, err
 	}
-	return rel, sig, nil
+	if rel := newOutboundRelay(s.cfg.SMTP.Relay, s.cfg.SMTP.WriteTimeout); rel != nil {
+		return rel, sig, nil
+	}
+	if s.cfg.SMTP.OutboundDirect {
+		return newDirectSender(s.cfg.SMTP.WriteTimeout), sig, nil
+	}
+	return nil, sig, nil
 }
 
 func (s *Server) Start(ctx context.Context) error {
@@ -71,12 +76,16 @@ func (s *Server) Start(ctx context.Context) error {
 		specs = append(specs, listenSpec{addr: s.cfg.SMTP.SMTPS, name: "smtps", implicit: true, requireAuth: true})
 	}
 
-	relay, dkimSig, err := s.outbound()
+	out, dkimSig, err := s.outbound()
 	if err != nil {
 		return fmt.Errorf("smtp dkim: %w", err)
 	}
-	if relay != nil {
-		s.log.Info("smtp outbound relay configured", "host", s.cfg.SMTP.Relay.Host, "dkim", dkimSig != nil)
+	if out != nil {
+		mode := "direct-mx"
+		if s.cfg.SMTP.Relay.Host != "" {
+			mode = "relay:" + s.cfg.SMTP.Relay.Host
+		}
+		s.log.Info("smtp outbound enabled", "mode", mode, "dkim", dkimSig != nil)
 	}
 
 	for _, spec := range specs {
@@ -90,7 +99,7 @@ func (s *Server) Start(ctx context.Context) error {
 			maxSize:     s.cfg.SMTP.MaxSize,
 			requireAuth: spec.requireAuth,
 			ha:          s.ha,
-			relay:       relay,
+			out:         out,
 			dkim:        dkimSig,
 		}
 		srv := gosmtp.NewServer(be)
@@ -164,9 +173,9 @@ type backend struct {
 	hostname    string
 	maxSize     int64
 	requireAuth bool
-	ha          ha.Gate
-	relay       *outboundRelay
-	dkim        *dkimSigner
+	ha   ha.Gate
+	out  outboundSender
+	dkim *dkimSigner
 }
 
 func (b *backend) NewSession(c *gosmtp.Conn) (gosmtp.Session, error) {
@@ -260,8 +269,8 @@ func (s *session) Rcpt(to string, _ *gosmtp.RcptOptions) error {
 		s.backend.log.Error("rcpt resolve failed", "to", to, "err", err)
 		return &gosmtp.SMTPError{Code: 451, EnhancedCode: gosmtp.EnhancedCode{4, 3, 0}, Message: "Temporary failure"}
 	}
-	// External recipient: authenticated submission + smart-host only.
-	if s.user != nil && s.backend.relay != nil {
+	// External recipient: authenticated submission + outbound (relay or direct MX).
+	if s.user != nil && s.backend.out != nil {
 		s.toRemote = append(s.toRemote, to)
 		return nil
 	}
@@ -303,9 +312,9 @@ func (s *session) Data(r io.Reader) error {
 			out = signed
 		}
 		from := normalizeAddr(s.from)
-		if err := s.backend.relay.Send(from, s.toRemote, out); err != nil {
-			s.backend.log.Error("outbound relay failed", "err", err, "recipients", len(s.toRemote))
-			return &gosmtp.SMTPError{Code: 451, EnhancedCode: gosmtp.EnhancedCode{4, 3, 0}, Message: "Relay failed"}
+		if err := s.backend.out.Send(from, s.toRemote, out); err != nil {
+			s.backend.log.Error("outbound delivery failed", "err", err, "recipients", len(s.toRemote))
+			return &gosmtp.SMTPError{Code: 451, EnhancedCode: gosmtp.EnhancedCode{4, 3, 0}, Message: "Outbound delivery failed"}
 		}
 	}
 	s.backend.log.Info("message accepted",
