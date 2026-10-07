@@ -50,6 +50,7 @@ Seed: `admin@example.com` / `changeme`. TLS: `tls.auto_generate` or `scripts/gen
 - Object store: optional S3/MinIO write-through for maildir (`mailstore.object_store`); `tayga-mail sync-objects` to reconcile
 - Virus scan: `scan.enabled` with ClamAV/exec → reject, quarantine folder, or tag headers
 - Spam: `spam.enabled` Rspamd `/checkv2` → reject / greylist / tag / Junk quarantine; admin `/api/v1/admin/quarantine`
+- Inbound DKIM: `dkim_verify.enabled` → `Authentication-Results` (tag or reject on MX)
 - WebAuthn MFA: `/api/v1/auth/webauthn/*` (passkeys; UUID credential/session IDs)
 - Account API: `GET /api/v1/me`; admin: `/api/v1/admin/users` (`http.admins`)
 - IDs: all entity PKs/FKs are UUIDs (fresh DB required after integer-ID builds)
