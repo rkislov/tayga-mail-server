@@ -27,7 +27,23 @@ type Config struct {
 	Seed        SeedConfig        `yaml:"seed"`
 	HA          HAConfig          `yaml:"ha"`
 	Scan        ScanConfig        `yaml:"scan"`
+	Spam        SpamConfig        `yaml:"spam"`
 	Log         LogConfig         `yaml:"log"`
+}
+
+// SpamConfig configures Rspamd (or similar) scoring for inbound SMTP.
+type SpamConfig struct {
+	Enabled         bool          `yaml:"enabled"`
+	Backend         string        `yaml:"backend"` // rspamd | none
+	URL             string        `yaml:"url"`
+	Password        string        `yaml:"password"`
+	Timeout         time.Duration `yaml:"timeout"`
+	FailOpen        bool          `yaml:"fail_open"`
+	Folder          string        `yaml:"folder"` // Junk / Quarantine for quarantine action
+	FollowRspamd    bool          `yaml:"follow_rspamd"`
+	RejectAbove     float64       `yaml:"reject_above"`
+	QuarantineAbove float64       `yaml:"quarantine_above"`
+	TagAbove        float64       `yaml:"tag_above"`
 }
 
 // ScanConfig configures antivirus scanning of inbound SMTP messages.
@@ -337,6 +353,15 @@ func Default() *Config {
 			FailOpen:         false,
 			ClamAV:           ClamAVConfig{Address: "127.0.0.1:3310"},
 		},
+		Spam: SpamConfig{
+			Enabled:      false,
+			Backend:      "rspamd",
+			URL:          "http://127.0.0.1:11333",
+			Timeout:      10 * time.Second,
+			FailOpen:     true,
+			Folder:       "Junk",
+			FollowRspamd: true,
+		},
 		Log: LogConfig{Level: "info", Format: "json"},
 	}
 }
@@ -522,6 +547,25 @@ func (c *Config) Validate() error {
 		}
 		if c.Scan.Backend == "exec" && len(c.Scan.Exec.Command) == 0 {
 			return fmt.Errorf("scan.exec.command is required when backend is exec")
+		}
+	}
+	if c.Spam.Enabled {
+		switch c.Spam.Backend {
+		case "", "rspamd", "none", "noop":
+			if c.Spam.Backend == "" {
+				c.Spam.Backend = "rspamd"
+			}
+		default:
+			return fmt.Errorf("spam.backend must be rspamd or none, got %q", c.Spam.Backend)
+		}
+		if c.Spam.URL == "" {
+			c.Spam.URL = "http://127.0.0.1:11333"
+		}
+		if c.Spam.Timeout <= 0 {
+			c.Spam.Timeout = 10 * time.Second
+		}
+		if c.Spam.Folder == "" {
+			c.Spam.Folder = "Junk"
 		}
 	}
 	return nil

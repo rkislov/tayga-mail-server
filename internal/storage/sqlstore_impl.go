@@ -484,6 +484,19 @@ func (s *Store) GetMailbox(ctx context.Context, userID, name string) (*Mailbox, 
 	return mb, nil
 }
 
+func (s *Store) GetMailboxByID(ctx context.Context, id string) (*Mailbox, error) {
+	mb := &Mailbox{}
+	q := s.rebind(`SELECT id, user_id, name, path, uidnext, uidvalidity, created_at
+		FROM mailboxes WHERE id = ?`)
+	err := s.db.QueryRowContext(ctx, q, id).Scan(
+		&mb.ID, &mb.UserID, &mb.Name, &mb.Path, &mb.UIDNext, &mb.UIDValidity, &mb.CreatedAt,
+	)
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	return mb, nil
+}
+
 func (s *Store) InsertMessage(ctx context.Context, msg *Message) (*Message, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {

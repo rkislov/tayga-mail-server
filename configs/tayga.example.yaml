@@ -116,6 +116,21 @@ scan:
   # exec:
   #   command: ["clamdscan", "--fdpass", "--no-summary", "-"]
 
+# Spam scoring via Rspamd HTTP /checkv2 (after virus scan, before Sieve)
+spam:
+  enabled: false
+  backend: rspamd          # rspamd | none
+  url: "http://127.0.0.1:11333"
+  # password: ""           # Rspamd controller password if required
+  timeout: 10s
+  fail_open: true          # true = deliver if Rspamd is down
+  folder: Junk             # folder for quarantine_above action
+  follow_rspamd: true      # map reject / greylist / add header from Rspamd
+  # Optional score overrides (also apply when follow_rspamd is true):
+  # reject_above: 15
+  # quarantine_above: 6
+  # tag_above: 4
+
 # FlowSync — original Tayga sync engine (ActiveSync- and EWS-compatible wire; Apache-2.0)
 flowsync:
   enabled: true

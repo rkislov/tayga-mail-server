@@ -169,6 +169,12 @@ Metric: `tayga_outbound_queued`. Admin: `GET/DELETE /api/v1/admin/outbound[/{id}
 
 Inbound SMTP local delivery can run `scan` (ClamAV clamd INSTREAM or exec). Actions: `reject` (550), `quarantine` (folder, default `Quarantine`), `tag` (deliver with `X-Virus-*` headers). See `scan:` in `configs/tayga.example.yaml`.
 
+## Spam (Rspamd)
+
+After virus scan and before Sieve, optional `spam:` checks Rspamd HTTP `/checkv2`. With `follow_rspamd: true`, Rspamd `reject` / `greylist` / `add header` map to SMTP reject, 421 greylist, or `X-Spam-*` tags. Score thresholds (`reject_above`, `quarantine_above`, `tag_above`) apply when set; quarantine files into `spam.folder` (default `Junk`).
+
+Admin: `GET /api/v1/admin/quarantine` (folders Quarantine+Junk), `POST …/{id}/release` (move to INBOX), `DELETE …/{id}` (Monitoring card).
+
 ## Next milestones
 
-Spam scoring / Rspamd hooks; admin quarantine UI.
+DKIM verify inbound; more spam UI polish; LDAP group sync.
