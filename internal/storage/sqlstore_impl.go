@@ -240,6 +240,32 @@ func (s *Store) UpdateUserPassword(ctx context.Context, userID int64, passwordHa
 	return nil
 }
 
+func (s *Store) UpdateUserProfile(ctx context.Context, userID int64, displayName string) error {
+	q := s.rebind(`UPDATE users SET display_name = ? WHERE id = ?`)
+	res, err := s.db.ExecContext(ctx, q, displayName, userID)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (s *Store) SumMailboxBytes(ctx context.Context, userID int64) (int64, error) {
+	q := s.rebind(`SELECT COALESCE(SUM(m.size), 0) FROM messages m
+		JOIN mailboxes b ON m.mailbox_id = b.id WHERE b.user_id = ?`)
+	var total int64
+	if err := s.db.QueryRowContext(ctx, q, userID).Scan(&total); err != nil {
+		return 0, err
+	}
+	return total, nil
+}
+
 func (s *Store) CreateAlias(ctx context.Context, domainID, userID int64, localPart string) (*Alias, error) {
 	now := time.Now().UTC()
 	localPart = strings.ToLower(localPart)

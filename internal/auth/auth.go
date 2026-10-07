@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/tayga/tms/internal/config"
 	"github.com/tayga/tms/internal/storage"
 	"golang.org/x/crypto/argon2"
 )
@@ -36,9 +37,10 @@ type Layer struct {
 	Hasher PasswordHasher
 	LDAP   LDAPProvider
 	OIDC   OIDCProvider
+	dir    *Directory // optional; used for EnabledFor checks
 }
 
-// LDAPProvider is a per-domain LDAP authenticator stub/interface.
+// LDAPProvider is a per-domain LDAP authenticator.
 type LDAPProvider interface {
 	Authenticate(ctx context.Context, domain, username, password string) (*storage.User, error)
 }
@@ -62,13 +64,21 @@ func (StubOIDC) ValidateAccessToken(context.Context, string) (*storage.User, err
 	return nil, ErrUnsupportedSource
 }
 
-func NewLayer(store storage.Driver) *Layer {
-	return &Layer{
+// NewLayer builds an auth layer. Pass ldap config to enable hybrid LDAP.
+func NewLayer(store storage.Driver, ldapCfg config.LDAPConfig) *Layer {
+	l := &Layer{
 		Store:  store,
 		Hasher: Argon2id{},
-		LDAP:   StubLDAP{},
 		OIDC:   StubOIDC{},
 	}
+	if len(ldapCfg.Domains) > 0 {
+		dir := NewDirectory(store, ldapCfg)
+		l.LDAP = dir
+		l.dir = dir
+	} else {
+		l.LDAP = StubLDAP{}
+	}
+	return l
 }
 
 func (l *Layer) Authenticate(ctx context.Context, username, password string) (*storage.User, error) {
@@ -77,12 +87,21 @@ func (l *Layer) Authenticate(ctx context.Context, username, password string) (*s
 		return nil, ErrInvalidCredentials
 	}
 
+	domain := ""
+	if at := strings.LastIndex(username, "@"); at >= 0 {
+		domain = username[at+1:]
+	}
+
 	u, err := l.Store.GetUserByEmail(ctx, username)
 	if err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
-			return nil, ErrInvalidCredentials
+		if !errors.Is(err, storage.ErrNotFound) {
+			return nil, err
 		}
-		return nil, err
+		// JIT path: try LDAP if domain is configured.
+		if l.dir != nil && l.dir.EnabledFor(domain) {
+			return l.LDAP.Authenticate(ctx, domain, username, password)
+		}
+		return nil, ErrInvalidCredentials
 	}
 	if !u.Enabled {
 		return nil, ErrUserDisabled
@@ -96,11 +115,6 @@ func (l *Layer) Authenticate(ctx context.Context, username, password string) (*s
 		}
 		return u, nil
 	case "ldap":
-		at := strings.LastIndex(username, "@")
-		domain := ""
-		if at >= 0 {
-			domain = username[at+1:]
-		}
 		return l.LDAP.Authenticate(ctx, domain, username, password)
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedSource, u.AuthSource)

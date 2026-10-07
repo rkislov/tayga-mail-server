@@ -260,6 +260,15 @@ func (s *session) deliver(ctx context.Context, rcpt string, data []byte, msgid s
 		if errors.Is(err, sieve.ErrRejected) {
 			return &gosmtp.SMTPError{Code: 550, EnhancedCode: gosmtp.EnhancedCode{5, 7, 1}, Message: "Message rejected by filter"}
 		}
+		if errors.Is(err, storage.ErrQuotaExceeded) {
+			return &gosmtp.SMTPError{Code: 552, EnhancedCode: gosmtp.EnhancedCode{5, 2, 2}, Message: "Mailbox full"}
+		}
+		return err
+	}
+	if err := storage.EnsureQuota(ctx, s.backend.store, u, int64(len(data))); err != nil {
+		if errors.Is(err, storage.ErrQuotaExceeded) {
+			return &gosmtp.SMTPError{Code: 552, EnhancedCode: gosmtp.EnhancedCode{5, 2, 2}, Message: "Mailbox full"}
+		}
 		return err
 	}
 	if _, err := s.backend.mailstore.EnsureUser(u.Email); err != nil {
