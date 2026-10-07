@@ -149,6 +149,10 @@ CLI: `tayga-mail sync-objects` reconciles indexed message paths between local ma
 
 `ha.mode: active_standby` (Postgres): advisory lock gates unauthenticated MX; see [ha.md](ha.md).
 
+## Outbound SMTP
+
+Authenticated submission may RCPT external addresses when `smtp.relay.host` is set. Messages are optionally DKIM-signed (`smtp.dkim`) then handed to the smart-host. Unauthenticated MX remains local-only.
+
 ## Next milestones
 
-Outbound smart-host / DKIM signing; multi-writer maildir fencing beyond MX.
+Direct MX outbound (no smart-host); multi-writer maildir fencing beyond MX.
