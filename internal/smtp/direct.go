@@ -1,7 +1,10 @@
 package smtp
 
 import (
+	"context"
+	"crypto/tls"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/smtp"
 	"sort"
@@ -10,14 +13,21 @@ import (
 )
 
 type directSender struct {
-	timeout time.Duration
+	timeout  time.Duration
+	hostname string
+	sts      *stsResolver
+	tlsrpt   *tlsReporter
+	log      *slog.Logger
 }
 
-func newDirectSender(timeout time.Duration) *directSender {
+func newDirectSender(timeout time.Duration, hostname string, sts *stsResolver, tlsrpt *tlsReporter, log *slog.Logger) *directSender {
 	if timeout <= 0 {
 		timeout = 60 * time.Second
 	}
-	return &directSender{timeout: timeout}
+	if hostname == "" {
+		hostname = "localhost"
+	}
+	return &directSender{timeout: timeout, hostname: hostname, sts: sts, tlsrpt: tlsrpt, log: log}
 }
 
 func (d *directSender) Send(from string, to []string, data []byte) error {
@@ -42,10 +52,33 @@ func (d *directSender) sendDomain(from, domain string, rcpts []string, data []by
 	if err != nil {
 		return err
 	}
+	var pol *stsPolicy
+	if d.sts != nil {
+		pol, err = d.sts.Policy(context.Background(), domain)
+		if err != nil {
+			return fmt.Errorf("mta-sts: %w", err)
+		}
+	}
+	enforce := pol != nil && pol.Mode == "enforce"
+	if enforce || (pol != nil && pol.Mode == "testing") {
+		filtered := filterMXBySTS(hosts, pol)
+		if len(filtered) == 0 {
+			d.recordTLS(&tlsEvent{
+				PolicyDomain: domain, ResultType: "sts-policy-invalid",
+				SendingMTA: d.hostname, Count: 1,
+			})
+			if enforce {
+				return fmt.Errorf("mta-sts: no MX hosts match policy for %s", domain)
+			}
+		} else {
+			hosts = filtered
+		}
+	}
+
 	var last error
 	for _, host := range hosts {
 		addr := net.JoinHostPort(host, "25")
-		last = d.sendHost(addr, host, from, rcpts, data)
+		last = d.sendHost(addr, host, domain, from, rcpts, data, enforce)
 		if last == nil {
 			return nil
 		}
@@ -56,9 +89,36 @@ func (d *directSender) sendDomain(from, domain string, rcpts []string, data []by
 	return last
 }
 
-func (d *directSender) sendHost(addr, serverName, from string, rcpts []string, data []byte) error {
+func (d *directSender) sendHost(addr, serverName, policyDomain, from string, rcpts []string, data []byte, enforce bool) error {
+	err := d.dialAndSend(addr, serverName, policyDomain, from, rcpts, data, true)
+	if err == nil {
+		return nil
+	}
+	if enforce {
+		return err
+	}
+	// Opportunistic / testing: plaintext fallback after TLS problems.
+	if isTLSRelated(err) {
+		return d.dialAndSend(addr, serverName, policyDomain, from, rcpts, data, false)
+	}
+	return err
+}
+
+func isTLSRelated(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := strings.ToLower(err.Error())
+	return strings.Contains(s, "starttls") || strings.Contains(s, "tls") || strings.Contains(s, "certificate")
+}
+
+func (d *directSender) dialAndSend(addr, serverName, policyDomain, from string, rcpts []string, data []byte, wantTLS bool) error {
 	conn, err := net.DialTimeout("tcp", addr, d.timeout)
 	if err != nil {
+		d.recordTLS(&tlsEvent{
+			PolicyDomain: policyDomain, MXHost: serverName,
+			ResultType: "network-error", SendingMTA: d.hostname, Count: 1,
+		})
 		return err
 	}
 	defer conn.Close()
@@ -68,9 +128,33 @@ func (d *directSender) sendHost(addr, serverName, from string, rcpts []string, d
 		return err
 	}
 	defer c.Close()
-	if err := c.Hello("localhost"); err != nil {
+	if err := c.Hello(d.hostname); err != nil {
 		return err
 	}
+
+	if wantTLS {
+		if ok, _ := c.Extension("STARTTLS"); ok {
+			tlsCfg := &tls.Config{ServerName: serverName, MinVersion: tls.VersionTLS12}
+			if err := c.StartTLS(tlsCfg); err != nil {
+				d.recordTLS(&tlsEvent{
+					PolicyDomain: policyDomain, MXHost: serverName,
+					ResultType: "starttls-failure", SendingMTA: d.hostname, Count: 1,
+				})
+				return fmt.Errorf("starttls: %w", err)
+			}
+			d.recordTLS(&tlsEvent{
+				PolicyDomain: policyDomain, MXHost: serverName,
+				ResultType: "successful-session", SendingMTA: d.hostname, Count: 1,
+			})
+		} else {
+			d.recordTLS(&tlsEvent{
+				PolicyDomain: policyDomain, MXHost: serverName,
+				ResultType: "starttls-not-supported", SendingMTA: d.hostname, Count: 1,
+			})
+			return fmt.Errorf("starttls not supported by %s", serverName)
+		}
+	}
+
 	if err := c.Mail(from); err != nil {
 		return err
 	}
@@ -91,6 +175,13 @@ func (d *directSender) sendHost(addr, serverName, from string, rcpts []string, d
 		return err
 	}
 	return c.Quit()
+}
+
+func (d *directSender) recordTLS(ev *tlsEvent) {
+	if d == nil || d.tlsrpt == nil || ev == nil {
+		return
+	}
+	d.tlsrpt.Record(ev)
 }
 
 func mxHosts(domain string) ([]string, error) {
