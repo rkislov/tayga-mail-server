@@ -3,11 +3,17 @@ package metrics
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tayga/tms/internal/storage"
 )
+
+var haLeader atomic.Bool
+
+// SetHALeader updates the tayga_ha_is_leader gauge (1 = MX leader).
+func SetHALeader(isLeader bool) { haLeader.Store(isLeader) }
 
 // Register installs Tayga collectors on the default Prometheus registry.
 func Register(store storage.Driver) {
@@ -17,6 +23,21 @@ func Register(store storage.Driver) {
 			panic(err)
 		}
 	}
+	g := prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+		Name: "tayga_ha_is_leader",
+		Help: "1 if this process holds the MX HA lease (or HA disabled)",
+	}, func() float64 {
+		if haLeader.Load() {
+			return 1
+		}
+		return 0
+	})
+	if err := prometheus.Register(g); err != nil {
+		if _, ok := err.(prometheus.AlreadyRegisteredError); !ok {
+			panic(err)
+		}
+	}
+	SetHALeader(true) // default until HA lease overrides
 }
 
 type collector struct {
