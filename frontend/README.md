@@ -1,6 +1,11 @@
 # Frontend
 
-Built assets are embedded from `internal/frontend/dist` via `//go:embed`.
+Source lives in `frontend/` (Tailwind v4). Built assets are embedded from
+`internal/frontend/dist` via `//go:embed`.
 
-The current UI is a single-page admin shell (login, TOTP/WebAuthn MFA, passkeys, quotas)
-with abstract cosmic backgrounds (author artwork). Licensed Apache-2.0; author Кислов Роман Сергеевич.
+```bash
+cd frontend && npm install && npm run build
+```
+
+Default theme is **тайга** (forest backdrop). Alternate theme **космос** toggles
+via the header button (`localStorage` key `tayga.theme`). Backdrop art © Алиса Кислова · Apache-2.0.

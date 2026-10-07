@@ -1,0 +1,14 @@
+{
+  "name": "tayga-frontend",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Tayga Mail web UI (Tailwind) embedded via go:embed",
+  "scripts": {
+    "build": "tailwindcss -i ./src/input.css -o ../internal/frontend/dist/assets/app.css --minify && cp ./src/app.js ../internal/frontend/dist/assets/app.js",
+    "watch": "tailwindcss -i ./src/input.css -o ../internal/frontend/dist/assets/app.css --watch"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.1.14",
+    "tailwindcss": "^4.1.14"
+  }
+}
