@@ -137,6 +137,46 @@ func (s *Store) UpdateMessagePath(ctx context.Context, messageID, filePath strin
 	return nil
 }
 
+// MoveMessage assigns a new UID in dstMailboxID and updates mailbox_id (FlowSync MoveItems).
+func (s *Store) MoveMessage(ctx context.Context, messageID, dstMailboxID string) (*Message, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	msg, err := s.scanMessage(tx.QueryRowContext(ctx, s.rebind(`SELECT `+msgCols+` FROM messages WHERE id = ?`), messageID))
+	if err != nil {
+		return nil, err
+	}
+	if msg.MailboxID == dstMailboxID {
+		return msg, nil
+	}
+
+	var uid int64
+	lockQ := s.rebind(`SELECT uidnext FROM mailboxes WHERE id = ?`)
+	if s.dialect == DialectPostgres {
+		lockQ = `SELECT uidnext FROM mailboxes WHERE id = $1 FOR UPDATE`
+	}
+	if err := tx.QueryRowContext(ctx, lockQ, dstMailboxID).Scan(&uid); err != nil {
+		return nil, mapErr(err)
+	}
+	updMB := s.rebind(`UPDATE mailboxes SET uidnext = ? WHERE id = ?`)
+	if _, err := tx.ExecContext(ctx, updMB, uid+1, dstMailboxID); err != nil {
+		return nil, err
+	}
+	updMsg := s.rebind(`UPDATE messages SET mailbox_id = ?, uid = ? WHERE id = ?`)
+	if _, err := tx.ExecContext(ctx, updMsg, dstMailboxID, uid, messageID); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	msg.MailboxID = dstMailboxID
+	msg.UID = uid
+	return msg, nil
+}
+
 func (s *Store) DeleteMessage(ctx context.Context, messageID string) error {
 	q := s.rebind(`DELETE FROM messages WHERE id = ?`)
 	res, err := s.db.ExecContext(ctx, q, messageID)
