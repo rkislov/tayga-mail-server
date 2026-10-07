@@ -149,6 +149,19 @@ func (s *Store) GetCalendarByID(ctx context.Context, userID, id string) (*Calend
 	return c, nil
 }
 
+func (s *Store) DeleteCalendar(ctx context.Context, userID, name string) error {
+	q := s.rebind(`DELETE FROM calendars WHERE user_id = ? AND name = ?`)
+	res, err := s.db.ExecContext(ctx, q, userID, name)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (s *Store) bumpCalendarCTag(ctx context.Context, calendarID string) error {
 	q := s.rebind(`UPDATE calendars SET ctag = ? WHERE id = ?`)
 	_, err := s.db.ExecContext(ctx, q, newCTag(), calendarID)
