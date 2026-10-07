@@ -154,7 +154,7 @@ spam:
   # tag_above: 4
 
 # Inbound mail authentication on unauthenticated MX (before virus/spam)
-# Order: SPF → DKIM → DMARC. Each may add Authentication-Results.
+# Order: SPF → DKIM → ARC verify → DMARC → ARC seal. Each may add Authentication-Results.
 spf:
   enabled: false
   action: tag                # tag | reject
@@ -172,14 +172,16 @@ dmarc:
   enabled: false
   action: tag                # tag | reject | follow (honor DNS p=reject)
   fail_open: true
+  arc_trust: false           # ARC cv=pass softens DMARC fail (no reject)
   # authserv_id: ""
   report:
     enabled: false           # aggregate rua reports (needs outbound queue/relay)
+    failure: false           # per-message ruf AFRF on DMARC fail (fo=/ruf=)
     org_name: "Tayga Mail"
     # contact: "dmarc-noreply@mail.example.com"
     interval: 24h
 
-# Authenticated Received Chain (RFC 8617) — after SPF/DKIM/DMARC on MX
+# Authenticated Received Chain (RFC 8617) — verify before DMARC, seal after
 arc:
   enabled: false
   verify: true               # Authentication-Results arc=pass|fail|none
