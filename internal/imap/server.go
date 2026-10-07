@@ -31,24 +31,22 @@ type Server struct {
 	authn     *auth.Layer
 	mailstore *mailstore.Store
 	hub       *Hub
+	tls       *tlsutil.Manager
 	servers   []*imapserv.Server
 }
 
-func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth.Layer, ms *mailstore.Store, hub *Hub) *Server {
+func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth.Layer, ms *mailstore.Store, hub *Hub, tlsMgr *tlsutil.Manager) *Server {
 	if hub == nil {
 		hub = NewHub(store)
 	}
-	return &Server{cfg: cfg, log: log, store: store, authn: authn, mailstore: ms, hub: hub}
+	return &Server{cfg: cfg, log: log, store: store, authn: authn, mailstore: ms, hub: hub, tls: tlsMgr}
 }
 
 // Hub returns the update hub used for IDLE/EXISTS notifications.
 func (s *Server) Hub() *Hub { return s.hub }
 
 func (s *Server) Start(ctx context.Context) error {
-	tlsCfg, err := s.loadTLS()
-	if err != nil {
-		return err
-	}
+	tlsCfg := s.tlsConfig()
 
 	be := &Backend{log: s.log, store: s.store, authn: s.authn, ms: s.mailstore, hub: s.hub}
 
@@ -75,6 +73,7 @@ func (s *Server) Start(ctx context.Context) error {
 		s.enableOAuth(srv, be)
 
 		var ln net.Listener
+		var err error
 		if sp.implicit {
 			if tlsCfg == nil {
 				s.log.Warn("imaps configured but TLS certs missing; skipping", "addr", sp.addr)
@@ -121,8 +120,12 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	return first
 }
 
-func (s *Server) loadTLS() (*tls.Config, error) {
-	return tlsutil.Load(s.cfg)
+func (s *Server) tlsConfig() *tls.Config {
+	if s.tls != nil {
+		return s.tls.TLSConfig()
+	}
+	cfg, _ := tlsutil.Load(s.cfg)
+	return cfg
 }
 
 // Backend implements backend.Backend and backend.BackendUpdater.

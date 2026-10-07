@@ -94,7 +94,7 @@ Enable: `mfa.webauthn.enabled: true` (RP ID from `http.public_url`).
 
 ## Admin UI
 
-Embedded at `/` (`internal/frontend/dist`): sign-in, TOTP + WebAuthn MFA, passkey enrollment/revoke, Sieve filters, quota usage, tenant user admin.
+Embedded at `/` (`internal/frontend/dist`): sign-in, TOTP + WebAuthn MFA, passkey enrollment/revoke, Sieve filters, quota usage, tenant user admin, TLS certificate management.
 
 ### Account / admin API
 
@@ -108,6 +108,9 @@ Embedded at `/` (`internal/frontend/dist`): sign-in, TOTP + WebAuthn MFA, passke
 | `PUT /api/v1/admin/users/{uuid}/quota` | set quota (0 = unlimited) |
 | `PATCH /api/v1/admin/users/{uuid}` | enable/disable |
 | `PUT /api/v1/admin/users/{uuid}/password` | reset local password (min 8 chars) |
+| `GET /api/v1/admin/tls` | active certificate status |
+| `PUT /api/v1/admin/tls` | install PEM certificate + private key (hot reload) |
+| `POST /api/v1/admin/tls` | generate self-signed cert (`hosts`, `days`) |
 
 Admins: `http.admins` email list (default `admin@example.com`).
 
@@ -119,4 +122,4 @@ Admins: `http.admins` email list (default `admin@example.com`).
 
 ## Next milestones
 
-Standard TLS ports (IMAPS/POP3S/SMTPS/submission STARTTLS/HTTPS) + self-signed auto-gen. Next: multi-tenant polish, richer Autodiscover.
+TLS cert hot-reload via admin UI/API. Next: multi-tenant polish, richer Autodiscover.
