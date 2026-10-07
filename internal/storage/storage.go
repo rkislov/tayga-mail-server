@@ -31,6 +31,9 @@ type Driver interface {
 	GetUserByID(ctx context.Context, id string) (*User, error)
 	UpdateUserPassword(ctx context.Context, userID, passwordHash string) error
 	UpdateUserProfile(ctx context.Context, userID, displayName string) error
+	UpdateUserQuota(ctx context.Context, userID string, quotaBytes int64) error
+	UpdateUserEnabled(ctx context.Context, userID string, enabled bool) error
+	ListUsersByTenant(ctx context.Context, tenantID string) ([]*User, error)
 	SumMailboxBytes(ctx context.Context, userID string) (int64, error)
 
 	CreateAlias(ctx context.Context, domainID, userID, localPart string) (*Alias, error)
