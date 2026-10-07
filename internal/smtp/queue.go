@@ -48,6 +48,7 @@ type OutboundQueue struct {
 	log          *slog.Logger
 	ha           ha.Gate
 	fenceWriters bool
+	writers      ha.WriterGate
 }
 
 // SetHA restricts queue drain to the lease holder when fenceWriters is set.
@@ -57,6 +58,14 @@ func (q *OutboundQueue) SetHA(gate ha.Gate, fenceWriters bool) {
 	}
 	q.ha = gate
 	q.fenceWriters = fenceWriters
+}
+
+// SetWriters gates DSN local delivery under sticky/cluster writer policy.
+func (q *OutboundQueue) SetWriters(w ha.WriterGate) {
+	if q == nil {
+		return
+	}
+	q.writers = w
 }
 
 func newOutboundQueue(store storage.Driver, sender outboundSender, dkim *dkimSigner, eng *sieve.Engine, hostname string, cfg QueueConfig, log *slog.Logger) *OutboundQueue {
@@ -199,6 +208,11 @@ func (q *OutboundQueue) bounceDSN(ctx context.Context, it *storage.OutboundItem,
 		// External envelope-from: no local mailbox to bounce into.
 		q.log.Info("dsn skipped; sender not local", "from", from, "failed_to", it.EnvelopeTo)
 		return nil
+	}
+	if q.writers != nil {
+		if err := q.writers.AllowWrite(ctx, u.ID); err != nil {
+			return err
+		}
 	}
 	dsn := buildDSN(q.hostname, it, fail)
 	msgid := extractMessageID(dsn)

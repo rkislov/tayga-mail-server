@@ -24,28 +24,24 @@ import (
 
 // Server is a minimal RFC 1939 POP3 server for INBOX.
 type Server struct {
-	cfg          *config.Config
-	log          *slog.Logger
-	store        storage.Driver
-	authn        *auth.Layer
-	mailstore    *mailstore.Store
-	tls          *tlsutil.Manager
-	tlsCfg       *tls.Config
-	ha           ha.Gate
-	fenceWriters bool
+	cfg       *config.Config
+	log       *slog.Logger
+	store     storage.Driver
+	authn     *auth.Layer
+	mailstore *mailstore.Store
+	tls       *tlsutil.Manager
+	tlsCfg    *tls.Config
+	writers   ha.WriterGate
 
 	mu     sync.Mutex
 	ln     []net.Listener
 	closed bool
 }
 
-func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth.Layer, ms *mailstore.Store, tlsMgr *tlsutil.Manager, gate ha.Gate) *Server {
-	if gate == nil {
-		gate = ha.AlwaysLeader{}
-	}
+func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth.Layer, ms *mailstore.Store, tlsMgr *tlsutil.Manager, writers ha.WriterGate) *Server {
 	return &Server{
 		cfg: cfg, log: log, store: store, authn: authn, mailstore: ms, tls: tlsMgr,
-		ha: gate, fenceWriters: cfg.HA.FenceWriters(),
+		writers: writers,
 	}
 }
 
@@ -349,8 +345,10 @@ func (sess *session) cmdDELE(arg string) error {
 	if err := sess.requireAuth(); err != nil {
 		return err
 	}
-	if sess.s.fenceWriters && sess.s.ha != nil && !sess.s.ha.IsLeader() {
-		return sess.err("standby; try active node")
+	if sess.s.writers != nil && sess.user != nil {
+		if err := sess.s.writers.AllowWrite(context.Background(), sess.user.ID); err != nil {
+			return sess.err("standby; try active node")
+		}
 	}
 	n, err := strconv.Atoi(arg)
 	if err != nil || n < 1 || n > len(sess.msgs) || sess.deleted[n] {
@@ -432,9 +430,11 @@ func (sess *session) cmdQUIT() error {
 				break
 			}
 		}
-		if hasDel && sess.s.fenceWriters && sess.s.ha != nil && !sess.s.ha.IsLeader() {
-			_ = sess.err("standby; deletions not committed")
-			return nil
+		if hasDel && sess.s.writers != nil && sess.user != nil {
+			if err := sess.s.writers.AllowWrite(context.Background(), sess.user.ID); err != nil {
+				_ = sess.err("standby; deletions not committed")
+				return nil
+			}
 		}
 		ctx := context.Background()
 		for i := range sess.msgs {
