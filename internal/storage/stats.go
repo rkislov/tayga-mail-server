@@ -13,9 +13,10 @@ type ServerStats struct {
 	Mailboxes    int   `json:"mailboxes"`
 	Messages     int   `json:"messages"`
 	BytesStored  int64 `json:"bytes_stored"`
-	Calendars    int   `json:"calendars"`
-	Contacts     int   `json:"contacts"` // address objects
-	SieveScripts int   `json:"sieve_scripts"`
+	Calendars       int   `json:"calendars"`
+	Contacts        int   `json:"contacts"` // address objects
+	SieveScripts    int   `json:"sieve_scripts"`
+	OutboundQueued  int   `json:"outbound_queued"`
 }
 
 // TenantStats is per-tenant monitoring summary.
@@ -43,6 +44,7 @@ func (s *Store) ServerStats(ctx context.Context) (*ServerStats, error) {
 		{`SELECT COUNT(*) FROM calendars`, &st.Calendars},
 		{`SELECT COUNT(*) FROM address_objects`, &st.Contacts},
 		{`SELECT COUNT(*) FROM sieve_scripts`, &st.SieveScripts},
+		{`SELECT COUNT(*) FROM outbound_queue`, &st.OutboundQueued},
 	}
 	for _, item := range queries {
 		if err := s.db.QueryRowContext(ctx, s.rebind(item.q)).Scan(item.n); err != nil {

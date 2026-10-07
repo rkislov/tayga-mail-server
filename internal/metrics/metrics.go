@@ -59,6 +59,7 @@ func (c *collector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- descCalendars
 	ch <- descContacts
 	ch <- descSieve
+	ch <- descOutbound
 }
 
 func (c *collector) Collect(ch chan<- prometheus.Metric) {
@@ -76,6 +77,7 @@ func (c *collector) Collect(ch chan<- prometheus.Metric) {
 	ch <- prometheus.MustNewConstMetric(descCalendars, prometheus.GaugeValue, float64(st.Calendars))
 	ch <- prometheus.MustNewConstMetric(descContacts, prometheus.GaugeValue, float64(st.Contacts))
 	ch <- prometheus.MustNewConstMetric(descSieve, prometheus.GaugeValue, float64(st.SieveScripts))
+	ch <- prometheus.MustNewConstMetric(descOutbound, prometheus.GaugeValue, float64(st.OutboundQueued))
 }
 
 func (c *collector) stats() *storage.ServerStats {
@@ -106,4 +108,5 @@ var (
 	descCalendars    = prometheus.NewDesc("tayga_calendars", "Number of calendars", nil, nil)
 	descContacts     = prometheus.NewDesc("tayga_contacts", "Number of address book objects", nil, nil)
 	descSieve        = prometheus.NewDesc("tayga_sieve_scripts", "Number of sieve scripts", nil, nil)
+	descOutbound     = prometheus.NewDesc("tayga_outbound_queued", "Messages waiting in the outbound retry queue", nil, nil)
 )

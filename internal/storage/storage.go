@@ -123,6 +123,12 @@ type Driver interface {
 	GetWebAuthnSession(ctx context.Context, id string) (*WebAuthnSession, error)
 	DeleteWebAuthnSession(ctx context.Context, id string) error
 
+	EnqueueOutbound(ctx context.Context, item *OutboundItem) (*OutboundItem, error)
+	ClaimOutboundDue(ctx context.Context, limit int) ([]*OutboundItem, error)
+	RescheduleOutbound(ctx context.Context, id string, attempts int, nextAttempt time.Time, lastError string) error
+	DeleteOutbound(ctx context.Context, id string) error
+	CountOutbound(ctx context.Context) (int, error)
+
 	ServerStats(ctx context.Context) (*ServerStats, error)
 	TenantStats(ctx context.Context, tenantID string) (*TenantStats, error)
 
@@ -193,4 +199,19 @@ type SieveScript struct {
 	Script    string
 	Active    bool
 	CreatedAt time.Time
+}
+
+// OutboundItem is one queued remote delivery (one recipient).
+type OutboundItem struct {
+	ID           string
+	EnvelopeFrom string
+	EnvelopeTo   string
+	MessageID    string
+	Data         []byte
+	Attempts     int
+	MaxAttempts  int
+	NextAttempt  time.Time
+	LastError    string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }
