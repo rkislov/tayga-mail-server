@@ -1,3 +1,145 @@
+const I18N = {
+  ru: {
+    brand: "Tayga Mail",
+    login_title: "Вход",
+    login_lede: "Почта, календарь, контакты и файлы.",
+    email: "Email",
+    password: "Пароль",
+    continue: "Продолжить",
+    mfa_title: "Подтвердите вход",
+    mfa_lede: "Второй фактор для завершения входа.",
+    totp_code: "Код приложения",
+    verify: "Проверить",
+    back: "Назад",
+    nav_mail: "Почта",
+    nav_calendar: "Календарь",
+    nav_contacts: "Контакты",
+    nav_files: "Файлы",
+    nav_settings: "Настройки",
+    nav_profile: "Профиль",
+    nav_security: "Безопасность",
+    nav_appearance: "Внешний вид",
+    nav_filters: "Фильтры",
+    nav_language: "Язык",
+    nav_admin: "Админ",
+    nav_monitor: "Мониторинг",
+    nav_tenants: "Домены и пользователи",
+    nav_tls: "TLS",
+    nav_server: "Сервер",
+    logout: "Выйти",
+    compose: "Написать",
+    send: "Отправить",
+    refresh: "Обновить",
+    folders: "Папки",
+    empty_mailbox: "Нет писем",
+    select_message: "Выберите письмо",
+    to: "Кому",
+    subject: "Тема",
+    body: "Текст",
+    reply: "Ответить",
+    delete: "Удалить",
+    calendar_title: "Календарь",
+    new_event: "Событие",
+    contacts_title: "Контакты",
+    new_contact: "Контакт",
+    files_title: "Файлы",
+    upload: "Загрузить",
+    mkdir: "Папка",
+    profile_title: "Профиль",
+    security_title: "Безопасность",
+    appearance_title: "Внешний вид",
+    theme: "Тема",
+    language_title: "Язык",
+    language_hint: "Язык интерфейса сохраняется в браузере.",
+    filters_title: "Фильтры Sieve",
+    session_active: "Сессия активна · IMAP XOAUTH2 / FlowSync",
+    save: "Сохранить",
+  },
+  en: {
+    brand: "Tayga Mail",
+    login_title: "Sign in",
+    login_lede: "Mail, calendar, contacts, and files.",
+    email: "Email",
+    password: "Password",
+    continue: "Continue",
+    mfa_title: "Confirm sign-in",
+    mfa_lede: "Second factor to finish signing in.",
+    totp_code: "Authenticator code",
+    verify: "Verify",
+    back: "Back",
+    nav_mail: "Mail",
+    nav_calendar: "Calendar",
+    nav_contacts: "Contacts",
+    nav_files: "Files",
+    nav_settings: "Settings",
+    nav_profile: "Profile",
+    nav_security: "Security",
+    nav_appearance: "Appearance",
+    nav_filters: "Filters",
+    nav_language: "Language",
+    nav_admin: "Admin",
+    nav_monitor: "Monitoring",
+    nav_tenants: "Domains & users",
+    nav_tls: "TLS",
+    nav_server: "Server",
+    logout: "Log out",
+    compose: "Compose",
+    send: "Send",
+    refresh: "Refresh",
+    folders: "Folders",
+    empty_mailbox: "No messages",
+    select_message: "Select a message",
+    to: "To",
+    subject: "Subject",
+    body: "Body",
+    reply: "Reply",
+    delete: "Delete",
+    calendar_title: "Calendar",
+    new_event: "Event",
+    contacts_title: "Contacts",
+    new_contact: "Contact",
+    files_title: "Files",
+    upload: "Upload",
+    mkdir: "Folder",
+    profile_title: "Profile",
+    security_title: "Security",
+    appearance_title: "Appearance",
+    theme: "Theme",
+    language_title: "Language",
+    language_hint: "Interface language is stored in this browser.",
+    filters_title: "Sieve filters",
+    session_active: "Session active · IMAP XOAUTH2 / FlowSync",
+    save: "Save",
+  },
+};
+
+let lang = "ru";
+
+function t(key) {
+  return (I18N[lang] && I18N[lang][key]) || (I18N.ru && I18N.ru[key]) || key;
+}
+
+function applyLang(next) {
+  lang = next in I18N ? next : "ru";
+  localStorage.setItem("tayga.lang", lang);
+  document.documentElement.lang = lang;
+  document.querySelectorAll("[data-i18n]").forEach((el) => {
+    el.textContent = t(el.getAttribute("data-i18n"));
+  });
+  document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
+    el.placeholder = t(el.getAttribute("data-i18n-placeholder"));
+  });
+  const sel = document.getElementById("lang-select");
+  if (sel) sel.value = lang;
+}
+
+(function initLang() {
+  const saved = localStorage.getItem("tayga.lang");
+  if (saved) lang = saved in I18N ? saved : "ru";
+  else if (typeof navigator !== "undefined" && navigator.language && !navigator.language.toLowerCase().startsWith("ru")) {
+    lang = "en";
+  }
+})();
 const state = {
   tokens: null,
   email: "",
@@ -10,14 +152,34 @@ const $ = (id) => document.getElementById(id);
 
 const THEMES = {
   taiga: {
-    label: "Тема: тайга",
+    label: "Тайга",
     image: "/assets/taiga-forest.jpg",
     image2x: "/assets/taiga-forest@2x.jpg",
   },
   cosmos: {
-    label: "Тема: космос",
+    label: "Космос",
     image: "/assets/cosmic-abstract.jpg",
     image2x: "/assets/cosmic-abstract@2x.jpg",
+  },
+  city: {
+    label: "Город",
+    image: "/assets/city.jpg",
+    image2x: "/assets/city@2x.jpg",
+  },
+  kalyazin: {
+    label: "Колязин",
+    image: "/assets/kalyazin.jpg",
+    image2x: "/assets/kalyazin@2x.jpg",
+  },
+  temple: {
+    label: "Храм на Нерли",
+    image: "/assets/temple-nerl.jpg",
+    image2x: "/assets/temple-nerl@2x.jpg",
+  },
+  moscow: {
+    label: "Москва-Сити",
+    image: "/assets/moscow-city.jpg",
+    image2x: "/assets/moscow-city@2x.jpg",
   },
 };
 
@@ -29,24 +191,96 @@ function applyTheme(name) {
     "--tayga-bg-image",
     `image-set(url('${theme.image}') 1x, url('${theme.image2x}') 2x)`
   );
-  const btn = document.getElementById("btn-theme");
-  if (btn) btn.textContent = theme.label;
+  const sel = document.getElementById("theme-select");
+  if (sel && sel.value !== key) sel.value = key;
+  const preview = document.getElementById("theme-preview");
+  if (preview) preview.style.backgroundImage = `url('${theme.image}')`;
   localStorage.setItem("tayga.theme", key);
 }
 
 (function initTheme() {
   const saved = localStorage.getItem("tayga.theme") || "taiga";
   applyTheme(saved);
-  document.getElementById("btn-theme")?.addEventListener("click", () => {
-    const cur = document.documentElement.dataset.theme || "taiga";
-    applyTheme(cur === "taiga" ? "cosmos" : "taiga");
+  document.getElementById("theme-select")?.addEventListener("change", (e) => {
+    applyTheme(e.target.value);
   });
 })();
 
-const views = ["view-login", "view-mfa", "view-account"];
+const APPS = [
+  "mail", "calendar", "contacts", "files",
+  "profile", "security", "appearance", "filters", "language",
+  "monitor", "tenants", "tls", "server",
+];
+
+const mailState = { mailboxID: "", messageID: "", mailboxes: [] };
+const calState = { calendarID: "" };
+const contactState = { bookID: "" };
+const filesState = { path: "" };
 
 function show(id) {
-  views.forEach((v) => $(v).classList.toggle("hidden", v !== id));
+  const account = id === "view-account";
+  $("auth-layout")?.classList.toggle("hidden", account);
+  $("view-account")?.classList.toggle("hidden", !account);
+  if (!account) {
+    $("view-login")?.classList.toggle("hidden", id !== "view-login");
+    $("view-mfa")?.classList.toggle("hidden", id !== "view-mfa");
+  }
+}
+
+const APP_I18N = {
+  mail: "nav_mail",
+  calendar: "nav_calendar",
+  contacts: "nav_contacts",
+  files: "nav_files",
+  profile: "nav_profile",
+  security: "nav_security",
+  appearance: "nav_appearance",
+  filters: "nav_filters",
+  language: "nav_language",
+  monitor: "nav_monitor",
+  tenants: "nav_tenants",
+  tls: "nav_tls",
+  server: "nav_server",
+};
+
+function setNavOpen(open) {
+  const shell = $("view-account");
+  const btn = $("btn-nav-toggle");
+  const nav = $("app-nav");
+  const backdrop = $("nav-backdrop");
+  if (!shell) return;
+  shell.classList.toggle("nav-open", open);
+  if (btn) btn.setAttribute("aria-expanded", open ? "true" : "false");
+  if (nav) nav.setAttribute("aria-hidden", open ? "false" : "true");
+  if (backdrop) backdrop.hidden = !open;
+  document.body.style.overflow = open ? "hidden" : "";
+}
+
+function showApp(name) {
+  const app = APPS.includes(name) ? name : "mail";
+  APPS.forEach((a) => $(`app-${a}`)?.classList.toggle("hidden", a !== app));
+  document.querySelectorAll(".nav-btn").forEach((btn) => {
+    btn.classList.toggle("is-active", btn.dataset.app === app);
+  });
+  const title = $("app-topbar-title");
+  if (title) {
+    const key = APP_I18N[app] || "nav_mail";
+    title.setAttribute("data-i18n", key);
+    title.textContent = t(key);
+  }
+  $("compose-backdrop")?.classList.add("hidden");
+  setNavOpen(false);
+  if (app === "mail") refreshMail();
+  if (app === "calendar") refreshCalendar();
+  if (app === "contacts") refreshContacts();
+  if (app === "files") refreshFiles();
+  if (app === "filters") refreshSieve();
+  if (app === "monitor") refreshMonitor();
+  if (app === "tenants") { refreshTenant(); refreshAdminUsers(); }
+  if (app === "tls") refreshTLS();
+  if (app === "server") refreshSettings();
+  if (app === "security") refreshPasskeys();
+  if (app === "profile") loadMe();
 }
 
 function setMsg(el, text, kind) {
@@ -152,17 +386,7 @@ async function loadMe() {
       : `${fmtBytes(me.used_bytes)} used · unlimited quota`;
     $("acct-quota").textContent = q;
     $("acct-role").textContent = me.is_admin ? "admin" : "live";
-    $("card-admin").classList.toggle("hidden", !me.is_admin);
-    $("card-tls").classList.toggle("hidden", !me.is_admin);
-    $("card-settings").classList.toggle("hidden", !me.is_admin);
-    $("card-monitor").classList.toggle("hidden", !me.is_admin);
-    if (me.is_admin) {
-      refreshMonitor();
-      refreshTenant();
-      refreshAdminUsers();
-      refreshTLS();
-      refreshSettings();
-    }
+    $("nav-admin")?.classList.toggle("hidden", !me.is_admin);
   } catch (err) {
     $("acct-meta").textContent = err.message;
   }
@@ -759,9 +983,9 @@ function enterAccount(tokens, email) {
   localStorage.setItem("tayga.email", state.email);
   $("acct-email").textContent = state.email;
   show("view-account");
-  refreshPasskeys();
-  refreshSieve();
   loadMe();
+  showApp("mail");
+  applyLang(lang);
 }
 
 $("form-login").addEventListener("submit", async (e) => {
@@ -842,6 +1066,7 @@ $("btn-back-login").addEventListener("click", () => show("view-login"));
 $("btn-logout").addEventListener("click", () => {
   state.tokens = null;
   localStorage.removeItem("tayga.tokens");
+  setNavOpen(false);
   show("view-login");
 });
 $("btn-refresh-me").addEventListener("click", loadMe);
@@ -927,6 +1152,404 @@ $("btn-passkey-add").addEventListener("click", async () => {
     setMsg($("passkey-msg"), err.message, "err");
   }
 });
+
+/* —— Mail —— */
+async function refreshMail() {
+  try {
+    const data = await api("/api/v1/mail/mailboxes");
+    mailState.mailboxes = data.mailboxes || [];
+    const list = $("mail-folder-list");
+    if (!list) return;
+    if (!mailState.mailboxID && mailState.mailboxes.length) {
+      const inbox = mailState.mailboxes.find((m) => m.name === "INBOX") || mailState.mailboxes[0];
+      mailState.mailboxID = inbox.id;
+    }
+    list.innerHTML = mailState.mailboxes.map((mb) => `
+      <li>
+        <button type="button" class="folder-btn${mb.id === mailState.mailboxID ? " is-active" : ""}" data-mb="${escapeHtml(mb.id)}">
+          <span>${escapeHtml(mb.name)}</span>
+          <span class="meta">${mb.unread ? mb.unread + " · " : ""}${mb.messages || 0}</span>
+        </button>
+      </li>`).join("") || `<li class="meta">${t("empty_mailbox")}</li>`;
+    list.querySelectorAll("[data-mb]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        mailState.mailboxID = btn.dataset.mb;
+        mailState.messageID = "";
+        refreshMailMessages();
+        list.querySelectorAll(".folder-btn").forEach((b) => b.classList.toggle("is-active", b.dataset.mb === mailState.mailboxID));
+      });
+    });
+    await refreshMailMessages();
+  } catch (err) {
+    if ($("mail-folder-list")) $("mail-folder-list").innerHTML = `<li class="meta">${escapeHtml(err.message)}</li>`;
+  }
+}
+
+async function refreshMailMessages() {
+  const list = $("mail-msg-list");
+  if (!list || !mailState.mailboxID) return;
+  const mb = mailState.mailboxes.find((m) => m.id === mailState.mailboxID);
+  if ($("mail-folder-title")) $("mail-folder-title").textContent = mb?.name || "INBOX";
+  try {
+    const data = await api("/api/v1/mail/mailboxes/" + encodeURIComponent(mailState.mailboxID) + "/messages?limit=80");
+    const msgs = data.messages || [];
+    if (!msgs.length) {
+      list.innerHTML = `<li class="meta">${t("empty_mailbox")}</li>`;
+      showMailReader(null);
+      return;
+    }
+    list.innerHTML = msgs.map((m) => `
+      <li>
+        <button type="button" class="msg-item${!m.seen ? " unread" : ""}${m.id === mailState.messageID ? " is-active" : ""}" data-msg="${escapeHtml(m.id)}">
+          <strong>${escapeHtml(m.subject || "(no subject)")}</strong>
+          <span class="meta">${escapeHtml(m.from || "")}</span>
+          <span class="meta">${escapeHtml((m.internal_date || "").slice(0, 16).replace("T", " "))}</span>
+        </button>
+      </li>`).join("");
+    list.querySelectorAll("[data-msg]").forEach((btn) => {
+      btn.addEventListener("click", () => openMailMessage(btn.dataset.msg));
+    });
+    if (mailState.messageID) openMailMessage(mailState.messageID);
+    else showMailReader(null);
+  } catch (err) {
+    list.innerHTML = `<li class="meta">${escapeHtml(err.message)}</li>`;
+  }
+}
+
+function showMailReader(msg) {
+  const empty = $("mail-empty");
+  const reader = $("mail-reader");
+  if (!empty || !reader) return;
+  if (!msg) {
+    empty.classList.remove("hidden");
+    reader.classList.add("hidden");
+    return;
+  }
+  empty.classList.add("hidden");
+  reader.classList.remove("hidden");
+  $("mail-subject").textContent = msg.subject || "(no subject)";
+  $("mail-meta").textContent = [msg.from, msg.to, msg.date || msg.internal_date].filter(Boolean).join(" · ");
+  const body = $("mail-body");
+  if (msg.html) {
+    body.innerHTML = msg.html;
+  } else {
+    body.textContent = msg.text || "";
+  }
+}
+
+async function openMailMessage(id) {
+  mailState.messageID = id;
+  try {
+    const msg = await api("/api/v1/mail/messages/" + encodeURIComponent(id));
+    showMailReader(msg);
+    document.querySelectorAll(".msg-item").forEach((el) => {
+      el.classList.toggle("is-active", el.dataset.msg === id);
+      if (el.dataset.msg === id) el.classList.remove("unread");
+    });
+  } catch (err) {
+    showMailReader(null);
+    if ($("mail-empty")) $("mail-empty").textContent = err.message;
+  }
+}
+
+$("btn-mail-refresh")?.addEventListener("click", () => refreshMail());
+$("btn-compose")?.addEventListener("click", () => {
+  $("compose-backdrop")?.classList.remove("hidden");
+  $("compose-to").value = "";
+  $("compose-subject").value = "";
+  $("compose-body").value = "";
+  setMsg($("compose-msg"), "");
+});
+$("btn-compose-close")?.addEventListener("click", () => $("compose-backdrop")?.classList.add("hidden"));
+$("compose-backdrop")?.addEventListener("click", (e) => {
+  if (e.target === $("compose-backdrop")) $("compose-backdrop").classList.add("hidden");
+});
+$("btn-compose-send")?.addEventListener("click", async () => {
+  const to = ($("compose-to").value || "").split(/[,;]/).map((s) => s.trim()).filter(Boolean);
+  setMsg($("compose-msg"), "…");
+  try {
+    await api("/api/v1/mail/send", {
+      method: "POST",
+      body: JSON.stringify({
+        to,
+        subject: $("compose-subject").value,
+        text: $("compose-body").value,
+      }),
+    });
+    setMsg($("compose-msg"), "OK", "ok");
+    $("compose-backdrop")?.classList.add("hidden");
+    refreshMail();
+  } catch (err) {
+    setMsg($("compose-msg"), err.message, "err");
+  }
+});
+$("btn-mail-reply")?.addEventListener("click", () => {
+  const meta = $("mail-meta")?.textContent || "";
+  const from = (meta.split(" · ")[0] || "").trim();
+  $("compose-backdrop")?.classList.remove("hidden");
+  $("compose-to").value = from;
+  $("compose-subject").value = "Re: " + ($("mail-subject")?.textContent || "");
+  $("compose-body").value = "\n\n---\n" + ($("mail-body")?.textContent || "").slice(0, 2000);
+});
+$("btn-mail-delete")?.addEventListener("click", async () => {
+  if (!mailState.messageID || !confirm("Delete?")) return;
+  try {
+    await api("/api/v1/mail/messages/" + encodeURIComponent(mailState.messageID), { method: "DELETE" });
+    mailState.messageID = "";
+    refreshMailMessages();
+  } catch (err) {
+    alert(err.message);
+  }
+});
+
+/* —— Calendar —— */
+async function refreshCalendar() {
+  try {
+    const data = await api("/api/v1/calendar/calendars");
+    const cals = data.calendars || [];
+    if (!calState.calendarID && cals.length) calState.calendarID = cals[0].id;
+    if (!calState.calendarID) {
+      $("cal-event-list").innerHTML = "<li class=\"meta\">No calendar</li>";
+      return;
+    }
+    const ev = await api("/api/v1/calendar/calendars/" + encodeURIComponent(calState.calendarID) + "/events");
+    const events = ev.events || [];
+    $("cal-event-list").innerHTML = events.map((e) => `
+      <li>
+        <span>
+          <strong>${escapeHtml(e.summary || "")}</strong><br/>
+          <span class="meta">${escapeHtml(e.start || "")} → ${escapeHtml(e.end || "")}</span>
+        </span>
+        <button type="button" class="btn-secondary" data-cal-del="${escapeHtml(e.id)}">${t("delete")}</button>
+      </li>`).join("") || "<li class=\"meta\">—</li>";
+    $("cal-event-list").querySelectorAll("[data-cal-del]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        try {
+          await api("/api/v1/calendar/events/" + encodeURIComponent(btn.dataset.calDel), { method: "DELETE" });
+          refreshCalendar();
+        } catch (err) { setMsg($("cal-msg"), err.message, "err"); }
+      });
+    });
+  } catch (err) {
+    setMsg($("cal-msg"), err.message, "err");
+  }
+}
+$("btn-cal-refresh")?.addEventListener("click", () => refreshCalendar());
+$("form-cal-event")?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!calState.calendarID) {
+    try {
+      const data = await api("/api/v1/calendar/calendars");
+      calState.calendarID = (data.calendars || [])[0]?.id || "";
+    } catch {}
+  }
+  if (!calState.calendarID) {
+    setMsg($("cal-msg"), "no calendar", "err");
+    return;
+  }
+  setMsg($("cal-msg"), "…");
+  try {
+    await api("/api/v1/calendar/calendars/" + encodeURIComponent(calState.calendarID) + "/events", {
+      method: "POST",
+      body: JSON.stringify({
+        summary: $("cal-summary").value,
+        start: $("cal-start").value,
+        end: $("cal-end").value,
+      }),
+    });
+    setMsg($("cal-msg"), "OK", "ok");
+    $("form-cal-event").reset();
+    refreshCalendar();
+  } catch (err) {
+    setMsg($("cal-msg"), err.message, "err");
+  }
+});
+
+/* —— Contacts —— */
+async function refreshContacts() {
+  try {
+    const data = await api("/api/v1/contacts/books");
+    const books = data.books || [];
+    if (!contactState.bookID && books.length) contactState.bookID = books[0].id;
+    if (!contactState.bookID) {
+      $("contact-list").innerHTML = "<li class=\"meta\">No address book</li>";
+      return;
+    }
+    const cards = await api("/api/v1/contacts/books/" + encodeURIComponent(contactState.bookID) + "/cards");
+    const list = cards.cards || [];
+    $("contact-list").innerHTML = list.map((c) => `
+      <li>
+        <span>
+          <strong>${escapeHtml(c.fn || "")}</strong><br/>
+          <span class="meta">${escapeHtml(c.email || "")} ${escapeHtml(c.tel || "")}</span>
+        </span>
+        <button type="button" class="btn-secondary" data-card-del="${escapeHtml(c.id)}">${t("delete")}</button>
+      </li>`).join("") || "<li class=\"meta\">—</li>";
+    $("contact-list").querySelectorAll("[data-card-del]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        try {
+          await api("/api/v1/contacts/cards/" + encodeURIComponent(btn.dataset.cardDel), { method: "DELETE" });
+          refreshContacts();
+        } catch (err) { setMsg($("contact-msg"), err.message, "err"); }
+      });
+    });
+  } catch (err) {
+    setMsg($("contact-msg"), err.message, "err");
+  }
+}
+$("btn-contacts-refresh")?.addEventListener("click", () => refreshContacts());
+$("form-contact")?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!contactState.bookID) {
+    try {
+      const data = await api("/api/v1/contacts/books");
+      contactState.bookID = (data.books || [])[0]?.id || "";
+    } catch {}
+  }
+  if (!contactState.bookID) {
+    setMsg($("contact-msg"), "no book", "err");
+    return;
+  }
+  setMsg($("contact-msg"), "…");
+  try {
+    await api("/api/v1/contacts/books/" + encodeURIComponent(contactState.bookID) + "/cards", {
+      method: "POST",
+      body: JSON.stringify({
+        fn: $("contact-fn").value,
+        email: $("contact-email").value,
+        tel: $("contact-tel").value,
+      }),
+    });
+    setMsg($("contact-msg"), "OK", "ok");
+    $("form-contact").reset();
+    refreshContacts();
+  } catch (err) {
+    setMsg($("contact-msg"), err.message, "err");
+  }
+});
+
+/* —— Files —— */
+function joinPath(base, name) {
+  if (!base) return name;
+  return base.replace(/\/+$/, "") + "/" + name;
+}
+
+async function refreshFiles() {
+  const list = $("files-list");
+  if (!list) return;
+  if ($("files-path")) $("files-path").textContent = "/" + (filesState.path || "");
+  try {
+    const q = filesState.path ? "?path=" + encodeURIComponent(filesState.path) : "";
+    const data = await api("/api/v1/files" + q);
+    const entries = data.entries || [];
+    let html = "";
+    if (filesState.path) {
+      html += `<li><button type="button" class="btn-secondary" id="files-up">..</button></li>`;
+    }
+    html += entries.map((e) => `
+      <li>
+        <span>
+          <strong>${escapeHtml(e.name)}</strong>
+          <span class="meta"> · ${e.is_dir ? "dir" : fmtBytes(e.size || 0)}</span>
+        </span>
+        <span class="actions">
+          ${e.is_dir
+            ? `<button type="button" class="btn-secondary" data-dir="${escapeHtml(e.name)}">Open</button>`
+            : `<button type="button" class="btn-secondary" data-dl="${escapeHtml(e.name)}">Download</button>`}
+          <button type="button" class="btn-secondary" data-rm="${escapeHtml(e.name)}">${t("delete")}</button>
+        </span>
+      </li>`).join("") || (!filesState.path ? "<li class=\"meta\">—</li>" : "");
+    list.innerHTML = html;
+    $("files-up")?.addEventListener("click", () => {
+      const parts = filesState.path.split("/").filter(Boolean);
+      parts.pop();
+      filesState.path = parts.join("/");
+      refreshFiles();
+    });
+    list.querySelectorAll("[data-dir]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        filesState.path = joinPath(filesState.path, btn.dataset.dir);
+        refreshFiles();
+      });
+    });
+    list.querySelectorAll("[data-dl]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const path = joinPath(filesState.path, btn.dataset.dl);
+        const headers = {};
+        if (state.tokens?.access_token) headers.Authorization = "Bearer " + state.tokens.access_token;
+        const res = await fetch("/api/v1/files/content?path=" + encodeURIComponent(path), { headers });
+        if (!res.ok) { setMsg($("files-msg"), "download failed", "err"); return; }
+        const blob = await res.blob();
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = btn.dataset.dl;
+        a.click();
+        URL.revokeObjectURL(a.href);
+      });
+    });
+    list.querySelectorAll("[data-rm]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        if (!confirm("Delete " + btn.dataset.rm + "?")) return;
+        try {
+          await api("/api/v1/files?path=" + encodeURIComponent(joinPath(filesState.path, btn.dataset.rm)), {
+            method: "DELETE",
+          });
+          refreshFiles();
+        } catch (err) { setMsg($("files-msg"), err.message, "err"); }
+      });
+    });
+  } catch (err) {
+    setMsg($("files-msg"), err.message, "err");
+  }
+}
+$("btn-files-refresh")?.addEventListener("click", () => refreshFiles());
+$("form-mkdir")?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const name = ($("mkdir-name").value || "").trim();
+  if (!name) return;
+  try {
+    await api("/api/v1/files/mkdir", {
+      method: "POST",
+      body: JSON.stringify({ path: joinPath(filesState.path, name) }),
+    });
+    $("mkdir-name").value = "";
+    refreshFiles();
+  } catch (err) { setMsg($("files-msg"), err.message, "err"); }
+});
+$("files-upload")?.addEventListener("change", async (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  try {
+    const path = joinPath(filesState.path, file.name);
+    const headers = { "Content-Type": "application/octet-stream" };
+    if (state.tokens?.access_token) headers.Authorization = "Bearer " + state.tokens.access_token;
+    const res = await fetch("/api/v1/files/content?path=" + encodeURIComponent(path), {
+      method: "PUT", headers, body: file,
+    });
+    if (!res.ok) throw new Error(await res.text());
+    setMsg($("files-msg"), "uploaded", "ok");
+    refreshFiles();
+  } catch (err) {
+    setMsg($("files-msg"), err.message, "err");
+  }
+  e.target.value = "";
+});
+
+/* —— Nav / i18n —— */
+document.querySelectorAll(".nav-btn").forEach((btn) => {
+  btn.addEventListener("click", () => showApp(btn.dataset.app));
+});
+$("btn-nav-toggle")?.addEventListener("click", () => {
+  setNavOpen(!$("view-account")?.classList.contains("nav-open"));
+});
+$("nav-backdrop")?.addEventListener("click", () => setNavOpen(false));
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && $("view-account")?.classList.contains("nav-open")) {
+    setNavOpen(false);
+  }
+});
+$("lang-select")?.addEventListener("change", (e) => applyLang(e.target.value));
+applyLang(lang);
 
 // Restore session
 try {
