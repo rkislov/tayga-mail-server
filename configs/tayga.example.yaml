@@ -172,7 +172,13 @@ spam:
   # tag_above: 4
 
 # Inbound mail authentication on unauthenticated MX (before virus/spam)
-# Order: SPF → DKIM → ARC verify → DMARC → ARC seal. Each may add Authentication-Results.
+# Order: iprev → SPF → DKIM → ARC verify → DMARC → ARC seal. Each may add Authentication-Results.
+iprev:
+  enabled: false
+  action: tag                # tag | reject (require forward-confirmed PTR)
+  fail_open: true
+  # authserv_id: ""
+
 spf:
   enabled: false
   action: tag                # tag | reject
