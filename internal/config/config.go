@@ -187,6 +187,23 @@ type SMTPConfig struct {
 	DKIM           SMTPDKIMConfig      `yaml:"dkim"`
 	RateLimit      SMTPRateLimitConfig `yaml:"rate_limit"`
 	Queue          SMTPQueueConfig     `yaml:"queue"`
+	MTASTS         MTASTSConfig        `yaml:"mta_sts"` // outbound MTA-STS (RFC 8461)
+	TLSRPT         TLSRPTConfig        `yaml:"tls_rpt"` // outbound TLS reporting (RFC 8460)
+}
+
+// MTASTSConfig enforces recipient MTA-STS policies on direct outbound.
+type MTASTSConfig struct {
+	Enabled  bool          `yaml:"enabled"`
+	Timeout  time.Duration `yaml:"timeout"`   // DNS + HTTPS policy fetch
+	FailOpen bool          `yaml:"fail_open"` // continue if policy fetch fails
+}
+
+// TLSRPTConfig sends RFC 8460 aggregate TLS reports for outbound sessions.
+type TLSRPTConfig struct {
+	Enabled  bool          `yaml:"enabled"`
+	OrgName  string        `yaml:"org_name"`
+	Contact  string        `yaml:"contact"`
+	Interval time.Duration `yaml:"interval"`
 }
 
 // SMTPQueueConfig enables durable outbound retries and DSN bounces.
@@ -386,6 +403,16 @@ func Default() *Config {
 				MaxAttempts:  8,
 				BatchSize:    10,
 			},
+			MTASTS: MTASTSConfig{
+				Enabled:  false,
+				Timeout:  10 * time.Second,
+				FailOpen: true,
+			},
+			TLSRPT: TLSRPTConfig{
+				Enabled:  false,
+				OrgName:  "Tayga Mail",
+				Interval: 24 * time.Hour,
+			},
 		},
 		IMAP:        IMAPConfig{Listen: ":143", IMAPS: ":993"},
 		POP3:        POP3Config{Listen: ":110", POP3S: ":995"},
@@ -526,6 +553,20 @@ func (c *Config) Validate() error {
 	}
 	if c.SMTP.Queue.PollInterval <= 0 {
 		c.SMTP.Queue.PollInterval = 5 * time.Second
+	}
+	if c.SMTP.MTASTS.Enabled && c.SMTP.MTASTS.Timeout <= 0 {
+		c.SMTP.MTASTS.Timeout = 10 * time.Second
+	}
+	if c.SMTP.TLSRPT.Enabled {
+		if c.SMTP.TLSRPT.OrgName == "" {
+			c.SMTP.TLSRPT.OrgName = "Tayga Mail"
+		}
+		if c.SMTP.TLSRPT.Contact == "" {
+			c.SMTP.TLSRPT.Contact = "tlsrpt-noreply@" + c.Server.Hostname
+		}
+		if c.SMTP.TLSRPT.Interval <= 0 {
+			c.SMTP.TLSRPT.Interval = 24 * time.Hour
+		}
 	}
 	if c.SMTP.Queue.MaxAttempts <= 0 {
 		c.SMTP.Queue.MaxAttempts = 8
