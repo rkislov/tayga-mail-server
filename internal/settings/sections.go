@@ -31,7 +31,8 @@ var EditableSections = []string{
 	"log",
 	"seed",
 	"mailstore", // object_store only; root preserved from bootstrap
-	"tls",       // paths / auto_generate; certs via /admin/tls
+	"tls",       // paths / auto_generate; certs via /admin/tls|/admin/certs
+	"xmpp",      // C2S / components; bots via /admin/bots
 }
 
 // RequiresRestart reports whether changing the section needs a process restart
@@ -40,7 +41,7 @@ func RequiresRestart(section string) bool {
 	switch section {
 	case "server", "smtp", "imap", "pop3", "managesieve", "http",
 		"spam", "scan", "dkim_verify", "spf", "iprev", "helo", "greylist", "dmarc", "arc",
-		"ldap", "oidc", "mfa", "flowsync", "ha", "log", "seed", "mailstore", "tls":
+		"ldap", "oidc", "mfa", "flowsync", "ha", "log", "seed", "mailstore", "tls", "xmpp":
 		return true
 	default:
 		return true
@@ -109,6 +110,8 @@ func getSectionPtr(cfg *config.Config, section string) (any, error) {
 		return &cfg.Mailstore, nil
 	case "tls":
 		return &cfg.TLS, nil
+	case "xmpp":
+		return &cfg.XMPP, nil
 	default:
 		return nil, fmt.Errorf("unknown section %q", section)
 	}

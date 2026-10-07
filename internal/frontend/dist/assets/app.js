@@ -30,11 +30,39 @@ const I18N = {
     nav_appearance: "Внешний вид",
     nav_filters: "Фильтры",
     nav_language: "Язык",
+    nav_migration: "Миграция",
+    mig_title: "Миграция",
+    mig_lede: "Импорт почты (IMAP), календаря (CalDAV) и контактов (CardDAV) с другого сервера.",
+    mig_start: "Запустить",
+    mig_cancel: "Отменить",
+    mig_no_jobs: "Задач пока нет",
+    mig_policy: "Миграция",
+    mig_inherit: "Наследовать",
+    mig_on: "Вкл",
+    mig_off: "Выкл",
     nav_admin: "Админ",
     nav_monitor: "Мониторинг",
     nav_tenants: "Домены и пользователи",
     nav_tls: "УЦ",
+    nav_xmpp: "XMPP",
     nav_server: "Сервер",
+    xmpp_title: "XMPP / чат",
+    xmpp_lede: "C2S для внешних клиентов, компоненты (XEP-0114) и HTTP-боты. Веб-чат работает и при выключенном C2S.",
+    xmpp_status: "Состояние",
+    xmpp_enabled: "C2S включён",
+    xmpp_disabled: "C2S выключен",
+    xmpp_webchat: "Веб-чат",
+    xmpp_components: "Компоненты",
+    xmpp_bots: "HTTP-боты",
+    xmpp_bot_name: "Имя бота",
+    xmpp_bot_user: "Пользователь (mailbox)",
+    xmpp_bot_webhook: "Webhook URL (опц.)",
+    xmpp_bot_create: "Создать бота",
+    xmpp_bot_token: "Токен (сохраните — показывается один раз)",
+    xmpp_no_bots: "Ботов пока нет",
+    xmpp_no_components: "Компоненты не настроены (секция xmpp в Сервер)",
+    xmpp_save_cfg: "Сохранить C2S",
+    xmpp_restart_hint: "Смена слушателей XMPP требует перезапуска tayga-mail.",
     ca_title: "Удостоверяющий центр",
     ca_lede: "Каталог сертификатов: самоподписанные, коммерческие PEM и Let’s Encrypt (ACME).",
     ca_list: "Сертификаты",
@@ -157,11 +185,39 @@ const I18N = {
     nav_appearance: "Appearance",
     nav_filters: "Filters",
     nav_language: "Language",
+    nav_migration: "Migration",
+    mig_title: "Migration",
+    mig_lede: "Import mail (IMAP), calendar (CalDAV), and contacts (CardDAV) from another server.",
+    mig_start: "Start",
+    mig_cancel: "Cancel",
+    mig_no_jobs: "No jobs yet",
+    mig_policy: "Migration",
+    mig_inherit: "Inherit",
+    mig_on: "On",
+    mig_off: "Off",
     nav_admin: "Admin",
     nav_monitor: "Monitoring",
     nav_tenants: "Domains & users",
     nav_tls: "CA",
+    nav_xmpp: "XMPP",
     nav_server: "Server",
+    xmpp_title: "XMPP / chat",
+    xmpp_lede: "C2S for external clients, XEP-0114 components, and HTTP bots. Web Chat works even when C2S is off.",
+    xmpp_status: "Status",
+    xmpp_enabled: "C2S enabled",
+    xmpp_disabled: "C2S disabled",
+    xmpp_webchat: "Web chat",
+    xmpp_components: "Components",
+    xmpp_bots: "HTTP bots",
+    xmpp_bot_name: "Bot name",
+    xmpp_bot_user: "User (mailbox)",
+    xmpp_bot_webhook: "Webhook URL (opt.)",
+    xmpp_bot_create: "Create bot",
+    xmpp_bot_token: "Token (save it — shown once)",
+    xmpp_no_bots: "No bots yet",
+    xmpp_no_components: "No components configured (xmpp section in Server)",
+    xmpp_save_cfg: "Save C2S",
+    xmpp_restart_hint: "Changing XMPP listeners requires a tayga-mail restart.",
     ca_title: "Certificate authority",
     ca_lede: "Certificate catalog: self-signed, commercial PEM, and Let’s Encrypt (ACME).",
     ca_list: "Certificates",
@@ -433,8 +489,8 @@ function updateNavUser(email, isAdmin) {
 
 const APPS = [
   "mail", "calendar", "contacts", "files", "chat",
-  "profile", "security", "appearance", "filters", "language",
-  "monitor", "tenants", "tls", "server",
+  "profile", "security", "appearance", "filters", "language", "migration",
+  "monitor", "tenants", "tls", "xmpp", "server",
 ];
 
 const mailState = { mailboxID: "", messageID: "", mailboxes: [], searchQ: "" };
@@ -464,9 +520,11 @@ const APP_I18N = {
   appearance: "nav_appearance",
   filters: "nav_filters",
   language: "nav_language",
+  migration: "nav_migration",
   monitor: "nav_monitor",
   tenants: "nav_tenants",
   tls: "nav_tls",
+  xmpp: "nav_xmpp",
   server: "nav_server",
 };
 
@@ -508,6 +566,8 @@ function showApp(name) {
   else stopMonitorLive();
   if (app === "tenants") { refreshTenant(); refreshAdminUsers(); }
   if (app === "tls") refreshTLS();
+  if (app === "xmpp") refreshXMPP();
+  if (app === "migration") refreshMigration();
   if (app === "server") refreshSettings();
   if (app === "security") refreshPasskeys();
   if (app === "profile") loadMe();
@@ -704,6 +764,7 @@ async function loadMe() {
     $("acct-quota").textContent = q;
     $("acct-role").textContent = me.is_admin ? "admin" : "live";
     $("nav-admin")?.classList.toggle("hidden", !me.is_admin);
+    $("nav-migration")?.classList.toggle("hidden", !(me.features && me.features.migration));
     updateNavUser(me.email, !!me.is_admin);
   } catch (err) {
     if (err.status === 401) return;
@@ -1124,7 +1185,14 @@ async function refreshTenant() {
           <strong>${escapeHtml(d.name)}</strong><br/>
           <span class="meta">${d.user_count || 0} users · ${escapeHtml(d.id)}</span>
         </span>
-        <button type="button" class="btn-secondary" data-del-domain="${escapeHtml(d.name)}" ${d.user_count > 0 ? "disabled" : ""}>Remove</button>
+        <span class="actions">
+          <select class="field-input" data-dom-mig="${escapeHtml(d.id)}" title="${t("mig_policy")}" style="max-width:9rem">
+            <option value="inherit" ${d.migration_enabled === "inherit" || !d.migration_enabled ? "selected" : ""}>${t("mig_inherit")}</option>
+            <option value="on" ${d.migration_enabled === "on" ? "selected" : ""}>${t("mig_on")}</option>
+            <option value="off" ${d.migration_enabled === "off" ? "selected" : ""}>${t("mig_off")}</option>
+          </select>
+          <button type="button" class="btn-secondary" data-del-domain="${escapeHtml(d.name)}" ${d.user_count > 0 ? "disabled" : ""}>Remove</button>
+        </span>
       </li>`).join("") || "<li><span class=\"meta\">No domains yet.</span></li>";
     list.querySelectorAll("[data-del-domain]").forEach((btn) => {
       btn.addEventListener("click", async () => {
@@ -1133,6 +1201,19 @@ async function refreshTenant() {
           await api("/api/v1/admin/domains/" + encodeURIComponent(btn.dataset.delDomain), { method: "DELETE" });
           setMsg($("admin-msg"), "Domain removed.", "ok");
           refreshTenant();
+        } catch (err) {
+          setMsg($("admin-msg"), err.message, "err");
+        }
+      });
+    });
+    list.querySelectorAll("[data-dom-mig]").forEach((sel) => {
+      sel.addEventListener("change", async () => {
+        try {
+          await api("/api/v1/admin/domains/" + encodeURIComponent(sel.dataset.domMig), {
+            method: "PATCH",
+            body: JSON.stringify({ migration_enabled: sel.value }),
+          });
+          setMsg($("admin-msg"), "OK", "ok");
         } catch (err) {
           setMsg($("admin-msg"), err.message, "err");
         }
@@ -1170,11 +1251,29 @@ async function refreshAdminUsers() {
           <span class="meta">${fmtBytes(u.used_bytes)} / ${u.quota_bytes > 0 ? fmtBytes(u.quota_bytes) : "∞"} · ${escapeHtml(u.id)}</span>
         </span>
         <span class="actions">
+          <select class="field-input" data-user-mig="${escapeHtml(u.id)}" title="${t("mig_policy")}" style="max-width:9rem">
+            <option value="inherit" ${u.migration_enabled === "inherit" || !u.migration_enabled ? "selected" : ""}>${t("mig_inherit")}</option>
+            <option value="on" ${u.migration_enabled === "on" ? "selected" : ""}>${t("mig_on")}</option>
+            <option value="off" ${u.migration_enabled === "off" ? "selected" : ""}>${t("mig_off")}</option>
+          </select>
           <button type="button" class="btn-secondary" data-quota="${escapeHtml(u.id)}">Quota</button>
           <button type="button" class="btn-secondary" data-toggle="${escapeHtml(u.id)}" data-enabled="${u.enabled ? "1" : "0"}">${u.enabled ? "Disable" : "Enable"}</button>
           <button type="button" class="btn-secondary" data-pass="${escapeHtml(u.id)}">Reset pw</button>
         </span>
       </li>`).join("");
+    list.querySelectorAll("[data-user-mig]").forEach((sel) => {
+      sel.addEventListener("change", async () => {
+        try {
+          await api("/api/v1/admin/users/" + encodeURIComponent(sel.dataset.userMig), {
+            method: "PATCH",
+            body: JSON.stringify({ migration_enabled: sel.value }),
+          });
+          setMsg($("admin-msg"), "OK", "ok");
+        } catch (err) {
+          setMsg($("admin-msg"), err.message, "err");
+        }
+      });
+    });
     list.querySelectorAll("[data-quota]").forEach((btn) => {
       btn.addEventListener("click", async () => {
         const raw = prompt("Quota bytes (0 = unlimited)", "0");
@@ -1387,6 +1486,242 @@ $("btn-ca-acme")?.addEventListener("click", async () => {
     refreshTLS();
   } catch (err) { setMsg($("tls-msg"), err.message, "err"); }
 });
+
+const xmppState = { status: null, bots: [], users: [] };
+
+function renderXMPPStatus(st) {
+  const el = $("xmpp-status");
+  if (!el) return;
+  if (!st) {
+    el.textContent = "—";
+    return;
+  }
+  const lines = [
+    st.enabled ? t("xmpp_enabled") : t("xmpp_disabled"),
+    "C2S: " + (st.listen || "—") + (st.listen_tls ? " / TLS " + st.listen_tls : ""),
+    "components: " + (st.component_listen || "—"),
+    t("xmpp_webchat") + ": " + (st.web_chat ? "OK" : "—"),
+    st.hostname ? "JID domain: " + st.hostname : "",
+  ].filter(Boolean);
+  el.textContent = lines.join(" · ");
+  if ($("xmpp-enabled")) $("xmpp-enabled").checked = !!st.enabled;
+  if ($("xmpp-listen")) $("xmpp-listen").value = st.listen || "";
+  if ($("xmpp-listen-tls")) $("xmpp-listen-tls").value = st.listen_tls || "";
+  if ($("xmpp-component-listen")) $("xmpp-component-listen").value = st.component_listen || "";
+  if ($("xmpp-require-tls")) $("xmpp-require-tls").checked = !!st.require_tls;
+}
+
+function renderXMPPComponents(list) {
+  const ul = $("xmpp-component-list");
+  if (!ul) return;
+  if (!list || !list.length) {
+    ul.innerHTML = `<li class="meta">${t("xmpp_no_components")}</li>`;
+    return;
+  }
+  ul.innerHTML = list.map((d) => `<li><code>${escapeHtml(d)}</code></li>`).join("");
+}
+
+function renderXMPPBots(bots) {
+  const ul = $("xmpp-bot-list");
+  if (!ul) return;
+  if (!bots || !bots.length) {
+    ul.innerHTML = `<li class="meta">${t("xmpp_no_bots")}</li>`;
+    return;
+  }
+  ul.innerHTML = bots.map((b) => `
+    <li class="ca-cert-item">
+      <div>
+        <strong>${escapeHtml(b.name || b.id)}</strong>
+        <div class="meta">${escapeHtml(b.email || b.user_id || "")} · ${escapeHtml(b.token_prefix || "")}…</div>
+        ${b.webhook_url ? `<div class="meta">${escapeHtml(b.webhook_url)}</div>` : ""}
+      </div>
+      <div class="actions">
+        <button type="button" class="btn-secondary btn-sm" data-xmpp-bot-del="${escapeHtml(b.id)}">${t("ca_delete")}</button>
+      </div>
+    </li>`).join("");
+  ul.querySelectorAll("[data-xmpp-bot-del]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      if (!confirm(t("ca_delete") + "?")) return;
+      try {
+        await api("/api/v1/admin/bots/" + encodeURIComponent(btn.dataset.xmppBotDel), { method: "DELETE" });
+        refreshXMPP();
+      } catch (err) { setMsg($("xmpp-msg"), err.message, "err"); }
+    });
+  });
+}
+
+async function fillXMPPUsers() {
+  const sel = $("xmpp-bot-user");
+  if (!sel) return;
+  try {
+    const data = await api("/api/v1/admin/users");
+    const users = data.users || data || [];
+    xmppState.users = Array.isArray(users) ? users : [];
+    const cur = sel.value;
+    sel.innerHTML = "";
+    xmppState.users.forEach((u) => {
+      const opt = document.createElement("option");
+      opt.value = u.id;
+      opt.textContent = u.email || u.id;
+      sel.appendChild(opt);
+    });
+    if (cur) sel.value = cur;
+  } catch (_) {
+    sel.innerHTML = "";
+  }
+}
+
+async function refreshXMPP() {
+  setMsg($("xmpp-msg"), "");
+  $("xmpp-bot-token")?.classList.add("hidden");
+  try {
+    const data = await api("/api/v1/admin/bots");
+    xmppState.status = data.status || null;
+    xmppState.bots = data.bots || [];
+    renderXMPPStatus(data.status);
+    renderXMPPComponents(data.components || (data.status && data.status.components) || []);
+    renderXMPPBots(xmppState.bots);
+    await fillXMPPUsers();
+    // merge live settings for form accuracy
+    try {
+      const settings = await api("/api/v1/admin/settings/xmpp");
+      const x = settings.value || {};
+      if ($("xmpp-enabled")) $("xmpp-enabled").checked = !!x.enabled;
+      if ($("xmpp-listen") && x.listen != null) $("xmpp-listen").value = x.listen;
+      if ($("xmpp-listen-tls") && x.listen_tls != null) $("xmpp-listen-tls").value = x.listen_tls;
+      if ($("xmpp-component-listen") && x.component_listen != null) $("xmpp-component-listen").value = x.component_listen;
+      if ($("xmpp-require-tls")) $("xmpp-require-tls").checked = !!x.require_tls;
+    } catch (_) {}
+  } catch (err) {
+    if ($("xmpp-status")) $("xmpp-status").textContent = err.message;
+    setMsg($("xmpp-msg"), err.message, "err");
+  }
+}
+
+$("btn-xmpp-refresh")?.addEventListener("click", () => refreshXMPP());
+$("btn-xmpp-save")?.addEventListener("click", async () => {
+  setMsg($("xmpp-msg"), "…");
+  try {
+    let cur = {};
+    try {
+      const settings = await api("/api/v1/admin/settings/xmpp");
+      cur = settings.value || {};
+    } catch (_) {}
+    const body = {
+      ...cur,
+      enabled: !!$("xmpp-enabled")?.checked,
+      listen: $("xmpp-listen")?.value || ":5222",
+      listen_tls: $("xmpp-listen-tls")?.value || "",
+      component_listen: $("xmpp-component-listen")?.value || "",
+      require_tls: !!$("xmpp-require-tls")?.checked,
+    };
+    const out = await api("/api/v1/admin/settings/xmpp", {
+      method: "PUT",
+      body: JSON.stringify(body),
+    });
+    setMsg($("xmpp-msg"), out.restart_required
+      ? t("xmpp_restart_hint")
+      : "OK", out.restart_required ? "err" : "ok");
+    refreshXMPP();
+  } catch (err) { setMsg($("xmpp-msg"), err.message, "err"); }
+});
+$("btn-xmpp-bot-create")?.addEventListener("click", async () => {
+  const name = ($("xmpp-bot-name")?.value || "").trim();
+  const userID = $("xmpp-bot-user")?.value || "";
+  if (!name || !userID) {
+    setMsg($("xmpp-msg"), "name + user required", "err");
+    return;
+  }
+  setMsg($("xmpp-msg"), "…");
+  try {
+    const info = await api("/api/v1/admin/bots", {
+      method: "POST",
+      body: JSON.stringify({
+        name,
+        user_id: userID,
+        webhook_url: ($("xmpp-bot-webhook")?.value || "").trim(),
+      }),
+    });
+    const tok = $("xmpp-bot-token");
+    if (tok && info.token) {
+      tok.textContent = t("xmpp_bot_token") + ":\n" + info.token;
+      tok.classList.remove("hidden");
+    }
+    if ($("xmpp-bot-name")) $("xmpp-bot-name").value = "";
+    if ($("xmpp-bot-webhook")) $("xmpp-bot-webhook").value = "";
+    setMsg($("xmpp-msg"), "OK", "ok");
+    refreshXMPP();
+  } catch (err) { setMsg($("xmpp-msg"), err.message, "err"); }
+});
+
+async function refreshMigration() {
+  setMsg($("mig-msg"), "");
+  const list = $("mig-job-list");
+  if (!list) return;
+  try {
+    const data = await api("/api/v1/migration");
+    if (!data.allowed) {
+      list.innerHTML = `<li class="meta">${t("mig_no_jobs")}</li>`;
+      return;
+    }
+    const jobs = data.jobs || [];
+    if (!jobs.length) {
+      list.innerHTML = `<li class="meta">${t("mig_no_jobs")}</li>`;
+      return;
+    }
+    list.innerHTML = jobs.map((j) => `
+      <li class="ca-cert-item">
+        <div>
+          <strong>${escapeHtml(j.kind)}</strong> · ${escapeHtml(j.status)}
+          <div class="meta">${j.copied || 0} copied · ${j.skipped || 0} skipped · ${j.errors || 0} errors</div>
+          ${j.last_error ? `<div class="meta">${escapeHtml(j.last_error)}</div>` : ""}
+        </div>
+        <div class="actions">
+          ${j.status === "pending" || j.status === "running" || j.status === "paused"
+            ? `<button type="button" class="btn-secondary btn-sm" data-mig-cancel="${escapeHtml(j.id)}">${t("mig_cancel")}</button>`
+            : ""}
+        </div>
+      </li>`).join("");
+    list.querySelectorAll("[data-mig-cancel]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        try {
+          await api("/api/v1/migration/jobs/" + encodeURIComponent(btn.dataset.migCancel) + "/cancel", { method: "POST" });
+          refreshMigration();
+        } catch (err) { setMsg($("mig-msg"), err.message, "err"); }
+      });
+    });
+  } catch (err) {
+    list.innerHTML = `<li class="meta">${escapeHtml(err.message)}</li>`;
+  }
+}
+
+async function startMigration(kind, body) {
+  setMsg($("mig-msg"), "…");
+  try {
+    await api("/api/v1/migration/jobs", { method: "POST", body: JSON.stringify({ kind, ...body }) });
+    setMsg($("mig-msg"), "OK", "ok");
+    refreshMigration();
+  } catch (err) { setMsg($("mig-msg"), err.message, "err"); }
+}
+
+$("btn-mig-refresh")?.addEventListener("click", () => refreshMigration());
+$("btn-mig-imap")?.addEventListener("click", () => startMigration("imap", {
+  host: ($("mig-imap-host")?.value || "").trim(),
+  port: Number($("mig-imap-port")?.value || 993),
+  tls: !!$("mig-imap-tls")?.checked,
+  username: ($("mig-imap-user")?.value || "").trim(),
+  password: $("mig-imap-pass")?.value || "",
+}));
+$("btn-mig-cal")?.addEventListener("click", () => startMigration("caldav", {
+  url: ($("mig-cal-url")?.value || "").trim(),
+  username: ($("mig-cal-user")?.value || "").trim(),
+  password: $("mig-cal-pass")?.value || "",
+}));
+$("btn-mig-card")?.addEventListener("click", () => startMigration("carddav", {
+  url: ($("mig-card-url")?.value || "").trim(),
+  username: ($("mig-card-user")?.value || "").trim(),
+  password: $("mig-card-pass")?.value || "",
+}));
 
 const settingsState = { all: null, certs: [] };
 

@@ -33,10 +33,12 @@ type Driver interface {
 	ListDomainsByTenant(ctx context.Context, tenantID string) ([]*Domain, error)
 	CountUsersByDomain(ctx context.Context, domainID string) (int, error)
 	DeleteDomain(ctx context.Context, tenantID, domainID string) error
+	UpdateDomainMigration(ctx context.Context, domainID, migrationEnabled string) error
 
 	CreateUser(ctx context.Context, u *User) (*User, error)
 	UpdateUserRoles(ctx context.Context, userID, roles string) error
 	UpdateUserServiceClass(ctx context.Context, userID, serviceClassID string) error
+	UpdateUserMigration(ctx context.Context, userID, migrationEnabled string) error
 	GetUserByEmail(ctx context.Context, email string) (*User, error)
 	GetUserByID(ctx context.Context, id string) (*User, error)
 	UpdateUserPassword(ctx context.Context, userID, passwordHash string) error
@@ -46,6 +48,9 @@ type Driver interface {
 	ListUsersByTenant(ctx context.Context, tenantID string) ([]*User, error)
 	ListUsersByDomain(ctx context.Context, domainID string) ([]*User, error)
 	SumMailboxBytes(ctx context.Context, userID string) (int64, error)
+	MessageExistsByMessageID(ctx context.Context, mailboxID, messageID string, size int64) (bool, error)
+	CalendarObjectExistsByUID(ctx context.Context, calendarID, uid string) (bool, error)
+	AddressObjectExistsByUID(ctx context.Context, bookID, uid string) (bool, error)
 
 	SetDomainAdminDomains(ctx context.Context, userID string, domainIDs []string) error
 	ListDomainAdminDomains(ctx context.Context, userID string) ([]string, error)
@@ -206,26 +211,28 @@ type Tenant struct {
 }
 
 type Domain struct {
-	ID        string
-	TenantID  string
-	Name      string
-	CreatedAt time.Time
+	ID               string
+	TenantID         string
+	Name             string
+	MigrationEnabled string // inherit | on | off
+	CreatedAt        time.Time
 }
 
 type User struct {
-	ID             string
-	TenantID       string
-	DomainID       string
-	Email          string
-	LocalPart      string
-	DisplayName    string
-	PasswordHash   string
-	AuthSource     string // local | ldap | oidc
-	QuotaBytes     int64
-	Enabled        bool
-	Roles          string // comma-separated: global_admin, domain_admin, …
-	ServiceClassID string
-	CreatedAt      time.Time
+	ID               string
+	TenantID         string
+	DomainID         string
+	Email            string
+	LocalPart        string
+	DisplayName      string
+	PasswordHash     string
+	AuthSource       string // local | ldap | oidc
+	QuotaBytes       int64
+	Enabled          bool
+	Roles            string // comma-separated: global_admin, domain_admin, …
+	ServiceClassID   string
+	MigrationEnabled string // inherit | on | off
+	CreatedAt        time.Time
 }
 
 type DomainAdminBinding struct {

@@ -32,7 +32,8 @@ func (s *Server) handleAdminTenant(w http.ResponseWriter, r *http.Request) {
 	for _, d := range domains {
 		n, _ := s.store.CountUsersByDomain(r.Context(), d.ID)
 		outDomains = append(outDomains, map[string]any{
-			"id": d.ID, "name": d.Name, "user_count": n, "created_at": d.CreatedAt,
+			"id": d.ID, "name": d.Name, "user_count": n,
+			"migration_enabled": d.MigrationEnabled, "created_at": d.CreatedAt,
 		})
 	}
 	users, _ := s.store.ListUsersByTenant(r.Context(), admin.TenantID)
@@ -67,10 +68,36 @@ func (s *Server) handleAdminDomains(w http.ResponseWriter, r *http.Request) {
 			}
 			n, _ := s.store.CountUsersByDomain(r.Context(), d.ID)
 			out = append(out, map[string]any{
-				"id": d.ID, "name": d.Name, "user_count": n, "created_at": d.CreatedAt,
+				"id": d.ID, "name": d.Name, "user_count": n,
+				"migration_enabled": d.MigrationEnabled, "created_at": d.CreatedAt,
 			})
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"domains": out})
+
+	case path != "" && r.Method == http.MethodPatch:
+		var req struct {
+			MigrationEnabled *string `json:"migration_enabled"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+			return
+		}
+		target := s.resolveDomain(r, admin, path)
+		if target == nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
+		if !s.adminCanManageDomain(r, admin, target.ID) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+			return
+		}
+		if req.MigrationEnabled != nil {
+			if err := s.store.UpdateDomainMigration(r.Context(), target.ID, *req.MigrationEnabled); err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+				return
+			}
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 
 	case r.Method == http.MethodPost && path == "":
 		if !s.isGlobalAdminUser(admin) {
@@ -101,24 +128,8 @@ func (s *Server) handleAdminDomains(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusCreated, map[string]any{"id": d.ID, "name": d.Name})
 
 	case r.Method == http.MethodDelete && path != "":
-		// path is domain name or UUID
-		var target *storage.Domain
-		if d, err := s.store.GetDomainByName(r.Context(), path); err == nil {
-			target = d
-		} else {
-			domains, err := s.store.ListDomainsByTenant(r.Context(), admin.TenantID)
-			if err != nil {
-				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-				return
-			}
-			for _, d := range domains {
-				if d.ID == path {
-					target = d
-					break
-				}
-			}
-		}
-		if target == nil || target.TenantID != admin.TenantID {
+		target := s.resolveDomain(r, admin, path)
+		if target == nil {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 			return
 		}
@@ -135,4 +146,19 @@ func (s *Server) handleAdminDomains(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 	}
+}
+
+func (s *Server) resolveDomain(r *http.Request, admin *storage.User, path string) *storage.Domain {
+	if d, err := s.store.GetDomainByName(r.Context(), path); err == nil {
+		if d.TenantID == admin.TenantID {
+			return d
+		}
+		return nil
+	}
+	if d, err := s.store.GetDomainByID(r.Context(), path); err == nil {
+		if d.TenantID == admin.TenantID {
+			return d
+		}
+	}
+	return nil
 }

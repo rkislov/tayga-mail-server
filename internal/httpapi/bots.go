@@ -32,6 +32,7 @@ func (s *Server) handleAdminBots(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
+			"status":     s.xmpp.Status(),
 			"bots":       list,
 			"components": s.xmpp.ComponentDomains(),
 		})
