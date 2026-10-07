@@ -30,6 +30,9 @@ pop3:
   listen: ":1110"
   pop3s: ""
 
+managesieve:
+  listen: ":14190"
+
 tls:
   cert_file: ""
   key_file: ""

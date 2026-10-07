@@ -16,8 +16,10 @@ import (
 	imapserver "github.com/tayga/tms/internal/imap"
 	"github.com/tayga/tms/internal/logging"
 	"github.com/tayga/tms/internal/mailstore"
+	"github.com/tayga/tms/internal/managesieve"
 	"github.com/tayga/tms/internal/pop3"
 	"github.com/tayga/tms/internal/seed"
+	"github.com/tayga/tms/internal/sieve"
 	"github.com/tayga/tms/internal/smtp"
 	"github.com/tayga/tms/internal/storage"
 )
@@ -60,12 +62,13 @@ func run(cfgPath string) error {
 
 	authn := auth.NewLayer(store)
 	ms := mailstore.New(cfg.Mailstore.Root)
+	sieveEng := sieve.New(store, ms, log)
 
 	if err := seed.Run(ctx, cfg.Seed, store, authn.Hasher, ms, log); err != nil {
 		return fmt.Errorf("seed: %w", err)
 	}
 
-	smtpSrv := smtp.New(cfg, log, store, authn, ms)
+	smtpSrv := smtp.New(cfg, log, store, authn, ms, sieveEng)
 	if err := smtpSrv.Start(ctx); err != nil {
 		return fmt.Errorf("smtp: %w", err)
 	}
@@ -78,6 +81,11 @@ func run(cfgPath string) error {
 	pop3Srv := pop3.New(cfg, log, store, authn, ms)
 	if err := pop3Srv.Start(ctx); err != nil {
 		return fmt.Errorf("pop3: %w", err)
+	}
+
+	msieveSrv := managesieve.New(cfg, log, store, authn)
+	if err := msieveSrv.Start(ctx); err != nil {
+		return fmt.Errorf("managesieve: %w", err)
 	}
 
 	httpSrv := httpapi.New(cfg.HTTP.Listen, log, store)
@@ -95,6 +103,7 @@ func run(cfgPath string) error {
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	_ = msieveSrv.Shutdown(shutdownCtx)
 	_ = pop3Srv.Shutdown(shutdownCtx)
 	_ = imapSrv.Shutdown(shutdownCtx)
 	_ = smtpSrv.Shutdown(shutdownCtx)

@@ -23,13 +23,14 @@ cmd/tayga
 
 ## Protocols (dev ports)
 
-| Protocol   | Config              | Default |
-|------------|---------------------|---------|
-| SMTP MX    | `smtp.mx`           | `:1025` |
-| Submission | `smtp.submission`   | `:1587` |
-| IMAP       | `imap.listen`       | `:1143` |
-| POP3       | `pop3.listen`       | `:1110` |
-| HTTP       | `http.listen`       | `:8080` |
+| Protocol    | Config                 | Default   |
+|-------------|------------------------|-----------|
+| SMTP MX     | `smtp.mx`              | `:1025`   |
+| Submission  | `smtp.submission`      | `:1587`   |
+| IMAP        | `imap.listen`          | `:1143`   |
+| POP3        | `pop3.listen`          | `:1110`   |
+| ManageSieve | `managesieve.listen`   | `:14190`  |
+| HTTP        | `http.listen`          | `:8080`   |
 
 ## IMAP MVP
 
@@ -39,6 +40,13 @@ CREATE/DELETE/RENAME. Auth via local Argon2id. Bodies read from Maildir.
 ## POP3 MVP
 
 USER/PASS, STAT, LIST, RETR, DELE (+QUIT), RSET, UIDL, TOP, CAPA on INBOX.
+
+## Sieve MVP
+
+- Interpreter: `foxcpp/go-sieve` (fileinto, reject, envelope, imap4flags, variables, relational, copy, subaddress, body).
+- Active script runs on SMTP local delivery.
+- ManageSieve (RFC 5804 subset): AUTHENTICATE PLAIN, PUTSCRIPT, GETSCRIPT, LISTSCRIPTS, SETACTIVE, DELETESCRIPT, CHECKSCRIPT, RENAMESCRIPT.
+- Vacation and outbound `redirect` to external MTAs are not implemented yet (local redirect only).
 
 ## Build
 
@@ -51,4 +59,4 @@ Seed user: `admin@example.com` / `changeme`
 
 ## Next milestones
 
-Sieve/ManageSieve → multi-tenant LDAP → OIDC/MFA → CalDAV/CardDAV → …
+LDAP per-domain → OIDC/MFA → CalDAV/CardDAV → ActiveSync/EWS → …
