@@ -5,23 +5,26 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/tayga/tms/internal/auth"
 	"github.com/tayga/tms/internal/frontend"
 	"github.com/tayga/tms/internal/storage"
 )
 
-// Server exposes health, metrics, and the embedded Web UI.
+// Server exposes health, metrics, auth API, and the embedded Web UI.
 type Server struct {
 	log    *slog.Logger
 	store  storage.Driver
+	authn  *auth.Layer
 	addr   string
 	server *http.Server
 }
 
-func New(addr string, log *slog.Logger, store storage.Driver) *Server {
-	return &Server{addr: addr, log: log, store: store}
+func New(addr string, log *slog.Logger, store storage.Driver, authn *auth.Layer) *Server {
+	return &Server{addr: addr, log: log, store: store, authn: authn}
 }
 
 func (s *Server) Start(ctx context.Context) error {
@@ -29,6 +32,15 @@ func (s *Server) Start(ctx context.Context) error {
 	mux.HandleFunc("/healthz", s.handleHealthz)
 	mux.HandleFunc("/readyz", s.handleReadyz)
 	mux.Handle("/metrics", promhttp.Handler())
+
+	mux.HandleFunc("/api/v1/auth/login", s.handleLogin)
+	mux.HandleFunc("/api/v1/auth/mfa/verify", s.handleMFAVerify)
+	mux.HandleFunc("/api/v1/auth/token", s.handleToken)
+	mux.HandleFunc("/api/v1/auth/mfa/setup", s.handleMFASetup)
+	mux.HandleFunc("/api/v1/auth/mfa/confirm", s.handleMFAConfirm)
+	mux.HandleFunc("/api/v1/auth/mfa/disable", s.handleMFADisable)
+	mux.HandleFunc("/api/v1/auth/oidc/", s.handleOIDCRoutes)
+
 	mux.Handle("/", frontend.Handler())
 
 	s.server = &http.Server{
@@ -51,6 +63,24 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 	}()
 	return nil
+}
+
+func (s *Server) handleOIDCRoutes(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/api/v1/auth/oidc/")
+	if strings.HasSuffix(path, "/start") || strings.HasSuffix(path, "/start/") {
+		s.handleOIDCStart(w, r)
+		return
+	}
+	if strings.HasSuffix(path, "/callback") || strings.HasSuffix(path, "/callback/") || path == "callback" {
+		s.handleOIDCCallback(w, r)
+		return
+	}
+	// Domain-scoped callback: /api/v1/auth/oidc/{domain}/callback
+	if strings.Contains(path, "/callback") {
+		s.handleOIDCCallback(w, r)
+		return
+	}
+	writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 }
 
 func (s *Server) handleHealthz(w http.ResponseWriter, _ *http.Request) {
