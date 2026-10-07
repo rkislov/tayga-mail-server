@@ -1,6 +1,7 @@
 package smtp
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -19,7 +20,7 @@ func TestDMARCPassDKIMAligned(t *testing.T) {
 		},
 	}
 	msg := []byte("From: User <a@example.com>\r\nSubject: hi\r\n\r\nbody\r\n")
-	out, err := p.apply(msg, "other@evil.test", "1.2.3.4", spf.Fail, []string{"example.com"})
+	out, err := p.apply(context.Background(), msg, "other@evil.test", "1.2.3.4", spf.Fail, []string{"example.com"}, "none")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +37,7 @@ func TestDMARCFollowReject(t *testing.T) {
 		},
 	}
 	msg := []byte("From: a@example.com\r\n\r\nx\r\n")
-	_, err := p.apply(msg, "a@example.com", "1.2.3.4", spf.Fail, nil)
+	_, err := p.apply(context.Background(), msg, "a@example.com", "1.2.3.4", spf.Fail, nil, "none")
 	if err == nil {
 		t.Fatal("expected reject")
 	}
@@ -48,12 +49,33 @@ func TestDMARCNoPolicy(t *testing.T) {
 		lookup: func(string) (*dmarc.Record, error) { return nil, dmarc.ErrNoPolicy },
 	}
 	msg := []byte("From: a@example.com\r\n\r\nx\r\n")
-	out, err := p.apply(msg, "a@example.com", "1.2.3.4", spf.Fail, nil)
+	out, err := p.apply(context.Background(), msg, "a@example.com", "1.2.3.4", spf.Fail, nil, "none")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(out), "dmarc=none") {
 		t.Fatalf("%s", out)
+	}
+}
+
+func TestDMARCARCTrustSoftensReject(t *testing.T) {
+	p := &dmarcPolicy{
+		action: "follow", arcTrust: true, authservID: "mail.test",
+		lookup: func(string) (*dmarc.Record, error) {
+			return &dmarc.Record{Policy: dmarc.PolicyReject, DKIMAlignment: dmarc.AlignmentRelaxed, SPFAlignment: dmarc.AlignmentRelaxed}, nil
+		},
+	}
+	msg := []byte("From: a@example.com\r\n\r\nx\r\n")
+	out, err := p.apply(context.Background(), msg, "a@example.com", "1.2.3.4", spf.Fail, nil, "pass")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(out)
+	if !strings.Contains(s, "dmarc=fail") {
+		t.Fatalf("expected dmarc=fail: %s", s)
+	}
+	if !strings.Contains(s, "reason=\"arc-pass\"") {
+		t.Fatalf("expected arc-pass reason: %s", s)
 	}
 }
 

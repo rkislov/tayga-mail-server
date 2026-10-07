@@ -32,7 +32,7 @@ func TestDMARCAggAndXML(t *testing.T) {
 	}
 	defer store.Close()
 
-	rep := newDMARCReporter(store, "Tayga", "dmarc@mail.test", "mail.test", time.Hour, nil)
+	rep := newDMARCReporter(store, "Tayga", "dmarc@mail.test", "mail.test", time.Hour, true, false, nil)
 	rep.Record(&dmarcEvent{
 		Domain: "example.com", HeaderFrom: "example.com", SourceIP: "1.2.3.4",
 		EnvelopeDomain: "example.com", SPFResult: "pass", DKIMResult: "pass",

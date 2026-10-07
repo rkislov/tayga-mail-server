@@ -3,6 +3,7 @@ package smtp
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"log/slog"
 	"net/mail"
@@ -18,9 +19,11 @@ import (
 type dmarcPolicy struct {
 	action     string // tag | reject | follow
 	failOpen   bool
+	arcTrust   bool // ARC cv=pass softens DMARC fail (no reject)
 	authservID string
 	lookup     func(domain string) (*dmarc.Record, error)
 	recorder   dmarcRecorder
+	failures   dmarcFailReporter
 	log        *slog.Logger
 }
 
@@ -28,11 +31,16 @@ type dmarcRecorder interface {
 	Record(ev *dmarcEvent)
 }
 
+type dmarcFailReporter interface {
+	SendFailure(ctx context.Context, ev *dmarcEvent, ruf []string, authResults string, original []byte)
+}
+
 // dmarcEvent is one inbound DMARC evaluation for aggregate reporting.
 type dmarcEvent struct {
 	Domain         string
 	HeaderFrom     string
 	SourceIP       string
+	EnvelopeFrom   string
 	EnvelopeDomain string
 	SPFResult      string // pass|fail|none
 	DKIMResult     string // pass|fail|none
@@ -41,7 +49,7 @@ type dmarcEvent struct {
 	RUA            []string
 }
 
-func (p *dmarcPolicy) apply(data []byte, envelopeFrom, clientIP string, spfRes spf.Result, dkimPassDomains []string) ([]byte, error) {
+func (p *dmarcPolicy) apply(ctx context.Context, data []byte, envelopeFrom, clientIP string, spfRes spf.Result, dkimPassDomains []string, arcCV string) ([]byte, error) {
 	if p == nil {
 		return data, nil
 	}
@@ -53,6 +61,7 @@ func (p *dmarcPolicy) apply(data []byte, envelopeFrom, clientIP string, spfRes s
 		Domain:         fromDomain,
 		HeaderFrom:     fromDomain,
 		SourceIP:       clientIP,
+		EnvelopeFrom:   strings.Trim(strings.ToLower(strings.TrimSpace(envelopeFrom)), "<>"),
 		EnvelopeDomain: emailDomain(envelopeFrom),
 		SPFResult:      spfResultString(spfRes),
 		DKIMResult:     dkimResultString(dkimPassDomains, fromDomain),
@@ -122,28 +131,63 @@ func (p *dmarcPolicy) apply(data []byte, envelopeFrom, clientIP string, spfRes s
 	if rec.Policy != "" {
 		ar += " policy." + string(rec.Policy)
 	}
-	data = scan.InjectHeader(data, "Authentication-Results", ar)
 
 	if pass {
+		data = scan.InjectHeader(data, "Authentication-Results", ar)
 		ev.Disposition = "none"
 		return data, nil
 	}
+
+	// ARC trust: valid chain softens disposition (still record dmarc=fail).
+	arcSoft := p.arcTrust && strings.EqualFold(arcCV, "pass")
+	if arcSoft {
+		ar += " reason=\"arc-pass\""
+	}
+	data = scan.InjectHeader(data, "Authentication-Results", ar)
+
 	policy := rec.Policy
 	if policy == "" {
 		policy = dmarc.PolicyNone
 	}
+
+	wantReject := false
+	wantQuarantine := false
 	switch p.action {
 	case "reject":
-		ev.Disposition = "reject"
-		return nil, &gosmtp.SMTPError{Code: 550, EnhancedCode: gosmtp.EnhancedCode{5, 7, 1}, Message: "DMARC validation failed"}
+		wantReject = true
 	case "follow":
 		if policy == dmarc.PolicyReject {
-			ev.Disposition = "reject"
-			return nil, &gosmtp.SMTPError{Code: 550, EnhancedCode: gosmtp.EnhancedCode{5, 7, 1}, Message: "Message rejected by DMARC policy"}
+			wantReject = true
 		}
 		if policy == dmarc.PolicyQuarantine {
-			ev.Disposition = "quarantine"
+			wantQuarantine = true
 		}
+	}
+
+	if arcSoft {
+		ev.Disposition = "none"
+		wantReject = false
+		wantQuarantine = false
+	} else if wantReject {
+		ev.Disposition = "reject"
+	} else if wantQuarantine {
+		ev.Disposition = "quarantine"
+	}
+
+	if p.failures != nil && shouldSendFailureReport(rec.FailureOptions, spfAligned, dkimAligned) {
+		ruf := append([]string{}, rec.ReportURIFailure...)
+		authLine := ar
+		orig := append([]byte(nil), data...)
+		evCopy := *ev
+		go p.failures.SendFailure(context.Background(), &evCopy, ruf, authLine, orig)
+	}
+
+	if wantReject {
+		msg := "DMARC validation failed"
+		if p.action == "follow" {
+			msg = "Message rejected by DMARC policy"
+		}
+		return nil, &gosmtp.SMTPError{Code: 550, EnhancedCode: gosmtp.EnhancedCode{5, 7, 1}, Message: msg}
 	}
 	return data, nil
 }

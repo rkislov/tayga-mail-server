@@ -175,19 +175,25 @@ After virus scan and before Sieve, optional `spam:` checks Rspamd HTTP `/checkv2
 
 Admin: `GET /api/v1/admin/quarantine` (folders Quarantine+Junk), `POST …/{id}/release` (move to INBOX), `DELETE …/{id}` (Monitoring card).
 
-## Inbound mail auth (SPF / DKIM / DMARC)
+## Inbound mail auth (SPF / DKIM / DMARC / ARC)
 
 On unauthenticated MX (before virus/spam), optional checks in order:
 
 1. `spf:` — `blitiri.com.ar/go/spf` against client IP + MAIL FROM
 2. `dkim_verify:` — DNS TXT public key via go-msgauth
-3. `dmarc:` — policy lookup + SPF/DKIM alignment (`action: follow` honors `p=reject`)
+3. `arc:` verify — existing ARC chain (`Authentication-Results: … arc=pass|fail|none`)
+4. `dmarc:` — policy lookup + SPF/DKIM alignment (`action: follow` honors `p=reject`); with `dmarc.arc_trust: true`, ARC `cv=pass` softens fail (no reject, still records `dmarc=fail reason="arc-pass"`)
+5. `arc:` seal — optional new ARC set with our auth results (`seal: true` + RSA key)
 
-Each step may inject `Authentication-Results`. Authenticated submission skips all three. Admin quarantine UI shows spam/virus headers, filters (`folder`/`kind`/`q`), and message preview. See `configs/tayga.example.yaml`.
+Each step may inject `Authentication-Results`. Authenticated submission skips all of these. Admin quarantine UI shows spam/virus headers, filters (`folder`/`kind`/`q`), and message preview. See `configs/tayga.example.yaml`.
 
 ### DMARC aggregate reports (rua)
 
 With `dmarc.report.enabled`, each evaluation is aggregated in `dmarc_agg` (per UTC day). A background flusher builds RFC 7489 XML (`gzip`), emails `mailto:` addresses from the published `rua=`, and deletes sent days. Requires outbound (`smtp.queue` / relay / `outbound_direct`).
+
+### DMARC failure reports (ruf)
+
+With `dmarc.report.failure`, a DMARC fail that matches published `fo=` (default `0` = all mechanisms failed alignment) triggers an RFC 6591 AFRF message to `mailto:` addresses in `ruf=`. Sent immediately via the same outbound path as rua.
 
 ## LDAP group sync
 
@@ -197,8 +203,4 @@ With `groups.nested: true`, membership is expanded transitively: `nested_mode: w
 
 ## ARC (Authenticated Received Chain)
 
-`arc:` on unauthenticated MX (after SPF/DKIM/DMARC): verify the existing chain (`Authentication-Results: … arc=pass|fail|none`) and optionally seal a new ARC set with our auth results (`seal: true` + RSA key). Uses `github.com/rest-mail/go-arc` (RFC 8617).
-
-## Next milestones
-
-DMARC failure reports (ruf); ARC trust policy for DMARC override.
+`arc:` uses `github.com/rest-mail/go-arc` (RFC 8617). Verify runs before DMARC so `dmarc.arc_trust` can override disposition; seal runs after so the sealed set includes DMARC results.

@@ -72,15 +72,17 @@ type DMARCConfig struct {
 	Action     string            `yaml:"action"` // tag | reject | follow (honor p=reject)
 	FailOpen   bool              `yaml:"fail_open"`
 	AuthservID string            `yaml:"authserv_id"`
+	ARCTrust   bool              `yaml:"arc_trust"` // ARC cv=pass softens DMARC fail (no reject)
 	Report     DMARCReportConfig `yaml:"report"`
 }
 
-// DMARCReportConfig sends RFC 7489 aggregate (rua) reports.
+// DMARCReportConfig sends RFC 7489 aggregate (rua) and failure (ruf) reports.
 type DMARCReportConfig struct {
-	Enabled  bool          `yaml:"enabled"`
+	Enabled  bool          `yaml:"enabled"`  // aggregate rua
+	Failure  bool          `yaml:"failure"`  // per-message ruf on DMARC fail
 	OrgName  string        `yaml:"org_name"` // report_metadata/org_name
 	Contact  string        `yaml:"contact"`  // report From / metadata email
-	Interval time.Duration `yaml:"interval"` // flush cadence (default 24h)
+	Interval time.Duration `yaml:"interval"` // rua flush cadence (default 24h)
 }
 
 // SpamConfig configures Rspamd (or similar) scoring for inbound SMTP.
@@ -452,8 +454,10 @@ func Default() *Config {
 			Enabled:  false,
 			Action:   "tag",
 			FailOpen: true,
+			ARCTrust: false,
 			Report: DMARCReportConfig{
 				Enabled:  false,
+				Failure:  false,
 				OrgName:  "Tayga Mail",
 				Interval: 24 * time.Hour,
 			},
@@ -751,14 +755,14 @@ func (c *Config) Validate() error {
 			c.DMARC.AuthservID = c.Server.Hostname
 		}
 	}
-	if c.DMARC.Report.Enabled {
+	if c.DMARC.Report.Enabled || c.DMARC.Report.Failure {
 		if c.DMARC.Report.OrgName == "" {
 			c.DMARC.Report.OrgName = "Tayga Mail"
 		}
 		if c.DMARC.Report.Contact == "" {
 			c.DMARC.Report.Contact = "dmarc-noreply@" + c.Server.Hostname
 		}
-		if c.DMARC.Report.Interval <= 0 {
+		if c.DMARC.Report.Enabled && c.DMARC.Report.Interval <= 0 {
 			c.DMARC.Report.Interval = 24 * time.Hour
 		}
 	}

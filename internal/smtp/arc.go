@@ -52,49 +52,60 @@ func newARCPolicy(verify, seal bool, action string, failOpen bool, authservID, d
 	return p, nil
 }
 
-func (p *arcPolicy) apply(ctx context.Context, data []byte) ([]byte, error) {
-	if p == nil {
+// applyVerify checks the ARC chain and injects Authentication-Results. Returns cv (pass|fail|none).
+func (p *arcPolicy) applyVerify(ctx context.Context, data []byte) ([]byte, string, error) {
+	if p == nil || !p.verify {
+		return data, "none", nil
+	}
+	cv, reason := arc.Verify(ctx, data, p.resolver)
+	ar := p.authservID + "; arc=" + cv
+	if reason != "" && cv != "pass" && cv != "none" {
+		ar += " reason=\"" + sanitizeARReason(reason) + "\""
+	}
+	data = scan.InjectHeader(data, "Authentication-Results", ar)
+	if cv == "fail" && p.action == "reject" {
+		return nil, cv, &gosmtp.SMTPError{Code: 550, EnhancedCode: gosmtp.EnhancedCode{5, 7, 29}, Message: "ARC validation failed"}
+	}
+	return data, cv, nil
+}
+
+// applySeal prepends a new ARC set recording current Authentication-Results.
+func (p *arcPolicy) applySeal(ctx context.Context, data []byte) ([]byte, error) {
+	if p == nil || !p.seal {
 		return data, nil
 	}
-	cv := "none"
-	reason := ""
-	if p.verify {
-		cv, reason = arc.Verify(ctx, data, p.resolver)
-		ar := p.authservID + "; arc=" + cv
-		if reason != "" && cv != "pass" && cv != "none" {
-			ar += " reason=\"" + sanitizeARReason(reason) + "\""
-		}
-		data = scan.InjectHeader(data, "Authentication-Results", ar)
-		if cv == "fail" && p.action == "reject" {
-			return nil, &gosmtp.SMTPError{Code: 550, EnhancedCode: gosmtp.EnhancedCode{5, 7, 29}, Message: "ARC validation failed"}
-		}
-	}
-	if p.seal {
-		authResults := collectAuthResultsForARC(data, p.authservID)
-		res, err := arc.Seal(ctx, data, arc.SealOptions{
-			Domain:      p.domain,
-			Selector:    p.selector,
-			PrivateKey:  p.key,
-			AuthResults: authResults,
-			Resolver:    p.resolver,
-			Headers:     []string{"from", "to", "subject", "date", "message-id"},
-		})
-		if err != nil {
-			if p.failOpen {
-				if p.log != nil {
-					p.log.Warn("arc seal failed; fail-open", "err", err)
-				}
-				return data, nil
+	authResults := collectAuthResultsForARC(data, p.authservID)
+	res, err := arc.Seal(ctx, data, arc.SealOptions{
+		Domain:      p.domain,
+		Selector:    p.selector,
+		PrivateKey:  p.key,
+		AuthResults: authResults,
+		Resolver:    p.resolver,
+		Headers:     []string{"from", "to", "subject", "date", "message-id"},
+	})
+	if err != nil {
+		if p.failOpen {
+			if p.log != nil {
+				p.log.Warn("arc seal failed; fail-open", "err", err)
 			}
-			return nil, &gosmtp.SMTPError{Code: 451, EnhancedCode: gosmtp.EnhancedCode{4, 7, 0}, Message: "ARC seal unavailable"}
+			return data, nil
 		}
-		data = res.Message
-		if p.log != nil {
-			p.log.Debug("arc sealed", "i", res.Instance, "cv", res.ChainValidation)
-		}
+		return nil, &gosmtp.SMTPError{Code: 451, EnhancedCode: gosmtp.EnhancedCode{4, 7, 0}, Message: "ARC seal unavailable"}
 	}
-	_ = reason
-	return data, nil
+	if p.log != nil {
+		p.log.Debug("arc sealed", "i", res.Instance, "cv", res.ChainValidation)
+	}
+	return res.Message, nil
+}
+
+// apply runs verify then seal (tests / single-shot use).
+func (p *arcPolicy) apply(ctx context.Context, data []byte) ([]byte, error) {
+	var err error
+	data, _, err = p.applyVerify(ctx, data)
+	if err != nil {
+		return nil, err
+	}
+	return p.applySeal(ctx, data)
 }
 
 // collectAuthResultsForARC builds the AAR payload (without i=) from injected Authentication-Results.

@@ -17,20 +17,22 @@ import (
 )
 
 type dmarcReporter struct {
-	store    storage.Driver
-	queue    *OutboundQueue
-	sender   outboundSender
-	orgName  string
-	contact  string
-	hostname string
-	interval time.Duration
-	log      *slog.Logger
+	store     storage.Driver
+	queue     *OutboundQueue
+	sender    outboundSender
+	orgName   string
+	contact   string
+	hostname  string
+	interval  time.Duration
+	aggregate bool // rua buffering + periodic send
+	failure   bool // per-message ruf
+	log       *slog.Logger
 
 	mu  sync.Mutex
 	buf []*dmarcEvent
 }
 
-func newDMARCReporter(store storage.Driver, org, contact, hostname string, interval time.Duration, log *slog.Logger) *dmarcReporter {
+func newDMARCReporter(store storage.Driver, org, contact, hostname string, interval time.Duration, aggregate, failure bool, log *slog.Logger) *dmarcReporter {
 	if interval <= 0 {
 		interval = 24 * time.Hour
 	}
@@ -42,7 +44,7 @@ func newDMARCReporter(store storage.Driver, org, contact, hostname string, inter
 	}
 	return &dmarcReporter{
 		store: store, orgName: org, contact: contact, hostname: hostname,
-		interval: interval, log: log,
+		interval: interval, aggregate: aggregate, failure: failure, log: log,
 	}
 }
 
@@ -55,7 +57,7 @@ func (r *dmarcReporter) SetOutbound(q *OutboundQueue, sender outboundSender) {
 }
 
 func (r *dmarcReporter) Record(ev *dmarcEvent) {
-	if r == nil || ev == nil || ev.Domain == "" {
+	if r == nil || !r.aggregate || ev == nil || ev.Domain == "" {
 		return
 	}
 	r.mu.Lock()
@@ -64,7 +66,10 @@ func (r *dmarcReporter) Record(ev *dmarcEvent) {
 }
 
 func (r *dmarcReporter) Start(ctx context.Context) {
-	if r == nil {
+	if r == nil || !r.aggregate {
+		if r != nil && r.failure && r.log != nil {
+			r.log.Info("dmarc ruf reporter enabled", "contact", r.contact)
+		}
 		return
 	}
 	go func() {
@@ -89,6 +94,9 @@ func (r *dmarcReporter) Start(ctx context.Context) {
 	}()
 	if r.log != nil {
 		r.log.Info("dmarc rua reporter enabled", "interval", r.interval.String(), "contact", r.contact)
+		if r.failure {
+			r.log.Info("dmarc ruf reporter enabled", "contact", r.contact)
+		}
 	}
 }
 
