@@ -147,6 +147,7 @@ func (q *OutboundQueue) process(ctx context.Context, it *storage.OutboundItem) {
 			q.log.Warn("outbound delete after success", "id", it.ID, "err", delErr)
 		} else {
 			q.log.Info("outbound delivered", "to", it.EnvelopeTo, "attempts", it.Attempts+1)
+			q.writeMailLog(it, "sent", "")
 		}
 		return
 	}
@@ -160,6 +161,7 @@ func (q *OutboundQueue) process(ctx context.Context, it *storage.OutboundItem) {
 			q.log.Warn("dsn bounce failed", "to", it.EnvelopeFrom, "err", bounceErr)
 		}
 		_ = q.store.DeleteOutbound(ctx, it.ID)
+		q.writeMailLog(it, "failed", truncateErr(err))
 		return
 	}
 
@@ -167,6 +169,39 @@ func (q *OutboundQueue) process(ctx context.Context, it *storage.OutboundItem) {
 	if resErr := q.store.RescheduleOutbound(ctx, it.ID, attempts, next, truncateErr(err)); resErr != nil {
 		q.log.Warn("outbound reschedule failed", "id", it.ID, "err", resErr)
 	}
+}
+
+func (q *OutboundQueue) writeMailLog(it *storage.OutboundItem, event, detail string) {
+	if q == nil || q.store == nil || it == nil {
+		return
+	}
+	from := strings.ToLower(strings.TrimSpace(it.EnvelopeFrom))
+	to := strings.ToLower(strings.TrimSpace(it.EnvelopeTo))
+	domain := storage.DomainOfEmail(from)
+	tenantID := ""
+	if domain != "" {
+		if d, err := q.store.GetDomainByName(context.Background(), domain); err == nil && d != nil {
+			tenantID = d.TenantID
+		}
+	}
+	e := &storage.MailLogEntry{
+		TenantID:  tenantID,
+		Domain:    domain,
+		Event:     event,
+		Direction: "outbound",
+		MailFrom:  from,
+		RcptTo:    to,
+		MessageID: it.MessageID,
+		Size:      int64(len(it.Data)),
+		Detail:    detail,
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		if err := q.store.InsertMailLog(ctx, e); err != nil {
+			q.log.Warn("mail log write failed", "err", err)
+		}
+	}()
 }
 
 func backoff(attempt int) time.Duration {

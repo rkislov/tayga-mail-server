@@ -429,6 +429,19 @@ func (b *backend) NewSession(c *gosmtp.Conn) (gosmtp.Session, error) {
 	}, nil
 }
 
+func (b *backend) writeMailLog(e *storage.MailLogEntry) {
+	if b == nil || b.store == nil || e == nil {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		if err := b.store.InsertMailLog(ctx, e); err != nil && b.log != nil {
+			b.log.Warn("mail log write failed", "err", err)
+		}
+	}()
+}
+
 type session struct {
 	backend  *backend
 	remote   string
@@ -548,11 +561,14 @@ func (s *session) Data(r io.Reader) error {
 		if err := s.deliver(ctx, rcpt, data, msgid); err != nil {
 			var smtpErr *gosmtp.SMTPError
 			if errors.As(err, &smtpErr) {
+				s.logMailEvent("rejected", "inbound", rcpt, msgid, int64(len(data)), smtpErr.Message)
 				return smtpErr
 			}
 			s.backend.log.Error("delivery failed", "rcpt", rcpt, "err", err)
+			s.logMailEvent("failed", "inbound", rcpt, msgid, int64(len(data)), err.Error())
 			return &gosmtp.SMTPError{Code: 451, EnhancedCode: gosmtp.EnhancedCode{4, 3, 0}, Message: "Delivery failed"}
 		}
+		s.logMailEvent("delivered", "inbound", rcpt, msgid, int64(len(data)), "")
 	}
 	if len(s.toRemote) > 0 {
 		outData := data
@@ -570,10 +586,19 @@ func (s *session) Data(r io.Reader) error {
 				s.backend.log.Error("outbound enqueue failed", "err", err)
 				return &gosmtp.SMTPError{Code: 451, EnhancedCode: gosmtp.EnhancedCode{4, 3, 0}, Message: "Queue failed"}
 			}
+			for _, rcpt := range s.toRemote {
+				s.logMailEvent("queued", "outbound", rcpt, msgid, int64(len(outData)), "")
+			}
 		} else if s.backend.out != nil {
 			if err := s.backend.out.Send(from, s.toRemote, outData); err != nil {
 				s.backend.log.Error("outbound delivery failed", "err", err, "recipients", len(s.toRemote))
+				for _, rcpt := range s.toRemote {
+					s.logMailEvent("failed", "outbound", rcpt, msgid, int64(len(outData)), err.Error())
+				}
 				return &gosmtp.SMTPError{Code: 451, EnhancedCode: gosmtp.EnhancedCode{4, 3, 0}, Message: "Outbound delivery failed"}
+			}
+			for _, rcpt := range s.toRemote {
+				s.logMailEvent("sent", "outbound", rcpt, msgid, int64(len(outData)), "")
 			}
 		}
 	}
@@ -585,6 +610,45 @@ func (s *session) Data(r io.Reader) error {
 		"peer", s.remote,
 	)
 	return nil
+}
+
+func (s *session) logMailEvent(event, direction, rcpt, msgid string, size int64, detail string) {
+	if s == nil || s.backend == nil {
+		return
+	}
+	from := normalizeAddr(s.from)
+	rcpt = normalizeAddr(rcpt)
+	domain := storage.DomainOfEmail(rcpt)
+	if direction == "outbound" {
+		domain = storage.DomainOfEmail(from)
+	}
+	tenantID := ""
+	if s.user != nil {
+		tenantID = s.user.TenantID
+		if domain == "" {
+			domain = storage.DomainOfEmail(s.user.Email)
+		}
+	}
+	if tenantID == "" && domain != "" {
+		if d, err := s.backend.store.GetDomainByName(context.Background(), domain); err == nil && d != nil {
+			tenantID = d.TenantID
+		}
+	}
+	if len(detail) > 500 {
+		detail = detail[:500]
+	}
+	s.backend.writeMailLog(&storage.MailLogEntry{
+		TenantID:  tenantID,
+		Domain:    domain,
+		Event:     event,
+		Direction: direction,
+		Peer:      stripPort(s.remote),
+		MailFrom:  from,
+		RcptTo:    rcpt,
+		MessageID: msgid,
+		Size:      size,
+		Detail:    detail,
+	})
 }
 
 func (s *session) deliver(ctx context.Context, rcpt string, data []byte, msgid string) error {

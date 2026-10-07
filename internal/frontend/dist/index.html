@@ -97,6 +97,7 @@
         <div id="nav-admin" class="hidden">
           <p class="nav-group" data-i18n="nav_admin">Админ</p>
           <button type="button" class="nav-btn" data-app="monitor"><span class="nav-ico" data-ico="chart" aria-hidden="true"></span><span data-i18n="nav_monitor">Мониторинг</span></button>
+          <button type="button" class="nav-btn" data-app="maillog"><span class="nav-ico" data-ico="mail" aria-hidden="true"></span><span data-i18n="nav_maillog">Лог писем</span></button>
           <button type="button" class="nav-btn" data-app="tenants"><span class="nav-ico" data-ico="domains" aria-hidden="true"></span><span data-i18n="nav_tenants">Домены и пользователи</span></button>
           <button type="button" class="nav-btn" data-app="tls"><span class="nav-ico" data-ico="tls" aria-hidden="true"></span><span data-i18n="nav_tls">УЦ</span></button>
           <button type="button" class="nav-btn" data-app="xmpp"><span class="nav-ico" data-ico="chat" aria-hidden="true"></span><span data-i18n="nav_xmpp">XMPP</span></button>
@@ -535,6 +536,24 @@ keep;</textarea>
           </div>
           <ul class="creds" id="sieve-list"></ul>
           <p id="sieve-msg" class="msg"></p>
+        </div>
+      </div>
+
+      <!-- ADMIN MAIL LOG -->
+      <div id="app-maillog" class="app-page hidden panel-page panel-page-wide">
+        <div class="card">
+          <h3 class="heading" data-i18n="nav_maillog">Лог писем</h3>
+          <p class="meta" id="maillog-scope" data-i18n="maillog_lede">Приём, доставка и исходящая очередь. Поиск по строкам лога.</p>
+          <div class="filter-bar">
+            <div class="filter-grow">
+              <label class="field-label" for="maillog-q" data-i18n="maillog_search">Поиск</label>
+              <input class="field-input" id="maillog-q" type="search" autocomplete="off" placeholder="from@… to@… msgid…" />
+            </div>
+            <button type="button" class="btn-spray" id="btn-maillog-search" data-i18n="maillog_find">Найти</button>
+            <button type="button" class="btn-secondary" id="btn-maillog-refresh" data-i18n="refresh">Обновить</button>
+          </div>
+          <pre class="secret preview-box maillog-lines" id="maillog-lines" aria-live="polite"></pre>
+          <p id="maillog-msg" class="msg" role="status"></p>
         </div>
       </div>
 
