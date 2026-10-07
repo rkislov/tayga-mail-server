@@ -96,10 +96,15 @@
           </div>
           <ul id="mail-folder-list" class="folder-list"></ul>
         </div>
-        <div class="mail-list panel-pane">
-          <div class="pane-head">
+        <div class="mail-list panel-pane mail-list-pane">
+          <div class="pane-head mail-list-toolbar">
             <strong id="mail-folder-title">INBOX</strong>
             <button type="button" class="btn-secondary btn-sm" id="btn-mail-refresh" data-i18n="refresh">Обновить</button>
+          </div>
+          <div class="msg-list-head" aria-hidden="true">
+            <span data-i18n="col_from">От</span>
+            <span data-i18n="col_subject">Тема</span>
+            <span data-i18n="col_date">Дата</span>
           </div>
           <ul id="mail-msg-list" class="msg-list"></ul>
         </div>
@@ -110,8 +115,12 @@
               <button type="button" class="btn-secondary btn-sm" id="btn-mail-reply" data-i18n="reply">Ответить</button>
               <button type="button" class="btn-secondary btn-sm" id="btn-mail-delete" data-i18n="delete">Удалить</button>
             </div>
-            <h2 class="heading" id="mail-subject"></h2>
-            <p class="meta" id="mail-meta"></p>
+            <h2 class="heading reader-subject" id="mail-subject"></h2>
+            <dl class="reader-headers" id="mail-headers">
+              <div><dt data-i18n="col_from">От</dt><dd id="mail-from"></dd></div>
+              <div><dt data-i18n="to">Кому</dt><dd id="mail-to"></dd></div>
+              <div><dt data-i18n="col_date">Дата</dt><dd id="mail-date"></dd></div>
+            </dl>
             <div class="reader-body" id="mail-body"></div>
           </div>
         </div>
@@ -135,68 +144,168 @@
       </div>
 
       <!-- CALENDAR -->
-      <div id="app-calendar" class="app-page hidden panel-page">
-        <div class="page-toolbar">
-          <h2 class="heading" data-i18n="calendar_title">Календарь</h2>
-          <button type="button" class="btn-spray btn-sm" id="btn-cal-refresh" data-i18n="refresh">Обновить</button>
-        </div>
-        <form id="form-cal-event" class="card">
-          <h3 class="heading heading-sm" data-i18n="new_event">Событие</h3>
-          <label class="field-label">Summary</label>
-          <input class="field-input" id="cal-summary" required />
-          <label class="field-label">Start (RFC3339)</label>
-          <input class="field-input" id="cal-start" placeholder="2026-10-07T10:00:00Z" />
-          <label class="field-label">End</label>
-          <input class="field-input" id="cal-end" placeholder="2026-10-07T11:00:00Z" />
-          <div class="actions">
-            <button type="submit" class="btn-spray" data-i18n="save">Сохранить</button>
+      <div id="app-calendar" class="app-page hidden mail-layout cal-layout">
+        <div class="mail-folders panel-pane">
+          <div class="pane-head">
+            <strong data-i18n="calendars">Календари</strong>
+            <button type="button" class="btn-spray btn-sm" id="btn-cal-new" data-i18n="new_event">Событие</button>
           </div>
-          <p id="cal-msg" class="msg"></p>
-        </form>
-        <ul id="cal-event-list" class="creds"></ul>
+          <ul id="cal-folder-list" class="folder-list"></ul>
+        </div>
+        <div class="mail-list panel-pane mail-list-pane">
+          <div class="pane-head mail-list-toolbar">
+            <strong id="cal-folder-title" data-i18n="calendar_title">Календарь</strong>
+            <button type="button" class="btn-secondary btn-sm" id="btn-cal-refresh" data-i18n="refresh">Обновить</button>
+          </div>
+          <div class="msg-list-head cal-list-head" aria-hidden="true">
+            <span data-i18n="col_summary">Тема</span>
+            <span data-i18n="col_start">Начало</span>
+            <span data-i18n="col_end">Конец</span>
+          </div>
+          <ul id="cal-event-list" class="msg-list"></ul>
+        </div>
+        <div class="mail-read panel-pane">
+          <div id="cal-empty" class="empty-state" data-i18n="select_event">Выберите событие</div>
+          <div id="cal-reader" class="hidden">
+            <div class="reader-actions">
+              <button type="button" class="btn-secondary btn-sm" id="btn-cal-delete" data-i18n="delete">Удалить</button>
+            </div>
+            <h2 class="heading reader-subject" id="cal-subject"></h2>
+            <dl class="reader-headers" id="cal-headers">
+              <div><dt data-i18n="col_start">Начало</dt><dd id="cal-read-start"></dd></div>
+              <div><dt data-i18n="col_end">Конец</dt><dd id="cal-read-end"></dd></div>
+              <div><dt data-i18n="col_location">Место</dt><dd id="cal-read-location"></dd></div>
+            </dl>
+            <div class="reader-body" id="cal-read-body"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="cal-backdrop" class="compose-backdrop hidden">
+        <div id="cal-panel" class="compose-panel" role="dialog" aria-modal="true">
+          <h3 class="heading" data-i18n="new_event">Событие</h3>
+          <form id="form-cal-event">
+            <label class="field-label" data-i18n="col_summary">Тема</label>
+            <input class="field-input" id="cal-summary" required />
+            <label class="field-label" data-i18n="col_location">Место</label>
+            <input class="field-input" id="cal-location" />
+            <label class="field-label" data-i18n="col_start">Начало</label>
+            <input class="field-input" id="cal-start" type="datetime-local" />
+            <label class="field-label" data-i18n="col_end">Конец</label>
+            <input class="field-input" id="cal-end" type="datetime-local" />
+            <label class="field-label" data-i18n="col_description">Описание</label>
+            <textarea class="field-input-mono" id="cal-description" rows="4"></textarea>
+            <div class="actions">
+              <button type="submit" class="btn-spray" data-i18n="save">Сохранить</button>
+              <button type="button" class="btn-secondary" id="btn-cal-close" data-i18n="back">Назад</button>
+            </div>
+            <p id="cal-msg" class="msg"></p>
+          </form>
+        </div>
       </div>
 
       <!-- CONTACTS -->
-      <div id="app-contacts" class="app-page hidden panel-page">
-        <div class="page-toolbar">
-          <h2 class="heading" data-i18n="contacts_title">Контакты</h2>
-          <button type="button" class="btn-secondary btn-sm" id="btn-contacts-refresh" data-i18n="refresh">Обновить</button>
-        </div>
-        <form id="form-contact" class="card">
-          <h3 class="heading heading-sm" data-i18n="new_contact">Контакт</h3>
-          <label class="field-label">FN</label>
-          <input class="field-input" id="contact-fn" required />
-          <label class="field-label">Email</label>
-          <input class="field-input" id="contact-email" type="email" />
-          <label class="field-label">Tel</label>
-          <input class="field-input" id="contact-tel" />
-          <div class="actions">
-            <button type="submit" class="btn-spray" data-i18n="save">Сохранить</button>
+      <div id="app-contacts" class="app-page hidden mail-layout contacts-layout">
+        <div class="mail-folders panel-pane">
+          <div class="pane-head">
+            <strong data-i18n="address_books">Книги</strong>
+            <button type="button" class="btn-spray btn-sm" id="btn-contact-new" data-i18n="new_contact">Контакт</button>
           </div>
-          <p id="contact-msg" class="msg"></p>
-        </form>
-        <ul id="contact-list" class="creds"></ul>
+          <ul id="contact-book-list" class="folder-list"></ul>
+        </div>
+        <div class="mail-list panel-pane mail-list-pane">
+          <div class="pane-head mail-list-toolbar">
+            <strong id="contact-book-title" data-i18n="contacts_title">Контакты</strong>
+            <button type="button" class="btn-secondary btn-sm" id="btn-contacts-refresh" data-i18n="refresh">Обновить</button>
+          </div>
+          <div class="msg-list-head contact-list-head" aria-hidden="true">
+            <span data-i18n="col_name">Имя</span>
+            <span data-i18n="email">Email</span>
+            <span data-i18n="col_tel">Тел</span>
+          </div>
+          <ul id="contact-list" class="msg-list"></ul>
+        </div>
+        <div class="mail-read panel-pane">
+          <div id="contact-empty" class="empty-state" data-i18n="select_contact">Выберите контакт</div>
+          <div id="contact-reader" class="hidden">
+            <div class="reader-actions">
+              <button type="button" class="btn-secondary btn-sm" id="btn-contact-delete" data-i18n="delete">Удалить</button>
+            </div>
+            <h2 class="heading reader-subject" id="contact-subject"></h2>
+            <dl class="reader-headers">
+              <div><dt data-i18n="email">Email</dt><dd id="contact-read-email"></dd></div>
+              <div><dt data-i18n="col_tel">Тел</dt><dd id="contact-read-tel"></dd></div>
+              <div><dt data-i18n="col_org">Орг</dt><dd id="contact-read-org"></dd></div>
+            </dl>
+            <div class="reader-body" id="contact-read-note"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="contact-backdrop" class="compose-backdrop hidden">
+        <div class="compose-panel" role="dialog" aria-modal="true">
+          <h3 class="heading" data-i18n="new_contact">Контакт</h3>
+          <form id="form-contact">
+            <label class="field-label" data-i18n="col_name">Имя</label>
+            <input class="field-input" id="contact-fn" required />
+            <label class="field-label" data-i18n="email">Email</label>
+            <input class="field-input" id="contact-email" type="email" />
+            <label class="field-label" data-i18n="col_tel">Тел</label>
+            <input class="field-input" id="contact-tel" />
+            <label class="field-label" data-i18n="col_org">Орг</label>
+            <input class="field-input" id="contact-org" />
+            <label class="field-label" data-i18n="col_note">Заметка</label>
+            <textarea class="field-input-mono" id="contact-note" rows="3"></textarea>
+            <div class="actions">
+              <button type="submit" class="btn-spray" data-i18n="save">Сохранить</button>
+              <button type="button" class="btn-secondary" id="btn-contact-close" data-i18n="back">Назад</button>
+            </div>
+            <p id="contact-msg" class="msg"></p>
+          </form>
+        </div>
       </div>
 
       <!-- FILES -->
-      <div id="app-files" class="app-page hidden panel-page panel-page-wide">
-        <div class="page-toolbar">
-          <h2 class="heading" data-i18n="files_title">Файлы</h2>
-          <div class="toolbar-actions">
-            <button type="button" class="btn-secondary btn-sm" id="btn-files-refresh" data-i18n="refresh">Обновить</button>
-            <label class="btn-spray btn-sm btn-file">
-              <span data-i18n="upload">Загрузить</span>
-              <input type="file" id="files-upload" />
-            </label>
+      <div id="app-files" class="app-page hidden mail-layout files-layout">
+        <div class="mail-list panel-pane mail-list-pane files-list-pane">
+          <div class="pane-head mail-list-toolbar files-toolbar">
+            <div class="files-path-wrap">
+              <strong data-i18n="files_title">Файлы</strong>
+              <span class="meta" id="files-path">/</span>
+            </div>
+            <div class="toolbar-actions">
+              <button type="button" class="btn-secondary btn-sm" id="btn-files-refresh" data-i18n="refresh">Обновить</button>
+              <button type="button" class="btn-secondary btn-sm" id="btn-files-mkdir" data-i18n="mkdir">Папка</button>
+              <label class="btn-spray btn-sm btn-file">
+                <span data-i18n="upload">Загрузить</span>
+                <input type="file" id="files-upload" />
+              </label>
+            </div>
+          </div>
+          <div class="msg-list-head files-list-head" aria-hidden="true">
+            <span data-i18n="col_name">Имя</span>
+            <span data-i18n="col_size">Размер</span>
+            <span data-i18n="col_type">Тип</span>
+          </div>
+          <ul id="files-list" class="msg-list"></ul>
+          <p id="files-msg" class="msg files-msg"></p>
+        </div>
+        <div class="mail-read panel-pane">
+          <div id="files-empty" class="empty-state" data-i18n="select_file">Выберите файл</div>
+          <div id="files-reader" class="hidden">
+            <div class="reader-actions">
+              <button type="button" class="btn-spray btn-sm" id="btn-files-download" data-i18n="download">Скачать</button>
+              <button type="button" class="btn-secondary btn-sm" id="btn-files-open" data-i18n="open">Открыть</button>
+              <button type="button" class="btn-secondary btn-sm" id="btn-files-delete" data-i18n="delete">Удалить</button>
+            </div>
+            <h2 class="heading reader-subject" id="files-subject"></h2>
+            <dl class="reader-headers">
+              <div><dt data-i18n="col_path">Путь</dt><dd id="files-read-path"></dd></div>
+              <div><dt data-i18n="col_size">Размер</dt><dd id="files-read-size"></dd></div>
+              <div><dt data-i18n="col_type">Тип</dt><dd id="files-read-type"></dd></div>
+            </dl>
           </div>
         </div>
-        <p class="meta" id="files-path">/</p>
-        <form id="form-mkdir" class="row-form">
-          <input class="field-input" id="mkdir-name" placeholder="new-folder" />
-          <button type="submit" class="btn-secondary" data-i18n="mkdir">Папка</button>
-        </form>
-        <ul id="files-list" class="creds"></ul>
-        <p id="files-msg" class="msg"></p>
       </div>
 
       <!-- PROFILE -->
@@ -292,8 +401,26 @@ keep;</textarea>
       <div id="app-monitor" class="app-page hidden panel-page panel-page-wide">
         <div class="card" id="card-monitor">
           <h3 class="heading" data-i18n="nav_monitor">Мониторинг</h3>
-          <p class="meta">Prometheus: <code>/metrics</code></p>
+          <p class="meta">Prometheus: <code>/metrics</code> · графики обновляются на этой странице</p>
           <div id="monitor-grid" class="meta monitor-grid"></div>
+          <div class="monitor-charts" id="monitor-charts">
+            <div class="chart-card">
+              <h4 class="chart-title">Пользователи / сообщения</h4>
+              <div id="chart-bars" class="chart-host"></div>
+            </div>
+            <div class="chart-card">
+              <h4 class="chart-title">Хранилище</h4>
+              <div id="chart-storage" class="chart-host"></div>
+            </div>
+            <div class="chart-card">
+              <h4 class="chart-title">Очередь и runtime</h4>
+              <div id="chart-runtime" class="chart-host"></div>
+            </div>
+            <div class="chart-card chart-card-wide">
+              <h4 class="chart-title">Живые метрики <span class="meta" id="chart-live-hint">(пока открыт мониторинг)</span></h4>
+              <div id="chart-sparklines" class="chart-host chart-sparklines"></div>
+            </div>
+          </div>
           <h3 class="heading heading-gap">Исходящая очередь</h3>
           <ul class="creds" id="outbound-list"></ul>
           <h3 class="heading heading-gap">Карантин / Junk</h3>
