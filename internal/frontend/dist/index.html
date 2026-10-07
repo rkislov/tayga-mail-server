@@ -92,7 +92,7 @@
       color: var(--sun);
       margin: 0.85rem 0 0.35rem;
     }
-    input {
+    input, textarea {
       width: 100%;
       border: 1px solid var(--line);
       background: rgba(255,255,255,0.92);
@@ -101,7 +101,13 @@
       font: inherit;
       border-radius: 3px;
     }
-    input:focus {
+    textarea {
+      min-height: 9rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.85rem;
+      resize: vertical;
+    }
+    input:focus, textarea:focus {
       outline: 2px solid rgba(244, 208, 63, 0.55);
       border-color: var(--sun);
     }
@@ -312,6 +318,23 @@
           </div>
           <ul class="creds" id="cred-list"></ul>
           <p id="passkey-msg" class="msg" role="status"></p>
+        </div>
+
+        <div class="card">
+          <h3>Sieve filters</h3>
+          <p class="meta">Manage delivery scripts (same store as ManageSieve).</p>
+          <label for="sieve-name">Script name</label>
+          <input id="sieve-name" type="text" value="default" />
+          <label for="sieve-body">Script</label>
+          <textarea id="sieve-body" spellcheck="false">require ["fileinto"];
+# sample: fileinto "Archive";
+keep;</textarea>
+          <div class="actions">
+            <button type="button" class="spray" id="btn-sieve-save">Save &amp; activate</button>
+            <button type="button" class="secondary" id="btn-sieve-refresh">Refresh</button>
+          </div>
+          <ul class="creds" id="sieve-list"></ul>
+          <p id="sieve-msg" class="msg" role="status"></p>
         </div>
       </section>
     </div>
@@ -545,6 +568,79 @@
       }
     });
 
+    async function refreshSieve() {
+      try {
+        const data = await api("/api/v1/sieve/scripts");
+        const list = $("sieve-list");
+        list.innerHTML = (data.scripts || []).map((sc) => `
+          <li>
+            <span>
+              <strong>${escapeHtml(sc.name)}</strong>${sc.active ? " · active" : ""}<br/>
+              <span class="meta">${escapeHtml((sc.script || "").split("\n")[0].slice(0, 72))}</span>
+            </span>
+            <span class="actions">
+              <button type="button" class="secondary" data-sieve-edit="${escapeHtml(sc.name)}">Edit</button>
+              <button type="button" class="secondary" data-sieve-act="${escapeHtml(sc.name)}">Activate</button>
+              <button type="button" class="secondary" data-sieve-del="${escapeHtml(sc.name)}">Delete</button>
+            </span>
+          </li>`).join("") || "<li><span class=\"meta\">No scripts yet.</span></li>";
+        list.querySelectorAll("[data-sieve-edit]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const sc = (data.scripts || []).find((x) => x.name === btn.dataset.sieveEdit);
+            if (!sc) return;
+            $("sieve-name").value = sc.name;
+            $("sieve-body").value = sc.script;
+          });
+        });
+        list.querySelectorAll("[data-sieve-act]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            try {
+              await api("/api/v1/sieve/scripts/" + encodeURIComponent(btn.dataset.sieveAct) + "/activate", { method: "POST", body: "{}" });
+              setMsg($("sieve-msg"), "Activated.", "ok");
+              refreshSieve();
+            } catch (err) {
+              setMsg($("sieve-msg"), err.message, "err");
+            }
+          });
+        });
+        list.querySelectorAll("[data-sieve-del]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            if (!confirm("Delete script " + btn.dataset.sieveDel + "?")) return;
+            try {
+              await api("/api/v1/sieve/scripts/" + encodeURIComponent(btn.dataset.sieveDel), { method: "DELETE" });
+              setMsg($("sieve-msg"), "Deleted.", "ok");
+              refreshSieve();
+            } catch (err) {
+              setMsg($("sieve-msg"), err.message, "err");
+            }
+          });
+        });
+      } catch (err) {
+        setMsg($("sieve-msg"), err.message, "err");
+      }
+    }
+
+    $("btn-sieve-refresh").addEventListener("click", () => refreshSieve());
+    $("btn-sieve-save").addEventListener("click", async () => {
+      const name = $("sieve-name").value.trim();
+      const script = $("sieve-body").value;
+      if (!name || !script.trim()) {
+        setMsg($("sieve-msg"), "name and script required", "err");
+        return;
+      }
+      setMsg($("sieve-msg"), "Saving…");
+      try {
+        await api("/api/v1/sieve/scripts/" + encodeURIComponent(name), {
+          method: "PUT",
+          body: JSON.stringify({ script, active: true }),
+        });
+        setMsg($("sieve-msg"), "Saved and activated.", "ok");
+        refreshSieve();
+      } catch (err) {
+        setMsg($("sieve-msg"), err.message, "err");
+      }
+    });
+
     function enterAccount(tokens, email) {
       state.tokens = tokens;
       state.email = email || state.email;
@@ -553,6 +649,7 @@
       $("acct-email").textContent = state.email;
       show("view-account");
       refreshPasskeys();
+      refreshSieve();
       loadMe();
     }
 
