@@ -143,6 +143,8 @@ Admins: `http.admins` email list (default `admin@example.com`).
 
 Local Maildir++ under `mailstore.root`. Optional S3-compatible write-through (`mailstore.object_store`): messages mirrored to the bucket; cache miss on `Read` pulls from object storage.
 
+CLI: `tayga-mail sync-objects` reconciles indexed message paths between local maildir and the object store.
+
 ## Next milestones
 
-Object-store maildir + cross-node IDLE shipped. Next: background blob↔maildir resync, leader election.
+Leader election / fencing for multi-writer maildir; periodic in-process object sync ticker.
