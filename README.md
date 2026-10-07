@@ -45,7 +45,7 @@ Seed: `admin@example.com` / `changeme`. TLS: `tls.auto_generate` or `scripts/gen
 - Backup/restore: `./tayga-mail backup|restore -config …` or Admin UI; see [docs/ha.md](docs/ha.md)
 - HA: Postgres + shared maildir; cross-node IMAP IDLE; `ha.mode: active_standby` (`fence: mx|writers`) or `sticky` per-user writers
 - Outbound: `smtp.relay` / `smtp.outbound_direct` + optional `smtp.dkim` for authenticated external recipients
-- MTA-STS / TLS-RPT: `smtp.mta_sts` enforce on direct MX; `smtp.tls_rpt` aggregate reports to `_smtp._tls` rua=
+- MTA-STS / TLS-RPT: `smtp.mta_sts` enforce on direct MX; `publish` serves `/.well-known/mta-sts.txt`; `smtp.tls_rpt` aggregate reports
 - SMTP rate limits: `smtp.rate_limit.per_ip` / `per_user`
 - Outbound queue + DSN: `smtp.queue` retries failed remote delivery; bounces local senders; admin `/api/v1/admin/outbound`
 - Object store: optional S3/MinIO write-through for maildir (`mailstore.object_store`); `tayga-mail sync-objects` to reconcile
