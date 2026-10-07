@@ -26,28 +26,24 @@ const Delimiter = "/"
 
 // Server wraps go-imap listeners.
 type Server struct {
-	cfg          *config.Config
-	log          *slog.Logger
-	store        storage.Driver
-	authn        *auth.Layer
-	mailstore    *mailstore.Store
-	hub          *Hub
-	tls          *tlsutil.Manager
-	ha           ha.Gate
-	fenceWriters bool
-	servers      []*imapserv.Server
+	cfg       *config.Config
+	log       *slog.Logger
+	store     storage.Driver
+	authn     *auth.Layer
+	mailstore *mailstore.Store
+	hub       *Hub
+	tls       *tlsutil.Manager
+	writers   ha.WriterGate
+	servers   []*imapserv.Server
 }
 
-func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth.Layer, ms *mailstore.Store, hub *Hub, tlsMgr *tlsutil.Manager, gate ha.Gate) *Server {
+func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth.Layer, ms *mailstore.Store, hub *Hub, tlsMgr *tlsutil.Manager, writers ha.WriterGate) *Server {
 	if hub == nil {
 		hub = NewHub(store)
 	}
-	if gate == nil {
-		gate = ha.AlwaysLeader{}
-	}
 	return &Server{
 		cfg: cfg, log: log, store: store, authn: authn, mailstore: ms, hub: hub, tls: tlsMgr,
-		ha: gate, fenceWriters: cfg.HA.FenceWriters(),
+		writers: writers,
 	}
 }
 
@@ -59,7 +55,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	be := &Backend{
 		log: s.log, store: s.store, authn: s.authn, ms: s.mailstore, hub: s.hub,
-		ha: s.ha, fenceWriters: s.fenceWriters,
+		writers: s.writers,
 	}
 
 	type spec struct {
@@ -142,20 +138,19 @@ func (s *Server) tlsConfig() *tls.Config {
 
 // Backend implements backend.Backend and backend.BackendUpdater.
 type Backend struct {
-	log          *slog.Logger
-	store        storage.Driver
-	authn        *auth.Layer
-	ms           *mailstore.Store
-	hub          *Hub
-	ha           ha.Gate
-	fenceWriters bool
+	log     *slog.Logger
+	store   storage.Driver
+	authn   *auth.Layer
+	ms      *mailstore.Store
+	hub     *Hub
+	writers ha.WriterGate
 }
 
-func (b *Backend) requireWriter() error {
-	if b.fenceWriters && b.ha != nil && !b.ha.IsLeader() {
-		return ha.ErrStandby
+func (b *Backend) requireWriter(userID string) error {
+	if b.writers == nil {
+		return nil
 	}
-	return nil
+	return b.writers.AllowWrite(context.Background(), userID)
 }
 
 func (b *Backend) Updates() <-chan backend.Update {
@@ -249,7 +244,7 @@ func (u *User) GetMailbox(name string) (backend.Mailbox, error) {
 }
 
 func (u *User) CreateMailbox(name string) error {
-	if err := u.backend.requireWriter(); err != nil {
+	if err := u.backend.requireWriter(u.user.ID); err != nil {
 		return err
 	}
 	name = strings.TrimSuffix(name, Delimiter)
@@ -269,7 +264,7 @@ func (u *User) CreateMailbox(name string) error {
 }
 
 func (u *User) DeleteMailbox(name string) error {
-	if err := u.backend.requireWriter(); err != nil {
+	if err := u.backend.requireWriter(u.user.ID); err != nil {
 		return err
 	}
 	if strings.EqualFold(name, "INBOX") {
@@ -297,7 +292,7 @@ func (u *User) DeleteMailbox(name string) error {
 }
 
 func (u *User) RenameMailbox(existingName, newName string) error {
-	if err := u.backend.requireWriter(); err != nil {
+	if err := u.backend.requireWriter(u.user.ID); err != nil {
 		return err
 	}
 	newName = strings.TrimSuffix(newName, Delimiter)
@@ -496,7 +491,7 @@ func (m *Mailbox) SearchMessages(uid bool, criteria *imap.SearchCriteria) ([]uin
 }
 
 func (m *Mailbox) CreateMessage(flags []string, date time.Time, body imap.Literal) error {
-	if err := m.user.backend.requireWriter(); err != nil {
+	if err := m.user.backend.requireWriter(m.user.user.ID); err != nil {
 		return err
 	}
 	data, err := io.ReadAll(body)
@@ -530,7 +525,7 @@ func (m *Mailbox) CreateMessage(flags []string, date time.Time, body imap.Litera
 }
 
 func (m *Mailbox) UpdateMessagesFlags(uid bool, seqset *imap.SeqSet, op imap.FlagsOp, flags []string) error {
-	if err := m.user.backend.requireWriter(); err != nil {
+	if err := m.user.backend.requireWriter(m.user.user.ID); err != nil {
 		return err
 	}
 	msgs, err := m.messages()
@@ -595,7 +590,7 @@ func updateFlags(current []string, op imap.FlagsOp, flags []string) []string {
 }
 
 func (m *Mailbox) CopyMessages(uid bool, seqset *imap.SeqSet, dest string) error {
-	if err := m.user.backend.requireWriter(); err != nil {
+	if err := m.user.backend.requireWriter(m.user.user.ID); err != nil {
 		return err
 	}
 	destMB, err := m.user.GetMailbox(dest)
@@ -644,7 +639,7 @@ func (m *Mailbox) CopyMessages(uid bool, seqset *imap.SeqSet, dest string) error
 }
 
 func (m *Mailbox) Expunge() error {
-	if err := m.user.backend.requireWriter(); err != nil {
+	if err := m.user.backend.requireWriter(m.user.user.ID); err != nil {
 		return err
 	}
 	ctx := context.Background()
