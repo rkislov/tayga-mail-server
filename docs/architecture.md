@@ -54,13 +54,22 @@ FolderSync advertises mailboxes plus CalDAV calendars (type 8) and CardDAV addre
 
 Enable: `flowsync.enabled: true` (default).
 
-## Protocols (dev ports)
+## Protocols (standard ports)
 
-| Protocol | Default |
-|----------|---------|
-| SMTP MX / submission | `:1025` / `:1587` |
-| IMAP (IDLE/EXISTS hub) / POP3 / ManageSieve | `:1143` / `:1110` / `:14190` |
-| HTTP / DAV / FlowSync | `:8080` |
+Privileged ports (<1024) require root or `CAP_NET_BIND_SERVICE`. TLS certs: `tls.cert_file` / `tls.key_file` (`auto_generate: true` creates a self-signed pair for lab use).
+
+| Protocol | Port | TLS |
+|----------|------|-----|
+| SMTP MX | `25` | STARTTLS (optional) |
+| SMTP submission | `587` | STARTTLS |
+| SMTPS | `465` | implicit TLS |
+| IMAP | `143` | STARTTLS |
+| IMAPS | `993` | implicit TLS |
+| POP3 | `110` | STLS |
+| POP3S | `995` | implicit TLS |
+| ManageSieve | `4190` | STARTTLS |
+| HTTP | `80` | redirect → HTTPS when enabled |
+| HTTPS | `443` | implicit TLS (HTTP/2 ALPN) |
 
 ## Build
 
@@ -110,4 +119,4 @@ Admins: `http.admins` email list (default `admin@example.com`).
 
 ## Next milestones
 
-Sieve script UI + REST API; IMAP IDLE hub. Next: multi-tenant polish, richer Autodiscover.
+Standard TLS ports (IMAPS/POP3S/SMTPS/submission STARTTLS/HTTPS) + self-signed auto-gen. Next: multi-tenant polish, richer Autodiscover.

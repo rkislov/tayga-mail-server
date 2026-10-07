@@ -18,6 +18,7 @@ import (
 	"github.com/tayga/tms/internal/config"
 	"github.com/tayga/tms/internal/mailstore"
 	"github.com/tayga/tms/internal/storage"
+	"github.com/tayga/tms/internal/tlsutil"
 )
 
 // Server is a minimal RFC 1939 POP3 server for INBOX.
@@ -27,6 +28,7 @@ type Server struct {
 	store     storage.Driver
 	authn     *auth.Layer
 	mailstore *mailstore.Store
+	tlsCfg    *tls.Config
 
 	mu     sync.Mutex
 	ln     []net.Listener
@@ -42,6 +44,7 @@ func (s *Server) Start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	s.tlsCfg = tlsCfg
 
 	type spec struct {
 		addr     string
@@ -75,7 +78,7 @@ func (s *Server) Start(ctx context.Context) error {
 		s.ln = append(s.ln, ln)
 		s.mu.Unlock()
 		s.log.Info("pop3 listening", "name", sp.name, "addr", sp.addr)
-		go s.serve(ln)
+		go s.serve(ln, sp.implicit)
 	}
 
 	go func() {
@@ -85,7 +88,7 @@ func (s *Server) Start(ctx context.Context) error {
 	return nil
 }
 
-func (s *Server) serve(ln net.Listener) {
+func (s *Server) serve(ln net.Listener, alreadyTLS bool) {
 	for {
 		c, err := ln.Accept()
 		if err != nil {
@@ -98,7 +101,7 @@ func (s *Server) serve(ln net.Listener) {
 			s.log.Error("pop3 accept", "err", err)
 			return
 		}
-		go s.handle(c)
+		go s.handle(c, alreadyTLS)
 	}
 }
 
@@ -117,14 +120,7 @@ func (s *Server) Shutdown(context.Context) error {
 }
 
 func (s *Server) loadTLS() (*tls.Config, error) {
-	if !s.cfg.TLSEnabled() {
-		return nil, nil
-	}
-	cert, err := tls.LoadX509KeyPair(s.cfg.TLS.CertFile, s.cfg.TLS.KeyFile)
-	if err != nil {
-		return nil, err
-	}
-	return &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}, nil
+	return tlsutil.Load(s.cfg)
 }
 
 type session struct {
@@ -135,15 +131,16 @@ type session struct {
 	msgs    []*storage.Message
 	deleted map[int]bool // 1-based index
 	authed  bool
+	tlsOn   bool
 }
 
-func (s *Server) handle(c net.Conn) {
+func (s *Server) handle(c net.Conn, alreadyTLS bool) {
 	defer c.Close()
 	rw := bufio.NewReadWriter(bufio.NewReader(c), bufio.NewWriter(c))
-	sess := &session{s: s, rw: rw, conn: c, deleted: map[int]bool{}}
+	sess := &session{s: s, rw: rw, conn: c, deleted: map[int]bool{}, tlsOn: alreadyTLS}
 	_ = sess.ok("Tayga POP3 ready")
 	for {
-		line, err := rw.ReadString('\n')
+		line, err := sess.rw.ReadString('\n')
 		if err != nil {
 			return
 		}
@@ -182,6 +179,8 @@ func (s *Server) handle(c net.Conn) {
 			errResp = sess.cmdTOP(arg)
 		case "CAPA":
 			errResp = sess.cmdCAPA()
+		case "STLS":
+			errResp = sess.cmdSTLS()
 		default:
 			errResp = sess.err("unknown command")
 		}
@@ -378,8 +377,35 @@ func (sess *session) cmdUIDL(arg string) error {
 
 func (sess *session) cmdCAPA() error {
 	_ = sess.ok("capability list follows")
-	fmt.Fprintf(sess.rw, "USER\r\nUIDL\r\nTOP\r\n.\r\n")
+	fmt.Fprintf(sess.rw, "USER\r\nUIDL\r\nTOP\r\n")
+	if sess.s.tlsCfg != nil && !sess.tlsOn {
+		fmt.Fprintf(sess.rw, "STLS\r\n")
+	}
+	fmt.Fprintf(sess.rw, ".\r\n")
 	return sess.rw.Flush()
+}
+
+func (sess *session) cmdSTLS() error {
+	if sess.tlsOn {
+		return sess.err("TLS already active")
+	}
+	if sess.s.tlsCfg == nil {
+		return sess.err("TLS not available")
+	}
+	if sess.authed {
+		return sess.err("STLS after auth not allowed")
+	}
+	if err := sess.ok("Begin TLS negotiation"); err != nil {
+		return err
+	}
+	tlsConn := tls.Server(sess.conn, sess.s.tlsCfg)
+	if err := tlsConn.Handshake(); err != nil {
+		return err
+	}
+	sess.conn = tlsConn
+	sess.rw = bufio.NewReadWriter(bufio.NewReader(tlsConn), bufio.NewWriter(tlsConn))
+	sess.tlsOn = true
+	return nil
 }
 
 func (sess *session) cmdQUIT() error {
