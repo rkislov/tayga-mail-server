@@ -34,7 +34,7 @@ GitHub Releases: push a `v*` tag; [GoReleaser](https://goreleaser.com) (`.github
 
 Seed: `admin@example.com` / `changeme`. TLS: `tls.auto_generate` or `scripts/gen-dev-certs.sh`.
 
-- LDAP: optional per-domain hybrid auth; group→admin roles; `tayga-mail ldap-sync`
+- LDAP: hybrid auth; group→admin roles; nested groups; `tayga-mail ldap-sync`
 - Quotas: set `users.quota_bytes` (0 = unlimited); SMTP returns `552` when full
 - Auth API: `POST /api/v1/auth/login` → opaque tokens; TOTP MFA; OIDC per-domain
 - IMAP/SMTP: SASL `XOAUTH2` / `OAUTHBEARER` with access tokens from the auth API

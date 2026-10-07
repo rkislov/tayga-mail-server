@@ -91,6 +91,10 @@ ldap:
     #     # base_dn: "ou=groups,dc=example,dc=com"
     #     # filter: "(&(objectClass=groupOfNames)(member={dn}))"
     #     # attr_name: cn
+    #     nested: true            # expand nested/transitive membership
+    #     nested_mode: walk       # walk (memberOf/member BFS) | chain (AD OID)
+    #     max_depth: 8
+    #     # member_attr: member   # walk parent search / chain attribute
     #     admin_groups:
     #       - "cn=mail-admins,ou=groups,dc=example,dc=com"
     #       - "mail-admins"
