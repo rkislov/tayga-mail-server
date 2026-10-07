@@ -53,14 +53,15 @@ type MailstoreConfig struct {
 
 // ObjectStoreConfig enables write-through S3-compatible maildir mirroring.
 type ObjectStoreConfig struct {
-	Enabled   bool   `yaml:"enabled"`
-	Endpoint  string `yaml:"endpoint"`
-	Region    string `yaml:"region"`
-	Bucket    string `yaml:"bucket"`
-	AccessKey string `yaml:"access_key"`
-	SecretKey string `yaml:"secret_key"`
-	Prefix    string `yaml:"prefix"`
-	PathStyle bool   `yaml:"path_style"`
+	Enabled      bool          `yaml:"enabled"`
+	Endpoint     string        `yaml:"endpoint"`
+	Region       string        `yaml:"region"`
+	Bucket       string        `yaml:"bucket"`
+	AccessKey    string        `yaml:"access_key"`
+	SecretKey    string        `yaml:"secret_key"`
+	Prefix       string        `yaml:"prefix"`
+	PathStyle    bool          `yaml:"path_style"`
+	SyncInterval time.Duration `yaml:"sync_interval"` // 0 = off; e.g. 1h runs SyncObjects in-process
 }
 
 type SMTPConfig struct {

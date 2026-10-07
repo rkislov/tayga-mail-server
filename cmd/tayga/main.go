@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -190,6 +191,31 @@ func openObjectStore(cfg *config.Config) (mailstore.Blob, error) {
 	})
 }
 
+func runObjectSyncLoop(ctx context.Context, store storage.Driver, ms *mailstore.Store, blob mailstore.Blob, interval time.Duration, log *slog.Logger) {
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			rep, err := mailstore.SyncObjects(ctx, store, ms, blob, mailstore.SyncOptions{})
+			if err != nil {
+				log.Warn("object store sync failed", "err", err)
+				continue
+			}
+			log.Info("object store sync",
+				"messages", rep.Messages,
+				"pushed", rep.Pushed,
+				"pulled", rep.Pulled,
+				"unchanged", rep.Unchanged,
+				"missing", rep.Missing,
+				"errors", rep.Errors,
+			)
+		}
+	}
+}
+
 func run(cfgPath string) error {
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
@@ -230,6 +256,10 @@ func run(cfgPath string) error {
 			"endpoint", cfg.Mailstore.ObjectStore.Endpoint,
 			"bucket", cfg.Mailstore.ObjectStore.Bucket,
 		)
+		if iv := cfg.Mailstore.ObjectStore.SyncInterval; iv > 0 {
+			go runObjectSyncLoop(ctx, store, ms, blob, iv, log)
+			log.Info("mailstore object store sync ticker", "interval", iv.String())
+		}
 	}
 	tlsMgr, err := tlsutil.NewManager(cfg)
 	if err != nil {
