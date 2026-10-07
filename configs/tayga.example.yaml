@@ -175,6 +175,18 @@ dmarc:
     # contact: "dmarc-noreply@mail.example.com"
     interval: 24h
 
+# Authenticated Received Chain (RFC 8617) — after SPF/DKIM/DMARC on MX
+arc:
+  enabled: false
+  verify: true               # Authentication-Results arc=pass|fail|none
+  seal: false                # prepend ARC set (needs RSA key)
+  action: tag                # tag | reject (on verify fail)
+  fail_open: true
+  # authserv_id: ""
+  # domain: example.com
+  # selector: arc
+  # private_key_file: ./data/dkim/private.pem   # RSA PEM (same key as DKIM ok)
+
 # FlowSync — original Tayga sync engine (ActiveSync- and EWS-compatible wire; Apache-2.0)
 flowsync:
   enabled: true

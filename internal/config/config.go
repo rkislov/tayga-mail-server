@@ -32,7 +32,21 @@ type Config struct {
 	DKIMVerify  DKIMVerifyConfig  `yaml:"dkim_verify"`
 	SPF         SPFConfig         `yaml:"spf"`
 	DMARC       DMARCConfig       `yaml:"dmarc"`
+	ARC         ARCConfig         `yaml:"arc"`
 	Log         LogConfig         `yaml:"log"`
+}
+
+// ARCConfig verifies and optionally seals Authenticated Received Chain (RFC 8617).
+type ARCConfig struct {
+	Enabled        bool   `yaml:"enabled"`
+	Verify         bool   `yaml:"verify"` // default true when enabled
+	Seal           bool   `yaml:"seal"`   // add ARC set after auth checks
+	Action         string `yaml:"action"` // tag | reject (on verify fail)
+	FailOpen       bool   `yaml:"fail_open"`
+	AuthservID     string `yaml:"authserv_id"`
+	Domain         string `yaml:"domain"`           // required for seal
+	Selector       string `yaml:"selector"`         // required for seal
+	PrivateKeyFile string `yaml:"private_key_file"` // RSA PEM for seal
 }
 
 // DKIMVerifyConfig checks inbound DKIM signatures (unauthenticated MX).
@@ -440,6 +454,13 @@ func Default() *Config {
 				Interval: 24 * time.Hour,
 			},
 		},
+		ARC: ARCConfig{
+			Enabled:  false,
+			Verify:   true,
+			Seal:     false,
+			Action:   "tag",
+			FailOpen: true,
+		},
 		Log: LogConfig{Level: "info", Format: "json"},
 	}
 }
@@ -719,6 +740,29 @@ func (c *Config) Validate() error {
 		}
 		if c.DMARC.Report.Interval <= 0 {
 			c.DMARC.Report.Interval = 24 * time.Hour
+		}
+	}
+	if c.ARC.Enabled {
+		// Default verify=true when enabled (YAML false is distinguishable only if we use *bool;
+		// treat zero-value as verify-on when Enabled).
+		if !c.ARC.Seal && !c.ARC.Verify {
+			c.ARC.Verify = true
+		}
+		switch c.ARC.Action {
+		case "", "tag", "reject":
+			if c.ARC.Action == "" {
+				c.ARC.Action = "tag"
+			}
+		default:
+			return fmt.Errorf("arc.action must be tag or reject, got %q", c.ARC.Action)
+		}
+		if c.ARC.AuthservID == "" {
+			c.ARC.AuthservID = c.Server.Hostname
+		}
+		if c.ARC.Seal {
+			if c.ARC.Domain == "" || c.ARC.Selector == "" || c.ARC.PrivateKeyFile == "" {
+				return fmt.Errorf("arc: domain, selector, and private_key_file required when seal is enabled")
+			}
 		}
 	}
 	return nil
