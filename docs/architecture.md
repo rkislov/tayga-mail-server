@@ -150,7 +150,7 @@ CLI: `tayga-mail sync-objects` reconciles indexed message paths between local ma
 
 ## HA fencing
 
-`ha.mode: active_standby` (Postgres): advisory lock gates unauthenticated MX; see [ha.md](ha.md).
+`ha.mode: active_standby` (Postgres): advisory lock; `ha.fence: mx|writers` gates MX-only or all maildir writers; see [ha.md](ha.md).
 
 ## Outbound SMTP
 
@@ -164,4 +164,4 @@ Metric: `tayga_outbound_queued`. Admin: `GET/DELETE /api/v1/admin/outbound[/{id}
 
 ## Next milestones
 
-Multi-writer maildir fencing beyond MX.
+Per-user sticky writers; quarantine / virus-scan hooks.
