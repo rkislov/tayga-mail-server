@@ -169,6 +169,11 @@ dmarc:
   action: tag                # tag | reject | follow (honor DNS p=reject)
   fail_open: true
   # authserv_id: ""
+  report:
+    enabled: false           # aggregate rua reports (needs outbound queue/relay)
+    org_name: "Tayga Mail"
+    # contact: "dmarc-noreply@mail.example.com"
+    interval: 24h
 
 # FlowSync — original Tayga sync engine (ActiveSync- and EWS-compatible wire; Apache-2.0)
 flowsync:

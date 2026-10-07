@@ -133,6 +133,11 @@ type Driver interface {
 	DeleteOutbound(ctx context.Context, id string) error
 	CountOutbound(ctx context.Context) (int, error)
 
+	UpsertDMARCAgg(ctx context.Context, row *DMARCAggRow) error
+	ListDMARCAggByDay(ctx context.Context, day string) ([]*DMARCAggRow, error)
+	DeleteDMARCAggByDay(ctx context.Context, day string) error
+	ListDMARCAggDaysBefore(ctx context.Context, beforeDay string) ([]string, error)
+
 	// TryAcquireUserWriter grabs or renews a per-user maildir writer lease for nodeID.
 	// acquired=false means another live node holds it (holder is that node_id).
 	TryAcquireUserWriter(ctx context.Context, userID, nodeID string, ttl time.Duration) (acquired bool, holder string, err error)
@@ -224,4 +229,22 @@ type OutboundItem struct {
 	LastError    string
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
+}
+
+// DMARCAggRow is one aggregated DMARC feedback row for a calendar day (UTC).
+type DMARCAggRow struct {
+	ID             string
+	Domain         string // organizational / policy domain (header From)
+	Day            string // YYYY-MM-DD UTC
+	SourceIP       string
+	EnvelopeDomain string
+	HeaderFrom     string
+	SPFResult      string // pass|fail|none
+	DKIMResult     string // pass|fail|none
+	Disposition    string // none|quarantine|reject
+	Policy         string // published p=
+	RUA            string // comma-separated mailto URIs
+	Count          int
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }

@@ -185,10 +185,14 @@ On unauthenticated MX (before virus/spam), optional checks in order:
 
 Each step may inject `Authentication-Results`. Authenticated submission skips all three. Admin quarantine UI shows spam/virus headers, filters (`folder`/`kind`/`q`), and message preview. See `configs/tayga.example.yaml`.
 
+### DMARC aggregate reports (rua)
+
+With `dmarc.report.enabled`, each evaluation is aggregated in `dmarc_agg` (per UTC day). A background flusher builds RFC 7489 XML (`gzip`), emails `mailto:` addresses from the published `rua=`, and deletes sent days. Requires outbound (`smtp.queue` / relay / `outbound_direct`).
+
 ## LDAP group sync
 
 Per-domain `ldap.domains.*.groups` maps membership to Tayga roles (`admin`) via `memberof` or group search. Roles are stored on `users.roles` and grant admin API access alongside `http.admins`. Optional `sync:` provisions members of `group_dns` / `admin_groups` on an interval or via `tayga-mail ldap-sync`.
 
 ## Next milestones
 
-DMARC reporting (rua); ARC; LDAP nested groups.
+ARC; LDAP nested groups; DMARC failure reports (ruf).
