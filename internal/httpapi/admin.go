@@ -25,13 +25,13 @@ func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) (*storage.
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return nil, false
 	}
-	if !s.isAdmin(au.Email) {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "admin required"})
-		return nil, false
-	}
 	su, err := s.store.GetUserByID(r.Context(), au.ID)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "user lookup failed"})
+		return nil, false
+	}
+	if !s.isAdminUser(su) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "admin required"})
 		return nil, false
 	}
 	return su, true

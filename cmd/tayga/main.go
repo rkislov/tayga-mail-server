@@ -54,6 +54,12 @@ func main() {
 				os.Exit(1)
 			}
 			return
+		case "ldap-sync":
+			if err := runLDAPSync(os.Args[2:]); err != nil {
+				fmt.Fprintf(os.Stderr, "tayga ldap-sync: %v\n", err)
+				os.Exit(1)
+			}
+			return
 		}
 	}
 
@@ -188,6 +194,40 @@ func runSyncObjects(args []string) error {
 	return nil
 }
 
+func runLDAPSync(args []string) error {
+	fs := flag.NewFlagSet("ldap-sync", flag.ExitOnError)
+	cfgPath := fs.String("config", "configs/tayga.example.yaml", "path to YAML config")
+	domain := fs.String("domain", "", "limit to one mail domain (default: all enabled)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	cfg, err := config.Load(*cfgPath)
+	if err != nil {
+		return err
+	}
+	ctx := context.Background()
+	store, err := storage.Open(ctx, cfg.Storage)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+	dir := auth.NewDirectory(store, cfg.LDAP)
+	if *domain != "" {
+		rep, err := dir.SyncDomain(ctx, *domain)
+		if rep != nil {
+			fmt.Printf("ldap-sync %s: created=%d updated=%d admins=%d errors=%d skipped=%d\n",
+				rep.Domain, rep.Created, rep.Updated, rep.Admins, rep.Errors, rep.Skipped)
+		}
+		return err
+	}
+	reps, err := dir.SyncAll(ctx)
+	for _, rep := range reps {
+		fmt.Printf("ldap-sync %s: created=%d updated=%d admins=%d errors=%d skipped=%d\n",
+			rep.Domain, rep.Created, rep.Updated, rep.Admins, rep.Errors, rep.Skipped)
+	}
+	return err
+}
+
 func openObjectStore(cfg *config.Config) (mailstore.Blob, error) {
 	o := cfg.Mailstore.ObjectStore
 	return mailstore.NewS3Blob(mailstore.S3Config{
@@ -258,6 +298,9 @@ func run(cfgPath string) error {
 	metrics.Register(store)
 
 	authn := auth.NewLayer(store, cfg.LDAP, cfg.MFA, cfg.OIDC)
+	if dir, ok := authn.LDAP.(*auth.Directory); ok {
+		dir.StartGroupSyncLoop(ctx, log)
+	}
 	ms := mailstore.New(cfg.Mailstore.Root)
 	var objBlob mailstore.Blob
 	var objSyncInterval time.Duration
