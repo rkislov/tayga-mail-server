@@ -3,52 +3,561 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Tayga Mail Server</title>
+  <title>Tayga Mail</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --forest: #2D5A27;
-      --earth: #6B4F3A;
-      --spray: #FF6B35;
-      --stone: #F5F5F0;
+      --forest: #1f4d2e;
+      --moss: #3d7a4a;
+      --earth: #4a3728;
+      --spray: #e85d04;
+      --spray-deep: #c44900;
+      --stone: #eef1ea;
+      --ink: #1a1f1c;
+      --mist: rgba(255, 255, 255, 0.72);
+      --line: rgba(31, 77, 46, 0.18);
+      --err: #9b2226;
+      --ok: #2d6a4f;
     }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
     body {
       margin: 0;
-      min-height: 100vh;
+      color: var(--ink);
+      font-family: "Source Sans 3", system-ui, sans-serif;
+      background:
+        radial-gradient(ellipse 80% 50% at 10% 0%, rgba(232, 93, 4, 0.18), transparent 55%),
+        radial-gradient(ellipse 70% 60% at 100% 100%, rgba(31, 77, 46, 0.28), transparent 50%),
+        linear-gradient(160deg, #f7f8f3 0%, #e4ebe3 45%, #d5e0d4 100%);
+      background-attachment: fixed;
+    }
+    .shell {
+      min-height: 100%;
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+    .brand-bar {
+      padding: 1.25rem 1.5rem 0;
+    }
+    .brand {
+      font-family: Fraunces, Georgia, serif;
+      font-weight: 700;
+      font-size: clamp(1.75rem, 4vw, 2.4rem);
+      color: var(--forest);
+      letter-spacing: -0.02em;
+      margin: 0;
+      line-height: 1.1;
+    }
+    .brand span { color: var(--spray); }
+    .stage {
       display: grid;
       place-items: center;
-      font-family: Georgia, "Times New Roman", serif;
-      background:
-        radial-gradient(circle at 20% 20%, rgba(255,107,53,.15), transparent 40%),
-        radial-gradient(circle at 80% 70%, rgba(45,90,39,.2), transparent 45%),
-        var(--stone);
+      padding: 1.5rem;
+    }
+    .panel {
+      width: min(420px, 100%);
+      background: var(--mist);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      padding: 1.5rem 1.4rem 1.35rem;
+      box-shadow: 0 18px 40px rgba(26, 31, 28, 0.08);
+    }
+    .panel h2 {
+      font-family: Fraunces, Georgia, serif;
+      font-size: 1.35rem;
+      font-weight: 500;
+      margin: 0 0 0.35rem;
       color: var(--earth);
     }
-    main { text-align: center; padding: 2rem; }
-    h1 {
-      font-size: clamp(2.5rem, 8vw, 4.5rem);
-      margin: 0 0 .5rem;
-      color: var(--forest);
-      letter-spacing: .02em;
+    .lede {
+      margin: 0 0 1.25rem;
+      color: rgba(26, 31, 28, 0.72);
+      font-size: 0.95rem;
     }
-    p { margin: 0; opacity: .85; }
-    .tag {
-      display: inline-block;
-      margin-top: 1.25rem;
-      padding: .35rem .9rem;
-      border: 2px solid var(--spray);
-      color: var(--spray);
-      font-weight: 700;
+    label {
+      display: block;
+      font-size: 0.78rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
       text-transform: uppercase;
-      letter-spacing: .08em;
-      font-size: .75rem;
+      color: var(--forest);
+      margin: 0.85rem 0 0.35rem;
     }
+    input {
+      width: 100%;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      padding: 0.7rem 0.8rem;
+      font: inherit;
+      border-radius: 3px;
+    }
+    input:focus {
+      outline: 2px solid rgba(232, 93, 4, 0.45);
+      border-color: var(--spray);
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+      margin-top: 1.25rem;
+    }
+    button, .btn {
+      appearance: none;
+      border: none;
+      cursor: pointer;
+      font: inherit;
+      font-weight: 600;
+      padding: 0.7rem 1.05rem;
+      border-radius: 3px;
+      background: var(--forest);
+      color: #fff;
+    }
+    button:hover { background: var(--moss); }
+    button.secondary {
+      background: transparent;
+      color: var(--forest);
+      border: 1px solid var(--line);
+    }
+    button.spray { background: var(--spray); }
+    button.spray:hover { background: var(--spray-deep); }
+    button:disabled { opacity: 0.55; cursor: not-allowed; }
+    .msg {
+      margin-top: 0.9rem;
+      font-size: 0.9rem;
+      min-height: 1.2em;
+    }
+    .msg.err { color: var(--err); }
+    .msg.ok { color: var(--ok); }
+    .hidden { display: none !important; }
+    .account {
+      width: min(720px, 100%);
+      display: grid;
+      gap: 1rem;
+    }
+    .card {
+      background: var(--mist);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      padding: 1.2rem 1.25rem;
+    }
+    .card h3 {
+      font-family: Fraunces, Georgia, serif;
+      margin: 0 0 0.5rem;
+      font-size: 1.15rem;
+      color: var(--forest);
+    }
+    .meta { color: rgba(26, 31, 28, 0.7); font-size: 0.92rem; }
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 0.75rem;
+    }
+    .chip {
+      display: inline-block;
+      padding: 0.2rem 0.55rem;
+      border: 1px solid var(--spray);
+      color: var(--spray-deep);
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    ul.creds {
+      list-style: none;
+      margin: 0.75rem 0 0;
+      padding: 0;
+    }
+    ul.creds li {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.75rem;
+      padding: 0.55rem 0;
+      border-top: 1px solid var(--line);
+      font-size: 0.92rem;
+    }
+    code.secret {
+      display: block;
+      margin-top: 0.5rem;
+      padding: 0.65rem 0.75rem;
+      background: #fff;
+      border: 1px dashed var(--line);
+      word-break: break-all;
+      font-size: 0.82rem;
+    }
+    .backup { font-size: 0.85rem; margin: 0.5rem 0 0; }
   </style>
 </head>
 <body>
-  <main>
-    <h1>Tayga Mail</h1>
-    <p>Mail server is running. Web UI arrives in a later milestone.</p>
-    <span class="tag">street art + nature</span>
-  </main>
+  <div class="shell">
+    <header class="brand-bar">
+      <p class="brand">Tayga <span>Mail</span></p>
+    </header>
+    <div class="stage">
+      <!-- Login -->
+      <section id="view-login" class="panel">
+        <h2>Sign in</h2>
+        <p class="lede">Access your mailbox account, MFA, and FlowSync credentials.</p>
+        <form id="form-login">
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" autocomplete="username" required placeholder="admin@example.com" />
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" required />
+          <div class="actions">
+            <button type="submit" class="spray">Continue</button>
+          </div>
+          <p id="login-msg" class="msg" role="status"></p>
+        </form>
+      </section>
+
+      <!-- MFA -->
+      <section id="view-mfa" class="panel hidden">
+        <h2>Verify it’s you</h2>
+        <p class="lede">Complete a second factor to finish signing in.</p>
+        <div id="mfa-methods" class="row"></div>
+        <form id="form-totp" class="hidden">
+          <label for="totp">Authenticator code</label>
+          <input id="totp" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" />
+          <div class="actions">
+            <button type="submit">Verify code</button>
+            <button type="button" class="secondary" id="btn-back-login">Back</button>
+          </div>
+        </form>
+        <div class="actions hidden" id="mfa-webauthn-actions">
+          <button type="button" id="btn-webauthn-login" class="spray">Use passkey</button>
+        </div>
+        <p id="mfa-msg" class="msg" role="status"></p>
+      </section>
+
+      <!-- Account -->
+      <section id="view-account" class="account hidden">
+        <div class="card">
+          <div class="row" style="margin-top:0">
+            <div>
+              <h3 id="acct-email">—</h3>
+              <p class="meta">Signed in · tokens ready for IMAP XOAUTH2 / FlowSync</p>
+            </div>
+            <span class="chip">live</span>
+          </div>
+          <div class="actions">
+            <button type="button" class="secondary" id="btn-logout">Sign out</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Authenticator (TOTP)</h3>
+          <p class="meta">Enroll an app like Aegis or Google Authenticator.</p>
+          <div class="actions">
+            <button type="button" id="btn-totp-setup">Begin setup</button>
+            <button type="button" class="secondary" id="btn-totp-confirm">Confirm code</button>
+          </div>
+          <div id="totp-setup-box" class="hidden">
+            <code class="secret" id="totp-uri"></code>
+            <p class="backup" id="totp-backup"></p>
+            <label for="totp-confirm">Confirm TOTP</label>
+            <input id="totp-confirm" inputmode="numeric" />
+          </div>
+          <p id="totp-msg" class="msg" role="status"></p>
+        </div>
+
+        <div class="card">
+          <h3>Passkeys (WebAuthn)</h3>
+          <p class="meta">Register a platform or security-key credential (UUID-backed).</p>
+          <div class="actions">
+            <button type="button" class="spray" id="btn-passkey-add">Add passkey</button>
+            <button type="button" class="secondary" id="btn-passkey-refresh">Refresh</button>
+          </div>
+          <ul class="creds" id="cred-list"></ul>
+          <p id="passkey-msg" class="msg" role="status"></p>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const state = {
+      tokens: null,
+      email: "",
+      challenge: "",
+      methods: [],
+    };
+
+    const $ = (id) => document.getElementById(id);
+    const views = ["view-login", "view-mfa", "view-account"];
+
+    function show(id) {
+      views.forEach((v) => $(v).classList.toggle("hidden", v !== id));
+    }
+
+    function setMsg(el, text, kind) {
+      el.textContent = text || "";
+      el.className = "msg" + (kind ? " " + kind : "");
+    }
+
+    async function api(path, opts = {}) {
+      const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
+      if (state.tokens?.access_token) {
+        headers.Authorization = "Bearer " + state.tokens.access_token;
+      }
+      const res = await fetch(path, Object.assign({}, opts, { headers }));
+      const text = await res.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch { data = { error: text }; }
+      if (!res.ok) {
+        const err = new Error((data && data.error) || res.statusText || "request failed");
+        err.status = res.status;
+        err.data = data;
+        throw err;
+      }
+      return data;
+    }
+
+    function b64urlToBuf(v) {
+      const s = v.replace(/-/g, "+").replace(/_/g, "/");
+      const pad = "=".repeat((4 - (s.length % 4)) % 4);
+      const bin = atob(s + pad);
+      const out = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+      return out.buffer;
+    }
+
+    function bufToB64url(buf) {
+      const bytes = new Uint8Array(buf);
+      let s = "";
+      for (const b of bytes) s += String.fromCharCode(b);
+      return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+    }
+
+    function reviveCreation(publicKey) {
+      const o = structuredClone(publicKey);
+      o.challenge = b64urlToBuf(o.challenge);
+      o.user.id = b64urlToBuf(o.user.id);
+      if (o.excludeCredentials) {
+        o.excludeCredentials = o.excludeCredentials.map((c) => Object.assign({}, c, { id: b64urlToBuf(c.id) }));
+      }
+      return o;
+    }
+
+    function reviveRequest(publicKey) {
+      const o = structuredClone(publicKey);
+      o.challenge = b64urlToBuf(o.challenge);
+      if (o.allowCredentials) {
+        o.allowCredentials = o.allowCredentials.map((c) => Object.assign({}, c, { id: b64urlToBuf(c.id) }));
+      }
+      return o;
+    }
+
+    function credentialToJSON(cred) {
+      const r = cred.response;
+      const out = {
+        id: cred.id,
+        rawId: bufToB64url(cred.rawId),
+        type: cred.type,
+        response: {},
+        clientExtensionResults: cred.getClientExtensionResults?.() || {},
+      };
+      if (r.attestationObject) {
+        out.response = {
+          clientDataJSON: bufToB64url(r.clientDataJSON),
+          attestationObject: bufToB64url(r.attestationObject),
+          transports: r.getTransports?.() || [],
+        };
+      } else {
+        out.response = {
+          clientDataJSON: bufToB64url(r.clientDataJSON),
+          authenticatorData: bufToB64url(r.authenticatorData),
+          signature: bufToB64url(r.signature),
+          userHandle: r.userHandle ? bufToB64url(r.userHandle) : null,
+        };
+      }
+      return out;
+    }
+
+    function enterAccount(tokens, email) {
+      state.tokens = tokens;
+      state.email = email || state.email;
+      localStorage.setItem("tayga.tokens", JSON.stringify(tokens));
+      localStorage.setItem("tayga.email", state.email);
+      $("acct-email").textContent = state.email;
+      show("view-account");
+      refreshPasskeys();
+    }
+
+    $("form-login").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      setMsg($("login-msg"), "Signing in…");
+      try {
+        const data = await api("/api/v1/auth/login", {
+          method: "POST",
+          body: JSON.stringify({
+            email: $("email").value.trim(),
+            password: $("password").value,
+          }),
+        });
+        state.email = data.email || $("email").value.trim();
+        if (data.mfa_required) {
+          state.challenge = data.challenge;
+          state.methods = data.methods || ["totp"];
+          renderMfaMethods();
+          show("view-mfa");
+          setMsg($("login-msg"), "");
+          return;
+        }
+        enterAccount(data.tokens, state.email);
+        setMsg($("login-msg"), "");
+      } catch (err) {
+        setMsg($("login-msg"), err.message, "err");
+      }
+    });
+
+    function renderMfaMethods() {
+      const wrap = $("mfa-methods");
+      wrap.innerHTML = state.methods.map((m) => `<span class="chip">${m}</span>`).join(" ");
+      const hasTotp = state.methods.includes("totp");
+      const hasWA = state.methods.includes("webauthn");
+      $("form-totp").classList.toggle("hidden", !hasTotp);
+      $("mfa-webauthn-actions").classList.toggle("hidden", !hasWA);
+    }
+
+    $("form-totp").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      setMsg($("mfa-msg"), "Verifying…");
+      try {
+        const tokens = await api("/api/v1/auth/mfa/verify", {
+          method: "POST",
+          body: JSON.stringify({ challenge: state.challenge, code: $("totp").value.trim() }),
+        });
+        enterAccount(tokens, state.email);
+      } catch (err) {
+        setMsg($("mfa-msg"), err.message, "err");
+      }
+    });
+
+    $("btn-webauthn-login").addEventListener("click", async () => {
+      setMsg($("mfa-msg"), "Waiting for authenticator…");
+      try {
+        const begin = await api("/api/v1/auth/webauthn/login/begin", {
+          method: "POST",
+          body: JSON.stringify({ challenge: state.challenge }),
+        });
+        const publicKey = reviveRequest(begin.options.publicKey);
+        const cred = await navigator.credentials.get({ publicKey });
+        const tokens = await api("/api/v1/auth/webauthn/login/finish", {
+          method: "POST",
+          body: JSON.stringify({
+            challenge: state.challenge,
+            session_id: begin.session_id,
+            credential: credentialToJSON(cred),
+          }),
+        });
+        enterAccount(tokens, state.email);
+      } catch (err) {
+        setMsg($("mfa-msg"), err.message, "err");
+      }
+    });
+
+    $("btn-back-login").addEventListener("click", () => show("view-login"));
+
+    $("btn-logout").addEventListener("click", () => {
+      state.tokens = null;
+      localStorage.removeItem("tayga.tokens");
+      show("view-login");
+    });
+
+    $("btn-totp-setup").addEventListener("click", async () => {
+      setMsg($("totp-msg"), "Creating secret…");
+      try {
+        const data = await api("/api/v1/auth/mfa/setup", { method: "POST", body: "{}" });
+        $("totp-setup-box").classList.remove("hidden");
+        $("totp-uri").textContent = data.otpauth_uri;
+        $("totp-backup").textContent = "Backup codes: " + (data.backup_codes || []).join(", ");
+        setMsg($("totp-msg"), "Scan the URI, then confirm a code.", "ok");
+      } catch (err) {
+        setMsg($("totp-msg"), err.message, "err");
+      }
+    });
+
+    $("btn-totp-confirm").addEventListener("click", async () => {
+      try {
+        await api("/api/v1/auth/mfa/confirm", {
+          method: "POST",
+          body: JSON.stringify({ code: $("totp-confirm").value.trim() }),
+        });
+        setMsg($("totp-msg"), "TOTP enabled.", "ok");
+      } catch (err) {
+        setMsg($("totp-msg"), err.message, "err");
+      }
+    });
+
+    async function refreshPasskeys() {
+      try {
+        const data = await api("/api/v1/auth/webauthn/credentials");
+        const list = $("cred-list");
+        const creds = data.credentials || [];
+        if (!creds.length) {
+          list.innerHTML = "<li><span class='meta'>No passkeys yet</span></li>";
+          return;
+        }
+        list.innerHTML = creds.map((c) => `
+          <li>
+            <span><strong>${escapeHtml(c.name || "Passkey")}</strong><br/><span class="meta">${escapeHtml(c.id)}</span></span>
+            <button type="button" class="secondary" data-del="${escapeHtml(c.id)}">Remove</button>
+          </li>`).join("");
+        list.querySelectorAll("[data-del]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            try {
+              await api("/api/v1/auth/webauthn/credentials/" + encodeURIComponent(btn.dataset.del), { method: "DELETE" });
+              refreshPasskeys();
+            } catch (err) {
+              setMsg($("passkey-msg"), err.message, "err");
+            }
+          });
+        });
+      } catch (err) {
+        setMsg($("passkey-msg"), err.message, "err");
+      }
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+    }
+
+    $("btn-passkey-refresh").addEventListener("click", refreshPasskeys);
+
+    $("btn-passkey-add").addEventListener("click", async () => {
+      setMsg($("passkey-msg"), "Creating passkey…");
+      try {
+        const begin = await api("/api/v1/auth/webauthn/register/begin", { method: "POST", body: "{}" });
+        const publicKey = reviveCreation(begin.options.publicKey);
+        const cred = await navigator.credentials.create({ publicKey });
+        const name = prompt("Name this passkey", "This device") || "Passkey";
+        await api("/api/v1/auth/webauthn/register/finish", {
+          method: "POST",
+          body: JSON.stringify({
+            session_id: begin.session_id,
+            name,
+            credential: credentialToJSON(cred),
+          }),
+        });
+        setMsg($("passkey-msg"), "Passkey registered.", "ok");
+        refreshPasskeys();
+      } catch (err) {
+        setMsg($("passkey-msg"), err.message, "err");
+      }
+    });
+
+    // Restore session
+    try {
+      const tok = JSON.parse(localStorage.getItem("tayga.tokens") || "null");
+      const email = localStorage.getItem("tayga.email") || "";
+      if (tok?.access_token) enterAccount(tok, email);
+    } catch {}
+  </script>
 </body>
 </html>
