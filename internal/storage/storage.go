@@ -120,6 +120,9 @@ type Driver interface {
 	GetWebAuthnSession(ctx context.Context, id string) (*WebAuthnSession, error)
 	DeleteWebAuthnSession(ctx context.Context, id string) error
 
+	ServerStats(ctx context.Context) (*ServerStats, error)
+	TenantStats(ctx context.Context, tenantID string) (*TenantStats, error)
+
 	DB() *sql.DB
 }
 

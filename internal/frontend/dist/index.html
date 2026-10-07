@@ -273,6 +273,18 @@
           </div>
         </div>
 
+        <div class="card hidden" id="card-monitor">
+          <h3>Monitoring</h3>
+          <p class="meta">Live tenant/server stats. Prometheus scrapes <code>/metrics</code>.</p>
+          <div id="monitor-grid" class="meta" style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem 1rem;margin:0.75rem 0;"></div>
+          <div class="actions">
+            <button type="button" class="secondary" id="btn-monitor-refresh">Refresh</button>
+            <button type="button" class="spray" id="btn-backup">Download backup</button>
+            <button type="button" class="secondary" id="btn-backup-mail">Backup + mail</button>
+          </div>
+          <p id="monitor-msg" class="msg" role="status"></p>
+        </div>
+
         <div class="card hidden" id="card-admin">
           <h3>Tenant</h3>
           <p class="meta" id="tenant-meta">Loading…</p>
@@ -493,7 +505,9 @@ keep;</textarea>
         $("acct-role").textContent = me.is_admin ? "admin" : "live";
         $("card-admin").classList.toggle("hidden", !me.is_admin);
         $("card-tls").classList.toggle("hidden", !me.is_admin);
+        $("card-monitor").classList.toggle("hidden", !me.is_admin);
         if (me.is_admin) {
+          refreshMonitor();
           refreshTenant();
           refreshAdminUsers();
           refreshTLS();
@@ -502,6 +516,64 @@ keep;</textarea>
         $("acct-meta").textContent = err.message;
       }
     }
+
+    function fmtNum(n) {
+      if (n == null) return "—";
+      return Number(n).toLocaleString();
+    }
+
+    async function refreshMonitor() {
+      try {
+        const d = await api("/api/v1/admin/status");
+        const t = d.tenant || {};
+        const s = d.server || {};
+        const g = d.go || {};
+        const rows = [
+          ["Tenant", t.tenant_name || "—"],
+          ["Uptime", (d.uptime_sec || 0) + "s"],
+          ["Users (tenant)", fmtNum(t.users) + " / " + fmtNum(t.users_enabled) + " enabled"],
+          ["Domains", fmtNum(t.domains)],
+          ["Messages (tenant)", fmtNum(t.messages)],
+          ["Bytes (tenant)", fmtBytes(t.bytes_stored || 0)],
+          ["Users (server)", fmtNum(s.users)],
+          ["Messages (server)", fmtNum(s.messages)],
+          ["Bytes (server)", fmtBytes(s.bytes_stored || 0)],
+          ["Goroutines", fmtNum(g.goroutines)],
+        ];
+        $("monitor-grid").innerHTML = rows.map(([k, v]) =>
+          `<div><span class="meta">${escapeHtml(k)}</span><br/><strong>${escapeHtml(String(v))}</strong></div>`
+        ).join("");
+      } catch (err) {
+        setMsg($("monitor-msg"), err.message, "err");
+      }
+    }
+
+    $("btn-monitor-refresh").addEventListener("click", () => refreshMonitor());
+
+    async function downloadBackup(includeMail) {
+      setMsg($("monitor-msg"), "Preparing backup…");
+      try {
+        const q = includeMail ? "?include_mail=1" : "";
+        const headers = {};
+        if (state.tokens?.access_token) headers.Authorization = "Bearer " + state.tokens.access_token;
+        const res = await fetch("/api/v1/admin/backup" + q, { headers });
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(text || ("HTTP " + res.status));
+        }
+        const blob = await res.blob();
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "tayga-backup.tar.gz";
+        a.click();
+        URL.revokeObjectURL(a.href);
+        setMsg($("monitor-msg"), "Backup downloaded.", "ok");
+      } catch (err) {
+        setMsg($("monitor-msg"), err.message, "err");
+      }
+    }
+    $("btn-backup").addEventListener("click", () => downloadBackup(false));
+    $("btn-backup-mail").addEventListener("click", () => downloadBackup(true));
 
     async function refreshTenant() {
       try {
