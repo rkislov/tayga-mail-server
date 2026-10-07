@@ -136,6 +136,19 @@ func (s *Store) GetCalendarByName(ctx context.Context, userID, name string) (*Ca
 	return c, nil
 }
 
+func (s *Store) GetCalendarByID(ctx context.Context, userID, id string) (*Calendar, error) {
+	q := s.rebind(`SELECT id, user_id, name, display_name, description, ctag, created_at FROM calendars WHERE user_id = ? AND id = ?`)
+	c := &Calendar{}
+	err := s.db.QueryRowContext(ctx, q, userID, id).Scan(&c.ID, &c.UserID, &c.Name, &c.DisplayName, &c.Description, &c.CTag, &c.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
 func (s *Store) bumpCalendarCTag(ctx context.Context, calendarID string) error {
 	q := s.rebind(`UPDATE calendars SET ctag = ? WHERE id = ?`)
 	_, err := s.db.ExecContext(ctx, q, newCTag(), calendarID)
@@ -287,6 +300,19 @@ func (s *Store) GetAddressBookByName(ctx context.Context, userID, name string) (
 	q := s.rebind(`SELECT id, user_id, name, display_name, description, ctag, created_at FROM addressbooks WHERE user_id = ? AND name = ?`)
 	ab := &AddressBook{}
 	err := s.db.QueryRowContext(ctx, q, userID, name).Scan(&ab.ID, &ab.UserID, &ab.Name, &ab.DisplayName, &ab.Description, &ab.CTag, &ab.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return ab, nil
+}
+
+func (s *Store) GetAddressBookByID(ctx context.Context, userID, id string) (*AddressBook, error) {
+	q := s.rebind(`SELECT id, user_id, name, display_name, description, ctag, created_at FROM addressbooks WHERE user_id = ? AND id = ?`)
+	ab := &AddressBook{}
+	err := s.db.QueryRowContext(ctx, q, userID, id).Scan(&ab.ID, &ab.UserID, &ab.Name, &ab.DisplayName, &ab.Description, &ab.CTag, &ab.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
 	}
