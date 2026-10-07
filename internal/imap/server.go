@@ -385,12 +385,16 @@ func (m *Mailbox) CreateMessage(flags []string, date time.Time, body imap.Litera
 	if date.IsZero() {
 		date = time.Now().UTC()
 	}
+	ctx := context.Background()
+	if err := storage.EnsureQuota(ctx, m.user.backend.store, m.user.user, int64(len(data))); err != nil {
+		return err
+	}
 	rel, size, err := m.user.backend.ms.Deliver(m.user.user.Email, m.mb.Name, data)
 	if err != nil {
 		return err
 	}
 	flagStr := storage.NormalizeFlags(flags)
-	_, err = m.user.backend.store.InsertMessage(context.Background(), &storage.Message{
+	_, err = m.user.backend.store.InsertMessage(ctx, &storage.Message{
 		MailboxID:    m.mb.ID,
 		Size:         size,
 		Flags:        flagStr,
@@ -483,6 +487,9 @@ func (m *Mailbox) CopyMessages(uid bool, seqset *imap.SeqSet, dest string) error
 		}
 		data, err := m.user.backend.ms.Read(msg.FilePath)
 		if err != nil {
+			return err
+		}
+		if err := storage.EnsureQuota(ctx, m.user.backend.store, m.user.user, int64(len(data))); err != nil {
 			return err
 		}
 		rel, size, err := m.user.backend.ms.Deliver(m.user.user.Email, dst.mb.Name, data)

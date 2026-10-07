@@ -18,6 +18,8 @@ CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o tayga-mail ./cmd/tayga
 - IMAP: `localhost:1143`
 - POP3: `localhost:1110`
 - ManageSieve: `localhost:14190`
+- LDAP: optional per-domain hybrid auth in `ldap.domains` (see example config)
+- Quotas: set `users.quota_bytes` (0 = unlimited); SMTP returns `552` when full
 
 ## License
 
