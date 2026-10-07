@@ -74,6 +74,7 @@ type Driver interface {
 	CreateCalendar(ctx context.Context, c *Calendar) (*Calendar, error)
 	ListCalendars(ctx context.Context, userID string) ([]*Calendar, error)
 	GetCalendarByName(ctx context.Context, userID, name string) (*Calendar, error)
+	GetCalendarByID(ctx context.Context, userID, id string) (*Calendar, error)
 	ListCalendarObjects(ctx context.Context, calendarID string) ([]*CalendarObject, error)
 	GetCalendarObject(ctx context.Context, calendarID, hrefName string) (*CalendarObject, error)
 	UpsertCalendarObject(ctx context.Context, o *CalendarObject) (*CalendarObject, error)
@@ -83,6 +84,7 @@ type Driver interface {
 	CreateAddressBook(ctx context.Context, ab *AddressBook) (*AddressBook, error)
 	ListAddressBooks(ctx context.Context, userID string) ([]*AddressBook, error)
 	GetAddressBookByName(ctx context.Context, userID, name string) (*AddressBook, error)
+	GetAddressBookByID(ctx context.Context, userID, id string) (*AddressBook, error)
 	DeleteAddressBook(ctx context.Context, userID, name string) error
 	ListAddressObjects(ctx context.Context, addressBookID string) ([]*AddressObject, error)
 	GetAddressObject(ctx context.Context, addressBookID, hrefName string) (*AddressObject, error)

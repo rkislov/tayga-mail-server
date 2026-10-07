@@ -37,11 +37,11 @@ func (h *ewsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
 	switch op {
 	case "FindItem":
-		soap, err = h.findItem(r.Context(), u)
+		soap, err = h.findItem(r.Context(), u, string(body))
 	case "GetItem":
 		soap, err = h.getItem(r.Context(), u, string(body))
 	case "SyncFolderItems":
-		soap, err = h.syncFolderItems(r.Context(), u)
+		soap, err = h.syncFolderItems(r.Context(), u, string(body))
 	case "GetFolder", "FindFolder":
 		soap, err = h.findFolder(r.Context(), u)
 	default:
@@ -56,7 +56,16 @@ func (h *ewsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ewsHandler) findFolder(ctx context.Context, u *storage.User) (string, error) {
+	_ = h.store.EnsureDAVDefaults(ctx, u.ID)
 	mbs, err := h.store.ListMailboxes(ctx, u.ID)
+	if err != nil {
+		return "", err
+	}
+	cals, err := h.store.ListCalendars(ctx, u.ID)
+	if err != nil {
+		return "", err
+	}
+	abs, err := h.store.ListAddressBooks(ctx, u.ID)
 	if err != nil {
 		return "", err
 	}
@@ -64,19 +73,52 @@ func (h *ewsHandler) findFolder(ctx context.Context, u *storage.User) (string, e
 	b.WriteString(`<m:FindFolderResponse xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types">`)
 	b.WriteString(`<m:ResponseMessages><m:FindFolderResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:RootFolder>`)
 	for _, mb := range mbs {
-		fmt.Fprintf(&b, `<t:Folders><t:Folder><t:FolderId Id="%s" ChangeKey="0"/><t:DisplayName>%s</t:DisplayName><t:TotalCount>0</t:TotalCount></t:Folder></t:Folders>`,
+		fmt.Fprintf(&b, `<t:Folders><t:Folder><t:FolderId Id="%s" ChangeKey="0"/><t:DisplayName>%s</t:DisplayName><t:FolderClass>IPF.Note</t:FolderClass><t:TotalCount>0</t:TotalCount></t:Folder></t:Folders>`,
 			xmlEscape(mb.ID), xmlEscape(mb.Name))
+	}
+	for _, cal := range cals {
+		name := cal.DisplayName
+		if name == "" {
+			name = cal.Name
+		}
+		fmt.Fprintf(&b, `<t:Folders><t:CalendarFolder><t:FolderId Id="%s" ChangeKey="0"/><t:DisplayName>%s</t:DisplayName><t:FolderClass>IPF.Appointment</t:FolderClass><t:TotalCount>0</t:TotalCount></t:CalendarFolder></t:Folders>`,
+			xmlEscape(cal.ID), xmlEscape(name))
+	}
+	for _, ab := range abs {
+		name := ab.DisplayName
+		if name == "" {
+			name = ab.Name
+		}
+		fmt.Fprintf(&b, `<t:Folders><t:ContactsFolder><t:FolderId Id="%s" ChangeKey="0"/><t:DisplayName>%s</t:DisplayName><t:FolderClass>IPF.Contact</t:FolderClass><t:TotalCount>0</t:TotalCount></t:ContactsFolder></t:Folders>`,
+			xmlEscape(ab.ID), xmlEscape(name))
 	}
 	b.WriteString(`</m:RootFolder></m:FindFolderResponseMessage></m:ResponseMessages></m:FindFolderResponse>`)
 	return b.String(), nil
 }
 
-func (h *ewsHandler) findItem(ctx context.Context, u *storage.User) (string, error) {
-	mb, err := h.store.GetMailbox(ctx, u.ID, "INBOX")
-	if err != nil {
-		return "", err
+func (h *ewsHandler) findItem(ctx context.Context, u *storage.User, body string) (string, error) {
+	_ = h.store.EnsureDAVDefaults(ctx, u.ID)
+	folderID := extractAttr(body, "FolderId", "Id")
+	if folderID == "" {
+		mb, err := h.store.GetMailbox(ctx, u.ID, "INBOX")
+		if err != nil {
+			return "", err
+		}
+		folderID = mb.ID
 	}
-	msgs, err := h.store.ListMessages(ctx, mb.ID)
+
+	if cal, err := h.store.GetCalendarByID(ctx, u.ID, folderID); err == nil {
+		return h.findCalendarItems(ctx, cal.ID)
+	}
+	if ab, err := h.store.GetAddressBookByID(ctx, u.ID, folderID); err == nil {
+		return h.findContactItems(ctx, ab.ID)
+	}
+	return h.findMailItems(ctx, u, folderID)
+}
+
+func (h *ewsHandler) findMailItems(ctx context.Context, u *storage.User, mailboxID string) (string, error) {
+	_ = u
+	msgs, err := h.store.ListMessages(ctx, mailboxID)
 	if err != nil {
 		return "", err
 	}
@@ -88,8 +130,59 @@ func (h *ewsHandler) findItem(ctx context.Context, u *storage.User) (string, err
 	b.WriteString(`<m:ResponseMessages><m:FindItemResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:RootFolder>`)
 	b.WriteString(`<t:Items>`)
 	for _, m := range msgs {
-		fmt.Fprintf(&b, `<t:Message><t:ItemId Id="%s" ChangeKey="%s"/><t:Subject>Message UID %d</t:Subject><t:DateTimeReceived>%s</t:DateTimeReceived></t:Message>`,
-			xmlEscape(m.ID), xmlEscape(m.ID), m.UID, m.InternalDate.UTC().Format("2006-01-02T15:04:05Z"))
+		hdr := readMsgHeaders(h.ms, m.FilePath)
+		fmt.Fprintf(&b, `<t:Message><t:ItemId Id="%s" ChangeKey="%s"/><t:Subject>%s</t:Subject><t:DateTimeReceived>%s</t:DateTimeReceived></t:Message>`,
+			xmlEscape(m.ID), xmlEscape(m.ID), xmlEscape(hdr.Subject), m.InternalDate.UTC().Format("2006-01-02T15:04:05Z"))
+	}
+	b.WriteString(`</t:Items></m:RootFolder></m:FindItemResponseMessage></m:ResponseMessages></m:FindItemResponse>`)
+	return b.String(), nil
+}
+
+func (h *ewsHandler) findCalendarItems(ctx context.Context, calendarID string) (string, error) {
+	objs, err := h.store.ListCalendarObjects(ctx, calendarID)
+	if err != nil {
+		return "", err
+	}
+	var b strings.Builder
+	b.WriteString(`<m:FindItemResponse xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types">`)
+	b.WriteString(`<m:ResponseMessages><m:FindItemResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:RootFolder><t:Items>`)
+	for _, o := range objs {
+		ev := parseICalEvent(o.Data)
+		subject := ev.Summary
+		if subject == "" {
+			subject = o.UID
+		}
+		start := formatASTime(o.DTStart)
+		if start == "" {
+			start = ev.Start
+		}
+		end := formatASTime(o.DTEnd)
+		if end == "" {
+			end = ev.End
+		}
+		fmt.Fprintf(&b, `<t:CalendarItem><t:ItemId Id="%s" ChangeKey="%s"/><t:Subject>%s</t:Subject><t:Start>%s</t:Start><t:End>%s</t:End><t:Location>%s</t:Location><t:UID>%s</t:UID></t:CalendarItem>`,
+			xmlEscape(o.ID), xmlEscape(o.ID), xmlEscape(subject), xmlEscape(start), xmlEscape(end), xmlEscape(ev.Location), xmlEscape(o.UID))
+	}
+	b.WriteString(`</t:Items></m:RootFolder></m:FindItemResponseMessage></m:ResponseMessages></m:FindItemResponse>`)
+	return b.String(), nil
+}
+
+func (h *ewsHandler) findContactItems(ctx context.Context, addressBookID string) (string, error) {
+	objs, err := h.store.ListAddressObjects(ctx, addressBookID)
+	if err != nil {
+		return "", err
+	}
+	var b strings.Builder
+	b.WriteString(`<m:FindItemResponse xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types">`)
+	b.WriteString(`<m:ResponseMessages><m:FindItemResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:RootFolder><t:Items>`)
+	for _, o := range objs {
+		c := parseVCard(o.Data)
+		dn := c.FN
+		if dn == "" {
+			dn = strings.TrimSpace(c.FirstName + " " + c.LastName)
+		}
+		fmt.Fprintf(&b, `<t:Contact><t:ItemId Id="%s" ChangeKey="%s"/><t:DisplayName>%s</t:DisplayName><t:GivenName>%s</t:GivenName><t:Surname>%s</t:Surname><t:EmailAddresses><t:Entry Key="EmailAddress1">%s</t:Entry></t:EmailAddresses></t:Contact>`,
+			xmlEscape(o.ID), xmlEscape(o.ID), xmlEscape(dn), xmlEscape(c.FirstName), xmlEscape(c.LastName), xmlEscape(c.Email))
 	}
 	b.WriteString(`</t:Items></m:RootFolder></m:FindItemResponseMessage></m:ResponseMessages></m:FindItemResponse>`)
 	return b.String(), nil
@@ -100,46 +193,82 @@ func (h *ewsHandler) getItem(ctx context.Context, u *storage.User, body string) 
 	if id == "" {
 		return ewsFault("ErrorInvalidId", "missing ItemId"), nil
 	}
-	msg, err := h.store.GetMessageByID(ctx, id)
-	if err != nil {
-		return ewsFault("ErrorItemNotFound", err.Error()), nil
+	// Try mail first, then calendar object / contact by scanning user collections.
+	if msg, err := h.store.GetMessageByID(ctx, id); err == nil {
+		mbs, err := h.store.ListMailboxes(ctx, u.ID)
+		if err != nil {
+			return "", err
+		}
+		owned := false
+		for _, mb := range mbs {
+			if mb.ID == msg.MailboxID {
+				owned = true
+				break
+			}
+		}
+		if !owned {
+			return ewsFault("ErrorAccessDenied", "forbidden"), nil
+		}
+		raw, err := h.ms.Read(msg.FilePath)
+		if err != nil {
+			raw = []byte("")
+		}
+		hdr := readMsgHeaders(h.ms, msg.FilePath)
+		var b strings.Builder
+		b.WriteString(`<m:GetItemResponse xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types">`)
+		b.WriteString(`<m:ResponseMessages><m:GetItemResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:Items>`)
+		fmt.Fprintf(&b, `<t:Message><t:ItemId Id="%s" ChangeKey="%s"/><t:Subject>%s</t:Subject><t:Body BodyType="Text">%s</t:Body></t:Message>`,
+			xmlEscape(msg.ID), xmlEscape(msg.ID), xmlEscape(hdr.Subject), xmlEscape(truncate(string(raw), 64<<10)))
+		b.WriteString(`</m:Items></m:GetItemResponseMessage></m:ResponseMessages></m:GetItemResponse>`)
+		return b.String(), nil
 	}
-	// ownership: message must belong to user's mailbox
-	mbs, err := h.store.ListMailboxes(ctx, u.ID)
-	if err != nil {
-		return "", err
-	}
-	owned := false
-	for _, mb := range mbs {
-		if mb.ID == msg.MailboxID {
-			owned = true
-			break
+
+	cals, _ := h.store.ListCalendars(ctx, u.ID)
+	for _, cal := range cals {
+		objs, _ := h.store.ListCalendarObjects(ctx, cal.ID)
+		for _, o := range objs {
+			if o.ID != id {
+				continue
+			}
+			ev := parseICalEvent(o.Data)
+			var b strings.Builder
+			b.WriteString(`<m:GetItemResponse xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types">`)
+			b.WriteString(`<m:ResponseMessages><m:GetItemResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:Items>`)
+			fmt.Fprintf(&b, `<t:CalendarItem><t:ItemId Id="%s" ChangeKey="%s"/><t:Subject>%s</t:Subject><t:Body BodyType="Text">%s</t:Body><t:UID>%s</t:UID></t:CalendarItem>`,
+				xmlEscape(o.ID), xmlEscape(o.ID), xmlEscape(ev.Summary), xmlEscape(truncate(o.Data, 64<<10)), xmlEscape(o.UID))
+			b.WriteString(`</m:Items></m:GetItemResponseMessage></m:ResponseMessages></m:GetItemResponse>`)
+			return b.String(), nil
 		}
 	}
-	if !owned {
-		return ewsFault("ErrorAccessDenied", "forbidden"), nil
+	abs, _ := h.store.ListAddressBooks(ctx, u.ID)
+	for _, ab := range abs {
+		objs, _ := h.store.ListAddressObjects(ctx, ab.ID)
+		for _, o := range objs {
+			if o.ID != id {
+				continue
+			}
+			c := parseVCard(o.Data)
+			var b strings.Builder
+			b.WriteString(`<m:GetItemResponse xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types">`)
+			b.WriteString(`<m:ResponseMessages><m:GetItemResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:Items>`)
+			fmt.Fprintf(&b, `<t:Contact><t:ItemId Id="%s" ChangeKey="%s"/><t:DisplayName>%s</t:DisplayName><t:Body BodyType="Text">%s</t:Body></t:Contact>`,
+				xmlEscape(o.ID), xmlEscape(o.ID), xmlEscape(c.FN), xmlEscape(truncate(o.Data, 64<<10)))
+			b.WriteString(`</m:Items></m:GetItemResponseMessage></m:ResponseMessages></m:GetItemResponse>`)
+			return b.String(), nil
+		}
 	}
-	raw, err := h.ms.Read(msg.FilePath)
-	if err != nil {
-		raw = []byte("")
-	}
-	var b strings.Builder
-	b.WriteString(`<m:GetItemResponse xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types">`)
-	b.WriteString(`<m:ResponseMessages><m:GetItemResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:Items>`)
-	fmt.Fprintf(&b, `<t:Message><t:ItemId Id="%s" ChangeKey="%s"/><t:Subject>Message UID %d</t:Subject><t:Body BodyType="Text">%s</t:Body></t:Message>`,
-		xmlEscape(msg.ID), xmlEscape(msg.ID), msg.UID, xmlEscape(truncate(string(raw), 64<<10)))
-	b.WriteString(`</m:Items></m:GetItemResponseMessage></m:ResponseMessages></m:GetItemResponse>`)
-	return b.String(), nil
+	return ewsFault("ErrorItemNotFound", "not found"), nil
 }
 
-func (h *ewsHandler) syncFolderItems(ctx context.Context, u *storage.User) (string, error) {
-	mb, err := h.store.GetMailbox(ctx, u.ID, "INBOX")
-	if err != nil {
-		return "", err
-	}
-	msgs, err := h.store.ListMessages(ctx, mb.ID)
-	if err != nil {
-		return "", err
+func (h *ewsHandler) syncFolderItems(ctx context.Context, u *storage.User, body string) (string, error) {
+	_ = h.store.EnsureDAVDefaults(ctx, u.ID)
+	folderID := extractAttr(body, "FolderId", "Id")
+	if folderID == "" {
+		mb, err := h.store.GetMailbox(ctx, u.ID, "INBOX")
+		if err != nil {
+			return "", err
+		}
+		folderID = mb.ID
 	}
 	syncState := storage.NewID() // UUID sync state token
 	var b strings.Builder
@@ -147,9 +276,34 @@ func (h *ewsHandler) syncFolderItems(ctx context.Context, u *storage.User) (stri
 	b.WriteString(`<m:ResponseMessages><m:SyncFolderItemsResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode>`)
 	fmt.Fprintf(&b, `<m:SyncState>%s</m:SyncState><m:IncludesLastItemInRange>true</m:IncludesLastItemInRange>`, xmlEscape(syncState))
 	b.WriteString(`<m:Changes>`)
-	for _, m := range msgs {
-		fmt.Fprintf(&b, `<t:Create><t:Message><t:ItemId Id="%s" ChangeKey="%s"/></t:Message></t:Create>`,
-			xmlEscape(m.ID), xmlEscape(m.ID))
+
+	if cal, err := h.store.GetCalendarByID(ctx, u.ID, folderID); err == nil {
+		objs, err := h.store.ListCalendarObjects(ctx, cal.ID)
+		if err != nil {
+			return "", err
+		}
+		for _, o := range objs {
+			fmt.Fprintf(&b, `<t:Create><t:CalendarItem><t:ItemId Id="%s" ChangeKey="%s"/></t:CalendarItem></t:Create>`,
+				xmlEscape(o.ID), xmlEscape(o.ID))
+		}
+	} else if ab, err := h.store.GetAddressBookByID(ctx, u.ID, folderID); err == nil {
+		objs, err := h.store.ListAddressObjects(ctx, ab.ID)
+		if err != nil {
+			return "", err
+		}
+		for _, o := range objs {
+			fmt.Fprintf(&b, `<t:Create><t:Contact><t:ItemId Id="%s" ChangeKey="%s"/></t:Contact></t:Create>`,
+				xmlEscape(o.ID), xmlEscape(o.ID))
+		}
+	} else {
+		msgs, err := h.store.ListMessages(ctx, folderID)
+		if err != nil {
+			return "", err
+		}
+		for _, m := range msgs {
+			fmt.Fprintf(&b, `<t:Create><t:Message><t:ItemId Id="%s" ChangeKey="%s"/></t:Message></t:Create>`,
+				xmlEscape(m.ID), xmlEscape(m.ID))
+		}
 	}
 	b.WriteString(`</m:Changes></m:SyncFolderItemsResponseMessage></m:ResponseMessages></m:SyncFolderItemsResponse>`)
 	return b.String(), nil
@@ -176,7 +330,6 @@ func ewsFault(code, msg string) string {
 }
 
 func extractAttr(body, elem, attr string) string {
-	// find Id="uuid" near ItemId
 	needle := elem
 	i := strings.Index(body, needle)
 	if i < 0 {
