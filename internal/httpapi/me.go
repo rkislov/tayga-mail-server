@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+
+	"github.com/tayga/tms/internal/storage"
 )
 
 type patchMeRequest struct {
@@ -36,7 +38,8 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 			"quota_bytes":  su.QuotaBytes,
 			"used_bytes":   used,
 			"enabled":      su.Enabled,
-			"is_admin":     s.isAdmin(su.Email),
+			"roles":        storage.ParseRoles(su.Roles),
+			"is_admin":     s.isAdminUser(su),
 		})
 	case http.MethodPatch:
 		var req patchMeRequest
@@ -66,4 +69,14 @@ func (s *Server) isAdmin(email string) bool {
 		}
 	}
 	return false
+}
+
+func (s *Server) isAdminUser(u *storage.User) bool {
+	if u == nil {
+		return false
+	}
+	if s.isAdmin(u.Email) {
+		return true
+	}
+	return storage.HasRole(u.Roles, storage.RoleAdmin)
 }

@@ -6,17 +6,17 @@ import (
 
 // ServerStats is aggregate counters for monitoring.
 type ServerStats struct {
-	Tenants      int   `json:"tenants"`
-	Domains      int   `json:"domains"`
-	Users        int   `json:"users"`
-	UsersEnabled int   `json:"users_enabled"`
-	Mailboxes    int   `json:"mailboxes"`
-	Messages     int   `json:"messages"`
-	BytesStored  int64 `json:"bytes_stored"`
-	Calendars       int   `json:"calendars"`
-	Contacts        int   `json:"contacts"` // address objects
-	SieveScripts    int   `json:"sieve_scripts"`
-	OutboundQueued  int   `json:"outbound_queued"`
+	Tenants        int   `json:"tenants"`
+	Domains        int   `json:"domains"`
+	Users          int   `json:"users"`
+	UsersEnabled   int   `json:"users_enabled"`
+	Mailboxes      int   `json:"mailboxes"`
+	Messages       int   `json:"messages"`
+	BytesStored    int64 `json:"bytes_stored"`
+	Calendars      int   `json:"calendars"`
+	Contacts       int   `json:"contacts"` // address objects
+	SieveScripts   int   `json:"sieve_scripts"`
+	OutboundQueued int   `json:"outbound_queued"`
 }
 
 // TenantStats is per-tenant monitoring summary.

@@ -82,6 +82,19 @@ func (d *Directory) Authenticate(ctx context.Context, domain, username, password
 	if err != nil {
 		return nil, err
 	}
+
+	groups := entry.Groups
+	mode := strings.ToLower(strings.TrimSpace(dc.Groups.Mode))
+	if mode == "search" || (mode == "memberof" && len(groups) == 0) {
+		if g, gerr := d.resolveGroups(ctx, dc, entry); gerr == nil {
+			groups = g
+		}
+	}
+	u, err = d.applyRoles(ctx, u, dc, groups)
+	if err != nil {
+		return nil, err
+	}
+
 	d.cache.setOK(username, password, u.ID)
 	return u, nil
 }
@@ -90,6 +103,7 @@ type ldapPerson struct {
 	DN          string
 	Email       string
 	DisplayName string
+	Groups      []string
 }
 
 func (d *Directory) searchAndBind(ctx context.Context, dc config.LDAPDomainConfig, username, password string) (*ldapPerson, error) {
@@ -110,12 +124,21 @@ func (d *Directory) searchAndBind(ctx context.Context, dc config.LDAPDomainConfi
 		}
 	}
 
+	attrs := []string{"dn", dc.AttrEmail, dc.AttrName}
+	if strings.EqualFold(dc.Groups.Mode, "memberof") {
+		attr := dc.Groups.AttrMemberOf
+		if attr == "" {
+			attr = "memberOf"
+		}
+		attrs = append(attrs, attr)
+	}
+
 	filter := ExpandFilter(dc.Filter, username)
 	req := ldap.NewSearchRequest(
 		dc.BaseDN,
 		ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 1, int(dc.Timeout.Seconds()), false,
 		filter,
-		[]string{"dn", dc.AttrEmail, dc.AttrName},
+		attrs,
 		nil,
 	)
 	res, err := conn.Search(req)
@@ -134,7 +157,20 @@ func (d *Directory) searchAndBind(ctx context.Context, dc config.LDAPDomainConfi
 		email = username
 	}
 	name := entry.GetAttributeValue(dc.AttrName)
-	return &ldapPerson{DN: entry.DN, Email: email, DisplayName: name}, nil
+	person := &ldapPerson{DN: entry.DN, Email: email, DisplayName: name}
+	if strings.EqualFold(dc.Groups.Mode, "memberof") {
+		attr := dc.Groups.AttrMemberOf
+		if attr == "" {
+			attr = "memberOf"
+		}
+		for _, v := range entry.GetAttributeValues(attr) {
+			v = strings.TrimSpace(v)
+			if v != "" {
+				person.Groups = append(person.Groups, v)
+			}
+		}
+	}
+	return person, nil
 }
 
 func (d *Directory) dial(dc config.LDAPDomainConfig) (*ldap.Conn, error) {

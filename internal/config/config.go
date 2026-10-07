@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -216,16 +217,36 @@ type LDAPConfig struct {
 }
 
 type LDAPDomainConfig struct {
-	Enabled      bool          `yaml:"enabled"`
-	URL          string        `yaml:"url"` // ldap:// or ldaps://
-	StartTLS     bool          `yaml:"start_tls"`
-	BindDN       string        `yaml:"bind_dn"`
-	BindPassword string        `yaml:"bind_password"`
-	BaseDN       string        `yaml:"base_dn"`
-	Filter       string        `yaml:"filter"` // {email}, {user}
-	AttrEmail    string        `yaml:"attr_email"`
-	AttrName     string        `yaml:"attr_name"`
-	Timeout      time.Duration `yaml:"timeout"`
+	Enabled      bool             `yaml:"enabled"`
+	URL          string           `yaml:"url"` // ldap:// or ldaps://
+	StartTLS     bool             `yaml:"start_tls"`
+	BindDN       string           `yaml:"bind_dn"`
+	BindPassword string           `yaml:"bind_password"`
+	BaseDN       string           `yaml:"base_dn"`
+	Filter       string           `yaml:"filter"` // {email}, {user}
+	AttrEmail    string           `yaml:"attr_email"`
+	AttrName     string           `yaml:"attr_name"`
+	Timeout      time.Duration    `yaml:"timeout"`
+	Groups       LDAPGroupsConfig `yaml:"groups"`
+	Sync         LDAPSyncConfig   `yaml:"sync"`
+}
+
+// LDAPGroupsConfig maps LDAP group membership to Tayga roles at login.
+type LDAPGroupsConfig struct {
+	Mode         string   `yaml:"mode"`          // off | memberof | search
+	AttrMemberOf string   `yaml:"attr_memberof"` // default memberOf
+	BaseDN       string   `yaml:"base_dn"`       // group search base (search mode)
+	Filter       string   `yaml:"filter"`        // {dn} placeholder (search mode)
+	AttrName     string   `yaml:"attr_name"`     // group CN attr (default cn)
+	AdminGroups  []string `yaml:"admin_groups"`  // DN or CN → role admin
+}
+
+// LDAPSyncConfig periodically provisions/updates users from LDAP groups.
+type LDAPSyncConfig struct {
+	Enabled    bool          `yaml:"enabled"`
+	Interval   time.Duration `yaml:"interval"`    // 0 = only CLI / on login
+	GroupDNs   []string      `yaml:"group_dns"`   // groups whose members get mailboxes
+	MemberAttr string        `yaml:"member_attr"` // default member
 }
 
 // OIDCConfig holds per-domain OpenID Connect IdP settings.
@@ -490,6 +511,31 @@ func (c *Config) Validate() error {
 		}
 		if d.Timeout <= 0 {
 			d.Timeout = 10 * time.Second
+		}
+		switch strings.ToLower(strings.TrimSpace(d.Groups.Mode)) {
+		case "", "off", "none", "memberof", "search":
+			if d.Groups.Mode == "" {
+				d.Groups.Mode = "off"
+			} else {
+				d.Groups.Mode = strings.ToLower(strings.TrimSpace(d.Groups.Mode))
+			}
+		default:
+			return fmt.Errorf("ldap.domains.%s.groups.mode must be off, memberof, or search", name)
+		}
+		if d.Groups.AttrMemberOf == "" {
+			d.Groups.AttrMemberOf = "memberOf"
+		}
+		if d.Groups.AttrName == "" {
+			d.Groups.AttrName = "cn"
+		}
+		if d.Groups.Mode == "search" && d.Groups.Filter == "" {
+			d.Groups.Filter = "(&(objectClass=groupOfNames)(member={dn}))"
+		}
+		if d.Sync.MemberAttr == "" {
+			d.Sync.MemberAttr = "member"
+		}
+		if d.Sync.Enabled && d.Sync.Interval < 0 {
+			return fmt.Errorf("ldap.domains.%s.sync.interval must be >= 0", name)
 		}
 		c.LDAP.Domains[name] = d
 	}

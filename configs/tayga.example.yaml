@@ -83,6 +83,24 @@ ldap:
     #   attr_email: mail
     #   attr_name: cn
     #   timeout: 10s
+    #   # Map LDAP groups → Tayga roles (admin) on login
+    #   groups:
+    #     mode: memberof          # off | memberof | search
+    #     attr_memberof: memberOf
+    #     # mode: search
+    #     # base_dn: "ou=groups,dc=example,dc=com"
+    #     # filter: "(&(objectClass=groupOfNames)(member={dn}))"
+    #     # attr_name: cn
+    #     admin_groups:
+    #       - "cn=mail-admins,ou=groups,dc=example,dc=com"
+    #       - "mail-admins"
+    #   # Periodic / CLI provisioning from groups
+    #   sync:
+    #     enabled: true
+    #     interval: 1h            # 0 = CLI only (tayga-mail ldap-sync)
+    #     group_dns:
+    #       - "cn=mail-users,ou=groups,dc=example,dc=com"
+    #     member_attr: member
 
 # Per-domain OpenID Connect (authorization code). Disabled by default.
 oidc:
