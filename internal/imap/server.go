@@ -17,6 +17,7 @@ import (
 	"github.com/tayga/tms/internal/auth"
 	"github.com/tayga/tms/internal/config"
 	"github.com/tayga/tms/internal/ha"
+	"github.com/tayga/tms/internal/mailsearch"
 	"github.com/tayga/tms/internal/mailstore"
 	"github.com/tayga/tms/internal/storage"
 	"github.com/tayga/tms/internal/tlsutil"
@@ -510,15 +511,19 @@ func (m *Mailbox) CreateMessage(flags []string, date time.Time, body imap.Litera
 		return err
 	}
 	flagStr := storage.NormalizeFlags(flags)
-	_, err = m.user.backend.store.InsertMessage(ctx, &storage.Message{
+	msg := &storage.Message{
 		MailboxID:    m.mb.ID,
 		Size:         size,
 		Flags:        flagStr,
 		InternalDate: date,
 		FilePath:     rel,
-	})
+		Archived:     strings.EqualFold(m.mb.Name, "Archive"),
+	}
+	mailsearch.ApplyHeaders(msg, data)
+	inserted, err := m.user.backend.store.InsertMessage(ctx, msg)
 	_ = m.reload()
 	if err == nil {
+		_ = mailsearch.Index(ctx, m.user.backend.store, inserted.ID, data)
 		m.notify()
 	}
 	return err
@@ -622,17 +627,21 @@ func (m *Mailbox) CopyMessages(uid bool, seqset *imap.SeqSet, dest string) error
 		if err != nil {
 			return err
 		}
-		_, err = m.user.backend.store.InsertMessage(ctx, &storage.Message{
+		nm := &storage.Message{
 			MailboxID:    dst.mb.ID,
 			Size:         size,
 			Flags:        msg.Flags,
 			InternalDate: msg.InternalDate,
 			FilePath:     rel,
 			MessageID:    msg.MessageID,
-		})
+			Archived:     strings.EqualFold(dst.mb.Name, "Archive"),
+		}
+		mailsearch.ApplyHeaders(nm, data)
+		inserted, err := m.user.backend.store.InsertMessage(ctx, nm)
 		if err != nil {
 			return err
 		}
+		_ = mailsearch.Index(ctx, m.user.backend.store, inserted.ID, data)
 	}
 	dst.notify()
 	return nil

@@ -545,9 +545,16 @@ func (s *Store) InsertMessage(ctx context.Context, msg *Message) (*Message, erro
 		return nil, err
 	}
 
-	ins := s.rebind(`INSERT INTO messages(id, mailbox_id, uid, size, flags, internal_date, file_path, message_id, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-	args := []any{msg.ID, msg.MailboxID, msg.UID, msg.Size, msg.Flags, msg.InternalDate, msg.FilePath, msg.MessageID, msg.CreatedAt}
+	arch := 0
+	if msg.Archived {
+		arch = 1
+	}
+	ins := s.rebind(`INSERT INTO messages(id, mailbox_id, uid, size, flags, internal_date, file_path, message_id, subject, from_addr, to_addr, date_hdr, archived, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	args := []any{
+		msg.ID, msg.MailboxID, msg.UID, msg.Size, msg.Flags, msg.InternalDate, msg.FilePath, msg.MessageID,
+		msg.Subject, msg.FromAddr, msg.ToAddr, msg.DateHdr, arch, msg.CreatedAt,
+	}
 	if _, err := tx.ExecContext(ctx, ins, args...); err != nil {
 		return nil, mapErr(err)
 	}
@@ -558,16 +565,16 @@ func (s *Store) InsertMessage(ctx context.Context, msg *Message) (*Message, erro
 }
 
 func (s *Store) GetMessageByID(ctx context.Context, id string) (*Message, error) {
-	m := &Message{}
-	q := s.rebind(`SELECT id, mailbox_id, uid, size, flags, internal_date, file_path, message_id, created_at
-		FROM messages WHERE id = ?`)
-	err := s.db.QueryRowContext(ctx, q, id).Scan(
-		&m.ID, &m.MailboxID, &m.UID, &m.Size, &m.Flags, &m.InternalDate, &m.FilePath, &m.MessageID, &m.CreatedAt,
-	)
-	if err != nil {
-		return nil, mapErr(err)
+	q := s.rebind(`SELECT ` + msgCols + ` FROM messages WHERE id = ?`)
+	return s.scanMessage(s.db.QueryRowContext(ctx, q, id))
+}
+
+// DialectName returns "sqlite" or "postgres".
+func (s *Store) DialectName() string {
+	if s.dialect == DialectPostgres {
+		return "postgres"
 	}
-	return m, nil
+	return "sqlite"
 }
 
 func mapErr(err error) error {
