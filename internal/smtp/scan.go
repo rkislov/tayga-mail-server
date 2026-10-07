@@ -71,10 +71,16 @@ func (s *session) deliverQuarantine(ctx context.Context, u *storage.User, data [
 	if s.backend.scan != nil && s.backend.scan.folder != "" {
 		folder = s.backend.scan.folder
 	}
+	return s.deliverFolder(ctx, u, folder, data, msgid)
+}
+
+func (s *session) deliverFolder(ctx context.Context, u *storage.User, folder string, data []byte, msgid string) error {
+	if folder == "" {
+		folder = "Junk"
+	}
 	if s.backend.sieve != nil {
 		return s.backend.sieve.FileInto(ctx, u, folder, nil, data, msgid)
 	}
-	// Fallback without sieve engine: reuse minimal path via temporary engine-like call.
 	eng := &sieve.Engine{Store: s.backend.store, Mailstore: s.backend.mailstore, Log: s.backend.log}
 	return eng.FileInto(ctx, u, folder, nil, data, msgid)
 }
