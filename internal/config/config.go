@@ -28,7 +28,17 @@ type Config struct {
 	HA          HAConfig          `yaml:"ha"`
 	Scan        ScanConfig        `yaml:"scan"`
 	Spam        SpamConfig        `yaml:"spam"`
+	DKIMVerify  DKIMVerifyConfig  `yaml:"dkim_verify"`
 	Log         LogConfig         `yaml:"log"`
+}
+
+// DKIMVerifyConfig checks inbound DKIM signatures (unauthenticated MX).
+type DKIMVerifyConfig struct {
+	Enabled          bool   `yaml:"enabled"`
+	Action           string `yaml:"action"`            // tag | reject
+	RequireSignature bool   `yaml:"require_signature"` // reject/fail when no DKIM-Signature
+	FailOpen         bool   `yaml:"fail_open"`         // temperror → deliver (tag temperror)
+	AuthservID       string `yaml:"authserv_id"`       // Authentication-Results id (default server.hostname)
 }
 
 // SpamConfig configures Rspamd (or similar) scoring for inbound SMTP.
@@ -48,13 +58,13 @@ type SpamConfig struct {
 
 // ScanConfig configures antivirus scanning of inbound SMTP messages.
 type ScanConfig struct {
-	Enabled          bool          `yaml:"enabled"`
-	Backend          string        `yaml:"backend"` // clamav | exec | none
-	Action           string        `yaml:"action"`  // reject | quarantine | tag
-	QuarantineFolder string        `yaml:"quarantine_folder"`
-	Timeout          time.Duration `yaml:"timeout"`
-	FailOpen         bool          `yaml:"fail_open"` // deliver on scanner errors
-	ClamAV           ClamAVConfig  `yaml:"clamav"`
+	Enabled          bool           `yaml:"enabled"`
+	Backend          string         `yaml:"backend"` // clamav | exec | none
+	Action           string         `yaml:"action"`  // reject | quarantine | tag
+	QuarantineFolder string         `yaml:"quarantine_folder"`
+	Timeout          time.Duration  `yaml:"timeout"`
+	FailOpen         bool           `yaml:"fail_open"` // deliver on scanner errors
+	ClamAV           ClamAVConfig   `yaml:"clamav"`
 	Exec             ExecScanConfig `yaml:"exec"`
 }
 
@@ -122,12 +132,12 @@ type ObjectStoreConfig struct {
 }
 
 type SMTPConfig struct {
-	Submission     string          `yaml:"submission"`
-	MX             string          `yaml:"mx"`
-	SMTPS          string          `yaml:"smtps"`
-	MaxSize        int64           `yaml:"max_size"` // bytes; 0 = default 25 MiB
-	ReadTimeout    time.Duration   `yaml:"read_timeout"`
-	WriteTimeout   time.Duration   `yaml:"write_timeout"`
+	Submission     string              `yaml:"submission"`
+	MX             string              `yaml:"mx"`
+	SMTPS          string              `yaml:"smtps"`
+	MaxSize        int64               `yaml:"max_size"` // bytes; 0 = default 25 MiB
+	ReadTimeout    time.Duration       `yaml:"read_timeout"`
+	WriteTimeout   time.Duration       `yaml:"write_timeout"`
 	OutboundDirect bool                `yaml:"outbound_direct"` // MX lookup when relay.host empty
 	Relay          SMTPRelayConfig     `yaml:"relay"`
 	DKIM           SMTPDKIMConfig      `yaml:"dkim"`
@@ -146,9 +156,9 @@ type SMTPQueueConfig struct {
 
 // SMTPRateLimitConfig limits accepted messages per remote IP and authenticated user.
 type SMTPRateLimitConfig struct {
-	PerIP       int           `yaml:"per_ip"`       // 0 = off
-	PerUser     int           `yaml:"per_user"`     // 0 = off
-	Window      time.Duration `yaml:"window"`       // default 1m
+	PerIP   int           `yaml:"per_ip"`   // 0 = off
+	PerUser int           `yaml:"per_user"` // 0 = off
+	Window  time.Duration `yaml:"window"`   // default 1m
 }
 
 // SMTPRelayConfig is the outbound smart-host for authenticated external recipients.
@@ -362,6 +372,11 @@ func Default() *Config {
 			Folder:       "Junk",
 			FollowRspamd: true,
 		},
+		DKIMVerify: DKIMVerifyConfig{
+			Enabled:  false,
+			Action:   "tag",
+			FailOpen: true,
+		},
 		Log: LogConfig{Level: "info", Format: "json"},
 	}
 }
@@ -566,6 +581,19 @@ func (c *Config) Validate() error {
 		}
 		if c.Spam.Folder == "" {
 			c.Spam.Folder = "Junk"
+		}
+	}
+	if c.DKIMVerify.Enabled {
+		switch c.DKIMVerify.Action {
+		case "", "tag", "reject":
+			if c.DKIMVerify.Action == "" {
+				c.DKIMVerify.Action = "tag"
+			}
+		default:
+			return fmt.Errorf("dkim_verify.action must be tag or reject, got %q", c.DKIMVerify.Action)
+		}
+		if c.DKIMVerify.AuthservID == "" {
+			c.DKIMVerify.AuthservID = c.Server.Hostname
 		}
 	}
 	return nil
