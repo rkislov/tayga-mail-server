@@ -3,24 +3,31 @@
 Backdrop artwork © **Алиса Кислова** · Apache-2.0  
 Software © Кислов Роман Сергеевич
 
-Repo source: `taiga/` and `cosmos/` with masters + sized JPEGs (desktop, retina laptop/tablet/phone).
+Themes in this tree:
 
-## Distributable pack (separate)
+| Dir | Theme | Subject |
+|-----|-------|---------|
+| `taiga/` | Тайга (default UI) | northern forest |
+| `cosmos/` | Космос | abstract space |
+| `city/` | Город | riverside city at dusk |
+| `kalyazin/` | Колязин | flooded bell tower |
+| `temple/` | Храм на Нерли | Church of the Intercession on the Nerl |
+| `moscow/` | Москва-Сити | Moscow City skyline |
 
-Build/copy artifact (not embedded in the binary):
+Each theme folder has masters (`master-16x9`, `master-4x3`, `master-9x16`, `source-author`) plus sized JPEGs:
 
-```
-dist/tayga-wallpaper-pack-v0.4.0.zip
-dist/wallpaper-pack/   # unpacked tree for inspection
-```
+- desktop-1080p / 1440p / 4k / 5k
+- laptop-16x10, mbp14-retina, mbp16-retina
+- ipad-retina, ipad-pro-retina
+- iphone-13-retina, iphone-15-pro-retina, android-qhd-plus
 
-Rebuild the zip:
+## Distributable pack
 
 ```bash
-# from repo root after assets/wallpapers is populated
+# from repo root
 rm -rf dist/wallpaper-pack
 mkdir -p dist/wallpaper-pack
-for theme in taiga cosmos; do
+for theme in taiga cosmos city kalyazin temple moscow; do
   mkdir -p "dist/wallpaper-pack/$theme"
   for f in desktop-1080p desktop-1440p desktop-4k desktop-5k \
            laptop-16x10 mbp14-retina mbp16-retina \
@@ -30,7 +37,7 @@ for theme in taiga cosmos; do
   done
 done
 cp assets/wallpapers/README.md dist/wallpaper-pack/README.md
-(cd dist && zip -qr tayga-wallpaper-pack-v0.4.0.zip wallpaper-pack)
+(cd dist && zip -qr tayga-wallpaper-pack.zip wallpaper-pack)
 ```
 
-UI embeds only `internal/frontend/dist/assets/taiga-forest[.jpg|@2x.jpg]` and `cosmic-abstract[.jpg|@2x.jpg]`.
+UI embeds 1x/2x under `internal/frontend/dist/assets/` (`taiga-forest`, `cosmic-abstract`, `city`, `kalyazin`, `temple-nerl`, `moscow-city`).
