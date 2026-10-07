@@ -89,7 +89,7 @@ Privileged ports (<1024) require root or `CAP_NET_BIND_SERVICE`. TLS certs: `tls
 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o tayga-mail ./cmd/tayga
 ./tayga-mail version
 ./tayga-mail -config configs/tayga.example.yaml
-# Cross builds: VERSION=v0.4.0 ./scripts/crossbuild.sh
+# Cross builds: VERSION=v0.5.0 ./scripts/crossbuild.sh
 ```
 
 Seed: `admin@example.com` / `changeme`. UUID schema requires a fresh DB when upgrading from integer IDs.
@@ -106,9 +106,28 @@ Seed: `admin@example.com` / `changeme`. UUID schema requires a fresh DB when upg
 
 Enable: `mfa.webauthn.enabled: true` (RP ID from `http.public_url`).
 
-## Admin UI
+## Web UI
 
-Embedded at `/` (`internal/frontend/dist`): sign-in, TOTP + WebAuthn MFA, passkey enrollment/revoke, Sieve filters, quota usage, tenant user admin, TLS certificate management.
+Embedded at `/` (`internal/frontend/dist`): app shell with **mail**, **calendar**, **contacts**, **files**, user settings (profile / security / appearance / Sieve / language ru|en), and admin (monitor / tenants / TLS / server). Themes via `localStorage` (`tayga.theme`).
+
+### User apps API
+
+| Endpoint | Role |
+|----------|------|
+| `GET /api/v1/mail/mailboxes` | list mailboxes |
+| `GET /api/v1/mail/mailboxes/{id}/messages` | list messages |
+| `GET/PATCH/DELETE /api/v1/mail/messages/{id}` | read / flags / delete |
+| `POST /api/v1/mail/send` | send (local + outbound queue) |
+| `GET /api/v1/calendar/calendars` | list calendars |
+| `GET/POST /api/v1/calendar/calendars/{id}/events` | list / create events |
+| `GET/DELETE /api/v1/calendar/events/{id}` | read / delete |
+| `GET /api/v1/contacts/books` | list address books |
+| `GET/POST /api/v1/contacts/books/{id}/cards` | list / create cards |
+| `GET/DELETE /api/v1/contacts/cards/{id}` | read / delete |
+| `GET /api/v1/files?path=` | list directory under `mailstore.root/files/{user}` |
+| `GET/PUT /api/v1/files/content?path=` | download / upload |
+| `POST /api/v1/files/mkdir` | create folder |
+| `DELETE /api/v1/files?path=` | remove file or folder |
 
 ### Account / admin API
 
@@ -153,7 +172,7 @@ Admins: `http.admins` email list (default `admin@example.com`).
 
 - **License:** Apache License 2.0 (`LICENSE`, `NOTICE`)
 - **Author:** Кислов Роман Сергеевич (Roman Sergeyevich Kislov)
-- **UI:** Tailwind SPA; default taiga (forest) backdrop, optional cosmos theme (backdrop art © Алиса Кислова; assets under `internal/frontend/dist/assets/`)
+- **UI:** Tailwind SPA shell (mail / calendar / contacts / files + settings/admin); i18n ru/en; themes (localStorage): taiga (default), cosmos, city, kalyazin, temple, moscow — picker in **Внешний вид** (backdrop art © Алиса Кислова except moscow; assets under `internal/frontend/dist/assets/`)
 
 ## Mailstore
 
