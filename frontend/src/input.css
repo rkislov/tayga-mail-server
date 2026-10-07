@@ -99,6 +99,18 @@ html[data-theme="street"] {
   --overlay: linear-gradient(180deg, rgba(36, 32, 28, 0.35) 0%, rgba(18, 16, 14, 0.58) 50%, rgba(6, 6, 6, 0.82) 100%);
 }
 
+html[data-theme="teriberka"] {
+  --panel-bg: rgba(18, 28, 36, 0.74);
+  --accent: #d4b896;
+  --btn-bg: #2a3a44;
+  --btn-bg-hover: #3a4c58;
+  --btn-spray: #c49058;
+  --btn-spray-hover: #a87848;
+  --field-text: #1a242c;
+  --body-bg: #121a22;
+  --overlay: linear-gradient(180deg, rgba(40, 52, 64, 0.32) 0%, rgba(18, 28, 36, 0.55) 48%, rgba(8, 12, 16, 0.8) 100%);
+}
+
 @layer base {
   html,
   body {

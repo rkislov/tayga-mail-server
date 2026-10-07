@@ -44,6 +44,11 @@ const THEMES = {
     image: "/assets/street-art.jpg",
     image2x: "/assets/street-art@2x.jpg",
   },
+  teriberka: {
+    label: "Териберка",
+    image: "/assets/teriberka.jpg",
+    image2x: "/assets/teriberka@2x.jpg",
+  },
 };
 
 function applyTheme(name) {
