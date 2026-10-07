@@ -66,6 +66,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/admin/domains/", s.handleAdminDomains)
 	mux.HandleFunc("/api/v1/admin/tls", s.handleAdminTLS)
 	mux.HandleFunc("/api/v1/admin/status", s.handleAdminStatus)
+	mux.HandleFunc("/api/v1/admin/outbound", s.handleAdminOutbound)
+	mux.HandleFunc("/api/v1/admin/outbound/", s.handleAdminOutbound)
 	mux.HandleFunc("/api/v1/admin/backup", s.handleAdminBackup)
 	mux.HandleFunc("/api/v1/admin/backup/restore", s.handleAdminBackupRestore)
 

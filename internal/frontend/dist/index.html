@@ -277,6 +277,9 @@
           <h3>Monitoring</h3>
           <p class="meta">Live tenant/server stats. Prometheus scrapes <code>/metrics</code>.</p>
           <div id="monitor-grid" class="meta" style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem 1rem;margin:0.75rem 0;"></div>
+          <h3>Outbound queue</h3>
+          <p class="meta">Failed remote deliveries waiting for retry. DSN after max attempts.</p>
+          <ul class="creds" id="outbound-list"></ul>
           <div class="actions">
             <button type="button" class="secondary" id="btn-monitor-refresh">Refresh</button>
             <button type="button" class="spray" id="btn-backup">Download backup</button>
@@ -543,13 +546,61 @@ keep;</textarea>
           ["Users (server)", fmtNum(s.users)],
           ["Messages (server)", fmtNum(s.messages)],
           ["Bytes (server)", fmtBytes(s.bytes_stored || 0)],
+          ["Outbound queued", fmtNum(s.outbound_queued)],
           ["Goroutines", fmtNum(g.goroutines)],
         ];
         $("monitor-grid").innerHTML = rows.map(([k, v]) =>
           `<div><span class="meta">${escapeHtml(k)}</span><br/><strong>${escapeHtml(String(v))}</strong></div>`
         ).join("");
+        await refreshOutbound();
       } catch (err) {
         setMsg($("monitor-msg"), err.message, "err");
+      }
+    }
+
+    async function refreshOutbound() {
+      const list = $("outbound-list");
+      if (!list) return;
+      try {
+        const d = await api("/api/v1/admin/outbound?limit=30");
+        const items = d.items || [];
+        if (!items.length) {
+          list.innerHTML = "<li class=\"meta\">Queue empty.</li>";
+          return;
+        }
+        list.innerHTML = items.map((it) => {
+          const err = it.last_error ? `<br/><span class="meta">${escapeHtml(it.last_error)}</span>` : "";
+          return `<li>
+            <strong>${escapeHtml(it.envelope_to)}</strong>
+            <span class="meta"> from ${escapeHtml(it.envelope_from)} · ${it.attempts}/${it.max_attempts} · next ${escapeHtml(it.next_attempt || "")}</span>
+            ${err}
+            <div class="actions" style="margin-top:0.35rem">
+              <button type="button" class="secondary" data-out-retry="${escapeHtml(it.id)}">Retry now</button>
+              <button type="button" class="secondary" data-out-del="${escapeHtml(it.id)}">Drop</button>
+            </div>
+          </li>`;
+        }).join("");
+        list.querySelectorAll("[data-out-retry]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            try {
+              await api("/api/v1/admin/outbound/" + btn.getAttribute("data-out-retry") + "/retry", { method: "POST" });
+              setMsg($("monitor-msg"), "Queued for immediate retry.", "ok");
+              refreshMonitor();
+            } catch (err) { setMsg($("monitor-msg"), err.message, "err"); }
+          });
+        });
+        list.querySelectorAll("[data-out-del]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            if (!confirm("Drop this queued message without DSN?")) return;
+            try {
+              await api("/api/v1/admin/outbound/" + btn.getAttribute("data-out-del"), { method: "DELETE" });
+              setMsg($("monitor-msg"), "Dropped.", "ok");
+              refreshMonitor();
+            } catch (err) { setMsg($("monitor-msg"), err.message, "err"); }
+          });
+        });
+      } catch (err) {
+        list.innerHTML = `<li class="meta">${escapeHtml(err.message)}</li>`;
       }
     }
 

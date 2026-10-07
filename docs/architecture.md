@@ -116,6 +116,9 @@ Embedded at `/` (`internal/frontend/dist`): sign-in, TOTP + WebAuthn MFA, passke
 | `PUT /api/v1/admin/tls` | install PEM certificate + private key (hot reload) |
 | `POST /api/v1/admin/tls` | generate self-signed cert (`hosts`, `days`) |
 | `GET /api/v1/admin/status` | monitoring snapshot (tenant + server counters) |
+| `GET /api/v1/admin/outbound` | list outbound retry queue |
+| `POST /api/v1/admin/outbound/{uuid}/retry` | schedule immediate retry |
+| `DELETE /api/v1/admin/outbound/{uuid}` | drop queued message |
 | `GET /api/v1/admin/backup?include_mail=1` | download tenant backup `.tar.gz` |
 
 Prometheus: `/metrics` includes `tayga_*` gauges (users, messages, bytes, …).
@@ -157,8 +160,8 @@ SMTP `rate_limit.per_ip` / `per_user` (windowed) returns `421` when exceeded.
 
 Outbound messages are enqueued (`smtp.queue`, table `outbound_queue`) and retried with exponential backoff. After `max_attempts`, a multipart/report DSN is delivered to the local envelope-from mailbox.
 
-Metric: `tayga_outbound_queued`.
+Metric: `tayga_outbound_queued`. Admin: `GET/DELETE /api/v1/admin/outbound[/{id}]`, `POST …/{id}/retry` (Monitoring card).
 
 ## Next milestones
 
-Admin outbound queue UI; multi-writer maildir fencing beyond MX.
+Multi-writer maildir fencing beyond MX.
