@@ -165,6 +165,25 @@ func run(cfgPath string) error {
 
 	authn := auth.NewLayer(store, cfg.LDAP, cfg.MFA, cfg.OIDC)
 	ms := mailstore.New(cfg.Mailstore.Root)
+	if cfg.Mailstore.ObjectStore.Enabled {
+		blob, err := mailstore.NewS3Blob(mailstore.S3Config{
+			Endpoint:  cfg.Mailstore.ObjectStore.Endpoint,
+			Region:    cfg.Mailstore.ObjectStore.Region,
+			Bucket:    cfg.Mailstore.ObjectStore.Bucket,
+			AccessKey: cfg.Mailstore.ObjectStore.AccessKey,
+			SecretKey: cfg.Mailstore.ObjectStore.SecretKey,
+			Prefix:    cfg.Mailstore.ObjectStore.Prefix,
+			PathStyle: cfg.Mailstore.ObjectStore.PathStyle,
+		})
+		if err != nil {
+			return fmt.Errorf("object store: %w", err)
+		}
+		ms.SetObjectStore(blob, log)
+		log.Info("mailstore object store enabled",
+			"endpoint", cfg.Mailstore.ObjectStore.Endpoint,
+			"bucket", cfg.Mailstore.ObjectStore.Bucket,
+		)
+	}
 	tlsMgr, err := tlsutil.NewManager(cfg)
 	if err != nil {
 		return fmt.Errorf("tls: %w", err)
