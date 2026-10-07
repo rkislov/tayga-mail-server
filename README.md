@@ -11,9 +11,18 @@ See [docs/architecture.md](docs/architecture.md) and `configs/tayga.example.yaml
 
 ```bash
 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o tayga-mail ./cmd/tayga
+./tayga-mail version
 # Standard ports need root (or CAP_NET_BIND_SERVICE); TLS auto-generates self-signed certs when enabled
 sudo ./tayga-mail -config configs/tayga.example.yaml
 ```
+
+### Cross-platform release builds
+
+```bash
+VERSION=v0.3.0 ./scripts/crossbuild.sh   # → dist/*.tar.gz|zip + checksums.txt
+```
+
+GitHub Releases: push a `v*` tag; [GoReleaser](https://goreleaser.com) (`.github/workflows/release.yml`) publishes linux/darwin/windows/freebsd amd64+arm64 archives.
 
 | Service | Address |
 |---------|---------|
