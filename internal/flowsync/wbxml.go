@@ -1,0 +1,391 @@
+package flowsync
+
+import (
+	"bytes"
+	"fmt"
+	"io"
+	"strings"
+)
+
+// ActiveSync WBXML (MS-ASWBXML) minimal codec — proprietary FlowSync encoding path.
+// Code pages cover FolderHierarchy, AirSync, Email, Provision, Ping, GetItemEstimate.
+
+const (
+	wbxmlVersion  = 0x03
+	wbxmlPublicID = 0x01
+	wbxmlCharset  = 0x6A // UTF-8
+	wbxmlSwitch   = 0x00
+	wbxmlEnd      = 0x01
+	wbxmlStrI     = 0x03
+	wbxmlOpaque   = 0xC3
+)
+
+// Code pages (MS-ASWBXML).
+const (
+	cpAirSync         = 0
+	cpEmail           = 2
+	cpFolderHierarchy = 5
+	cpProvision       = 14
+	cpGetItemEstimate = 6
+	cpPing            = 13
+)
+
+type wbTag struct {
+	page byte
+	code byte
+}
+
+var (
+	// AirSync (0)
+	tagSync            = wbTag{cpAirSync, 0x05}
+	tagAdd             = wbTag{cpAirSync, 0x07}
+	tagSyncKey         = wbTag{cpAirSync, 0x0B}
+	tagServerID        = wbTag{cpAirSync, 0x0D}
+	tagStatus          = wbTag{cpAirSync, 0x0E}
+	tagCollection      = wbTag{cpAirSync, 0x0F}
+	tagCollectionID    = wbTag{cpAirSync, 0x12}
+	tagCommands        = wbTag{cpAirSync, 0x16}
+	tagCollections     = wbTag{cpAirSync, 0x1C}
+	tagApplicationData = wbTag{cpAirSync, 0x1D}
+
+	// Email (2)
+	tagEmailFrom         = wbTag{cpEmail, 0x07}
+	tagEmailSubject      = wbTag{cpEmail, 0x08}
+	tagEmailDateReceived = wbTag{cpEmail, 0x0F}
+	tagEmailRead         = wbTag{cpEmail, 0x13}
+
+	// FolderHierarchy (5)
+	tagFHDisplayName = wbTag{cpFolderHierarchy, 0x07}
+	tagFHServerID    = wbTag{cpFolderHierarchy, 0x08}
+	tagFHParentID    = wbTag{cpFolderHierarchy, 0x09}
+	tagFHType        = wbTag{cpFolderHierarchy, 0x0A}
+	tagFHStatus      = wbTag{cpFolderHierarchy, 0x0C}
+	tagFHChanges     = wbTag{cpFolderHierarchy, 0x0E}
+	tagFHAdd         = wbTag{cpFolderHierarchy, 0x0F}
+	tagFHSyncKey     = wbTag{cpFolderHierarchy, 0x12}
+	tagFHFolderSync  = wbTag{cpFolderHierarchy, 0x16}
+	tagFHCount       = wbTag{cpFolderHierarchy, 0x17}
+
+	// GetItemEstimate (6)
+	tagGIEGetItemEstimate = wbTag{cpGetItemEstimate, 0x05}
+	tagGIECollection      = wbTag{cpGetItemEstimate, 0x08}
+	tagGIEStatus          = wbTag{cpGetItemEstimate, 0x0A}
+	tagGIEEstimate        = wbTag{cpGetItemEstimate, 0x0C}
+	tagGIEResponse        = wbTag{cpGetItemEstimate, 0x0D}
+	tagGIECollectionID    = wbTag{cpGetItemEstimate, 0x12}
+
+	// Ping (13)
+	tagPing       = wbTag{cpPing, 0x05}
+	tagPingStatus = wbTag{cpPing, 0x08}
+
+	// Provision (14)
+	tagProvProvision  = wbTag{cpProvision, 0x05}
+	tagProvPolicies   = wbTag{cpProvision, 0x06}
+	tagProvPolicy     = wbTag{cpProvision, 0x07}
+	tagProvPolicyType = wbTag{cpProvision, 0x08}
+	tagProvPolicyKey  = wbTag{cpProvision, 0x09}
+	tagProvStatus     = wbTag{cpProvision, 0x0B}
+)
+
+type wbEncoder struct {
+	buf  bytes.Buffer
+	page byte
+}
+
+func newWBEncoder() *wbEncoder {
+	e := &wbEncoder{page: 0xFF}
+	e.buf.WriteByte(wbxmlVersion)
+	e.buf.WriteByte(wbxmlPublicID)
+	e.buf.WriteByte(wbxmlCharset)
+	e.buf.WriteByte(0x00) // empty string table
+	return e
+}
+
+func (e *wbEncoder) switchPage(p byte) {
+	if e.page == p {
+		return
+	}
+	e.buf.WriteByte(wbxmlSwitch)
+	e.buf.WriteByte(p)
+	e.page = p
+}
+
+func (e *wbEncoder) start(t wbTag) {
+	e.switchPage(t.page)
+	e.buf.WriteByte((t.code & 0x3F) | 0x40) // has content
+}
+
+func (e *wbEncoder) end() { e.buf.WriteByte(wbxmlEnd) }
+
+func (e *wbEncoder) str(s string) {
+	e.buf.WriteByte(wbxmlStrI)
+	e.buf.WriteString(s)
+	e.buf.WriteByte(0x00)
+}
+
+func (e *wbEncoder) taggedStr(t wbTag, s string) {
+	e.start(t)
+	e.str(s)
+	e.end()
+}
+
+func (e *wbEncoder) bytes() []byte { return e.buf.Bytes() }
+
+func encodeFolderSyncWBXML(syncKey string, folders []folderChange) []byte {
+	e := newWBEncoder()
+	e.start(tagFHFolderSync)
+	e.taggedStr(tagFHStatus, "1")
+	e.taggedStr(tagFHSyncKey, syncKey)
+	e.start(tagFHChanges)
+	e.taggedStr(tagFHCount, fmt.Sprintf("%d", len(folders)))
+	for _, f := range folders {
+		e.start(tagFHAdd)
+		e.taggedStr(tagFHServerID, f.ServerID)
+		e.taggedStr(tagFHParentID, f.ParentID)
+		e.taggedStr(tagFHDisplayName, f.DisplayName)
+		e.taggedStr(tagFHType, fmt.Sprintf("%d", f.Type))
+		e.end()
+	}
+	e.end() // Changes
+	e.end() // FolderSync
+	return e.bytes()
+}
+
+type folderChange struct {
+	ServerID    string
+	ParentID    string
+	DisplayName string
+	Type        int
+}
+
+type syncAdd struct {
+	ServerID string
+	Subject  string
+	From     string
+	Date     string
+	Read     bool
+}
+
+func encodeSyncWBXML(syncKey, collectionID string, adds []syncAdd) []byte {
+	e := newWBEncoder()
+	e.start(tagSync)
+	e.start(tagCollections)
+	e.start(tagCollection)
+	e.taggedStr(tagSyncKey, syncKey)
+	e.taggedStr(tagCollectionID, collectionID)
+	e.taggedStr(tagStatus, "1")
+	e.start(tagCommands)
+	for _, a := range adds {
+		e.start(tagAdd)
+		e.taggedStr(tagServerID, a.ServerID)
+		e.start(tagApplicationData)
+		e.taggedStr(tagEmailSubject, a.Subject)
+		if a.From != "" {
+			e.taggedStr(tagEmailFrom, a.From)
+		}
+		e.taggedStr(tagEmailDateReceived, a.Date)
+		e.taggedStr(tagEmailRead, fmt.Sprintf("%d", bool01(a.Read)))
+		e.end() // ApplicationData
+		e.end() // Add
+	}
+	e.end() // Commands
+	e.end() // Collection
+	e.end() // Collections
+	e.end() // Sync
+	return e.bytes()
+}
+
+func encodeProvisionWBXML(policyKey string) []byte {
+	e := newWBEncoder()
+	e.start(tagProvProvision)
+	e.taggedStr(tagProvStatus, "1")
+	e.start(tagProvPolicies)
+	e.start(tagProvPolicy)
+	e.taggedStr(tagProvPolicyType, "MS-EAS-Provisioning-WBXML")
+	e.taggedStr(tagProvStatus, "1")
+	e.taggedStr(tagProvPolicyKey, policyKey)
+	e.end()
+	e.end()
+	e.end()
+	return e.bytes()
+}
+
+func encodePingWBXML() []byte {
+	e := newWBEncoder()
+	e.start(tagPing)
+	e.taggedStr(tagPingStatus, "1")
+	e.end()
+	return e.bytes()
+}
+
+func encodeItemEstimateWBXML(collectionID string, estimate int) []byte {
+	e := newWBEncoder()
+	e.start(tagGIEGetItemEstimate)
+	e.start(tagGIEResponse)
+	e.taggedStr(tagGIEStatus, "1")
+	e.start(tagGIECollection)
+	e.taggedStr(tagGIECollectionID, collectionID)
+	e.taggedStr(tagGIEEstimate, fmt.Sprintf("%d", estimate))
+	e.end()
+	e.end()
+	e.end()
+	return e.bytes()
+}
+
+func requestWantsWBXML(contentType, accept string, body []byte) bool {
+	ct := strings.ToLower(contentType)
+	if strings.Contains(ct, "vnd.ms-sync.wbxml") || strings.Contains(ct, "application/vnd.ms-sync.wbxml") {
+		return true
+	}
+	if strings.Contains(strings.ToLower(accept), "vnd.ms-sync.wbxml") {
+		return true
+	}
+	return len(body) > 0 && body[0] == wbxmlVersion
+}
+
+// extractWBXMLTagString walks ActiveSync WBXML and returns the first inline string
+// for a tag matching local name heuristics used by Sync (CollectionId).
+func extractWBXMLTagString(body []byte, wantLocal string) string {
+	if len(body) < 4 || body[0] != wbxmlVersion {
+		return ""
+	}
+	r := bytes.NewReader(body)
+	_, _ = r.ReadByte() // version
+	if err := skipMultiByteInt(r); err != nil {
+		return ""
+	}
+	if err := skipMultiByteInt(r); err != nil { // charset
+		return ""
+	}
+	stLen, err := readMultiByteInt(r)
+	if err != nil {
+		return ""
+	}
+	if stLen > 0 {
+		if _, err := io.CopyN(io.Discard, r, int64(stLen)); err != nil {
+			return ""
+		}
+	}
+
+	page := byte(0)
+	want := strings.ToLower(wantLocal)
+	for {
+		b, err := r.ReadByte()
+		if err != nil {
+			return ""
+		}
+		switch b {
+		case wbxmlSwitch:
+			p, err := r.ReadByte()
+			if err != nil {
+				return ""
+			}
+			page = p
+		case wbxmlEnd:
+			continue
+		case wbxmlStrI:
+			if _, err := readCString(r); err != nil {
+				return ""
+			}
+		case wbxmlOpaque:
+			n, err := readMultiByteInt(r)
+			if err != nil {
+				return ""
+			}
+			if _, err := io.CopyN(io.Discard, r, int64(n)); err != nil {
+				return ""
+			}
+		default:
+			tagID := b & 0x3F
+			hasContent := b&0x40 != 0
+			hasAttrs := b&0x80 != 0
+			if hasAttrs {
+				// skip attribute tokens until END — rare in AS
+				for {
+					ab, err := r.ReadByte()
+					if err != nil {
+						return ""
+					}
+					if ab == wbxmlEnd {
+						break
+					}
+					if ab == wbxmlStrI {
+						_, _ = readCString(r)
+					}
+				}
+			}
+			name := asTagName(page, tagID)
+			if hasContent && strings.EqualFold(name, want) {
+				// next token often STR_I
+				nb, err := r.ReadByte()
+				if err != nil {
+					return ""
+				}
+				if nb == wbxmlStrI {
+					s, err := readCString(r)
+					if err != nil {
+						return ""
+					}
+					return s
+				}
+				_ = r.UnreadByte()
+			}
+			_ = page
+		}
+	}
+}
+
+func asTagName(page, tagID byte) string {
+	switch page {
+	case cpAirSync:
+		switch tagID {
+		case 0x12:
+			return "CollectionId"
+		case 0x0B:
+			return "SyncKey"
+		case 0x0D:
+			return "ServerId"
+		}
+	case cpFolderHierarchy:
+		switch tagID {
+		case 0x12:
+			return "SyncKey"
+		case 0x08:
+			return "ServerId"
+		}
+	}
+	return ""
+}
+
+func readCString(r *bytes.Reader) (string, error) {
+	var b strings.Builder
+	for {
+		c, err := r.ReadByte()
+		if err != nil {
+			return "", err
+		}
+		if c == 0 {
+			return b.String(), nil
+		}
+		b.WriteByte(c)
+	}
+}
+
+func readMultiByteInt(r *bytes.Reader) (uint64, error) {
+	var v uint64
+	for {
+		b, err := r.ReadByte()
+		if err != nil {
+			return 0, err
+		}
+		v = (v << 7) | uint64(b&0x7F)
+		if b&0x80 == 0 {
+			return v, nil
+		}
+	}
+}
+
+func skipMultiByteInt(r *bytes.Reader) error {
+	_, err := readMultiByteInt(r)
+	return err
+}
