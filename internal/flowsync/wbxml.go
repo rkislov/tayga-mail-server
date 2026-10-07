@@ -41,6 +41,9 @@ var (
 	// AirSync (0)
 	tagSync            = wbTag{cpAirSync, 0x05}
 	tagAdd             = wbTag{cpAirSync, 0x07}
+	tagChange          = wbTag{cpAirSync, 0x08}
+	tagDelete          = wbTag{cpAirSync, 0x09}
+	tagClientID        = wbTag{cpAirSync, 0x0C}
 	tagSyncKey         = wbTag{cpAirSync, 0x0B}
 	tagServerID        = wbTag{cpAirSync, 0x0D}
 	tagStatus          = wbTag{cpAirSync, 0x0E}
@@ -455,18 +458,10 @@ func extractWBXMLTagString(body []byte, wantLocal string) string {
 }
 
 func asTagName(page, tagID byte) string {
+	if name := wbFieldName(page, tagID); name != "" {
+		return name
+	}
 	switch page {
-	case cpAirSync:
-		switch tagID {
-		case 0x12:
-			return "CollectionId"
-		case 0x10:
-			return "Class"
-		case 0x0B:
-			return "SyncKey"
-		case 0x0D:
-			return "ServerId"
-		}
 	case cpFolderHierarchy:
 		switch tagID {
 		case 0x12:

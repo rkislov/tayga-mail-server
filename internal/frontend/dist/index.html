@@ -269,7 +269,20 @@
 
         <div class="card hidden" id="card-admin">
           <h3>Tenant users</h3>
-          <p class="meta">Admin: list users and set mailbox quotas (0 = unlimited).</p>
+          <p class="meta">Admin: create users and set mailbox quotas (0 = unlimited).</p>
+          <form id="form-create-user">
+            <label for="nu-email">New user email</label>
+            <input id="nu-email" type="email" required placeholder="user@example.com" />
+            <label for="nu-name">Display name</label>
+            <input id="nu-name" type="text" placeholder="User" />
+            <label for="nu-pass">Password</label>
+            <input id="nu-pass" type="password" required autocomplete="new-password" />
+            <label for="nu-quota">Quota bytes (0 = unlimited)</label>
+            <input id="nu-quota" type="number" min="0" value="0" />
+            <div class="actions">
+              <button type="submit" class="spray">Create user</button>
+            </div>
+          </form>
           <ul class="creds" id="admin-user-list"></ul>
           <p id="admin-msg" class="msg" role="status"></p>
         </div>
@@ -470,6 +483,29 @@
         setMsg($("admin-msg"), err.message, "err");
       }
     }
+
+    $("form-create-user").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      setMsg($("admin-msg"), "Creating…");
+      try {
+        const body = {
+          email: $("nu-email").value.trim(),
+          display_name: $("nu-name").value.trim(),
+          password: $("nu-pass").value,
+          quota_bytes: Number($("nu-quota").value) || 0,
+        };
+        const created = await api("/api/v1/admin/users", {
+          method: "POST",
+          body: JSON.stringify(body),
+        });
+        setMsg($("admin-msg"), "Created " + created.email + " (" + created.id + ")", "ok");
+        $("form-create-user").reset();
+        $("nu-quota").value = "0";
+        refreshAdminUsers();
+      } catch (err) {
+        setMsg($("admin-msg"), err.message, "err");
+      }
+    });
 
     function enterAccount(tokens, email) {
       state.tokens = tokens;
