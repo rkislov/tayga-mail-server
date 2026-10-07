@@ -35,6 +35,7 @@ type Driver interface {
 	DeleteDomain(ctx context.Context, tenantID, domainID string) error
 
 	CreateUser(ctx context.Context, u *User) (*User, error)
+	UpdateUserRoles(ctx context.Context, userID, roles string) error
 	GetUserByEmail(ctx context.Context, email string) (*User, error)
 	GetUserByID(ctx context.Context, id string) (*User, error)
 	UpdateUserPassword(ctx context.Context, userID, passwordHash string) error
@@ -167,6 +168,7 @@ type User struct {
 	AuthSource   string // local | ldap | oidc
 	QuotaBytes   int64
 	Enabled      bool
+	Roles        string // comma-separated: admin, …
 	CreatedAt    time.Time
 }
 
