@@ -14,6 +14,16 @@ storage:
 
 mailstore:
   root: ./data/maildir
+  # Optional S3-compatible write-through mirror (local maildir stays hot cache).
+  object_store:
+    enabled: false
+    endpoint: "http://127.0.0.1:9000"
+    region: us-east-1
+    bucket: tayga-mail
+    access_key: minio
+    secret_key: minio123
+    prefix: "maildir/"
+    path_style: true   # MinIO / path-style; set false for virtual-hosted AWS
 
 smtp:
   mx: ":25"
