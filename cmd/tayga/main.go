@@ -88,7 +88,7 @@ func run(cfgPath string) error {
 		return fmt.Errorf("managesieve: %w", err)
 	}
 
-	httpSrv := httpapi.New(cfg.HTTP.Listen, log, store, authn)
+	httpSrv := httpapi.New(cfg, log, store, authn, ms)
 	if err := httpSrv.Start(ctx); err != nil {
 		return fmt.Errorf("http: %w", err)
 	}
