@@ -151,8 +151,8 @@ CLI: `tayga-mail sync-objects` reconciles indexed message paths between local ma
 
 ## Outbound SMTP
 
-Authenticated submission may RCPT external addresses when `smtp.relay.host` is set. Messages are optionally DKIM-signed (`smtp.dkim`) then handed to the smart-host. Unauthenticated MX remains local-only.
+Authenticated submission may RCPT external addresses when `smtp.relay.host` is set **or** `smtp.outbound_direct: true`. Messages are optionally DKIM-signed (`smtp.dkim`), then sent via smart-host or direct MX (port 25). Unauthenticated inbound MX remains local-only.
 
 ## Next milestones
 
-Direct MX outbound (no smart-host); multi-writer maildir fencing beyond MX.
+Outbound retry queue / DSN; rate limits; multi-writer maildir fencing beyond MX.
