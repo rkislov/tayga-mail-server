@@ -31,20 +31,28 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		domainIDs, _ := s.store.ListDomainAdminDomains(r.Context(), su.ID)
+		cos := s.userCoS(r, su)
+		features := map[string]bool{}
+		for k, v := range cos.Features {
+			features[k] = v
+		}
+		features["migration"] = s.migrationAllowed(r, su)
 		writeJSON(w, http.StatusOK, map[string]any{
-			"id":             su.ID,
-			"email":          su.Email,
-			"display_name":   su.DisplayName,
-			"auth_source":    su.AuthSource,
-			"quota_bytes":    su.QuotaBytes,
-			"used_bytes":     used,
-			"enabled":        su.Enabled,
-			"roles":          storage.ParseRoles(su.Roles),
-			"admin_scope":    storage.AdminScope(su.Roles),
-			"is_admin":       s.isAdminUser(su),
-			"is_global_admin": s.isGlobalAdminUser(su),
-			"domain_ids":     domainIDs,
+			"id":               su.ID,
+			"email":            su.Email,
+			"display_name":     su.DisplayName,
+			"auth_source":      su.AuthSource,
+			"quota_bytes":      su.QuotaBytes,
+			"used_bytes":       used,
+			"enabled":          su.Enabled,
+			"roles":            storage.ParseRoles(su.Roles),
+			"admin_scope":      storage.AdminScope(su.Roles),
+			"is_admin":         s.isAdminUser(su),
+			"is_global_admin":  s.isGlobalAdminUser(su),
+			"domain_ids":       domainIDs,
 			"service_class_id": su.ServiceClassID,
+			"migration_enabled": su.MigrationEnabled,
+			"features":         features,
 		})
 	case http.MethodPatch:
 		var req patchMeRequest

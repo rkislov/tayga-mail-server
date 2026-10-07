@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"database/sql"
 	"strings"
 	"time"
 )
@@ -87,6 +88,23 @@ func (s *Store) RenameMailbox(ctx context.Context, userID, oldName, newName, new
 func (s *Store) GetMessageByUID(ctx context.Context, mailboxID string, uid int64) (*Message, error) {
 	q := s.rebind(`SELECT ` + msgCols + ` FROM messages WHERE mailbox_id = ? AND uid = ?`)
 	return s.scanMessage(s.db.QueryRowContext(ctx, q, mailboxID, uid))
+}
+
+func (s *Store) MessageExistsByMessageID(ctx context.Context, mailboxID, messageID string, size int64) (bool, error) {
+	messageID = strings.TrimSpace(messageID)
+	if messageID == "" {
+		return false, nil
+	}
+	q := s.rebind(`SELECT 1 FROM messages WHERE mailbox_id = ? AND message_id = ? AND size = ? LIMIT 1`)
+	var one int
+	err := s.db.QueryRowContext(ctx, q, mailboxID, messageID, size).Scan(&one)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (s *Store) ListMessages(ctx context.Context, mailboxID string) ([]*Message, error) {

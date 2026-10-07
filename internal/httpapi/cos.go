@@ -14,7 +14,7 @@ const DefaultCoSConfig = `{
   "max_mail_size": 26214400,
   "large_attach_bytes": 10485760,
   "share_max_ttl_sec": 604800,
-  "features": {"files": true, "dav": true, "flowsync": true, "sieve": true, "shares": true, "delegates": true}
+  "features": {"files": true, "dav": true, "flowsync": true, "sieve": true, "shares": true, "delegates": true, "migration": false}
 }`
 
 type cosConfig struct {
@@ -28,7 +28,7 @@ type cosConfig struct {
 func parseCoSConfig(raw string) cosConfig {
 	cfg := cosConfig{
 		MaxMailSize: 25 << 20, LargeAttachBytes: 10 << 20, ShareMaxTTLSec: 7 * 24 * 3600,
-		Features: map[string]bool{"files": true, "dav": true, "flowsync": true, "sieve": true, "shares": true, "delegates": true},
+		Features: map[string]bool{"files": true, "dav": true, "flowsync": true, "sieve": true, "shares": true, "delegates": true, "migration": false},
 	}
 	if raw == "" {
 		_ = json.Unmarshal([]byte(DefaultCoSConfig), &cfg)

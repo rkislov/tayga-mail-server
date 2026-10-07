@@ -90,11 +90,13 @@
         <button type="button" class="nav-btn" data-app="appearance"><span class="nav-ico" data-ico="theme" aria-hidden="true"></span><span data-i18n="nav_appearance">Внешний вид</span></button>
         <button type="button" class="nav-btn" data-app="filters"><span class="nav-ico" data-ico="filter" aria-hidden="true"></span><span data-i18n="nav_filters">Фильтры</span></button>
         <button type="button" class="nav-btn" data-app="language"><span class="nav-ico" data-ico="lang" aria-hidden="true"></span><span data-i18n="nav_language">Язык</span></button>
+        <button type="button" class="nav-btn hidden" id="nav-migration" data-app="migration"><span class="nav-ico" data-ico="filter" aria-hidden="true"></span><span data-i18n="nav_migration">Миграция</span></button>
         <div id="nav-admin" class="hidden">
           <p class="nav-group" data-i18n="nav_admin">Админ</p>
           <button type="button" class="nav-btn" data-app="monitor"><span class="nav-ico" data-ico="chart" aria-hidden="true"></span><span data-i18n="nav_monitor">Мониторинг</span></button>
           <button type="button" class="nav-btn" data-app="tenants"><span class="nav-ico" data-ico="domains" aria-hidden="true"></span><span data-i18n="nav_tenants">Домены и пользователи</span></button>
           <button type="button" class="nav-btn" data-app="tls"><span class="nav-ico" data-ico="tls" aria-hidden="true"></span><span data-i18n="nav_tls">УЦ</span></button>
+          <button type="button" class="nav-btn" data-app="xmpp"><span class="nav-ico" data-ico="chat" aria-hidden="true"></span><span data-i18n="nav_xmpp">XMPP</span></button>
           <button type="button" class="nav-btn" data-app="server"><span class="nav-ico" data-ico="server" aria-hidden="true"></span><span data-i18n="nav_server">Сервер</span></button>
         </div>
       </nav>
@@ -449,6 +451,60 @@
         </div>
       </div>
 
+      <!-- MIGRATION -->
+      <div id="app-migration" class="app-page hidden panel-page panel-page-wide">
+        <div class="card" id="card-migration">
+          <h3 class="heading" data-i18n="mig_title">Миграция</h3>
+          <p class="meta" data-i18n="mig_lede">Импорт почты (IMAP), календаря (CalDAV) и контактов (CardDAV) с другого сервера.</p>
+          <ul class="creds" id="mig-job-list"></ul>
+          <div class="ca-panels">
+            <section class="ca-panel">
+              <h4 class="heading" style="font-size:1rem">IMAP</h4>
+              <label class="field-label" for="mig-imap-host">Host</label>
+              <input class="field-input" id="mig-imap-host" type="text" placeholder="imap.example.com" />
+              <label class="field-label" for="mig-imap-port">Port</label>
+              <input class="field-input" id="mig-imap-port" type="number" value="993" />
+              <label class="field-check"><input type="checkbox" id="mig-imap-tls" checked /> <span>TLS</span></label>
+              <label class="field-label" for="mig-imap-user" data-i18n="email">Email</label>
+              <input class="field-input" id="mig-imap-user" type="text" autocomplete="username" />
+              <label class="field-label" for="mig-imap-pass" data-i18n="password">Пароль</label>
+              <input class="field-input" id="mig-imap-pass" type="password" autocomplete="current-password" />
+              <div class="actions">
+                <button type="button" class="btn-spray" id="btn-mig-imap" data-i18n="mig_start">Запустить</button>
+              </div>
+            </section>
+            <section class="ca-panel">
+              <h4 class="heading" style="font-size:1rem">CalDAV</h4>
+              <label class="field-label" for="mig-cal-url">URL</label>
+              <input class="field-input" id="mig-cal-url" type="url" placeholder="https://…" />
+              <label class="field-label" for="mig-cal-user" data-i18n="email">Email</label>
+              <input class="field-input" id="mig-cal-user" type="text" />
+              <label class="field-label" for="mig-cal-pass" data-i18n="password">Пароль</label>
+              <input class="field-input" id="mig-cal-pass" type="password" />
+              <div class="actions">
+                <button type="button" class="btn-spray" id="btn-mig-cal" data-i18n="mig_start">Запустить</button>
+              </div>
+            </section>
+            <section class="ca-panel">
+              <h4 class="heading" style="font-size:1rem">CardDAV</h4>
+              <label class="field-label" for="mig-card-url">URL</label>
+              <input class="field-input" id="mig-card-url" type="url" placeholder="https://…" />
+              <label class="field-label" for="mig-card-user" data-i18n="email">Email</label>
+              <input class="field-input" id="mig-card-user" type="text" />
+              <label class="field-label" for="mig-card-pass" data-i18n="password">Пароль</label>
+              <input class="field-input" id="mig-card-pass" type="password" />
+              <div class="actions">
+                <button type="button" class="btn-spray" id="btn-mig-card" data-i18n="mig_start">Запустить</button>
+              </div>
+            </section>
+          </div>
+          <div class="actions">
+            <button type="button" class="btn-secondary" id="btn-mig-refresh" data-i18n="refresh">Обновить</button>
+          </div>
+          <p id="mig-msg" class="msg"></p>
+        </div>
+      </div>
+
       <!-- FILTERS / SIEVE -->
       <div id="app-filters" class="app-page hidden panel-page stack-gap">
         <div class="card">
@@ -634,6 +690,47 @@ keep;</textarea>
             </section>
           </div>
           <input type="hidden" id="tls-hosts" />
+        </div>
+      </div>
+
+      <!-- ADMIN XMPP -->
+      <div id="app-xmpp" class="app-page hidden panel-page panel-page-wide">
+        <div class="card" id="card-xmpp">
+          <h3 class="heading" data-i18n="xmpp_title">XMPP / чат</h3>
+          <p class="meta" data-i18n="xmpp_lede">C2S для внешних клиентов, компоненты (XEP-0114) и HTTP-боты. Веб-чат работает и при выключенном C2S.</p>
+          <p class="meta" id="xmpp-status">Loading…</p>
+          <p class="meta" data-i18n="xmpp_restart_hint">Смена слушателей XMPP требует перезапуска tayga-mail.</p>
+
+          <h4 class="heading" style="font-size:1rem;margin-top:1rem" data-i18n="xmpp_status">Состояние</h4>
+          <label class="field-check"><input type="checkbox" id="xmpp-enabled" /> <span data-i18n="xmpp_enabled">C2S включён</span></label>
+          <label class="field-label" for="xmpp-listen">C2S listen</label>
+          <input class="field-input" id="xmpp-listen" type="text" placeholder=":5222" />
+          <label class="field-label" for="xmpp-listen-tls">C2S TLS</label>
+          <input class="field-input" id="xmpp-listen-tls" type="text" placeholder=":5223" />
+          <label class="field-label" for="xmpp-component-listen">Component listen</label>
+          <input class="field-input" id="xmpp-component-listen" type="text" placeholder=":5347" />
+          <label class="field-check"><input type="checkbox" id="xmpp-require-tls" /> <span>require_tls</span></label>
+          <div class="actions">
+            <button type="button" class="btn-spray" id="btn-xmpp-save" data-i18n="xmpp_save_cfg">Сохранить C2S</button>
+            <button type="button" class="btn-secondary" id="btn-xmpp-refresh" data-i18n="refresh">Обновить</button>
+          </div>
+
+          <h4 class="heading" style="font-size:1rem;margin-top:1.25rem" data-i18n="xmpp_components">Компоненты</h4>
+          <ul class="creds" id="xmpp-component-list"></ul>
+
+          <h4 class="heading" style="font-size:1rem;margin-top:1.25rem" data-i18n="xmpp_bots">HTTP-боты</h4>
+          <ul class="creds" id="xmpp-bot-list"></ul>
+          <label class="field-label" for="xmpp-bot-name" data-i18n="xmpp_bot_name">Имя бота</label>
+          <input class="field-input" id="xmpp-bot-name" type="text" />
+          <label class="field-label" for="xmpp-bot-user" data-i18n="xmpp_bot_user">Пользователь (mailbox)</label>
+          <select class="field-input" id="xmpp-bot-user"></select>
+          <label class="field-label" for="xmpp-bot-webhook" data-i18n="xmpp_bot_webhook">Webhook URL (опц.)</label>
+          <input class="field-input" id="xmpp-bot-webhook" type="url" placeholder="https://…" />
+          <div class="actions">
+            <button type="button" class="btn-spray" id="btn-xmpp-bot-create" data-i18n="xmpp_bot_create">Создать бота</button>
+          </div>
+          <pre class="secret preview-box hidden" id="xmpp-bot-token"></pre>
+          <p id="xmpp-msg" class="msg"></p>
         </div>
       </div>
 

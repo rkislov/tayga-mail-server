@@ -21,6 +21,7 @@ import (
 	"github.com/tayga/tms/internal/mailstore"
 	"github.com/tayga/tms/internal/managesieve"
 	"github.com/tayga/tms/internal/metrics"
+	"github.com/tayga/tms/internal/migrate"
 	"github.com/tayga/tms/internal/pop3"
 	"github.com/tayga/tms/internal/seed"
 	"github.com/tayga/tms/internal/settings"
@@ -420,8 +421,17 @@ func run(cfgPath string) error {
 		return fmt.Errorf("xmpp: %w", err)
 	}
 
+	migSvc, err := migrate.New(cfg, log, store, ms)
+	if err != nil {
+		return fmt.Errorf("migrate: %w", err)
+	}
+	if migSvc != nil {
+		migSvc.Start(ctx)
+	}
+
 	httpSrv := httpapi.New(cfg, log, store, authn, ms, tlsMgr, hub)
 	httpSrv.SetXMPP(xmppSrv)
+	httpSrv.SetMigrate(migSvc)
 	if err := httpSrv.Start(ctx); err != nil {
 		return fmt.Errorf("http: %w", err)
 	}

@@ -20,6 +20,8 @@ cmd/tayga
 
 ## Configuration
 
+Initial setup guide (RU): [setup.md](./setup.md).
+
 **Bootstrap YAML** (required to open the DB): `server.hostname`, `storage.*`, `mailstore.root`. Optional: `seed`, `http`/`tls`/`log` emergency overrides.
 
 **Runtime settings** live in the `settings` table (JSON per section: `spam`, `scan`, `dmarc`, `smtp`, `ldap`, …). Admins edit them in the UI (**Server settings**) or via:
@@ -96,7 +98,7 @@ XMPP + OMEMO: [docs/xmpp.md](./xmpp.md), TZ [docs/tms-xmpp-001.md](./tms-xmpp-00
 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o tayga-mail ./cmd/tayga
 ./tayga-mail version
 ./tayga-mail -config configs/tayga.example.yaml
-# Cross builds: VERSION=v0.7.0 ./scripts/crossbuild.sh
+# Cross builds: VERSION=v0.7.1 ./scripts/crossbuild.sh
 ```
 
 Seed: `admin@example.com` / `changeme`. UUID schema requires a fresh DB when upgrading from integer IDs.
@@ -115,7 +117,7 @@ Enable: `mfa.webauthn.enabled: true` (RP ID from `http.public_url`).
 
 ## Web UI
 
-Embedded at `/` (`internal/frontend/dist`): app shell with **mail**, **calendar**, **contacts**, **files**, **chat** (Outlook-style panes; ≤900px master-detail), user settings (profile / security / appearance / Sieve+vacation / language ru|en), and admin (monitor charts / tenants / TLS / server / CoS). Roles: `global_admin`, `domain_admin`, `user`. Unauthenticated users are sent to the login card. Themes via `localStorage` (`tayga.theme`); street-art theme promotes Chat/Messenger. Thunderbird companion: `extensions/thunderbird-tayga/`. Chat API: `/api/v1/chat/*` (roster, history, send, SSE events).
+Embedded at `/` (`internal/frontend/dist`): app shell with **mail**, **calendar**, **contacts**, **files**, **chat** (Outlook-style panes; ≤900px master-detail), user settings (profile / security / appearance / Sieve+vacation / language ru|en), and admin (monitor / tenants / УЦ / **XMPP** / server / CoS). Roles: `global_admin`, `domain_admin`, `user`. Unauthenticated users are sent to the login card. Themes via `localStorage` (`tayga.theme`); street-art theme promotes Chat/Messenger. Thunderbird companion: `extensions/thunderbird-tayga/`. Chat API: `/api/v1/chat/*`; admin XMPP/bots: `/api/v1/admin/bots`, settings section `xmpp`. Details: [xmpp.md](./xmpp.md).
 
 ### User apps API
 
@@ -165,6 +167,8 @@ Embedded at `/` (`internal/frontend/dist`): app shell with **mail**, **calendar*
 | `POST /api/v1/admin/certs/self-signed\|upload\|acme` | issue / import / Let’s Encrypt |
 | `POST /api/v1/admin/certs/{id}/activate\|renew` | activate / renew ACME |
 | `GET/PUT/POST /api/v1/admin/tls` | legacy status / install / generate (activates catalog entry) |
+| `GET/POST /api/v1/admin/bots` | XMPP status + HTTP bots; create bot (token once) |
+| `DELETE /api/v1/admin/bots/{id}` | delete HTTP bot |
 | `GET /api/v1/admin/status` | monitoring snapshot (tenant + server counters) |
 | `GET /api/v1/admin/outbound` | list outbound retry queue |
 | `POST /api/v1/admin/outbound/{uuid}/retry` | schedule immediate retry |

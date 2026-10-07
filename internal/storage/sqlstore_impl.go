@@ -132,8 +132,11 @@ func (s *Store) InsertDomain(ctx context.Context, d *Domain) (*Domain, error) {
 	if d.CreatedAt.IsZero() {
 		d.CreatedAt = now
 	}
-	q := s.rebind(`INSERT INTO domains(id, tenant_id, name, created_at) VALUES (?, ?, ?, ?)`)
-	if _, err := s.db.ExecContext(ctx, q, d.ID, d.TenantID, d.Name, d.CreatedAt); err != nil {
+	if d.MigrationEnabled == "" {
+		d.MigrationEnabled = "inherit"
+	}
+	q := s.rebind(`INSERT INTO domains(id, tenant_id, name, migration_enabled, created_at) VALUES (?, ?, ?, ?, ?)`)
+	if _, err := s.db.ExecContext(ctx, q, d.ID, d.TenantID, d.Name, d.MigrationEnabled, d.CreatedAt); err != nil {
 		return nil, mapErr(err)
 	}
 	return d, nil
@@ -141,8 +144,8 @@ func (s *Store) InsertDomain(ctx context.Context, d *Domain) (*Domain, error) {
 
 func (s *Store) GetDomainByID(ctx context.Context, id string) (*Domain, error) {
 	d := &Domain{}
-	q := s.rebind(`SELECT id, tenant_id, name, created_at FROM domains WHERE id = ?`)
-	err := s.db.QueryRowContext(ctx, q, id).Scan(&d.ID, &d.TenantID, &d.Name, &d.CreatedAt)
+	q := s.rebind(`SELECT id, tenant_id, name, COALESCE(migration_enabled,'inherit'), created_at FROM domains WHERE id = ?`)
+	err := s.db.QueryRowContext(ctx, q, id).Scan(&d.ID, &d.TenantID, &d.Name, &d.MigrationEnabled, &d.CreatedAt)
 	if err != nil {
 		return nil, mapErr(err)
 	}
@@ -154,11 +157,11 @@ func (s *Store) GetDomainByName(ctx context.Context, name string) (*Domain, erro
 	name = strings.ToLower(name)
 	var q string
 	if s.dialect == DialectPostgres {
-		q = `SELECT id, tenant_id, name, created_at FROM domains WHERE LOWER(name) = LOWER($1)`
+		q = `SELECT id, tenant_id, name, COALESCE(migration_enabled,'inherit'), created_at FROM domains WHERE LOWER(name) = LOWER($1)`
 	} else {
-		q = `SELECT id, tenant_id, name, created_at FROM domains WHERE name = ? COLLATE NOCASE`
+		q = `SELECT id, tenant_id, name, COALESCE(migration_enabled,'inherit'), created_at FROM domains WHERE name = ? COLLATE NOCASE`
 	}
-	err := s.db.QueryRowContext(ctx, q, name).Scan(&d.ID, &d.TenantID, &d.Name, &d.CreatedAt)
+	err := s.db.QueryRowContext(ctx, q, name).Scan(&d.ID, &d.TenantID, &d.Name, &d.MigrationEnabled, &d.CreatedAt)
 	if err != nil {
 		return nil, mapErr(err)
 	}
@@ -166,7 +169,7 @@ func (s *Store) GetDomainByName(ctx context.Context, name string) (*Domain, erro
 }
 
 func (s *Store) ListDomainsByTenant(ctx context.Context, tenantID string) ([]*Domain, error) {
-	q := s.rebind(`SELECT id, tenant_id, name, created_at FROM domains WHERE tenant_id = ? ORDER BY name`)
+	q := s.rebind(`SELECT id, tenant_id, name, COALESCE(migration_enabled,'inherit'), created_at FROM domains WHERE tenant_id = ? ORDER BY name`)
 	rows, err := s.db.QueryContext(ctx, q, tenantID)
 	if err != nil {
 		return nil, err
@@ -175,12 +178,37 @@ func (s *Store) ListDomainsByTenant(ctx context.Context, tenantID string) ([]*Do
 	var out []*Domain
 	for rows.Next() {
 		d := &Domain{}
-		if err := rows.Scan(&d.ID, &d.TenantID, &d.Name, &d.CreatedAt); err != nil {
+		if err := rows.Scan(&d.ID, &d.TenantID, &d.Name, &d.MigrationEnabled, &d.CreatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, d)
 	}
 	return out, rows.Err()
+}
+
+func (s *Store) UpdateDomainMigration(ctx context.Context, domainID, migrationEnabled string) error {
+	migrationEnabled = normalizeMigrationPolicy(migrationEnabled)
+	q := s.rebind(`UPDATE domains SET migration_enabled = ? WHERE id = ?`)
+	res, err := s.db.ExecContext(ctx, q, migrationEnabled, domainID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func normalizeMigrationPolicy(v string) string {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "on", "true", "1", "enabled":
+		return "on"
+	case "off", "false", "0", "disabled":
+		return "off"
+	default:
+		return "inherit"
+	}
 }
 
 func (s *Store) CountUsersByDomain(ctx context.Context, domainID string) (int, error) {
@@ -227,14 +255,17 @@ func (s *Store) CreateUser(ctx context.Context, u *User) (*User, error) {
 	}
 
 	u.Roles = JoinRoles(ParseRoles(u.Roles))
+	if u.MigrationEnabled == "" {
+		u.MigrationEnabled = "inherit"
+	}
 	q := s.rebind(`INSERT INTO users(
 		id, tenant_id, domain_id, email, local_part, display_name, password_hash,
-		auth_source, quota_bytes, enabled, roles, service_class_id, created_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		auth_source, quota_bytes, enabled, roles, service_class_id, migration_enabled, created_at
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 
 	args := []any{
 		u.ID, u.TenantID, u.DomainID, u.Email, u.LocalPart, u.DisplayName, u.PasswordHash,
-		u.AuthSource, u.QuotaBytes, enabled, u.Roles, u.ServiceClassID, now,
+		u.AuthSource, u.QuotaBytes, enabled, u.Roles, u.ServiceClassID, u.MigrationEnabled, now,
 	}
 	if _, err := s.db.ExecContext(ctx, q, args...); err != nil {
 		return nil, mapErr(err)
@@ -247,13 +278,17 @@ func (s *Store) scanUser(row interface{ Scan(dest ...any) error }) (*User, error
 	var enabled any
 	err := row.Scan(
 		&u.ID, &u.TenantID, &u.DomainID, &u.Email, &u.LocalPart, &u.DisplayName,
-		&u.PasswordHash, &u.AuthSource, &u.QuotaBytes, &enabled, &u.Roles, &u.ServiceClassID, &u.CreatedAt,
+		&u.PasswordHash, &u.AuthSource, &u.QuotaBytes, &enabled, &u.Roles, &u.ServiceClassID,
+		&u.MigrationEnabled, &u.CreatedAt,
 	)
 	if err != nil {
 		return nil, mapErr(err)
 	}
 	u.Enabled = asBool(enabled)
 	u.Roles = JoinRoles(ParseRoles(u.Roles))
+	if u.MigrationEnabled == "" {
+		u.MigrationEnabled = "inherit"
+	}
 	return u, nil
 }
 
@@ -272,7 +307,7 @@ func asBool(v any) bool {
 	}
 }
 
-const userCols = `id, tenant_id, domain_id, email, local_part, display_name, password_hash, auth_source, quota_bytes, enabled, roles, COALESCE(service_class_id,''), created_at`
+const userCols = `id, tenant_id, domain_id, email, local_part, display_name, password_hash, auth_source, quota_bytes, enabled, roles, COALESCE(service_class_id,''), COALESCE(migration_enabled,'inherit'), created_at`
 
 func (s *Store) GetUserByEmail(ctx context.Context, email string) (*User, error) {
 	email = strings.ToLower(email)

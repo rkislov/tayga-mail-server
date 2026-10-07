@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -191,6 +192,40 @@ func (s *Store) GetCalendarObject(ctx context.Context, calendarID, hrefName stri
 	q := s.rebind(`SELECT id, calendar_id, uid, href_name, etag, data, size, component, dtstart, dtend, updated_at
 		FROM calendar_objects WHERE calendar_id = ? AND href_name = ?`)
 	return s.scanCalObject(s.db.QueryRowContext(ctx, q, calendarID, hrefName))
+}
+
+func (s *Store) CalendarObjectExistsByUID(ctx context.Context, calendarID, uid string) (bool, error) {
+	uid = strings.TrimSpace(uid)
+	if uid == "" {
+		return false, nil
+	}
+	q := s.rebind(`SELECT 1 FROM calendar_objects WHERE calendar_id = ? AND uid = ? LIMIT 1`)
+	var one int
+	err := s.db.QueryRowContext(ctx, q, calendarID, uid).Scan(&one)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (s *Store) AddressObjectExistsByUID(ctx context.Context, bookID, uid string) (bool, error) {
+	uid = strings.TrimSpace(uid)
+	if uid == "" {
+		return false, nil
+	}
+	q := s.rebind(`SELECT 1 FROM address_objects WHERE addressbook_id = ? AND uid = ? LIMIT 1`)
+	var one int
+	err := s.db.QueryRowContext(ctx, q, bookID, uid).Scan(&one)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (s *Store) GetCalendarObjectByID(ctx context.Context, id string) (*CalendarObject, error) {
@@ -444,8 +479,9 @@ func (s *Store) scanAddrObject(row interface{ Scan(dest ...any) error }) (*Addre
 }
 
 // EnsureDAVDefaults creates default calendar and address book for a user.
+// The default calendar is named "default" (href) with display name "Календарь".
 func (s *Store) EnsureDAVDefaults(ctx context.Context, userID string) error {
-	if _, err := s.EnsureCalendar(ctx, userID, "default", "Calendar"); err != nil {
+	if _, err := s.EnsureCalendar(ctx, userID, "default", "Календарь"); err != nil {
 		return fmt.Errorf("ensure calendar: %w", err)
 	}
 	if _, err := s.EnsureAddressBook(ctx, userID, "default", "Contacts"); err != nil {
