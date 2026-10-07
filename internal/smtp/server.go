@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -41,6 +42,15 @@ func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth
 	return &Server{cfg: cfg, log: log, store: store, authn: authn, mailstore: ms, sieve: eng, tls: tlsMgr, ha: gate}
 }
 
+func (s *Server) outbound() (*outboundRelay, *dkimSigner, error) {
+	rel := newOutboundRelay(s.cfg.SMTP.Relay, s.cfg.SMTP.WriteTimeout)
+	sig, err := newDKIMSigner(s.cfg.SMTP.DKIM)
+	if err != nil {
+		return nil, nil, err
+	}
+	return rel, sig, nil
+}
+
 func (s *Server) Start(ctx context.Context) error {
 	tlsCfg := s.tlsConfig()
 
@@ -61,6 +71,14 @@ func (s *Server) Start(ctx context.Context) error {
 		specs = append(specs, listenSpec{addr: s.cfg.SMTP.SMTPS, name: "smtps", implicit: true, requireAuth: true})
 	}
 
+	relay, dkimSig, err := s.outbound()
+	if err != nil {
+		return fmt.Errorf("smtp dkim: %w", err)
+	}
+	if relay != nil {
+		s.log.Info("smtp outbound relay configured", "host", s.cfg.SMTP.Relay.Host, "dkim", dkimSig != nil)
+	}
+
 	for _, spec := range specs {
 		be := &backend{
 			log:         s.log,
@@ -72,6 +90,8 @@ func (s *Server) Start(ctx context.Context) error {
 			maxSize:     s.cfg.SMTP.MaxSize,
 			requireAuth: spec.requireAuth,
 			ha:          s.ha,
+			relay:       relay,
+			dkim:        dkimSig,
 		}
 		srv := gosmtp.NewServer(be)
 		srv.Domain = s.cfg.Server.Hostname
@@ -145,6 +165,8 @@ type backend struct {
 	maxSize     int64
 	requireAuth bool
 	ha          ha.Gate
+	relay       *outboundRelay
+	dkim        *dkimSigner
 }
 
 func (b *backend) NewSession(c *gosmtp.Conn) (gosmtp.Session, error) {
@@ -159,7 +181,8 @@ type session struct {
 	remote  string
 	user    *storage.User
 	from    string
-	to      []string
+	toLocal []string
+	toRemote []string
 	opts    *gosmtp.MailOptions
 }
 
@@ -221,27 +244,32 @@ func (s *session) Mail(from string, opts *gosmtp.MailOptions) error {
 	}
 	s.from = from
 	s.opts = opts
-	s.to = nil
+	s.toLocal = nil
+	s.toRemote = nil
 	return nil
 }
 
 func (s *session) Rcpt(to string, _ *gosmtp.RcptOptions) error {
 	to = normalizeAddr(to)
-	u, err := s.backend.store.ResolveRecipient(context.Background(), to)
-	if err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
-			return &gosmtp.SMTPError{Code: 550, EnhancedCode: gosmtp.EnhancedCode{5, 1, 1}, Message: "User unknown"}
-		}
+	_, err := s.backend.store.ResolveRecipient(context.Background(), to)
+	if err == nil {
+		s.toLocal = append(s.toLocal, to)
+		return nil
+	}
+	if !errors.Is(err, storage.ErrNotFound) {
 		s.backend.log.Error("rcpt resolve failed", "to", to, "err", err)
 		return &gosmtp.SMTPError{Code: 451, EnhancedCode: gosmtp.EnhancedCode{4, 3, 0}, Message: "Temporary failure"}
 	}
-	_ = u
-	s.to = append(s.to, to)
-	return nil
+	// External recipient: authenticated submission + smart-host only.
+	if s.user != nil && s.backend.relay != nil {
+		s.toRemote = append(s.toRemote, to)
+		return nil
+	}
+	return &gosmtp.SMTPError{Code: 550, EnhancedCode: gosmtp.EnhancedCode{5, 1, 1}, Message: "User unknown"}
 }
 
 func (s *session) Data(r io.Reader) error {
-	if len(s.to) == 0 {
+	if len(s.toLocal) == 0 && len(s.toRemote) == 0 {
 		return &gosmtp.SMTPError{Code: 554, EnhancedCode: gosmtp.EnhancedCode{5, 5, 0}, Message: "No valid recipients"}
 	}
 	data, err := io.ReadAll(io.LimitReader(r, s.backend.maxSize+1))
@@ -254,7 +282,7 @@ func (s *session) Data(r io.Reader) error {
 
 	ctx := context.Background()
 	msgid := extractMessageID(data)
-	for _, rcpt := range s.to {
+	for _, rcpt := range s.toLocal {
 		if err := s.deliver(ctx, rcpt, data, msgid); err != nil {
 			var smtpErr *gosmtp.SMTPError
 			if errors.As(err, &smtpErr) {
@@ -264,11 +292,28 @@ func (s *session) Data(r io.Reader) error {
 			return &gosmtp.SMTPError{Code: 451, EnhancedCode: gosmtp.EnhancedCode{4, 3, 0}, Message: "Delivery failed"}
 		}
 	}
+	if len(s.toRemote) > 0 {
+		out := data
+		if s.backend.dkim != nil {
+			signed, err := s.backend.dkim.Sign(out)
+			if err != nil {
+				s.backend.log.Error("dkim sign failed", "err", err)
+				return &gosmtp.SMTPError{Code: 451, EnhancedCode: gosmtp.EnhancedCode{4, 3, 0}, Message: "DKIM signing failed"}
+			}
+			out = signed
+		}
+		from := normalizeAddr(s.from)
+		if err := s.backend.relay.Send(from, s.toRemote, out); err != nil {
+			s.backend.log.Error("outbound relay failed", "err", err, "recipients", len(s.toRemote))
+			return &gosmtp.SMTPError{Code: 451, EnhancedCode: gosmtp.EnhancedCode{4, 3, 0}, Message: "Relay failed"}
+		}
+	}
 	s.backend.log.Info("message accepted",
 		"from", s.from,
-		"recipients", len(s.to),
+		"local", len(s.toLocal),
+		"remote", len(s.toRemote),
 		"size", len(data),
-		"remote", s.remote,
+		"peer", s.remote,
 	)
 	return nil
 }
@@ -318,7 +363,8 @@ func (s *session) deliver(ctx context.Context, rcpt string, data []byte, msgid s
 
 func (s *session) Reset() {
 	s.from = ""
-	s.to = nil
+	s.toLocal = nil
+	s.toRemote = nil
 	s.opts = nil
 }
 

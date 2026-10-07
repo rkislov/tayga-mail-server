@@ -72,12 +72,30 @@ type ObjectStoreConfig struct {
 }
 
 type SMTPConfig struct {
-	Submission   string        `yaml:"submission"`
-	MX           string        `yaml:"mx"`
-	SMTPS        string        `yaml:"smtps"`
-	MaxSize      int64         `yaml:"max_size"` // bytes; 0 = default 25 MiB
-	ReadTimeout  time.Duration `yaml:"read_timeout"`
-	WriteTimeout time.Duration `yaml:"write_timeout"`
+	Submission   string          `yaml:"submission"`
+	MX           string          `yaml:"mx"`
+	SMTPS        string          `yaml:"smtps"`
+	MaxSize      int64           `yaml:"max_size"` // bytes; 0 = default 25 MiB
+	ReadTimeout  time.Duration   `yaml:"read_timeout"`
+	WriteTimeout time.Duration   `yaml:"write_timeout"`
+	Relay        SMTPRelayConfig `yaml:"relay"`
+	DKIM         SMTPDKIMConfig  `yaml:"dkim"`
+}
+
+// SMTPRelayConfig is the outbound smart-host for authenticated external recipients.
+type SMTPRelayConfig struct {
+	Host            string `yaml:"host"` // host:port; empty disables outbound
+	Username        string `yaml:"username"`
+	Password        string `yaml:"password"`
+	DisableSTARTTLS bool   `yaml:"disable_starttls"`
+}
+
+// SMTPDKIMConfig signs outbound messages before relay.
+type SMTPDKIMConfig struct {
+	Enabled        bool   `yaml:"enabled"`
+	Domain         string `yaml:"domain"`
+	Selector       string `yaml:"selector"`
+	PrivateKeyFile string `yaml:"private_key_file"`
 }
 
 type IMAPConfig struct {
@@ -288,6 +306,11 @@ func (c *Config) Validate() error {
 	}
 	if c.SMTP.WriteTimeout <= 0 {
 		c.SMTP.WriteTimeout = 60 * time.Second
+	}
+	if c.SMTP.DKIM.Enabled {
+		if c.SMTP.DKIM.Domain == "" || c.SMTP.DKIM.Selector == "" || c.SMTP.DKIM.PrivateKeyFile == "" {
+			return fmt.Errorf("smtp.dkim: domain, selector, and private_key_file required when enabled")
+		}
 	}
 	if c.LDAP.CacheTTL <= 0 {
 		c.LDAP.CacheTTL = 5 * time.Minute
