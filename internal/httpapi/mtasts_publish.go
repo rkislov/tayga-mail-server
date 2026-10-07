@@ -13,7 +13,12 @@ func (s *Server) handleMTASTSPolicy(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	pub := s.cfg.SMTP.MTASTS.Publish
+	cfg := s.cfgLive()
+	if cfg == nil {
+		http.NotFound(w, r)
+		return
+	}
+	pub := cfg.SMTP.MTASTS.Publish
 	if !pub.Enabled {
 		http.NotFound(w, r)
 		return

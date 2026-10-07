@@ -61,7 +61,7 @@ func TestAdminQuarantine(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	h := httpapi.New(cfg, slog.Default(), store, layer, ms, nil).Handler()
+	h := httpapi.New(cfg, slog.Default(), store, layer, ms, nil, nil).Handler()
 	res, err := layer.LoginWithPassword(ctx, "admin@ex.com", "secret")
 	if err != nil {
 		t.Fatal(err)

@@ -57,7 +57,7 @@ func TestAdminTLSGenerateAndStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 	ms := mailstore.New(filepath.Join(dir, "mail"))
-	h := httpapi.New(cfg, slog.Default(), store, layer, ms, tlsMgr).Handler()
+	h := httpapi.New(cfg, slog.Default(), store, layer, ms, tlsMgr, nil).Handler()
 
 	res, err := layer.LoginWithPassword(ctx, "admin@ex.com", "secret")
 	if err != nil || res.Tokens == nil {

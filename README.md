@@ -5,7 +5,7 @@ Corporate-class multi-domain / multi-tenant mail server in Go.
 **Author:** Кислов Роман Сергеевич (Roman Sergeyevich Kislov)  
 **License:** [Apache License 2.0](LICENSE)
 
-See [docs/architecture.md](docs/architecture.md) and `configs/tayga.example.yaml`.
+See [docs/architecture.md](docs/architecture.md) and `configs/tayga.example.yaml` (minimal bootstrap YAML). Mail policies and most options are edited in **Admin → Server settings** (`/api/v1/admin/settings`).
 
 ## Quick start
 
@@ -40,7 +40,7 @@ Seed: `admin@example.com` / `changeme`. TLS: `tls.auto_generate` or `scripts/gen
 - IMAP/SMTP: SASL `XOAUTH2` / `OAUTHBEARER` with access tokens from the auth API
 - CalDAV / CardDAV: `/dav/cal/`, `/dav/card/`; `/.well-known/caldav|carddav`
 - FlowSync (original): ActiveSync `/Microsoft-Server-ActiveSync`, EWS `/EWS/Exchange.asmx`, Autodiscover (POX/JSON) + Mozilla autoconfig
-- Admin: tenant domains, users, TLS certs, monitoring, backup (`/api/v1/admin/*`)
+- Admin: tenant domains, users, TLS, **Server settings** (DB-backed config), monitoring, backup (`/api/v1/admin/*`)
 - Metrics: `GET /metrics` (Prometheus `tayga_*`)
 - Backup/restore: `./tayga-mail backup|restore -config …` or Admin UI; see [docs/ha.md](docs/ha.md)
 - HA: Postgres + shared maildir; cross-node IMAP IDLE; `ha.mode: active_standby` (`fence: mx|writers`) or `sticky` per-user writers
