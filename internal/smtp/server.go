@@ -39,6 +39,8 @@ type Server struct {
 	scan         *scanPolicy
 	spam         *spamPolicy
 	dkimVerify   *dkimVerifyPolicy
+	spf          *spfPolicy
+	dmarc        *dmarcPolicy
 	queue        *OutboundQueue
 	servers      []*gosmtp.Server
 }
@@ -130,6 +132,30 @@ func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth
 		}
 		log.Info("smtp dkim verify enabled", "action", action, "authserv_id", authserv)
 	}
+	if cfg.SPF.Enabled {
+		authserv := cfg.SPF.AuthservID
+		if authserv == "" {
+			authserv = cfg.Server.Hostname
+		}
+		action := cfg.SPF.Action
+		if action == "" {
+			action = "tag"
+		}
+		srv.spf = &spfPolicy{action: action, failOpen: cfg.SPF.FailOpen, authservID: authserv, log: log}
+		log.Info("smtp spf check enabled", "action", action)
+	}
+	if cfg.DMARC.Enabled {
+		authserv := cfg.DMARC.AuthservID
+		if authserv == "" {
+			authserv = cfg.Server.Hostname
+		}
+		action := cfg.DMARC.Action
+		if action == "" {
+			action = "tag"
+		}
+		srv.dmarc = &dmarcPolicy{action: action, failOpen: cfg.DMARC.FailOpen, authservID: authserv, log: log}
+		log.Info("smtp dmarc check enabled", "action", action)
+	}
 	return srv
 }
 
@@ -213,6 +239,8 @@ func (s *Server) Start(ctx context.Context) error {
 			scan:         s.scan,
 			spam:         s.spam,
 			dkimVerify:   s.dkimVerify,
+			spf:          s.spf,
+			dmarc:        s.dmarc,
 			out:          out,
 			dkim:         dkimSig,
 			queue:        oq,
@@ -296,6 +324,8 @@ type backend struct {
 	scan         *scanPolicy
 	spam         *spamPolicy
 	dkimVerify   *dkimVerifyPolicy
+	spf          *spfPolicy
+	dmarc        *dmarcPolicy
 	out          outboundSender
 	dkim         *dkimSigner
 	queue        *OutboundQueue
@@ -477,16 +507,42 @@ func (s *session) deliver(ctx context.Context, rcpt string, data []byte, msgid s
 			return &gosmtp.SMTPError{Code: 421, EnhancedCode: gosmtp.EnhancedCode{4, 3, 2}, Message: "Not writer for recipient; try later"}
 		}
 	}
-	// Inbound DKIM verify for unauthenticated MX only.
-	if s.backend.dkimVerify != nil && s.user == nil {
-		var dkimErr error
-		data, dkimErr = s.backend.dkimVerify.apply(data)
-		if dkimErr != nil {
-			var smtpErr *gosmtp.SMTPError
-			if errors.As(dkimErr, &smtpErr) {
-				return smtpErr
+	// Inbound mail auth (SPF → DKIM → DMARC) for unauthenticated MX only.
+	if s.user == nil {
+		var (
+			spfRes      = spfNoneResult()
+			dkimDomains []string
+			authErr     error
+		)
+		if s.backend.spf != nil {
+			data, spfRes, authErr = s.backend.spf.apply(stripPort(s.remote), s.backend.hostname, s.from, data)
+			if authErr != nil {
+				var smtpErr *gosmtp.SMTPError
+				if errors.As(authErr, &smtpErr) {
+					return smtpErr
+				}
+				return authErr
 			}
-			return dkimErr
+		}
+		if s.backend.dkimVerify != nil {
+			data, dkimDomains, authErr = s.backend.dkimVerify.apply(data)
+			if authErr != nil {
+				var smtpErr *gosmtp.SMTPError
+				if errors.As(authErr, &smtpErr) {
+					return smtpErr
+				}
+				return authErr
+			}
+		}
+		if s.backend.dmarc != nil {
+			data, authErr = s.backend.dmarc.apply(data, s.from, spfRes, dkimDomains)
+			if authErr != nil {
+				var smtpErr *gosmtp.SMTPError
+				if errors.As(authErr, &smtpErr) {
+					return smtpErr
+				}
+				return authErr
+			}
 		}
 	}
 	if s.backend.scan != nil {

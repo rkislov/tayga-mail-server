@@ -52,7 +52,7 @@ func TestDKIMVerifyPassAndNone(t *testing.T) {
 	p := &dkimVerifyPolicy{
 		action: "tag", authservID: "mail.test", lookupTXT: lookup,
 	}
-	out, err := p.apply(signed)
+	out, domains, err := p.apply(signed)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,8 +63,11 @@ func TestDKIMVerifyPassAndNone(t *testing.T) {
 	if !strings.Contains(s, "header.d=example.com") {
 		t.Fatalf("want domain: %s", s)
 	}
+	if len(domains) != 1 || domains[0] != "example.com" {
+		t.Fatalf("domains %v", domains)
+	}
 
-	out2, err := p.apply(msg)
+	out2, _, err := p.apply(msg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +114,7 @@ func TestDKIMVerifyRejectFail(t *testing.T) {
 	}
 
 	p := &dkimVerifyPolicy{action: "reject", authservID: "mail.test", lookupTXT: lookup}
-	_, err = p.apply(tampered)
+	_, _, err = p.apply(tampered)
 	if err == nil {
 		t.Fatal("expected reject")
 	}
@@ -123,7 +126,7 @@ func TestDKIMVerifyRequireSignature(t *testing.T) {
 		lookupTXT: func(string) ([]string, error) { return nil, &netDNSError{msg: "nxdomain"} },
 	}
 	msg := []byte("From: a@example.com\r\nSubject: x\r\n\r\ny\r\n")
-	_, err := p.apply(msg)
+	_, _, err := p.apply(msg)
 	if err == nil {
 		t.Fatal("expected reject without signature")
 	}
