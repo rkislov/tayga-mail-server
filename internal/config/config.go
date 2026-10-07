@@ -32,6 +32,7 @@ type Config struct {
 	DKIMVerify  DKIMVerifyConfig  `yaml:"dkim_verify"`
 	SPF         SPFConfig         `yaml:"spf"`
 	IPRev       IPRevConfig       `yaml:"iprev"`
+	Helo        HeloConfig        `yaml:"helo"`
 	DMARC       DMARCConfig       `yaml:"dmarc"`
 	ARC         ARCConfig         `yaml:"arc"`
 	Log         LogConfig         `yaml:"log"`
@@ -43,6 +44,14 @@ type IPRevConfig struct {
 	Action     string `yaml:"action"` // tag | reject
 	FailOpen   bool   `yaml:"fail_open"`
 	AuthservID string `yaml:"authserv_id"`
+}
+
+// HeloConfig validates client HELO/EHLO syntax on unauthenticated MX.
+type HeloConfig struct {
+	Enabled     bool   `yaml:"enabled"`
+	Action      string `yaml:"action"`       // tag | reject
+	RequireFQDN bool   `yaml:"require_fqdn"` // require a dotted name (or [IPv4/IPv6])
+	AuthservID  string `yaml:"authserv_id"`
 }
 
 // ARCConfig verifies and optionally seals Authenticated Received Chain (RFC 8617).
@@ -501,6 +510,11 @@ func Default() *Config {
 			Action:   "tag",
 			FailOpen: true,
 		},
+		Helo: HeloConfig{
+			Enabled:     false,
+			Action:      "tag",
+			RequireFQDN: true,
+		},
 		DMARC: DMARCConfig{
 			Enabled:  false,
 			Action:   "tag",
@@ -837,6 +851,19 @@ func (c *Config) Validate() error {
 		}
 		if c.IPRev.AuthservID == "" {
 			c.IPRev.AuthservID = c.Server.Hostname
+		}
+	}
+	if c.Helo.Enabled {
+		switch c.Helo.Action {
+		case "", "tag", "reject":
+			if c.Helo.Action == "" {
+				c.Helo.Action = "tag"
+			}
+		default:
+			return fmt.Errorf("helo.action must be tag or reject, got %q", c.Helo.Action)
+		}
+		if c.Helo.AuthservID == "" {
+			c.Helo.AuthservID = c.Server.Hostname
 		}
 	}
 	if c.DMARC.Enabled {
