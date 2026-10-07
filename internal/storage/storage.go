@@ -49,6 +49,13 @@ type Driver interface {
 	DeleteMessage(ctx context.Context, messageID int64) error
 	ExpungeMailbox(ctx context.Context, mailboxID int64) ([]*Message, error) // returns deleted msgs (had \Deleted)
 
+	ListSieveScripts(ctx context.Context, userID int64) ([]*SieveScript, error)
+	GetSieveScript(ctx context.Context, userID int64, name string) (*SieveScript, error)
+	GetActiveSieveScript(ctx context.Context, userID int64) (*SieveScript, error)
+	PutSieveScript(ctx context.Context, userID int64, name, script string) (*SieveScript, error)
+	DeleteSieveScript(ctx context.Context, userID int64, name string) error
+	SetActiveSieveScript(ctx context.Context, userID int64, name string) error // empty name = deactivate all
+
 	DB() *sql.DB
 }
 
@@ -107,4 +114,13 @@ type Message struct {
 	FilePath     string
 	MessageID    string
 	CreatedAt    time.Time
+}
+
+type SieveScript struct {
+	ID        int64
+	UserID    int64
+	Name      string
+	Script    string
+	Active    bool
+	CreatedAt time.Time
 }

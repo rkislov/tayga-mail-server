@@ -7,6 +7,7 @@ require (
 	github.com/emersion/go-message v0.18.2
 	github.com/emersion/go-sasl v0.0.0-20241020182733-b788ff22d5a6
 	github.com/emersion/go-smtp v0.25.0
+	github.com/foxcpp/go-sieve v0.0.0-20260523221512-9ae51b269e52
 	github.com/lib/pq v1.10.9
 	github.com/prometheus/client_golang v1.22.0
 	golang.org/x/crypto v0.40.0
@@ -34,4 +35,5 @@ require (
 	modernc.org/libc v1.62.1 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.9.1 // indirect
+	rsc.io/binaryregexp v0.2.0 // indirect
 )
