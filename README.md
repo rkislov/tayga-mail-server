@@ -31,7 +31,9 @@ Seed: `admin@example.com` / `changeme`. TLS: `tls.auto_generate` or `scripts/gen
 - IMAP/SMTP: SASL `XOAUTH2` / `OAUTHBEARER` with access tokens from the auth API
 - CalDAV / CardDAV: `/dav/cal/`, `/dav/card/`; `/.well-known/caldav|carddav`
 - FlowSync (original): ActiveSync `/Microsoft-Server-ActiveSync`, EWS `/EWS/Exchange.asmx`, Autodiscover (POX/JSON) + Mozilla autoconfig
-- Admin: tenant domains, users, TLS certs (`/api/v1/admin/*`)
+- Admin: tenant domains, users, TLS certs, monitoring, backup (`/api/v1/admin/*`)
+- Metrics: `GET /metrics` (Prometheus `tayga_*`)
+- Backup: `./tayga-mail backup -config … -out backup.tar.gz` or Admin UI download
 - WebAuthn MFA: `/api/v1/auth/webauthn/*` (passkeys; UUID credential/session IDs)
 - Account API: `GET /api/v1/me`; admin: `/api/v1/admin/users` (`http.admins`)
 - IDs: all entity PKs/FKs are UUIDs (fresh DB required after integer-ID builds)

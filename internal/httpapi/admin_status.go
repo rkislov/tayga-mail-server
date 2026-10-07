@@ -1,0 +1,91 @@
+package httpapi
+
+import (
+	"net/http"
+	"runtime"
+	"time"
+
+	"github.com/tayga/tms/internal/backup"
+)
+
+var startedAt = time.Now().UTC()
+
+func (s *Server) handleAdminStatus(w http.ResponseWriter, r *http.Request) {
+	admin, ok := s.requireAdmin(w, r)
+	if !ok {
+		return
+	}
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	global, err := s.store.ServerStats(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	tenant, err := s.store.TenantStats(r.Context(), admin.TenantID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	var tls any
+	if s.tls != nil {
+		tls = s.tls.Status()
+	}
+	var ms runtime.MemStats
+	runtime.ReadMemStats(&ms)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"hostname":   s.cfg.Server.Hostname,
+		"uptime_sec": int(time.Since(startedAt).Seconds()),
+		"started_at": startedAt.Format(time.RFC3339),
+		"go": map[string]any{
+			"version":    runtime.Version(),
+			"goroutines": runtime.NumGoroutine(),
+			"heap_alloc": ms.HeapAlloc,
+		},
+		"server": global,
+		"tenant": tenant,
+		"tls":    tls,
+		"listeners": map[string]string{
+			"smtp_mx":         s.cfg.SMTP.MX,
+			"smtp_submission": s.cfg.SMTP.Submission,
+			"smtps":           s.cfg.SMTP.SMTPS,
+			"imap":            s.cfg.IMAP.Listen,
+			"imaps":           s.cfg.IMAP.IMAPS,
+			"pop3":            s.cfg.POP3.Listen,
+			"pop3s":           s.cfg.POP3.POP3S,
+			"managesieve":     s.cfg.ManageSieve.Listen,
+			"http":            s.cfg.HTTP.Listen,
+			"https":           s.cfg.HTTP.TLSListen,
+		},
+	})
+}
+
+func (s *Server) handleAdminBackup(w http.ResponseWriter, r *http.Request) {
+	admin, ok := s.requireAdmin(w, r)
+	if !ok {
+		return
+	}
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	includeMail := r.URL.Query().Get("include_mail") == "1" || r.URL.Query().Get("include_mail") == "true"
+	opts := backup.Options{
+		IncludeMail: includeMail,
+		TenantID:    admin.TenantID, // tenant-scoped for multi-tenant safety
+	}
+	if s.ms != nil {
+		opts.MailRoot = s.ms.Root
+	}
+
+	name := "tayga-backup-" + time.Now().UTC().Format("20060102-150405") + ".tar.gz"
+	w.Header().Set("Content-Type", "application/gzip")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+name+`"`)
+	if err := backup.WriteTarGz(r.Context(), s.store, opts, w); err != nil {
+		s.log.Error("backup failed", "err", err)
+		// headers may already be sent; best effort
+		return
+	}
+}
