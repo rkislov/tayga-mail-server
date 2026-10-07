@@ -60,7 +60,7 @@ func run(cfgPath string) error {
 	}
 	defer store.Close()
 
-	authn := auth.NewLayer(store, cfg.LDAP)
+	authn := auth.NewLayer(store, cfg.LDAP, cfg.MFA, cfg.OIDC)
 	ms := mailstore.New(cfg.Mailstore.Root)
 	sieveEng := sieve.New(store, ms, log)
 
@@ -88,7 +88,7 @@ func run(cfgPath string) error {
 		return fmt.Errorf("managesieve: %w", err)
 	}
 
-	httpSrv := httpapi.New(cfg.HTTP.Listen, log, store)
+	httpSrv := httpapi.New(cfg.HTTP.Listen, log, store, authn)
 	if err := httpSrv.Start(ctx); err != nil {
 		return fmt.Errorf("http: %w", err)
 	}
