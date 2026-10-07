@@ -42,6 +42,12 @@ func main() {
 				os.Exit(1)
 			}
 			return
+		case "sync-objects":
+			if err := runSyncObjects(os.Args[2:]); err != nil {
+				fmt.Fprintf(os.Stderr, "tayga sync-objects: %v\n", err)
+				os.Exit(1)
+			}
+			return
 		}
 	}
 
@@ -135,6 +141,55 @@ func runRestore(args []string) error {
 	return nil
 }
 
+func runSyncObjects(args []string) error {
+	fs := flag.NewFlagSet("sync-objects", flag.ExitOnError)
+	cfgPath := fs.String("config", "configs/tayga.example.yaml", "path to YAML config")
+	dryRun := fs.Bool("dry-run", false, "report actions without writing")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	cfg, err := config.Load(*cfgPath)
+	if err != nil {
+		return err
+	}
+	if !cfg.Mailstore.ObjectStore.Enabled {
+		return fmt.Errorf("mailstore.object_store.enabled must be true")
+	}
+	log := logging.New(cfg.Log.Level, cfg.Log.Format)
+	ctx := context.Background()
+	store, err := storage.Open(ctx, cfg.Storage)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+	ms := mailstore.New(cfg.Mailstore.Root)
+	blob, err := openObjectStore(cfg)
+	if err != nil {
+		return err
+	}
+	ms.SetObjectStore(blob, log)
+	rep, err := mailstore.SyncObjects(ctx, store, ms, blob, mailstore.SyncOptions{DryRun: *dryRun, Log: log})
+	if err != nil {
+		return err
+	}
+	fmt.Printf("sync-objects ok: messages=%d pushed=%d pulled=%d unchanged=%d missing=%d errors=%d dry_run=%v\n",
+		rep.Messages, rep.Pushed, rep.Pulled, rep.Unchanged, rep.Missing, rep.Errors, *dryRun)
+	return nil
+}
+
+func openObjectStore(cfg *config.Config) (mailstore.Blob, error) {
+	o := cfg.Mailstore.ObjectStore
+	return mailstore.NewS3Blob(mailstore.S3Config{
+		Endpoint:  o.Endpoint,
+		Region:    o.Region,
+		Bucket:    o.Bucket,
+		AccessKey: o.AccessKey,
+		SecretKey: o.SecretKey,
+		Prefix:    o.Prefix,
+		PathStyle: o.PathStyle,
+	})
+}
+
 func run(cfgPath string) error {
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
@@ -166,15 +221,7 @@ func run(cfgPath string) error {
 	authn := auth.NewLayer(store, cfg.LDAP, cfg.MFA, cfg.OIDC)
 	ms := mailstore.New(cfg.Mailstore.Root)
 	if cfg.Mailstore.ObjectStore.Enabled {
-		blob, err := mailstore.NewS3Blob(mailstore.S3Config{
-			Endpoint:  cfg.Mailstore.ObjectStore.Endpoint,
-			Region:    cfg.Mailstore.ObjectStore.Region,
-			Bucket:    cfg.Mailstore.ObjectStore.Bucket,
-			AccessKey: cfg.Mailstore.ObjectStore.AccessKey,
-			SecretKey: cfg.Mailstore.ObjectStore.SecretKey,
-			Prefix:    cfg.Mailstore.ObjectStore.Prefix,
-			PathStyle: cfg.Mailstore.ObjectStore.PathStyle,
-		})
+		blob, err := openObjectStore(cfg)
 		if err != nil {
 			return fmt.Errorf("object store: %w", err)
 		}

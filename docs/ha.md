@@ -84,11 +84,18 @@ mailstore:
 
 Deliver/Delete/flag moves sync object keys (relative maildir paths). `Read` falls back to the bucket on local miss. Backups still archive the local `mailstore.root` cache — warm nodes before a backup drill if you rely on cold objects.
 
+Reconcile all indexed messages (push local→blob, pull blob→local):
+
+```bash
+./tayga-mail sync-objects -config configs/tayga.example.yaml
+./tayga-mail sync-objects -config configs/tayga.example.yaml -dry-run
+```
+
 ## What is not included yet
 
 - Automatic leader election / fencing
 - Point-in-time DB restore orchestration (use Postgres tooling)
-- Background full-bucket ↔ maildir resync job
+- Periodic in-process sync ticker (use cron + `sync-objects`)
 
 ## Checklist before production HA
 
