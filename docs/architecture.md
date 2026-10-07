@@ -145,6 +145,10 @@ Local Maildir++ under `mailstore.root`. Optional S3-compatible write-through (`m
 
 CLI: `tayga-mail sync-objects` reconciles indexed message paths between local maildir and the object store.
 
+## HA fencing
+
+`ha.mode: active_standby` (Postgres): advisory lock gates unauthenticated MX; see [ha.md](ha.md).
+
 ## Next milestones
 
-Leader election / fencing for multi-writer maildir.
+Outbound smart-host / DKIM signing; multi-writer maildir fencing beyond MX.

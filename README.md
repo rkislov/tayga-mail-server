@@ -34,7 +34,7 @@ Seed: `admin@example.com` / `changeme`. TLS: `tls.auto_generate` or `scripts/gen
 - Admin: tenant domains, users, TLS certs, monitoring, backup (`/api/v1/admin/*`)
 - Metrics: `GET /metrics` (Prometheus `tayga_*`)
 - Backup/restore: `./tayga-mail backup|restore -config …` or Admin UI; see [docs/ha.md](docs/ha.md)
-- HA: Postgres + shared maildir; cross-node IMAP IDLE via LISTEN/NOTIFY when using postgres
+- HA: Postgres + shared maildir; cross-node IMAP IDLE; optional `ha.mode: active_standby` MX lease
 - Object store: optional S3/MinIO write-through for maildir (`mailstore.object_store`); `tayga-mail sync-objects` to reconcile
 - WebAuthn MFA: `/api/v1/auth/webauthn/*` (passkeys; UUID credential/session IDs)
 - Account API: `GET /api/v1/me`; admin: `/api/v1/admin/users` (`http.admins`)

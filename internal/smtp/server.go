@@ -14,6 +14,7 @@ import (
 	gosmtp "github.com/emersion/go-smtp"
 	"github.com/tayga/tms/internal/auth"
 	"github.com/tayga/tms/internal/config"
+	"github.com/tayga/tms/internal/ha"
 	"github.com/tayga/tms/internal/mailstore"
 	"github.com/tayga/tms/internal/sieve"
 	"github.com/tayga/tms/internal/storage"
@@ -29,11 +30,15 @@ type Server struct {
 	mailstore *mailstore.Store
 	sieve     *sieve.Engine
 	tls       *tlsutil.Manager
+	ha        ha.Gate
 	servers   []*gosmtp.Server
 }
 
-func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth.Layer, ms *mailstore.Store, eng *sieve.Engine, tlsMgr *tlsutil.Manager) *Server {
-	return &Server{cfg: cfg, log: log, store: store, authn: authn, mailstore: ms, sieve: eng, tls: tlsMgr}
+func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth.Layer, ms *mailstore.Store, eng *sieve.Engine, tlsMgr *tlsutil.Manager, gate ha.Gate) *Server {
+	if gate == nil {
+		gate = ha.AlwaysLeader{}
+	}
+	return &Server{cfg: cfg, log: log, store: store, authn: authn, mailstore: ms, sieve: eng, tls: tlsMgr, ha: gate}
 }
 
 func (s *Server) Start(ctx context.Context) error {
@@ -66,6 +71,7 @@ func (s *Server) Start(ctx context.Context) error {
 			hostname:    s.cfg.Server.Hostname,
 			maxSize:     s.cfg.SMTP.MaxSize,
 			requireAuth: spec.requireAuth,
+			ha:          s.ha,
 		}
 		srv := gosmtp.NewServer(be)
 		srv.Domain = s.cfg.Server.Hostname
@@ -138,6 +144,7 @@ type backend struct {
 	hostname    string
 	maxSize     int64
 	requireAuth bool
+	ha          ha.Gate
 }
 
 func (b *backend) NewSession(c *gosmtp.Conn) (gosmtp.Session, error) {
@@ -207,6 +214,10 @@ func (s *session) Auth(mech string) (sasl.Server, error) {
 func (s *session) Mail(from string, opts *gosmtp.MailOptions) error {
 	if s.backend.requireAuth && s.user == nil {
 		return &gosmtp.SMTPError{Code: 530, EnhancedCode: gosmtp.EnhancedCode{5, 7, 0}, Message: "Authentication required"}
+	}
+	// Unauthenticated MX: only the HA lease holder accepts new mail.
+	if !s.backend.requireAuth && s.backend.ha != nil && !s.backend.ha.IsLeader() {
+		return &gosmtp.SMTPError{Code: 421, EnhancedCode: gosmtp.EnhancedCode{4, 3, 2}, Message: "Not MX leader; try later"}
 	}
 	s.from = from
 	s.opts = opts
