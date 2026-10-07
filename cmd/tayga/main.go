@@ -28,12 +28,21 @@ import (
 )
 
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == "backup" {
-		if err := runBackup(os.Args[2:]); err != nil {
-			fmt.Fprintf(os.Stderr, "tayga backup: %v\n", err)
-			os.Exit(1)
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "backup":
+			if err := runBackup(os.Args[2:]); err != nil {
+				fmt.Fprintf(os.Stderr, "tayga backup: %v\n", err)
+				os.Exit(1)
+			}
+			return
+		case "restore":
+			if err := runRestore(os.Args[2:]); err != nil {
+				fmt.Fprintf(os.Stderr, "tayga restore: %v\n", err)
+				os.Exit(1)
+			}
+			return
 		}
-		return
 	}
 
 	cfgPath := flag.String("config", "configs/tayga.example.yaml", "path to YAML config")
@@ -82,6 +91,47 @@ func runBackup(args []string) error {
 		return err
 	}
 	fmt.Printf("wrote %s\n", *out)
+	return nil
+}
+
+func runRestore(args []string) error {
+	fs := flag.NewFlagSet("restore", flag.ExitOnError)
+	cfgPath := fs.String("config", "configs/tayga.example.yaml", "path to YAML config")
+	in := fs.String("in", "", "input .tar.gz path (required)")
+	includeMail := fs.Bool("include-mail", true, "restore maildir files and reindex")
+	skipExisting := fs.Bool("skip-existing", false, "do not update existing users")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *in == "" {
+		return fmt.Errorf("-in is required")
+	}
+	cfg, err := config.Load(*cfgPath)
+	if err != nil {
+		return err
+	}
+	ctx := context.Background()
+	store, err := storage.Open(ctx, cfg.Storage)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+
+	f, err := os.Open(*in)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	rep, err := backup.RestoreTarGz(ctx, store, f, backup.RestoreOptions{
+		MailRoot:     cfg.Mailstore.Root,
+		IncludeMail:  *includeMail,
+		SkipExisting: *skipExisting,
+	})
+	if err != nil {
+		return err
+	}
+	fmt.Printf("restore ok: tenants=%d domains=%d users=%d skipped=%d scripts=%d mail_files=%d\n",
+		rep.TenantsCreated, rep.DomainsCreated, rep.UsersCreated, rep.UsersSkipped, rep.ScriptsRestored, rep.MailFiles)
 	return nil
 }
 

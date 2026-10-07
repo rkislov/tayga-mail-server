@@ -33,7 +33,7 @@ Seed: `admin@example.com` / `changeme`. TLS: `tls.auto_generate` or `scripts/gen
 - FlowSync (original): ActiveSync `/Microsoft-Server-ActiveSync`, EWS `/EWS/Exchange.asmx`, Autodiscover (POX/JSON) + Mozilla autoconfig
 - Admin: tenant domains, users, TLS certs, monitoring, backup (`/api/v1/admin/*`)
 - Metrics: `GET /metrics` (Prometheus `tayga_*`)
-- Backup: `./tayga-mail backup -config … -out backup.tar.gz` or Admin UI download
+- Backup/restore: `./tayga-mail backup|restore -config …` or Admin UI; see [docs/ha.md](docs/ha.md)
 - WebAuthn MFA: `/api/v1/auth/webauthn/*` (passkeys; UUID credential/session IDs)
 - Account API: `GET /api/v1/me`; admin: `/api/v1/admin/users` (`http.admins`)
 - IDs: all entity PKs/FKs are UUIDs (fresh DB required after integer-ID builds)

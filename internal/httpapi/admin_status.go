@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"io"
 	"net/http"
 	"runtime"
 	"time"
@@ -71,6 +72,7 @@ func (s *Server) handleAdminBackup(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
+	_ = admin
 	includeMail := r.URL.Query().Get("include_mail") == "1" || r.URL.Query().Get("include_mail") == "true"
 	opts := backup.Options{
 		IncludeMail: includeMail,
@@ -85,7 +87,40 @@ func (s *Server) handleAdminBackup(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", `attachment; filename="`+name+`"`)
 	if err := backup.WriteTarGz(r.Context(), s.store, opts, w); err != nil {
 		s.log.Error("backup failed", "err", err)
-		// headers may already be sent; best effort
 		return
 	}
+}
+
+func (s *Server) handleAdminBackupRestore(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.requireAdmin(w, r); !ok {
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	if err := r.ParseMultipartForm(512 << 20); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "multipart form required (file=backup.tar.gz)"})
+		return
+	}
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "file field required"})
+		return
+	}
+	defer file.Close()
+	includeMail := r.FormValue("include_mail") != "0" && r.FormValue("include_mail") != "false"
+	mailRoot := ""
+	if s.ms != nil {
+		mailRoot = s.ms.Root
+	}
+	rep, err := backup.RestoreTarGz(r.Context(), s.store, io.LimitReader(file, 512<<20), backup.RestoreOptions{
+		MailRoot:    mailRoot,
+		IncludeMail: includeMail,
+	})
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, rep)
 }

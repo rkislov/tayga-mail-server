@@ -282,6 +282,11 @@
             <button type="button" class="spray" id="btn-backup">Download backup</button>
             <button type="button" class="secondary" id="btn-backup-mail">Backup + mail</button>
           </div>
+          <label for="restore-file">Restore from .tar.gz</label>
+          <input id="restore-file" type="file" accept=".gz,application/gzip" />
+          <div class="actions">
+            <button type="button" class="secondary" id="btn-restore">Restore</button>
+          </div>
           <p id="monitor-msg" class="msg" role="status"></p>
         </div>
 
@@ -574,6 +579,38 @@ keep;</textarea>
     }
     $("btn-backup").addEventListener("click", () => downloadBackup(false));
     $("btn-backup-mail").addEventListener("click", () => downloadBackup(true));
+
+    $("btn-restore").addEventListener("click", async () => {
+      const input = $("restore-file");
+      if (!input.files || !input.files[0]) {
+        setMsg($("monitor-msg"), "choose a backup file", "err");
+        return;
+      }
+      if (!confirm("Restore will create missing tenants/users and may update existing accounts. Continue?")) return;
+      setMsg($("monitor-msg"), "Restoring…");
+      try {
+        const fd = new FormData();
+        fd.append("file", input.files[0]);
+        fd.append("include_mail", "1");
+        const headers = {};
+        if (state.tokens?.access_token) headers.Authorization = "Bearer " + state.tokens.access_token;
+        const res = await fetch("/api/v1/admin/backup/restore", { method: "POST", headers, body: fd });
+        const text = await res.text();
+        let data;
+        try { data = JSON.parse(text); } catch { data = { error: text }; }
+        if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
+        setMsg($("monitor-msg"),
+          "Restored: +" + (data.users_created || 0) + " users, " +
+          (data.users_skipped || 0) + " skipped, " +
+          (data.scripts_restored || 0) + " scripts, " +
+          (data.mail_files || 0) + " mail files.", "ok");
+        refreshMonitor();
+        refreshTenant();
+        refreshAdminUsers();
+      } catch (err) {
+        setMsg($("monitor-msg"), err.message, "err");
+      }
+    });
 
     async function refreshTenant() {
       try {
