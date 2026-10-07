@@ -8,7 +8,7 @@ TMS is a single-binary mail server (`tayga-mail`) built in Go with `CGO_ENABLED=
 cmd/tayga
   ├─ config (YAML)
   ├─ storage (sqlite | postgres; UUID PKs everywhere)
-  ├─ auth (local Argon2id; LDAP hybrid; OIDC; TOTP MFA; opaque tokens)
+  ├─ auth (local Argon2id; LDAP hybrid; OIDC; TOTP + WebAuthn MFA; opaque tokens)
   ├─ mailstore (Maildir++)
   ├─ smtp / imap / pop3 / managesieve
   ├─ sieve (foxcpp/go-sieve on delivery)
@@ -21,11 +21,12 @@ cmd/tayga
 
 - **All entity primary keys and FKs are UUID strings (`TEXT`)**, including FlowSync device rows, policy keys, and sync-state tokens. IMAP `uid` / `uidnext` / `uidvalidity` stay numeric protocol counters.
 - Shared schema with `tenant_id` isolation.
-- Migrations: `001_init`, `002_mfa_oauth`, `003_dav`, `004_flowsync`.
+- Migrations: `001_init`, `002_mfa_oauth`, `003_dav`, `004_flowsync`, `005_webauthn`.
 
 ## Auth
 
-- Local Argon2id; LDAP hybrid; OIDC; TOTP MFA; opaque Bearer tokens for IMAP/SMTP/DAV/FlowSync.
+- Local Argon2id; LDAP hybrid; OIDC; TOTP + WebAuthn (passkeys) MFA; opaque Bearer tokens for IMAP/SMTP/DAV/FlowSync.
+- WebAuthn credential rows and ceremony sessions use **UUID** primary keys; user handle is the user’s UUID (16 bytes).
 
 ## CalDAV / CardDAV
 
@@ -68,6 +69,18 @@ CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o tayga-mail ./cmd/tayga
 
 Seed: `admin@example.com` / `changeme`. UUID schema requires a fresh DB when upgrading from integer IDs.
 
+### WebAuthn API
+
+| Endpoint | Role |
+|----------|------|
+| `POST /api/v1/auth/webauthn/register/begin` | creation options + UUID `session_id` (Bearer) |
+| `POST /api/v1/auth/webauthn/register/finish` | store credential (UUID PK) |
+| `POST /api/v1/auth/webauthn/login/begin` | assertion options after MFA challenge |
+| `POST /api/v1/auth/webauthn/login/finish` | issue tokens |
+| `GET/DELETE /api/v1/auth/webauthn/credentials[/{uuid}]` | list / revoke |
+
+Enable: `mfa.webauthn.enabled: true` (RP ID from `http.public_url`).
+
 ## Next milestones
 
-WebAuthn MFA → richer FlowSync (WBXML, calendar/contacts sync, policies) → …
+Richer FlowSync (WBXML, calendar/contacts sync, policies) → admin UI polish → …

@@ -70,8 +70,14 @@ mfa:
   access_token_ttl: 1h
   refresh_token_ttl: 720h
   challenge_ttl: 5m
-  # When true, users with TOTP enabled cannot use password on IMAP/SMTP/POP3.
+  # When true, users with TOTP/WebAuthn cannot use password on IMAP/SMTP/POP3.
   require_token_for_mfa_users: true
+  webauthn:
+    enabled: true
+    # rp_id / rp_origins default from http.public_url host
+    # rp_display_name: "Tayga Mail"
+    # rp_id: "127.0.0.1"
+    # rp_origins: ["http://127.0.0.1:8080"]
 
 tls:
   cert_file: ""

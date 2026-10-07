@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"time"
 
@@ -110,8 +111,17 @@ type MFAConfig struct {
 	AccessTokenTTL  time.Duration `yaml:"access_token_ttl"`  // default 1h
 	RefreshTokenTTL time.Duration `yaml:"refresh_token_ttl"` // default 720h
 	ChallengeTTL    time.Duration `yaml:"challenge_ttl"`     // default 5m
-	// When true, users with TOTP enabled cannot use password auth on IMAP/SMTP.
-	RequireTokenForMFAUsers bool `yaml:"require_token_for_mfa_users"`
+	// When true, users with TOTP/WebAuthn cannot use password auth on IMAP/SMTP.
+	RequireTokenForMFAUsers bool           `yaml:"require_token_for_mfa_users"`
+	WebAuthn                WebAuthnConfig `yaml:"webauthn"`
+}
+
+// WebAuthnConfig configures passkey / security-key MFA (RP ID defaults from http.public_url).
+type WebAuthnConfig struct {
+	Enabled       bool     `yaml:"enabled"`
+	RPDisplayName string   `yaml:"rp_display_name"`
+	RPID          string   `yaml:"rp_id"`
+	RPOrigins     []string `yaml:"rp_origins"`
 }
 
 // FlowSyncConfig controls Tayga's proprietary FlowSync engine
@@ -192,6 +202,9 @@ func Default() *Config {
 			RefreshTokenTTL:         30 * 24 * time.Hour,
 			ChallengeTTL:            5 * time.Minute,
 			RequireTokenForMFAUsers: true,
+			WebAuthn: WebAuthnConfig{
+				Enabled: true,
+			},
 		},
 		FlowSync: FlowSyncConfig{Enabled: true},
 		HTTP:     HTTPConfig{Listen: ":8080", PublicURL: "http://127.0.0.1:8080"},
@@ -281,6 +294,20 @@ func (c *Config) Validate() error {
 	}
 	if c.HTTP.PublicURL == "" {
 		c.HTTP.PublicURL = "http://127.0.0.1" + c.HTTP.Listen
+	}
+	if c.MFA.WebAuthn.RPDisplayName == "" {
+		c.MFA.WebAuthn.RPDisplayName = c.MFA.Issuer
+	}
+	if u, err := url.Parse(c.HTTP.PublicURL); err == nil && u.Hostname() != "" {
+		if c.MFA.WebAuthn.RPID == "" {
+			c.MFA.WebAuthn.RPID = u.Hostname()
+		}
+		if len(c.MFA.WebAuthn.RPOrigins) == 0 {
+			c.MFA.WebAuthn.RPOrigins = []string{u.Scheme + "://" + u.Host}
+		}
+	}
+	if c.MFA.WebAuthn.Enabled && (c.MFA.WebAuthn.RPID == "" || len(c.MFA.WebAuthn.RPOrigins) == 0) {
+		return fmt.Errorf("mfa.webauthn: rp_id and rp_origins required when enabled (set http.public_url)")
 	}
 	return nil
 }

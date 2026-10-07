@@ -95,6 +95,17 @@ type Driver interface {
 	GetFlowSyncSyncKey(ctx context.Context, deviceRowID, collectionID string) (string, error)
 	SetFlowSyncSyncKey(ctx context.Context, deviceRowID, collectionID, syncKey string) error
 
+	CreateWebAuthnCredential(ctx context.Context, c *WebAuthnCredential) (*WebAuthnCredential, error)
+	ListWebAuthnCredentials(ctx context.Context, userID string) ([]*WebAuthnCredential, error)
+	GetWebAuthnCredential(ctx context.Context, id string) (*WebAuthnCredential, error)
+	GetWebAuthnCredentialByCredID(ctx context.Context, credentialID string) (*WebAuthnCredential, error)
+	UpdateWebAuthnCredential(ctx context.Context, c *WebAuthnCredential) error
+	DeleteWebAuthnCredential(ctx context.Context, userID, id string) error
+	CountWebAuthnCredentials(ctx context.Context, userID string) (int, error)
+	CreateWebAuthnSession(ctx context.Context, sess *WebAuthnSession) (*WebAuthnSession, error)
+	GetWebAuthnSession(ctx context.Context, id string) (*WebAuthnSession, error)
+	DeleteWebAuthnSession(ctx context.Context, id string) error
+
 	DB() *sql.DB
 }
 

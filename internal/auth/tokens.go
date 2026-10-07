@@ -31,6 +31,7 @@ type LoginResult struct {
 	Tokens      *TokenPair `json:"tokens,omitempty"`
 	MFARequired bool       `json:"mfa_required"`
 	Challenge   string     `json:"challenge,omitempty"`
+	Methods     []string   `json:"methods,omitempty"` // totp, webauthn
 	UserEmail   string     `json:"email,omitempty"`
 }
 
