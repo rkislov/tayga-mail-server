@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -16,21 +17,21 @@ import (
 	"github.com/tayga/tms/internal/frontend"
 	"github.com/tayga/tms/internal/mailstore"
 	"github.com/tayga/tms/internal/storage"
+	"github.com/tayga/tms/internal/tlsutil"
 )
 
 // Server exposes health, metrics, auth API, and the embedded Web UI.
 type Server struct {
-	log    *slog.Logger
-	cfg    *config.Config
-	store  storage.Driver
-	authn  *auth.Layer
-	ms     *mailstore.Store
-	addr   string
-	server *http.Server
+	log     *slog.Logger
+	cfg     *config.Config
+	store   storage.Driver
+	authn   *auth.Layer
+	ms      *mailstore.Store
+	servers []*http.Server
 }
 
 func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth.Layer, ms *mailstore.Store) *Server {
-	return &Server{cfg: cfg, addr: cfg.HTTP.Listen, log: log, store: store, authn: authn, ms: ms}
+	return &Server{cfg: cfg, log: log, store: store, authn: authn, ms: ms}
 }
 
 // Handler builds the HTTP mux (health, auth, DAV, FlowSync, admin UI).
@@ -67,25 +68,83 @@ func (s *Server) Handler() http.Handler {
 }
 
 func (s *Server) Start(ctx context.Context) error {
-	s.server = &http.Server{
-		Addr:              s.addr,
-		Handler:           s.Handler(),
-		ReadHeaderTimeout: 5 * time.Second,
+	tlsCfg, err := tlsutil.LoadHTTP(s.cfg)
+	if err != nil {
+		return err
 	}
+	handler := s.Handler()
 
-	s.log.Info("http listening", "addr", s.addr)
 	go func() {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = s.server.Shutdown(shutdownCtx)
-	}()
-
-	go func() {
-		if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			s.log.Error("http serve stopped", "err", err)
+		for _, srv := range s.servers {
+			_ = srv.Shutdown(shutdownCtx)
 		}
 	}()
+
+	httpsAddr := s.cfg.HTTP.TLSListen
+	httpAddr := s.cfg.HTTP.Listen
+
+	if httpsAddr != "" {
+		if tlsCfg == nil {
+			s.log.Warn("http.tls_listen set but TLS certs missing; skipping HTTPS", "addr", httpsAddr)
+		} else {
+			srv := &http.Server{
+				Addr:              httpsAddr,
+				Handler:           handler,
+				TLSConfig:         tlsCfg,
+				ReadHeaderTimeout: 5 * time.Second,
+			}
+			s.servers = append(s.servers, srv)
+			ln, err := net.Listen("tcp", httpsAddr)
+			if err != nil {
+				return err
+			}
+			s.log.Info("https listening", "addr", httpsAddr)
+			go func() {
+				if err := srv.ServeTLS(ln, "", ""); err != nil && err != http.ErrServerClosed {
+					s.log.Error("https serve stopped", "err", err)
+				}
+			}()
+		}
+	}
+
+	if httpAddr != "" {
+		var h http.Handler = handler
+		if s.cfg.HTTP.RedirectHTTPToTLS && httpsAddr != "" && tlsCfg != nil {
+			h = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				target := s.cfg.HTTP.PublicURL
+				if target == "" {
+					host := r.Host
+					if h, _, err := net.SplitHostPort(host); err == nil {
+						host = h
+					}
+					target = "https://" + host
+					if _, port, err := net.SplitHostPort(httpsAddr); err == nil && port != "443" {
+						target += ":" + port
+					}
+				}
+				http.Redirect(w, r, strings.TrimRight(target, "/")+r.URL.RequestURI(), http.StatusMovedPermanently)
+			})
+		}
+		srv := &http.Server{
+			Addr:              httpAddr,
+			Handler:           h,
+			ReadHeaderTimeout: 5 * time.Second,
+		}
+		s.servers = append(s.servers, srv)
+		s.log.Info("http listening", "addr", httpAddr)
+		go func() {
+			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				s.log.Error("http serve stopped", "err", err)
+			}
+		}()
+	}
+
+	if len(s.servers) == 0 {
+		return nil
+	}
 	return nil
 }
 
