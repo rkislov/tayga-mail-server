@@ -42,6 +42,7 @@ type Server struct {
 	spf          *spfPolicy
 	dmarc        *dmarcPolicy
 	dmarcReport  *dmarcReporter
+	arc          *arcPolicy
 	queue        *OutboundQueue
 	servers      []*gosmtp.Server
 }
@@ -161,6 +162,18 @@ func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth
 			srv.dmarc.recorder = srv.dmarcReport
 		}
 	}
+	if cfg.ARC.Enabled {
+		ap, err := newARCPolicy(
+			cfg.ARC.Verify, cfg.ARC.Seal, cfg.ARC.Action, cfg.ARC.FailOpen,
+			cfg.ARC.AuthservID, cfg.ARC.Domain, cfg.ARC.Selector, cfg.ARC.PrivateKeyFile, log,
+		)
+		if err != nil {
+			log.Error("arc config invalid; arc disabled", "err", err)
+		} else {
+			srv.arc = ap
+			log.Info("smtp arc enabled", "verify", ap.verify, "seal", ap.seal, "action", ap.action)
+		}
+	}
 	return srv
 }
 
@@ -250,6 +263,7 @@ func (s *Server) Start(ctx context.Context) error {
 			dkimVerify:   s.dkimVerify,
 			spf:          s.spf,
 			dmarc:        s.dmarc,
+			arc:          s.arc,
 			out:          out,
 			dkim:         dkimSig,
 			queue:        oq,
@@ -335,6 +349,7 @@ type backend struct {
 	dkimVerify   *dkimVerifyPolicy
 	spf          *spfPolicy
 	dmarc        *dmarcPolicy
+	arc          *arcPolicy
 	out          outboundSender
 	dkim         *dkimSigner
 	queue        *OutboundQueue
@@ -545,6 +560,16 @@ func (s *session) deliver(ctx context.Context, rcpt string, data []byte, msgid s
 		}
 		if s.backend.dmarc != nil {
 			data, authErr = s.backend.dmarc.apply(data, s.from, stripPort(s.remote), spfRes, dkimDomains)
+			if authErr != nil {
+				var smtpErr *gosmtp.SMTPError
+				if errors.As(authErr, &smtpErr) {
+					return smtpErr
+				}
+				return authErr
+			}
+		}
+		if s.backend.arc != nil {
+			data, authErr = s.backend.arc.apply(ctx, data)
 			if authErr != nil {
 				var smtpErr *gosmtp.SMTPError
 				if errors.As(authErr, &smtpErr) {
