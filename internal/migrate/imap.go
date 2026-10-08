@@ -98,6 +98,32 @@ func (s *Service) runIMAP(ctx context.Context, job *Job) error {
 			errs++
 			continue
 		}
+		// Archive sizes in the index are compressed on disk; deduplication uses
+		// the uncompressed RFC822 size, as supplied by the source IMAP server.
+		archiveSizes := map[string]map[int64]bool{}
+		if strings.EqualFold(localName, "Archive") {
+			existing, e := s.store.ListMessages(ctx, mb.ID)
+			if e != nil {
+				return fmt.Errorf("archive index: %w", e)
+			}
+			for _, m := range existing {
+				raw, e := s.ms.Read(m.FilePath)
+				if e != nil {
+					return fmt.Errorf("archive read: %w", e)
+				}
+				messageID := m.MessageID
+				if messageID == "" {
+					messageID = mailsearch.ParseDocument(raw).MessageID
+				}
+				if messageID == "" {
+					continue
+				}
+				if archiveSizes[messageID] == nil {
+					archiveSizes[messageID] = map[int64]bool{}
+				}
+				archiveSizes[messageID][int64(len(raw))] = true
+			}
+		}
 		if _, err := c.Select(box, true); err != nil {
 			errs++
 			_ = s.bumpProgress(ctx, job.ID, copied, skipped, errs, err.Error(), `{"folder":`+jsonString(box)+`}`)
@@ -136,7 +162,10 @@ func (s *Service) runIMAP(ctx context.Context, job *Job) error {
 			tmp := &storage.Message{}
 			mailsearch.ApplyHeaders(tmp, raw)
 			exists, err := s.store.MessageExistsByMessageID(ctx, mb.ID, tmp.MessageID, int64(len(raw)))
-			if err == nil && exists {
+			if err != nil {
+				return fmt.Errorf("duplicate lookup: %w", err)
+			}
+			if exists || archiveSizes[tmp.MessageID][int64(len(raw))] {
 				skipped++
 				continue
 			}
@@ -171,7 +200,16 @@ func (s *Service) runIMAP(ctx context.Context, job *Job) error {
 			inserted, err := s.store.InsertMessage(ctx, ins)
 			if err != nil {
 				errs++
+				_ = s.ms.Delete(rel)
+				job.LastError = "index imported message: " + err.Error()
+				_ = s.bumpProgress(ctx, job.ID, copied, skipped, errs, job.LastError, `{"folder":`+jsonString(box)+`}`)
 				continue
+			}
+			if strings.EqualFold(localName, "Archive") && tmp.MessageID != "" {
+				if archiveSizes[tmp.MessageID] == nil {
+					archiveSizes[tmp.MessageID] = map[int64]bool{}
+				}
+				archiveSizes[tmp.MessageID][int64(len(raw))] = true
 			}
 			_ = mailsearch.Index(ctx, s.store, inserted.ID, raw)
 			copied++

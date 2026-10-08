@@ -29,6 +29,12 @@ func (s *Server) handleMail(w http.ResponseWriter, r *http.Request) {
 	parts := splitPath(path)
 
 	switch {
+	case len(parts) == 1 && parts[0] == "mailboxes" && r.Method == http.MethodPost:
+		s.mailCreateFolder(w, r, au)
+	case len(parts) == 2 && parts[0] == "mailboxes" && parts[1] == "order" && r.Method == http.MethodPut:
+		s.mailFolderOrder(w, r, au)
+	case len(parts) == 2 && parts[0] == "mailboxes" && (r.Method == http.MethodPatch || r.Method == http.MethodDelete):
+		s.mailChangeFolder(w, r, au, parts[1])
 	case r.Method == http.MethodGet && len(parts) == 1 && parts[0] == "mailboxes":
 		s.mailListMailboxes(w, r, au)
 	case len(parts) >= 3 && parts[0] == "mailboxes" && parts[2] == "acl":
@@ -92,12 +98,17 @@ func (s *Server) mailListMailboxes(w http.ResponseWriter, r *http.Request, au *a
 	}
 	out := make([]map[string]any, 0, len(mbs))
 	seen := map[string]struct{}{}
+	var countErr error
 	appendMB := func(mb *storage.Mailbox, shared bool) {
 		if _, ok := seen[mb.ID]; ok {
 			return
 		}
 		seen[mb.ID] = struct{}{}
-		msgs, _ := s.store.ListMessages(ctx, mb.ID)
+		msgs, err := s.store.ListMessages(ctx, mb.ID)
+		if err != nil {
+			countErr = err
+			return
+		}
 		unread := 0
 		for _, m := range msgs {
 			if !strings.Contains(strings.ToUpper(m.Flags), `\SEEN`) {
@@ -109,7 +120,7 @@ func (s *Server) mailListMailboxes(w http.ResponseWriter, r *http.Request, au *a
 			name = mb.Name + " (shared)"
 		}
 		out = append(out, map[string]any{
-			"id": mb.ID, "name": name, "messages": len(msgs), "unread": unread, "shared": shared, "owner_id": mb.UserID,
+			"id": mb.ID, "name": name, "messages": len(msgs), "unread": unread, "shared": shared, "owner_id": mb.UserID, "role": storage.SystemMailboxRole(mb.Name), "system": storage.SystemMailboxRole(mb.Name) != "",
 		})
 	}
 	for _, mb := range mbs {
@@ -120,7 +131,15 @@ func (s *Server) mailListMailboxes(w http.ResponseWriter, r *http.Request, au *a
 			appendMB(mb, true)
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"mailboxes": out})
+	if countErr != nil {
+		writeJSON(w, 500, map[string]string{"error": countErr.Error()})
+		return
+	}
+	var order []string
+	if raw, ok, err := s.store.GetSetting(ctx, "ui.mailfolders."+au.ID); err == nil && ok {
+		_ = json.Unmarshal([]byte(raw), &order)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"mailboxes": out, "order": order})
 }
 
 func (s *Server) mailboxOwned(r *http.Request, au *authUser, mailboxID string) (*storage.Mailbox, int) {
@@ -211,13 +230,13 @@ func (s *Server) mailListMessages(w http.ResponseWriter, r *http.Request, au *au
 			"id": m.ID, "uid": m.UID, "mailbox_id": m.MailboxID,
 			"size": m.Size, "flags": m.Flags,
 			"internal_date": m.InternalDate.UTC().Format(time.RFC3339),
-			"message_id":   m.MessageID,
-			"subject":      subject,
-			"from":         from,
-			"to":           to,
-			"date":         date,
-			"archived":     m.Archived,
-			"seen":         strings.Contains(strings.ToUpper(m.Flags), `\SEEN`),
+			"message_id":    m.MessageID,
+			"subject":       subject,
+			"from":          from,
+			"to":            to,
+			"date":          date,
+			"archived":      m.Archived,
+			"seen":          strings.Contains(strings.ToUpper(m.Flags), `\SEEN`),
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -247,14 +266,14 @@ func (s *Server) mailGetMessage(w http.ResponseWriter, r *http.Request, au *auth
 		"id": msg.ID, "mailbox_id": msg.MailboxID, "uid": msg.UID,
 		"size": msg.Size, "flags": msg.Flags,
 		"internal_date": msg.InternalDate.UTC().Format(time.RFC3339),
-		"message_id":   msg.MessageID,
-		"subject":      parsed.Subject,
-		"from":         parsed.From,
-		"to":           parsed.To,
-		"cc":           parsed.Cc,
-		"date":         parsed.Date,
-		"text":         parsed.Text,
-		"html":         parsed.HTML,
+		"message_id":    msg.MessageID,
+		"subject":       parsed.Subject,
+		"from":          parsed.From,
+		"to":            parsed.To,
+		"cc":            parsed.Cc,
+		"date":          parsed.Date,
+		"text":          parsed.Text,
+		"html":          parsed.HTML,
 	})
 }
 

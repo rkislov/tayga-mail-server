@@ -3062,3 +3062,11 @@ html[data-color-mode="light"] {
 @layer components {
   .cal-layout .mail-folders .pane-head { flex-wrap: wrap; }
 }
+
+.mail-folders-dialog { width: min(680px, calc(100vw - 32px)); max-height: 85dvh; overflow:auto; border:1px solid var(--ui-text-45); border-radius:24px; background:var(--panel-bg); color:var(--ui-text); padding:24px; box-shadow:0 24px 80px #0006; }
+.mail-folders-dialog::backdrop { background:#0007; backdrop-filter:blur(8px); }
+.mail-folder-manager { margin:16px 0; }
+.mail-folder-manager-row { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:10px 0; flex-wrap:wrap; }
+.mail-folder-manager-row > div { display:flex; align-items:center; gap:6px; }
+.mail-folder-manager-row button:disabled { opacity:.3; cursor:default; }
+#btn-mail-folders { margin:8px 12px; }
