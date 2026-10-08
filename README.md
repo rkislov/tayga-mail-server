@@ -24,7 +24,7 @@ sudo ./tayga-mail -config configs/tayga.example.yaml
 ### Cross-platform release builds
 
 ```bash
-VERSION=v0.8.0 ./scripts/crossbuild.sh   # → dist/*.tar.gz|zip + checksums.txt
+VERSION=v0.8.1 ./scripts/crossbuild.sh   # → dist/*.tar.gz|zip + checksums.txt
 ```
 
 GitHub Releases: push a `v*` tag; [GoReleaser](https://goreleaser.com) (`.github/workflows/release.yml`) publishes linux/darwin/windows/freebsd amd64+arm64 archives.
@@ -54,7 +54,7 @@ Seed: `admin@example.com` / `changeme`. TLS: `tls.auto_generate` or `scripts/gen
 - SMTP rate limits: `smtp.rate_limit.per_ip` / `per_user`
 - Outbound queue + DSN: `smtp.queue` retries failed remote delivery; bounces local senders; admin `/api/v1/admin/outbound`
 - Object store: optional S3/MinIO write-through for maildir (`mailstore.object_store`); `tayga-mail sync-objects` to reconcile
-- Virus scan: `scan.enabled` with ClamAV/exec → reject, quarantine folder, or tag headers
+- Virus scan: `scan.enabled` with ClamAV / exec / ICAP → reject, quarantine folder, or tag headers
 - Spam: `spam.enabled` Rspamd `/checkv2` → reject / greylist / tag / Junk quarantine; admin `/api/v1/admin/quarantine`
 - Inbound auth: optional DB-backed `greylist`; then `helo` → `iprev` → `spf` → `dkim_verify` → ARC → `dmarc` on MX
 - DMARC rua/ruf: aggregate XML (`report.enabled`) and AFRF failure reports (`report.failure`)

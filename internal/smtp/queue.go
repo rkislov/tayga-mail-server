@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/tayga/tms/internal/ha"
+	"github.com/tayga/tms/internal/siem"
 	"github.com/tayga/tms/internal/sieve"
 	"github.com/tayga/tms/internal/storage"
 )
@@ -49,6 +50,7 @@ type OutboundQueue struct {
 	ha           ha.Gate
 	fenceWriters bool
 	writers      ha.WriterGate
+	siem         *siem.Exporter
 }
 
 // SetHA restricts queue drain to the lease holder when fenceWriters is set.
@@ -66,6 +68,13 @@ func (q *OutboundQueue) SetWriters(w ha.WriterGate) {
 		return
 	}
 	q.writers = w
+}
+
+// SetSIEM attaches CEF syslog export for queue mail-log events.
+func (q *OutboundQueue) SetSIEM(e *siem.Exporter) {
+	if q != nil {
+		q.siem = e
+	}
 }
 
 func newOutboundQueue(store storage.Driver, sender outboundSender, dkim *dkimSigner, eng *sieve.Engine, hostname string, cfg QueueConfig, log *slog.Logger) *OutboundQueue {
@@ -166,6 +175,8 @@ func (q *OutboundQueue) process(ctx context.Context, it *storage.OutboundItem) {
 	}
 
 	next := time.Now().UTC().Add(backoff(attempts))
+	detail := fmt.Sprintf("attempt %d/%d next %s: %s", attempts, it.MaxAttempts, next.Format(time.RFC3339), truncateErr(err))
+	q.writeMailLog(it, "deferred", detail)
 	if resErr := q.store.RescheduleOutbound(ctx, it.ID, attempts, next, truncateErr(err)); resErr != nil {
 		q.log.Warn("outbound reschedule failed", "id", it.ID, "err", resErr)
 	}
@@ -194,6 +205,9 @@ func (q *OutboundQueue) writeMailLog(it *storage.OutboundItem, event, detail str
 		MessageID: it.MessageID,
 		Size:      int64(len(it.Data)),
 		Detail:    detail,
+	}
+	if q.siem != nil {
+		q.siem.EmitMail(e.Event, e.Direction, e.Peer, e.MailFrom, e.RcptTo, e.MessageID, e.Detail, e.Size)
 	}
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)

@@ -8,9 +8,10 @@ import (
 
 // SearchHit is one ranked search result with optional FTS snippet.
 type SearchHit struct {
-	Message *Message
-	Snippet string
-	Rank    float64
+	Message     *Message
+	MailboxName string
+	Snippet     string
+	Rank        float64
 }
 
 // UpsertMessageSearch indexes or refreshes FTS document for a message.
@@ -66,7 +67,7 @@ func (s *Store) searchSQLite(ctx context.Context, userID, mailboxID, fromF, toF,
 	var args []any
 	var b strings.Builder
 	b.WriteString(`SELECT m.id, m.mailbox_id, m.uid, m.size, m.flags, m.internal_date, m.file_path, m.message_id,
-		m.subject, m.from_addr, m.to_addr, m.date_hdr, m.archived, m.created_at,`)
+		m.subject, m.from_addr, m.to_addr, m.date_hdr, m.archived, m.created_at, mb.name,`)
 	if fts != "" {
 		b.WriteString(` snippet(message_fts, 3, '', '', '…', 24) AS snip, bm25(message_fts) AS rank`)
 		b.WriteString(` FROM message_fts JOIN messages m ON m.id = message_fts.message_id`)
@@ -121,7 +122,7 @@ func (s *Store) searchPostgres(ctx context.Context, userID, mailboxID, fromF, to
 	}
 	var b strings.Builder
 	b.WriteString(`SELECT m.id, m.mailbox_id, m.uid, m.size, m.flags, m.internal_date, m.file_path, m.message_id,
-		m.subject, m.from_addr, m.to_addr, m.date_hdr, m.archived, m.created_at,`)
+		m.subject, m.from_addr, m.to_addr, m.date_hdr, m.archived, m.created_at, mb.name,`)
 	if fts != "" {
 		b.WriteString(` ts_headline('simple', coalesce(ms.body,''), plainto_tsquery('simple', ` + ph() + `), 'MaxWords=24, MinWords=8') AS snip,`)
 		args = append(args, fts)
@@ -178,17 +179,18 @@ func scanSearchHits(rows interface {
 	for rows.Next() {
 		m := &Message{}
 		var archived int
+		var mailboxName string
 		var snip string
 		var rank float64
 		if err := rows.Scan(
 			&m.ID, &m.MailboxID, &m.UID, &m.Size, &m.Flags, &m.InternalDate, &m.FilePath, &m.MessageID,
-			&m.Subject, &m.FromAddr, &m.ToAddr, &m.DateHdr, &archived, &m.CreatedAt,
+			&m.Subject, &m.FromAddr, &m.ToAddr, &m.DateHdr, &archived, &m.CreatedAt, &mailboxName,
 			&snip, &rank,
 		); err != nil {
 			return nil, err
 		}
 		m.Archived = archived != 0
-		out = append(out, SearchHit{Message: m, Snippet: snip, Rank: rank})
+		out = append(out, SearchHit{Message: m, MailboxName: mailboxName, Snippet: snip, Rank: rank})
 	}
 	return out, rows.Err()
 }

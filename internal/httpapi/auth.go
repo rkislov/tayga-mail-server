@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"strings"
 
@@ -38,12 +39,33 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
 		return
 	}
+	src := requestIP(r)
 	res, err := s.authn.LoginWithPassword(r.Context(), req.Email, req.Password)
 	if err != nil {
+		if s.siem != nil {
+			s.siem.EmitAuth(false, req.Email, src, err.Error())
+		}
 		writeAuthError(w, err)
 		return
 	}
+	if s.siem != nil {
+		s.siem.EmitAuth(true, req.Email, src, "web")
+	}
 	writeJSON(w, http.StatusOK, res)
+}
+
+func requestIP(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		return strings.TrimSpace(strings.Split(xff, ",")[0])
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
 }
 
 func (s *Server) handleMFAVerify(w http.ResponseWriter, r *http.Request) {

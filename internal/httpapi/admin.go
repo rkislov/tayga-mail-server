@@ -43,7 +43,33 @@ func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 
 	switch {
 	case r.Method == http.MethodGet && path == "":
-		users, err := s.store.ListUsersByTenant(r.Context(), admin.TenantID)
+		domainID := strings.TrimSpace(r.URL.Query().Get("domain_id"))
+		tenantID := strings.TrimSpace(r.URL.Query().Get("tenant_id"))
+		var (
+			users []*storage.User
+			err   error
+		)
+		switch {
+		case domainID != "":
+			dom, derr := s.store.GetDomainByID(r.Context(), domainID)
+			if derr != nil {
+				writeJSON(w, http.StatusNotFound, map[string]string{"error": "domain not found"})
+				return
+			}
+			if !s.adminCanAccessTenant(r, admin, dom.TenantID) || !s.adminCanManageDomain(r, admin, dom.ID) {
+				writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+				return
+			}
+			users, err = s.store.ListUsersByDomain(r.Context(), domainID)
+		case tenantID != "":
+			if !s.adminCanAccessTenant(r, admin, tenantID) {
+				writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+				return
+			}
+			users, err = s.store.ListUsersByTenant(r.Context(), tenantID)
+		default:
+			users, err = s.store.ListUsersByTenant(r.Context(), admin.TenantID)
+		}
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
@@ -64,6 +90,7 @@ func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 				"auth_source":       u.AuthSource,
 				"roles":             storage.ParseRoles(u.Roles),
 				"domain_id":         u.DomainID,
+				"tenant_id":         u.TenantID,
 				"service_class_id":  u.ServiceClassID,
 				"migration_enabled": u.MigrationEnabled,
 			})
@@ -93,7 +120,7 @@ func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "domain not found"})
 			return
 		}
-		if dom.TenantID != admin.TenantID {
+		if !s.adminCanAccessTenant(r, admin, dom.TenantID) {
 			writeJSON(w, http.StatusForbidden, map[string]string{"error": "domain outside tenant"})
 			return
 		}
@@ -107,7 +134,7 @@ func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		u, err := s.store.CreateUser(r.Context(), &storage.User{
-			TenantID: admin.TenantID, DomainID: dom.ID,
+			TenantID: dom.TenantID, DomainID: dom.ID,
 			Email: email, LocalPart: local, DisplayName: req.DisplayName,
 			PasswordHash: hash, AuthSource: "local", QuotaBytes: req.QuotaBytes, Enabled: true,
 		})
