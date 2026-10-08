@@ -58,8 +58,8 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 		for _, c := range cals {
 			seen[c.ID] = struct{}{}
 			out = append(out, map[string]any{
-				"id": c.ID, "name": c.Name, "display_name": c.DisplayName, "description": c.Description,
-				"shared": false, "owned": true, "deletable": c.Name != "default",
+				"id": c.ID, "name": c.Name, "display_name": c.DisplayName, "description": c.Description, "color": c.Color,
+				"shared": false, "owned": true, "writable": true, "deletable": c.Name != "default",
 			})
 		}
 		if shared, err := s.store.ListSharedCalendars(r.Context(), au.ID); err == nil {
@@ -68,8 +68,8 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 					continue
 				}
 				out = append(out, map[string]any{
-					"id": c.ID, "name": c.Name, "display_name": c.DisplayName + " (shared)", "description": c.Description,
-					"shared": true, "owned": false, "deletable": false,
+					"id": c.ID, "name": c.Name, "display_name": c.DisplayName, "description": c.Description, "color": c.Color,
+					"shared": true, "owned": false, "writable": calendarCanWrite(s, r, au, c.ID), "deletable": false,
 				})
 			}
 		}
@@ -114,6 +114,9 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 			"id": cal.ID, "name": cal.Name, "display_name": cal.DisplayName, "description": cal.Description,
 			"shared": false, "owned": true, "deletable": true,
 		})
+
+	case (r.Method == http.MethodGet || r.Method == http.MethodPatch) && len(parts) == 2 && parts[0] == "calendars":
+		s.handleCalendarProperties(w, r, au, parts[1])
 
 	case r.Method == http.MethodDelete && len(parts) == 2 && parts[0] == "calendars":
 		cal, err := s.store.GetCalendarByID(r.Context(), au.ID, parts[1])
@@ -199,8 +202,8 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 		s.handleCalendarAttachmentByID(w, r, au, parts[1])
 
 	case (r.Method == http.MethodPost || r.Method == http.MethodPut) && len(parts) == 3 && parts[0] == "calendars" && parts[2] == "events":
-		cal, err := s.store.GetCalendarByID(r.Context(), au.ID, parts[1])
-		if err != nil {
+		cal, err := s.calendarAccessible(r, au, parts[1])
+		if err != nil || !calendarCanWrite(s, r, au, parts[1]) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 			return
 		}
@@ -228,6 +231,14 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		uid := req.UID
+		if req.ID != "" {
+			old, e := s.store.GetCalendarObjectByID(r.Context(), req.ID)
+			if e != nil || old.CalendarID != cal.ID {
+				writeJSON(w, 403, map[string]string{"error": "forbidden"})
+				return
+			}
+			uid = old.UID
+		}
 		if uid == "" {
 			uid = storage.NewID()
 		}
@@ -311,13 +322,14 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 			return
 		}
-		if _, err := s.store.GetCalendarByID(r.Context(), au.ID, o.CalendarID); err != nil {
+		cal, accessErr := s.calendarAccessible(r, au, o.CalendarID)
+		if accessErr != nil || !calendarCanWrite(s, r, au, o.CalendarID) {
 			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 			return
 		}
 		if atts, _ := s.store.ListCalendarAttachments(r.Context(), o.ID); len(atts) > 0 {
 			if root, err := s.calendarAttachRoot(); err == nil {
-				_ = os.RemoveAll(filepath.Join(root, au.ID, o.ID))
+				_ = os.RemoveAll(filepath.Join(root, cal.UserID, o.ID))
 			}
 		}
 		if err := s.store.DeleteCalendarObject(r.Context(), o.CalendarID, o.HrefName); err != nil {
@@ -438,7 +450,7 @@ func (s *Server) handleCalendarInvitesList(w http.ResponseWriter, r *http.Reques
 			"id": inv.ID, "event_uid": inv.EventUID, "calendar_object_id": inv.CalendarObjectID,
 			"summary": inv.Summary, "partstat": inv.PartStat, "attendee_email": inv.AttendeeEmail,
 			"organizer_user_id": inv.OrganizerUserID,
-			"created_at":       inv.CreatedAt.UTC().Format(time.RFC3339),
+			"created_at":        inv.CreatedAt.UTC().Format(time.RFC3339),
 		}
 		if inv.ProposedStart != nil {
 			item["proposed_start"] = inv.ProposedStart.UTC().Format(time.RFC3339)

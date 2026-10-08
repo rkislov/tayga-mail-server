@@ -37,6 +37,13 @@
 - [Расписание дня](ui-calendar-day-tayga-light.png)
 - [Лоток приглашений](ui-calendar-invites-tayga-light.png)
 
+## Классы обслуживания и миграция
+
+- [Форма класса обслуживания](ui-cos-editor-tayga-light.png)
+- [Форма класса обслуживания на телефоне](ui-cos-editor-tayga-light-mobile.png)
+- [Выбор типа переноса](ui-migration-tayga-light.png)
+- [Параметры переноса почты](ui-migration-dialog-tayga-light.png)
+
 ## Остальные экраны
 
 Для календаря, контактов, заметок, файлов, чата и административных разделов доступны ночные `ui-*-tayga.png` и дневные `ui-*-tayga-light.png` версии. Также сохранены примеры фонов «Космос», «Москва-Сити», «Стрит-арт» и «Териберка».
@@ -52,3 +59,10 @@ node scripts/capture-screenshots.mjs
 По умолчанию сервер доступен на `http://127.0.0.1:18080`. Переменные `TMS_URL` и `CHROME_PATH` позволяют указать другой адрес сервера и путь к Chromium/Chrome.
 
 Размер настольных снимков — 1440 × 900, мобильных — 390 × 844. Скрипт обновляет существующие PNG и создаёт дневные и мобильные варианты.
+
+## Обновлённые действия
+
+- [Свойства календаря и публичная подписка](ui-calendar-properties-tayga-light.png)
+- [Свойства календаря на телефоне](ui-calendar-properties-tayga-light-mobile.png)
+- [Контекстное меню файлов и ZIP папки](ui-files-context-tayga-light.png)
+- [Настройки XMPP по разделам](ui-xmpp-tayga-light.png)

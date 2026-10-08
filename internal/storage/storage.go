@@ -146,6 +146,8 @@ type Driver interface {
 
 	EnsureCalendar(ctx context.Context, userID, name, displayName string) (*Calendar, error)
 	CreateCalendar(ctx context.Context, c *Calendar) (*Calendar, error)
+	UpdateCalendar(ctx context.Context, c *Calendar) error
+	GetPublicCalendar(ctx context.Context, token string) (*Calendar, error)
 	ListCalendars(ctx context.Context, userID string) ([]*Calendar, error)
 	GetCalendarByName(ctx context.Context, userID, name string) (*Calendar, error)
 	GetCalendarByID(ctx context.Context, userID, id string) (*Calendar, error)
@@ -307,11 +309,11 @@ type FileShare struct {
 }
 
 type MailboxDelegate struct {
-	OwnerID          string
-	DelegateID       string
-	CanRead          bool
-	CanSendAs        bool
-	CanSendOnBehalf  bool
+	OwnerID         string
+	DelegateID      string
+	CanRead         bool
+	CanSendAs       bool
+	CanSendOnBehalf bool
 }
 
 type MailboxACLEntry struct {
