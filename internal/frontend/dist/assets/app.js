@@ -1,5 +1,36 @@
 const I18N = {
   ru: {
+    cal_grid_hint: "Клик — открыть день · двойной клик — создать событие · Shift+Enter — создать с клавиатуры",
+    cal_back_month: "К месяцу",
+    cal_hour_add: "Двойной клик",
+    cal_inbox_hint: "Ответьте на приглашения. После ответа они исчезнут из лотка.",
+
+    config_search: "Поиск параметра…",
+    config_catalog_search: "Поиск раздела или параметра…",
+    config_parameters: "параметров",
+    config_readonly: "Только чтение",
+    config_sections: "разделов",
+    config_help_every_field: "Пояснения к каждому параметру",
+    config_no_results: "Ничего не найдено. Попробуйте другое название.",
+    config_bootstrap_hint: "Изменяется в bootstrap YAML; затем перезапустите сервер.",
+    config_secret_hint: "Оставьте поле пустым, чтобы сохранить существующий секрет.",
+    config_secret_saved: "Секрет сохранён · оставьте пустым",
+    config_secret_empty: "Не задан",
+    config_collection_empty: "Записей пока нет. Добавьте первую запись.",
+    config_add_domain: "Добавить домен",
+    config_add_item: "Добавить компонент",
+    config_domain_name: "Домен, например example.com",
+    config_invalid_domain: "Укажите корректное доменное имя. Для IDN используйте punycode.",
+    config_duplicate_domain: "Этот домен уже добавлен.",
+    config_invalid_number: "Укажите корректное число; целые значения должны быть без дробной части.",
+    config_restart_hint: "Изменения сохраняются сразу. Для применения настроек сервисов потребуется перезапуск сервера.",
+    config_discard: "Закрыть окно и потерять несохранённые изменения?",
+    config_saving: "Сохранение…",
+    config_saved: "Настройки сохранены. Для применения перезапустите сервер.",
+
+    color_mode: "Режим интерфейса",
+    color_mode_light: "Дневной",
+    color_mode_dark: "Ночной",
     brand: "Tayga Mail",
     login_title: "Вход",
     login_lede: "Почта, календарь, заметки, чат, контакты и файлы в одном окне.",
@@ -113,7 +144,7 @@ const I18N = {
     nav_xmpp: "XMPP",
     nav_server: "Сервер",
     nav_cos: "CoS",
-    server_lede: "Выберите раздел настроек. Основные параметры — в простых формах; после сохранения обычно нужен перезапуск.",
+    server_lede: "Выберите раздел настроек. Все параметры сгруппированы по назначению и открываются в отдельных окнах с пояснениями. После сохранения требуется перезапуск.",
     server_restart: "Нужен перезапуск tayga-mail.",
     server_section: "Секция",
     server_json_hint: "Расширенная секция без отдельной формы — правьте JSON осторожно.",
@@ -376,6 +407,37 @@ const I18N = {
     save: "Сохранить",
   },
   en: {
+    cal_grid_hint: "Click to open a day · double-click to create an event · Shift+Enter to create with the keyboard",
+    cal_back_month: "Back to month",
+    cal_hour_add: "Double-click",
+    cal_inbox_hint: "Respond to invitations. They leave the inbox after your response.",
+
+    config_search: "Search parameters…",
+    config_catalog_search: "Search sections or parameters…",
+    config_parameters: "parameters",
+    config_readonly: "Read only",
+    config_sections: "sections",
+    config_help_every_field: "Help for every parameter",
+    config_no_results: "No matches. Try another name.",
+    config_bootstrap_hint: "Change in bootstrap YAML, then restart the server.",
+    config_secret_hint: "Leave blank to keep the existing secret.",
+    config_secret_saved: "Secret saved · leave blank to keep",
+    config_secret_empty: "Not set",
+    config_collection_empty: "No entries yet. Add the first entry.",
+    config_add_domain: "Add domain",
+    config_add_item: "Add component",
+    config_domain_name: "Domain, e.g. example.com",
+    config_invalid_domain: "Enter a valid domain name. Use punycode for IDNs.",
+    config_duplicate_domain: "This domain already exists.",
+    config_invalid_number: "Enter a valid number; integer fields cannot contain fractions.",
+    config_restart_hint: "Settings are saved immediately. Restart the server to apply service changes.",
+    config_discard: "Close and discard unsaved changes?",
+    config_saving: "Saving…",
+    config_saved: "Settings saved. Restart the server to apply them.",
+
+    color_mode: "Interface mode",
+    color_mode_light: "Day",
+    color_mode_dark: "Night",
     brand: "Tayga Mail",
     login_title: "Sign in",
     login_lede: "Mail, calendar, notes, chat, contacts, and files in one place.",
@@ -798,6 +860,7 @@ const state = {
 const $ = (id) => document.getElementById(id);
 
 let dialogResolve = null;
+let dialogFocus = null;
 
 function closeDialog(result) {
   const backdrop = $("dialog-backdrop");
@@ -806,12 +869,14 @@ function closeDialog(result) {
   $("dialog-panel")?.classList.remove("is-danger");
   const resolve = dialogResolve;
   dialogResolve = null;
+  dialogFocus?.focus();
   if (resolve) resolve(result);
 }
 
 function openDialog({ title, body = "", danger = false, input = false, label = "", value = "", placeholder = "", okText = "", cancelText = "", password = false, alertOnly = false }) {
   return new Promise((resolve) => {
     if (dialogResolve) closeDialog(input ? null : false);
+    dialogFocus = document.activeElement;
     dialogResolve = resolve;
     const backdrop = $("dialog-backdrop");
     const panel = $("dialog-panel");
@@ -917,6 +982,13 @@ document.addEventListener("keydown", (e) => {
   if (!backdrop || backdrop.classList.contains("hidden")) return;
   const inputMode = !$("dialog-field-wrap")?.classList.contains("hidden");
   closeDialog(inputMode ? null : false);
+});
+
+$("dialog-panel")?.addEventListener("keydown", event => {
+  if (event.key !== "Tab") return;
+  const items = [...$("dialog-panel").querySelectorAll("button, input")].filter(item => !item.disabled && item.getClientRects().length);
+  if (event.shiftKey && document.activeElement === items[0]) {event.preventDefault();items.at(-1)?.focus();}
+  else if (!event.shiftKey && document.activeElement === items.at(-1)) {event.preventDefault();items[0]?.focus();}
 });
 
 const THEMES = {
@@ -1049,6 +1121,19 @@ function updateNavUser(email, isAdmin) {
   }
 }
 
+function applyColorMode(mode) {
+  const value = mode === "light" ? "light" : "dark";
+  document.documentElement.dataset.colorMode = value;
+  localStorage.setItem("tayga.colorMode", value);
+  const select = document.getElementById("color-mode-select");
+  if (select) select.value = value;
+}
+
+applyColorMode(localStorage.getItem("tayga.colorMode") || "dark");
+document.getElementById("color-mode-select")?.addEventListener("change", (event) => {
+  applyColorMode(event.target.value);
+});
+
 (function initTheme() {
   const saved = localStorage.getItem("tayga.theme") || "tayga";
   applyTheme(saved);
@@ -1071,6 +1156,8 @@ const calState = {
   events: [],
   month: new Date(),
   selectedDay: "",
+  view: "month",
+  dayClickTimer: null,
   attendees: [],
   invites: [],
   highlightInvite: "",
@@ -1130,6 +1217,7 @@ function setNavOpen(open) {
 }
 
 function showApp(name) {
+  clearTimeout(calState.dayClickTimer);
   const app = APPS.includes(name) ? name : "mail";
   APPS.forEach((a) => $(`app-${a}`)?.classList.toggle("hidden", a !== app));
   document.querySelectorAll(".nav-btn").forEach((btn) => {
@@ -2657,412 +2745,18 @@ $("btn-mig-card")?.addEventListener("click", () => startMigration("carddav", {
   password: $("mig-card-pass")?.value || "",
 }));
 
-const settingsState = { all: null, certs: [] };
+const settingsState = { all: null };
 const cosState = { items: [], selected: "" };
-
-const SETTINGS_SECTION_LABELS = {
-  smtp: "sec_smtp",
-  spam: "sec_spam",
-  scan: "sec_scan",
-  siem: "sec_siem",
-  log: "sec_log",
-  tls: "sec_tls",
-  http: "sec_http",
-  server: "sec_server",
-};
-
-const SETTINGS_GUIDED = ["smtp", "spam", "scan", "siem", "log", "tls"];
-const SETTINGS_BLURBS = {
-  smtp: "smtp_outbound_hint",
-  spam: "spam_hint",
-  scan: "scan_hint",
-  siem: "siem_hint",
-  log: "log_hint",
-  tls: "ca_pick_hint",
-};
-
-function settingsSectionLabel(name) {
-  const key = SETTINGS_SECTION_LABELS[name];
-  return key ? t(key) : name;
-}
-
-function fillSettingsSectionSelect(sections) {
-  const sel = $("settings-section");
-  if (!sel) return;
-  const cur = sel.value;
-  sel.innerHTML = "";
-  const preferred = ["smtp", "spam", "scan", "siem", "log", "tls", "http", "server"];
-  const ordered = [
-    ...preferred.filter((n) => (sections || []).includes(n)),
-    ...(sections || []).filter((n) => !preferred.includes(n)),
-  ];
-  ordered.forEach((name) => {
-    const opt = document.createElement("option");
-    opt.value = name;
-    opt.textContent = settingsSectionLabel(name);
-    sel.appendChild(opt);
-  });
-  if (cur && ordered.includes(cur)) sel.value = cur;
-  else if (ordered.length) sel.value = ordered.includes("smtp") ? "smtp" : ordered[0];
-  renderSettingsSectionList(ordered);
-}
-
-function renderSettingsSectionList(ordered) {
-  const list = $("settings-section-list");
-  if (!list) return;
-  const guided = (ordered || []).filter((n) => SETTINGS_GUIDED.includes(n));
-  const other = (ordered || []).filter((n) => !SETTINGS_GUIDED.includes(n));
-  const rows = guided.map((name) => {
-    const blurbKey = SETTINGS_BLURBS[name];
-    const blurb = blurbKey ? t(blurbKey) : name;
-    return `<li>
-      <button type="button" class="friendly-list-item" data-settings-open="${escapeHtml(name)}">
-        <span>
-          <strong>${escapeHtml(settingsSectionLabel(name))}</strong>
-          <span class="meta">${escapeHtml(blurb)}</span>
-        </span>
-        <span class="meta">${escapeHtml(t("server_open"))}</span>
-      </button>
-    </li>`;
-  });
-  if (other.length) {
-    rows.push(`<li class="friendly-list-empty">${escapeHtml(t("server_other"))}</li>`);
-    other.forEach((name) => {
-      rows.push(`<li>
-        <button type="button" class="friendly-list-item" data-settings-open="${escapeHtml(name)}">
-          <span>
-            <strong>${escapeHtml(settingsSectionLabel(name))}</strong>
-            <span class="meta">${escapeHtml(name)}</span>
-          </span>
-          <span class="meta">${escapeHtml(t("server_open"))}</span>
-        </button>
-      </li>`);
-    });
-  }
-  list.innerHTML = rows.join("") || `<li class="friendly-list-empty">—</li>`;
-  list.querySelectorAll("[data-settings-open]").forEach((btn) => {
-    btn.addEventListener("click", () => openSettingsDetail(btn.dataset.settingsOpen));
-  });
-}
-
-function openSettingsDetail(name) {
-  const sel = $("settings-section");
-  if (sel) sel.value = name;
-  $("settings-home")?.classList.add("hidden");
-  $("settings-detail")?.classList.remove("hidden");
-  if ($("settings-detail-title")) $("settings-detail-title").textContent = settingsSectionLabel(name);
-  const blurbKey = SETTINGS_BLURBS[name];
-  if ($("settings-detail-lede")) {
-    $("settings-detail-lede").textContent = blurbKey ? t(blurbKey) : (SETTINGS_GUIDED.includes(name) ? "" : t("server_json_hint"));
-  }
-  showSettingsSection(name);
-  setMsg($("settings-msg"), "");
-}
-
-function closeSettingsDetail() {
-  $("settings-detail")?.classList.add("hidden");
-  $("settings-home")?.classList.remove("hidden");
-  setMsg($("settings-msg"), "");
-}
-
-async function fillSettingsCertSelect(activeId) {
-  const sel = $("settings-tls-cert");
-  if (!sel) return;
-  try {
-    const data = await api("/api/v1/admin/certs");
-    settingsState.certs = data.certificates || [];
-    sel.innerHTML = "";
-    settingsState.certs.forEach((c) => {
-      const opt = document.createElement("option");
-      opt.value = c.id;
-      opt.textContent = (c.active ? "★ " : "") + (c.name || c.id) + " (" + (c.source || "") + ")";
-      if (c.id === activeId || c.active) opt.selected = true;
-      sel.appendChild(opt);
-    });
-  } catch (_) {
-    sel.innerHTML = "";
-  }
-}
-
-function fillSmtpForm(val) {
-  const v = val || {};
-  const relay = v.relay || {};
-  const queue = v.queue || {};
-  if ($("smtp-outbound-direct")) $("smtp-outbound-direct").checked = !!v.outbound_direct;
-  if ($("smtp-relay-host")) $("smtp-relay-host").value = relay.host || "";
-  if ($("smtp-relay-user")) $("smtp-relay-user").value = relay.username || "";
-  if ($("smtp-relay-pass")) $("smtp-relay-pass").value = "";
-  if ($("smtp-relay-pass")) $("smtp-relay-pass").placeholder = relay.password ? "••••••••" : "";
-  if ($("smtp-relay-no-starttls")) $("smtp-relay-no-starttls").checked = !!relay.disable_starttls;
-  if ($("smtp-queue-enabled")) $("smtp-queue-enabled").checked = queue.enabled !== false;
-  if ($("smtp-queue-workers")) $("smtp-queue-workers").value = queue.workers || 1;
-  if ($("smtp-queue-max")) $("smtp-queue-max").value = queue.max_attempts || 8;
-}
-
-function readSmtpForm(base) {
-  const cur = JSON.parse(JSON.stringify(base || {}));
-  cur.outbound_direct = !!$("smtp-outbound-direct")?.checked;
-  cur.relay = cur.relay || {};
-  cur.relay.host = ($("smtp-relay-host")?.value || "").trim();
-  cur.relay.username = ($("smtp-relay-user")?.value || "").trim();
-  const pass = $("smtp-relay-pass")?.value || "";
-  if (pass) cur.relay.password = pass;
-  else if (!cur.relay.password) cur.relay.password = "";
-  cur.relay.disable_starttls = !!$("smtp-relay-no-starttls")?.checked;
-  cur.queue = cur.queue || {};
-  cur.queue.enabled = !!$("smtp-queue-enabled")?.checked;
-  cur.queue.workers = Number($("smtp-queue-workers")?.value || 1);
-  cur.queue.max_attempts = Number($("smtp-queue-max")?.value || 8);
-  return cur;
-}
-
-function fillSpamForm(val) {
-  const v = val || {};
-  if ($("spam-enabled")) $("spam-enabled").checked = !!v.enabled;
-  if ($("spam-backend")) $("spam-backend").value = v.backend || "rspamd";
-  if ($("spam-url")) $("spam-url").value = v.url || "http://127.0.0.1:11333";
-  if ($("spam-password")) $("spam-password").value = "";
-  if ($("spam-password")) $("spam-password").placeholder = v.password ? "••••••••" : "";
-  if ($("spam-folder")) $("spam-folder").value = v.folder || "Junk";
-  if ($("spam-fail-open")) $("spam-fail-open").checked = v.fail_open !== false;
-  if ($("spam-follow")) $("spam-follow").checked = v.follow_rspamd !== false;
-}
-
-function readSpamForm(base) {
-  const cur = JSON.parse(JSON.stringify(base || {}));
-  cur.enabled = !!$("spam-enabled")?.checked;
-  cur.backend = $("spam-backend")?.value || "rspamd";
-  cur.url = ($("spam-url")?.value || "").trim();
-  const pass = $("spam-password")?.value || "";
-  if (pass) cur.password = pass;
-  else if (cur.password == null) cur.password = "";
-  cur.folder = ($("spam-folder")?.value || "Junk").trim() || "Junk";
-  cur.fail_open = !!$("spam-fail-open")?.checked;
-  cur.follow_rspamd = !!$("spam-follow")?.checked;
-  return cur;
-}
-
-function updateScanBackendFields() {
-  const backend = $("scan-backend")?.value || "clamav";
-  $("scan-clamav-fields")?.classList.toggle("hidden", backend !== "clamav");
-  $("scan-exec-fields")?.classList.toggle("hidden", backend !== "exec");
-  $("scan-icap-fields")?.classList.toggle("hidden", backend !== "icap");
-}
-
-function fillScanForm(val) {
-  const v = val || {};
-  if ($("scan-enabled")) $("scan-enabled").checked = !!v.enabled;
-  if ($("scan-backend")) $("scan-backend").value = v.backend || "clamav";
-  if ($("scan-action")) $("scan-action").value = v.action || "quarantine";
-  if ($("scan-folder")) $("scan-folder").value = v.quarantine_folder || "Quarantine";
-  if ($("scan-fail-open")) $("scan-fail-open").checked = !!v.fail_open;
-  if ($("scan-clamav-addr")) $("scan-clamav-addr").value = (v.clamav && v.clamav.address) || "127.0.0.1:3310";
-  if ($("scan-exec-cmd")) {
-    const cmd = (v.exec && Array.isArray(v.exec.command)) ? v.exec.command.join(" ") : "clamdscan --fdpass --no-summary -";
-    $("scan-exec-cmd").value = cmd;
-  }
-  if ($("scan-icap-url")) $("scan-icap-url").value = (v.icap && v.icap.url) || "icap://127.0.0.1:1344/reqmod";
-  updateScanBackendFields();
-}
-
-function readScanForm(base) {
-  const cur = JSON.parse(JSON.stringify(base || {}));
-  cur.enabled = !!$("scan-enabled")?.checked;
-  cur.backend = $("scan-backend")?.value || "clamav";
-  cur.action = $("scan-action")?.value || "quarantine";
-  cur.quarantine_folder = ($("scan-folder")?.value || "Quarantine").trim() || "Quarantine";
-  cur.fail_open = !!$("scan-fail-open")?.checked;
-  cur.clamav = cur.clamav || {};
-  cur.clamav.address = ($("scan-clamav-addr")?.value || "").trim() || "127.0.0.1:3310";
-  cur.exec = cur.exec || {};
-  const rawCmd = ($("scan-exec-cmd")?.value || "").trim();
-  cur.exec.command = rawCmd ? rawCmd.split(/\s+/).filter(Boolean) : [];
-  cur.icap = cur.icap || {};
-  cur.icap.url = ($("scan-icap-url")?.value || "").trim() || "icap://127.0.0.1:1344/reqmod";
-  return cur;
-}
-
-function fillSiemForm(val) {
-  const v = val || {};
-  if ($("siem-enabled")) $("siem-enabled").checked = !!v.enabled;
-  if ($("siem-protocol")) $("siem-protocol").value = v.protocol || "udp";
-  if ($("siem-address")) $("siem-address").value = v.address || "127.0.0.1:514";
-  if ($("siem-facility")) $("siem-facility").value = v.facility || "local0";
-  if ($("siem-format")) $("siem-format").value = v.format || "cef";
-  if ($("siem-tls-skip")) $("siem-tls-skip").checked = !!v.tls_skip_verify;
-}
-
-function readSiemForm(base) {
-  const cur = JSON.parse(JSON.stringify(base || {}));
-  cur.enabled = !!$("siem-enabled")?.checked;
-  cur.protocol = $("siem-protocol")?.value || "udp";
-  cur.address = ($("siem-address")?.value || "").trim();
-  cur.facility = ($("siem-facility")?.value || "local0").trim() || "local0";
-  cur.format = $("siem-format")?.value || "cef";
-  cur.tls_skip_verify = !!$("siem-tls-skip")?.checked;
-  return cur;
-}
-
-function fillLogForm(val) {
-  const v = val || {};
-  if ($("log-level")) $("log-level").value = v.level || "info";
-  if ($("log-format")) $("log-format").value = v.format || "json";
-  if ($("log-file")) $("log-file").value = v.file || "./data/tayga.log";
-}
-
-function readLogForm(base) {
-  const cur = JSON.parse(JSON.stringify(base || {}));
-  cur.level = $("log-level")?.value || "info";
-  cur.format = $("log-format")?.value || "json";
-  cur.file = ($("log-file")?.value || "").trim();
-  return cur;
-}
-
-function showSettingsSection(name) {
-  if (!settingsState.all || !settingsState.all.settings) return;
-  const val = settingsState.all.settings[name] || {};
-  const tlsPanel = $("settings-tls-panel");
-  const smtpPanel = $("settings-smtp-panel");
-  const spamPanel = $("settings-spam-panel");
-  const scanPanel = $("settings-scan-panel");
-  const siemPanel = $("settings-siem-panel");
-  const logPanel = $("settings-log-panel");
-  const jsonWrap = $("settings-json-wrap");
-  tlsPanel?.classList.add("hidden");
-  smtpPanel?.classList.add("hidden");
-  spamPanel?.classList.add("hidden");
-  scanPanel?.classList.add("hidden");
-  siemPanel?.classList.add("hidden");
-  logPanel?.classList.add("hidden");
-  jsonWrap?.classList.add("hidden");
-  // hide optional advanced JSON toggles in friendly UI
-  ["smtp-show-json", "spam-show-json", "scan-show-json", "siem-show-json", "log-show-json"].forEach((id) => {
-    $(id)?.closest("label")?.classList.add("hidden");
-  });
-
-  if (name === "tls") {
-    tlsPanel?.classList.remove("hidden");
-    if ($("settings-tls-email")) $("settings-tls-email").value = val.acme?.email || "";
-    if ($("settings-tls-staging")) $("settings-tls-staging").checked = !!val.acme?.staging;
-    fillSettingsCertSelect(val.active_id || "");
-    return;
-  }
-  if (name === "smtp") {
-    smtpPanel?.classList.remove("hidden");
-    fillSmtpForm(val);
-    return;
-  }
-  if (name === "spam") {
-    spamPanel?.classList.remove("hidden");
-    fillSpamForm(val);
-    return;
-  }
-  if (name === "scan") {
-    scanPanel?.classList.remove("hidden");
-    fillScanForm(val);
-    return;
-  }
-  if (name === "siem") {
-    siemPanel?.classList.remove("hidden");
-    fillSiemForm(val);
-    return;
-  }
-  if (name === "log") {
-    logPanel?.classList.remove("hidden");
-    fillLogForm(val);
-    return;
-  }
-  jsonWrap?.classList.remove("hidden");
-  if ($("settings-json")) $("settings-json").value = JSON.stringify(val, null, 2);
-}
 
 async function refreshSettings() {
   try {
-    const data = await api("/api/v1/admin/settings");
-    settingsState.all = data;
-    fillSettingsSectionSelect(data.sections || []);
-    const detailOpen = !$("settings-detail")?.classList.contains("hidden");
-    if (detailOpen && $("settings-section")?.value) {
-      showSettingsSection($("settings-section").value);
-    } else {
-      closeSettingsDetail();
-    }
-    $("settings-restart")?.classList.toggle("hidden", !data.restart_required);
+    settingsState.all = await api("/api/v1/admin/settings");
+    renderAdminCatalog();
+    $("settings-restart")?.classList.toggle("hidden", !settingsState.all.restart_required);
     setMsg($("settings-msg"), "");
-  } catch (err) {
-    setMsg($("settings-msg"), err.message, "err");
-  }
+  } catch (err) { setMsg($("settings-msg"), err.message, "err"); }
 }
-
-$("scan-backend")?.addEventListener("change", () => updateScanBackendFields());
-$("btn-settings-refresh")?.addEventListener("click", () => refreshSettings());
-$("btn-settings-back")?.addEventListener("click", () => closeSettingsDetail());
-$("btn-settings-close")?.addEventListener("click", () => closeSettingsDetail());
-$("btn-settings-cancel")?.addEventListener("click", () => {
-  const section = $("settings-section")?.value;
-  if (section) showSettingsSection(section);
-  setMsg($("settings-msg"), "");
-});
-$("btn-settings-save")?.addEventListener("click", async () => {
-  const section = $("settings-section").value;
-  let parsed;
-  if (section === "tls") {
-    const cur = (settingsState.all && settingsState.all.settings && settingsState.all.settings.tls) || {};
-    const certId = $("settings-tls-cert")?.value || "";
-    parsed = {
-      ...cur,
-      active_id: certId,
-      acme: {
-        ...(cur.acme || {}),
-        email: $("settings-tls-email")?.value || "",
-        staging: !!$("settings-tls-staging")?.checked,
-      },
-    };
-    if (certId) {
-      try {
-        await api("/api/v1/admin/certs/" + encodeURIComponent(certId) + "/activate", { method: "POST" });
-      } catch (err) {
-        setMsg($("settings-msg"), err.message, "err");
-        return;
-      }
-    }
-  } else if (section === "smtp") {
-    parsed = readSmtpForm((settingsState.all?.settings?.smtp) || {});
-  } else if (section === "spam") {
-    parsed = readSpamForm((settingsState.all?.settings?.spam) || {});
-  } else if (section === "scan") {
-    parsed = readScanForm((settingsState.all?.settings?.scan) || {});
-  } else if (section === "siem") {
-    parsed = readSiemForm((settingsState.all?.settings?.siem) || {});
-  } else if (section === "log") {
-    parsed = readLogForm((settingsState.all?.settings?.log) || {});
-    if (!(parsed.file || "").trim()) {
-      setMsg($("settings-msg"), t("log_file") + " required", "err");
-      return;
-    }
-  } else {
-    try {
-      parsed = JSON.parse($("settings-json").value);
-    } catch (err) {
-      setMsg($("settings-msg"), "Invalid JSON: " + err.message, "err");
-      return;
-    }
-  }
-  setMsg($("settings-msg"), "…");
-  try {
-    const out = await api("/api/v1/admin/settings/" + encodeURIComponent(section), {
-      method: "PUT",
-      body: JSON.stringify(parsed),
-    });
-    $("settings-restart")?.classList.toggle("hidden", !out.restart_required);
-    setMsg($("settings-msg"), out.restart_required ? t("server_restart") : "OK", "ok");
-    const keep = section;
-    await refreshSettings();
-    openSettingsDetail(keep);
-  } catch (err) {
-    setMsg($("settings-msg"), err.message, "err");
-  }
-});
+$("btn-settings-refresh")?.addEventListener("click", refreshSettings);
 
 const DEFAULT_COS_CONFIG = {
   quota_bytes: 0,
@@ -3497,7 +3191,7 @@ function openNotifyHref(href) {
     const m = String(href).match(/invite=([^&]+)/);
     if (m) calState.highlightInvite = decodeURIComponent(m[1]);
     showApp("calendar");
-    refreshCalInvites();
+    openCalInviteInbox();
   }
 }
 
@@ -4275,7 +3969,9 @@ async function refreshCalInvites() {
   try {
     const data = await api("/api/v1/calendar/invites");
     calState.invites = data.invites || [];
+    updateCalInviteBadge();
     if (!calState.invites.length) {
+      if (!$("cal-invites-backdrop").classList.contains("hidden")) $("btn-cal-invites-close").focus();
       list.innerHTML = `<li class="meta msg-empty">${escapeHtml(t("cal_invites_empty"))}</li>`;
       return;
     }
@@ -4296,6 +3992,7 @@ async function refreshCalInvites() {
         </div>
       </li>`;
     }).join("");
+    if (!$("cal-invites-backdrop").classList.contains("hidden") && document.activeElement === document.body) $("btn-cal-invites-close").focus();
     list.querySelectorAll("[data-inv-act]").forEach((btn) => {
       btn.addEventListener("click", () => replyCalInvite(btn.dataset.id, btn.dataset.invAct));
     });
@@ -4326,11 +4023,20 @@ async function replyCalInvite(id, action) {
     await refreshCalInvites();
     await loadCalEvents();
   } catch (err) {
-    setMsg($("cal-msg"), err.message, "err");
+    setMsg($("cal-invite-msg"), err.message, "err");
   }
 }
 
 function shiftCalMonth(delta) {
+  clearTimeout(calState.dayClickTimer);
+  if (calState.view === "day") {
+    const day = new Date(calState.selectedDay + "T12:00");
+    day.setDate(day.getDate() + delta);
+    calState.month = calMonthStart(day);
+    openCalDay(calDayKey(day));
+    renderCalMonth();
+    return;
+  }
   const m = calMonthStart(calState.month);
   calState.month = new Date(m.getFullYear(), m.getMonth() + delta, 1);
   renderCalMonth();
@@ -4346,6 +4052,7 @@ function goCalToday() {
 }
 
 function renderCalMonth() {
+  clearTimeout(calState.dayClickTimer);
   const root = $("cal-month");
   const label = $("cal-month-label");
   if (!root) return;
@@ -4410,29 +4117,117 @@ function renderCalMonth() {
   root.innerHTML = html;
 
   root.querySelectorAll("[data-day]").forEach((cell) => {
-    const activate = (e) => {
-      const pill = e.target.closest("[data-ev]");
-      if (pill) {
-        e.stopPropagation();
-        calState.selectedDay = cell.dataset.day;
-        openCalEvent(pill.dataset.ev);
-        renderCalMonth();
-        renderCalEventLog();
-        return;
-      }
-      calState.selectedDay = cell.dataset.day === calState.selectedDay ? "" : cell.dataset.day;
-      renderCalMonth();
-      renderCalEventLog();
-    };
-    cell.addEventListener("click", activate);
-    cell.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        activate(e);
+    cell.setAttribute("aria-label", new Date(cell.dataset.day + "T12:00").toLocaleDateString(calLocale(), {day:"numeric",month:"long",year:"numeric"}));
+    cell.setAttribute("aria-pressed", String(cell.dataset.day === calState.selectedDay));
+    cell.addEventListener("click", (event) => {
+      clearTimeout(calState.dayClickTimer);
+      const pill = event.target.closest("[data-ev]");
+      if (pill) { openCalEvent(pill.dataset.ev); return; }
+      selectCalDay(cell.dataset.day);
+      // Keep the original cell in the DOM until the double-click window has passed.
+      calState.dayClickTimer = setTimeout(() => openCalDay(cell.dataset.day), 500);
+    });
+    cell.addEventListener("dblclick", (event) => {
+      clearTimeout(calState.dayClickTimer);
+      if (event.target.closest("[data-ev]")) return;
+      event.preventDefault();
+      selectCalDay(cell.dataset.day);
+      startNewCalEvent(cell.dataset.day);
+    });
+    cell.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault(); clearTimeout(calState.dayClickTimer);
+        if (event.shiftKey) startNewCalEvent(cell.dataset.day);
+        else openCalDay(cell.dataset.day);
       }
     });
   });
+  renderCalDay();
 }
+
+function selectCalDay(day) {
+  calState.selectedDay = day;
+  document.querySelectorAll("#cal-month [data-day]").forEach(cell => {
+    cell.classList.toggle("is-selected", cell.dataset.day === day);
+    cell.setAttribute("aria-pressed", String(cell.dataset.day === day));
+  });
+  renderCalEventLog();
+}
+
+function openCalDay(day) {
+  calState.view = "day";
+  selectCalDay(day);
+  renderCalDay();
+  $("btn-cal-month-view")?.focus();
+}
+
+function renderCalDay() {
+  const daily = calState.view === "day";
+  $("cal-month")?.classList.toggle("hidden", daily);
+  $("cal-day-view")?.classList.toggle("hidden", !daily);
+  if (!daily) return;
+  const day = calState.selectedDay || calDayKey(new Date());
+  const date = new Date(day + "T12:00");
+  $("cal-day-title").textContent = date.toLocaleDateString(calLocale(), {weekday:"long",day:"numeric",month:"long"});
+  const events = calState.events.filter(event => calEventDayKey(event) === day);
+  $("cal-day-schedule").innerHTML = Array.from({length:24}, (_, hour) => {
+    const time = String(hour).padStart(2,"0") + ":00";
+    const matching = events.filter(event => new Date(event.start).getHours() === hour);
+    return `<div class="cal-hour-row"><button type="button" class="cal-hour-slot" data-hour="${hour}" aria-label="${escapeHtml(t("new_event") + " · " + day + " " + time)}"><time>${time}</time><span>${escapeHtml(t("cal_hour_add"))}</span></button><div class="cal-hour-events">${matching.map(event => `<button type="button" class="cal-agenda-event" data-ev="${escapeHtml(event.id)}"><strong>${escapeHtml(event.summary || "—")}</strong><span>${escapeHtml(fmtCalTime(event.start))}–${escapeHtml(fmtCalTime(event.end))}${event.location ? " · " + escapeHtml(event.location) : ""}</span></button>`).join("")}</div></div>`;
+  }).join("");
+  $("cal-day-schedule").querySelectorAll("[data-hour]").forEach(slot => {
+    slot.addEventListener("dblclick", () => startNewCalEvent(day, Number(slot.dataset.hour)));
+    slot.addEventListener("keydown", event => { if (event.key === "Enter" || event.key === " ") {event.preventDefault();startNewCalEvent(day,Number(slot.dataset.hour));} });
+  });
+  $("cal-day-schedule").querySelectorAll("[data-ev]").forEach(button => button.addEventListener("click", () => openCalEvent(button.dataset.ev)));
+}
+
+function startNewCalEvent(day = calState.selectedDay || calDayKey(new Date()), hour = 10) {
+  clearTimeout(calState.dayClickTimer);
+  calState.selectedDay = day;
+  $("form-cal-event")?.reset();
+  $("cal-start").value = day + "T" + String(hour).padStart(2,"0") + ":00";
+  const end = new Date(day + "T" + String(hour).padStart(2,"0") + ":00");
+  end.setHours(end.getHours() + 1);
+  $("cal-end").value = calDayKey(end) + "T" + String(end.getHours()).padStart(2,"0") + ":00";
+  showCalCompose(true);
+}
+
+let calInboxFocus = null;
+function updateCalInviteBadge() {
+  const count = calState.invites.length;
+  $("cal-invite-count").textContent = String(count);
+  $("cal-invite-count").classList.toggle("hidden", count === 0);
+  const label = t("cal_invites") + (count ? ` · ${count}` : "");
+  $("btn-cal-invites").setAttribute("aria-label", label);
+  $("btn-cal-invites").title = label;
+}
+async function openCalInviteInbox() {
+  calInboxFocus = document.activeElement;
+  $("cal-invites-backdrop").classList.remove("hidden");
+  $("view-account").inert = true;
+  $("btn-cal-invites-close").focus();
+  setMsg($("cal-invite-msg"), "");
+  await refreshCalInvites();
+}
+function closeCalInviteInbox() {
+  $("cal-invites-backdrop").classList.add("hidden");
+  $("view-account").inert = false;
+  calInboxFocus?.focus();
+}
+$("btn-cal-invites")?.addEventListener("click", openCalInviteInbox);
+$("btn-cal-invites-close")?.addEventListener("click", closeCalInviteInbox);
+$("cal-invites-backdrop")?.addEventListener("click", event => { if (event.target === $("cal-invites-backdrop")) closeCalInviteInbox(); });
+$("cal-invites-dialog")?.addEventListener("keydown", event => {
+  if (event.key === "Escape") {event.preventDefault();event.stopPropagation();closeCalInviteInbox();}
+  if (event.key === "Tab") {
+    const buttons = [...$("cal-invites-dialog").querySelectorAll("button")].filter(button => !button.disabled && button.getClientRects().length);
+    if (event.shiftKey && document.activeElement === buttons[0]) {event.preventDefault();buttons.at(-1)?.focus();}
+    else if (!event.shiftKey && document.activeElement === buttons.at(-1)) {event.preventDefault();buttons[0]?.focus();}
+  }
+});
+$("btn-cal-month-view")?.addEventListener("click", () => {calState.view = "month";renderCalMonth();});
+$("btn-cal-new-mobile")?.addEventListener("click", () => startNewCalEvent());
 
 function renderCalEventLog() {
   const list = $("cal-event-list");
@@ -4625,7 +4420,7 @@ $("btn-cal-refresh")?.addEventListener("click", () => refreshCalendar());
 $("btn-cal-prev")?.addEventListener("click", () => shiftCalMonth(-1));
 $("btn-cal-next")?.addEventListener("click", () => shiftCalMonth(1));
 $("btn-cal-today")?.addEventListener("click", () => goCalToday());
-$("btn-cal-new")?.addEventListener("click", () => showCalCompose(true));
+$("btn-cal-new")?.addEventListener("click", () => startNewCalEvent());
 $("btn-cal-close")?.addEventListener("click", () => showCalCompose(false));
 $("cal-backdrop")?.addEventListener("click", (e) => {
   if (e.target === $("cal-backdrop")) showCalCompose(false);
@@ -5747,3 +5542,219 @@ try {
     forceLogin(t("session_expired"));
   }
 })();
+/* Typed configuration forms follow the schema exposed by the server. */
+const CONFIG_GROUPS = [
+  { title: ["Почта и клиенты", "Mail and clients"], icon: "mail", sections: ["smtp", "imap", "pop3", "managesieve", "flowsync", "xmpp"] },
+  { title: ["Защита почты", "Mail protection"], icon: "lock", sections: ["spam", "scan", "dkim_verify", "spf", "iprev", "helo", "greylist", "dmarc", "arc"] },
+  { title: ["Вход и пользователи", "Identity and users"], icon: "user", sections: ["ldap", "oidc", "mfa", "seed"] },
+  { title: ["Хранение и доступность", "Storage and availability"], icon: "files", sections: ["storage", "mailstore", "ha"] },
+  { title: ["Сервер и наблюдение", "Server and observability"], icon: "server", sections: ["server", "http", "tls", "log", "siem"] },
+];
+const CONFIG_SECTIONS = {
+  server: ["Идентификация сервера", "DNS-имя и ключ шифрования данных."],
+  smtp: ["SMTP и доставка", "Слушатели, relay, подписи, очередь и TLS-политики."],
+  imap: ["IMAP", "Доступ клиентов к почтовым папкам и письмам."],
+  pop3: ["POP3", "Получение писем клиентами POP3."],
+  managesieve: ["ManageSieve", "Подключение клиентов для управления почтовыми фильтрами."],
+  flowsync: ["FlowSync", "Синхронизация клиентов ActiveSync и EWS."],
+  xmpp: ["XMPP и компоненты", "Чат, TLS-соединения, внешние боты и мосты."],
+  spam: ["Антиспам", "Rspamd, пороги оценки и обработка подозрительных писем."],
+  scan: ["Антивирус", "ClamAV, ICAP или внешняя команда проверки."],
+  dkim_verify: ["Проверка DKIM", "Проверка подписей входящей почты."],
+  spf: ["Проверка SPF", "Проверка разрешённых серверов отправителя."],
+  iprev: ["Обратный DNS", "PTR и подтверждение IP прямым DNS-запросом."],
+  helo: ["HELO / EHLO", "Проверка имени, заявленного внешним SMTP-клиентом."],
+  greylist: ["Greylisting", "Временная задержка неизвестных отправителей."],
+  dmarc: ["DMARC и отчёты", "Согласование SPF/DKIM, политики и отчётность."],
+  arc: ["Цепочки ARC", "Проверка и подпись цепочек пересылки почты."],
+  ldap: ["LDAP и группы", "Каталоги по доменам, роли и синхронизация пользователей."],
+  oidc: ["Вход через OIDC", "Провайдеры единого входа для каждого домена."],
+  mfa: ["MFA и ключи доступа", "Второй фактор, WebAuthn и сроки действия токенов."],
+  seed: ["Первоначальная учётная запись", "Параметры создания первой организации и администратора."],
+  storage: ["База данных", "Параметры bootstrap YAML, доступные только для чтения."],
+  mailstore: ["Письма и S3", "Каталог maildir и зеркало объектного хранилища."],
+  ha: ["Высокая доступность", "Лидер, аренда узла и закрепление писателей за пользователями."],
+  http: ["Веб-интерфейс и HTTP", "HTTP/HTTPS, публичный адрес и глобальные администраторы."],
+  tls: ["TLS и ACME", "Сертификаты сервисов и автоматическая выдача через ACME."],
+  log: ["Журнал сервера", "Уровень, формат и файл журналирования."],
+  siem: ["Экспорт событий SIEM", "Отправка событий безопасности по syslog / CEF."],
+};
+const configEditor = { section: "", draft: null, initial: "", focus: null, busy: false, controls: [] };
+function configText(ru, en) { return lang === "en" ? en : ru; }
+function configLabel(section) { return lang === "en" ? section.replaceAll("_", " ").toUpperCase() : CONFIG_SECTIONS[section]?.[0] || section; }
+function configDescription(section) { return lang === "en" ? `Configuration for ${configLabel(section)}.` : CONFIG_SECTIONS[section]?.[1] || section; }
+function configFieldCount(field) { return (field.fields || []).reduce((sum, child) => sum + configFieldCount(child), 0) + (field.item ? configFieldCount(field.item) : field.fields ? 0 : 1); }
+function renderAdminCatalog() {
+  const host = $("settings-section-list");
+  if (!host || !settingsState.all?.schema) return;
+  const query = ($("settings-search")?.value || "").trim().toLowerCase();
+  const schema = settingsState.all.schema;
+  let count = 0;
+  const known = CONFIG_GROUPS.flatMap(group => group.sections);
+  const extra = Object.keys(schema).filter(key => !known.includes(key));
+  const groups = [...CONFIG_GROUPS, ...(extra.length ? [{title:["Другие настройки", "Other settings"],icon:"server",sections:extra}] : [])];
+  host.innerHTML = groups.map(group => {
+    const sections = group.sections.filter(section => schema[section] && `${section} ${configLabel(section)} ${configDescription(section)} ${JSON.stringify(schema[section])}`.toLowerCase().includes(query));
+    count += sections.length;
+    if (!sections.length) return "";
+    return `<section class="config-group"><h4><span class="nav-ico" data-ico="${group.icon}" aria-hidden="true"></span>${escapeHtml(configText(...group.title))}</h4><div class="config-section-grid">${sections.map(section => `<button type="button" class="config-section-card" data-config-open="${section}"><span><strong>${escapeHtml(configLabel(section))}</strong><span class="meta">${escapeHtml(configDescription(section))}</span></span><span class="config-card-foot"><span>${configFieldCount(schema[section])} ${escapeHtml(t("config_parameters"))}</span><span>${escapeHtml(schema[section].read_only ? t("config_readonly") : t("server_open"))} →</span></span></button>`).join("")}</div></section>`;
+  }).join("") || `<p class="meta">${escapeHtml(t("config_no_results"))}</p>`;
+  $("settings-summary").textContent = `${count} ${t("config_sections")} · ${t("config_help_every_field")}`;
+  host.querySelectorAll("[data-config-open]").forEach(button => button.addEventListener("click", () => openAdminConfig(button.dataset.configOpen)));
+}
+function configDefault(field) {
+  if (field.kind === "object") return Object.fromEntries(field.fields.map(child => [child.key, configDefault(child)]));
+  if (field.kind === "map") return {};
+  if (field.kind === "array" || field.kind === "strings") return [];
+  return field.default ?? (field.kind === "boolean" ? false : field.kind === "integer" || field.kind === "number" ? 0 : "");
+}
+function configValue(path) { return path.reduce((value, key) => value?.[key], configEditor.draft); }
+function configSet(path, value) {
+  let obj = configEditor.draft;
+  for (const key of path.slice(0, -1)) obj = obj[key];
+  obj[path[path.length - 1]] = value;
+}
+function configFieldHTML(field, path, locked = false) {
+  const value = configValue(path);
+  const readonly = locked || field.read_only;
+  const label = lang === "en" ? field.key.replaceAll("_", " ") : field.label;
+  const description = field.description;
+  const title = `<strong>${escapeHtml(label)}</strong><code>${escapeHtml(path.join("."))}</code>`;
+  if (field.kind === "object") {
+    return `<details class="config-subgroup" open><summary>${title}</summary><p class="meta">${escapeHtml(description)}</p><div class="config-field-grid">${field.fields.map(child => configFieldHTML(child, [...path, child.key], readonly)).join("")}</div></details>`;
+  }
+  const index = configEditor.controls.push({field, path, readonly}) - 1;
+  if (field.kind === "map" || field.kind === "array") {
+    const entries = Object.entries(value || {});
+    return `<section class="config-collection" data-config-searchable><div class="config-collection-head">${title}</div><p class="meta">${escapeHtml(description)}</p>${entries.length ? entries.map(([key]) => `<div class="config-collection-item"><div class="config-collection-head"><strong>${field.kind === "map" ? escapeHtml(key) : `${escapeHtml(label)} ${Number(key) + 1}`}</strong>${!readonly ? `<button type="button" class="btn-secondary btn-sm" data-config-remove="${index}" data-entry="${escapeHtml(key)}">${escapeHtml(t("delete"))}</button>` : ""}</div>${configFieldHTML(field.item, [...path, field.kind === "array" ? Number(key) : key], readonly)}</div>`).join("") : `<p class="meta">${escapeHtml(t("config_collection_empty"))}</p>`}${!readonly ? `<button type="button" class="btn-secondary" data-config-add="${index}">+ ${escapeHtml(t(field.kind === "map" ? "config_add_domain" : "config_add_item"))}</button>` : ""}</section>`;
+  }
+  const id = `config-field-${index}`;
+  const disabled = readonly ? "disabled" : "";
+  const hint = `${description}${readonly ? " " + t("config_bootstrap_hint") : ""}${field.secret && !readonly ? " " + t("config_secret_hint") : ""}`;
+  let input;
+  if (field.kind === "boolean") input = `<input id="${id}" type="checkbox" ${value ? "checked" : ""} ${disabled} />`;
+  else if (field.kind === "strings") input = `<textarea id="${id}" class="field-input" rows="3" ${disabled}>${escapeHtml((value || []).join("\n"))}</textarea>`;
+  else if (field.options?.length) {
+    const options = [...new Set([...(!field.options.includes(value ?? "") ? [value ?? ""] : []), ...field.options])];
+    input = `<select id="${id}" class="field-input" ${disabled}>${options.map(option => `<option value="${escapeHtml(option)}" ${value === option ? "selected" : ""}>${escapeHtml(option)}</option>`).join("")}</select>`;
+  } else {
+    const type = field.secret ? "password" : ["integer", "number"].includes(field.kind) ? "number" : "text";
+    input = `<input id="${id}" class="field-input" type="${type}" value="${escapeHtml(field.secret ? "" : value ?? "")}" ${type === "number" ? `step="${field.kind === "integer" ? "1" : "any"}"` : ""} ${field.kind === "duration" ? 'placeholder="30s, 5m, 24h"' : ""} ${field.secret ? `autocomplete="new-password" placeholder="${escapeHtml(value ? t("config_secret_saved") : t("config_secret_empty"))}"` : ""} ${disabled} />`;
+  }
+  return `<div class="config-field ${field.kind === "boolean" ? "config-field-toggle" : ""}" data-config-searchable><label for="${id}">${title}</label>${input}<p class="field-hint" id="${id}-hint">${escapeHtml(hint)}</p></div>`;
+}
+function renderConfigFields() {
+  configEditor.controls = [];
+  const schema = settingsState.all.schema[configEditor.section];
+  $("config-fields").innerHTML = `<div class="config-field-grid">${schema.fields.map(field => configFieldHTML(field, [field.key], schema.read_only)).join("")}</div>`;
+  configEditor.controls.forEach(({field, path, readonly}, index) => {
+    const input = $(`config-field-${index}`);
+    if (!input) return;
+    input.setAttribute("aria-describedby", input.id + "-hint");
+    if (readonly) return;
+    input.addEventListener("input", () => {
+      input.setCustomValidity("");
+      let value;
+      if (field.kind === "boolean") value = input.checked;
+      else if (field.kind === "strings") value = input.value.split("\n").filter(line => line.trim());
+      else if (["integer", "number"].includes(field.kind)) {
+        value = Number(input.value);
+        if (input.value === "" || !Number.isFinite(value) || (field.kind === "integer" && !Number.isSafeInteger(value))) input.setCustomValidity(t("config_invalid_number"));
+      } else value = input.value;
+      if (field.secret && value === "") return; // Keep the existing masked value.
+      configSet(path, value);
+    });
+  });
+  $("config-fields").querySelectorAll("[data-config-add]").forEach(button => button.addEventListener("click", async () => {
+    const control = configEditor.controls[Number(button.dataset.configAdd)];
+    if (control.field.kind === "map") {
+      const domain = await askPrompt(t("config_add_domain"), {label:t("config_domain_name"), value:""});
+      if (domain == null) return;
+      const key = domain.trim().toLowerCase();
+      if (!key || ["__proto__","constructor","prototype"].includes(key) || !/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/.test(key)) { setMsg($("config-msg"), t("config_invalid_domain"), "err"); return; }
+      const map = configValue(control.path) || {};
+      if (Object.hasOwn(map, key)) { setMsg($("config-msg"), t("config_duplicate_domain"), "err"); return; }
+      configSet(control.path, {...map, [key]:configDefault(control.field.item)});
+    } else configSet(control.path, [...(configValue(control.path) || []), configDefault(control.field.item)]);
+    renderConfigFields(); filterConfigFields();
+  }));
+  $("config-fields").querySelectorAll("[data-config-remove]").forEach(button => button.addEventListener("click", () => {
+    const control = configEditor.controls[Number(button.dataset.configRemove)];
+    const value = configValue(control.path);
+    if (control.field.kind === "array") value.splice(Number(button.dataset.entry), 1);
+    else delete value[button.dataset.entry];
+    renderConfigFields(); filterConfigFields();
+  }));
+}
+function filterConfigFields() {
+  const query = $("config-search").value.trim().toLowerCase();
+  $("config-fields").querySelectorAll("[data-config-searchable]").forEach(row => row.classList.toggle("hidden", !!query && !row.textContent.toLowerCase().includes(query)));
+  [...$("config-fields").querySelectorAll("details")].reverse().forEach(group => {
+    group.classList.toggle("hidden", !!query && ![...group.querySelectorAll("[data-config-searchable]")].some(row => !row.classList.contains("hidden")));
+    if (query) group.open = true;
+  });
+}
+async function openAdminConfig(section) {
+  const schema = settingsState.all?.schema?.[section];
+  if (!schema) return;
+  configEditor.section = section;
+  configEditor.draft = structuredClone(settingsState.all.settings[section] || configDefault(schema));
+  configEditor.initial = JSON.stringify(configEditor.draft);
+  configEditor.focus = document.activeElement;
+  $("config-title").textContent = configLabel(section);
+  const group = CONFIG_GROUPS.find(group => group.sections.includes(section));
+  $("config-category").textContent = group ? configText(...group.title) : "";
+  $("config-lede").textContent = configDescription(section);
+  $("config-notice").textContent = t(schema.read_only ? "config_bootstrap_hint" : "config_restart_hint");
+  $("config-save").classList.toggle("hidden", !!schema.read_only);
+  $("config-search").value = "";
+  setMsg($("config-msg"), "");
+  renderConfigFields();
+  $("config-backdrop").classList.remove("hidden");
+  $("view-account").inert = true;
+  $("config-search").focus();
+}
+async function closeAdminConfig() {
+  if (configEditor.busy) return;
+  if (JSON.stringify(configEditor.draft) !== configEditor.initial && !(await askConfirm(t("config_discard")))) return;
+  $("config-backdrop").classList.add("hidden");
+  $("view-account").inert = false;
+  configEditor.focus?.focus();
+}
+document.body.append($("config-backdrop"));
+$("settings-search")?.addEventListener("input", renderAdminCatalog);
+$("config-search")?.addEventListener("input", filterConfigFields);
+[$("config-x"), $("config-cancel")].forEach(button => button?.addEventListener("click", closeAdminConfig));
+$("config-backdrop")?.addEventListener("click", event => { if (event.target === $("config-backdrop")) closeAdminConfig(); });
+$("config-dialog")?.addEventListener("keydown", event => {
+  if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); closeAdminConfig(); }
+  if (event.key === "Tab") {
+    const focusable = [...$("config-dialog").querySelectorAll('button, input, select, textarea, summary')].filter(element => !element.disabled && element.getClientRects().length);
+    const first = focusable[0], last = focusable.at(-1);
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+  }
+});
+$("config-dialog")?.addEventListener("submit", async event => {
+  event.preventDefault();
+  if (configEditor.busy || settingsState.all.schema[configEditor.section].read_only) return;
+  if (!event.target.reportValidity()) return;
+  configEditor.busy = true;
+  $("config-fields").inert = true;
+  $("config-save").disabled = true;
+  setMsg($("config-msg"), t("config_saving"));
+  try {
+    const section = configEditor.section;
+    const result = await api("/api/v1/admin/settings/" + encodeURIComponent(section), {method:"PUT",body:JSON.stringify(configEditor.draft)});
+    settingsState.all.settings[section] = structuredClone(configEditor.draft);
+    configEditor.initial = JSON.stringify(configEditor.draft);
+    $("settings-restart").classList.toggle("hidden", !result.restart_required);
+    setMsg($("config-msg"), t("config_saved"), "ok");
+    // Reload redacted values, so newly entered secrets never remain in the catalog.
+    await refreshSettings();
+    configEditor.draft = structuredClone(settingsState.all.settings[section]);
+    configEditor.initial = JSON.stringify(configEditor.draft);
+    renderConfigFields(); filterConfigFields();
+  } catch (error) { setMsg($("config-msg"), error.message, "err"); }
+  finally { configEditor.busy = false; $("config-fields").inert = false; $("config-save").disabled = false; }
+});

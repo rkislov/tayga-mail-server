@@ -24,7 +24,7 @@ sudo ./tayga-mail -config configs/tayga.example.yaml
 ### Cross-platform release builds
 
 ```bash
-VERSION=v0.9.0 ./scripts/crossbuild.sh   # → dist/*.tar.gz|zip + checksums.txt
+VERSION=0.9.2 ./scripts/crossbuild.sh   # → dist/*.tar.gz|zip + checksums.txt
 ```
 
 GitHub Releases: push a `v*` tag; [GoReleaser](https://goreleaser.com) (`.github/workflows/release.yml`) publishes linux/darwin/windows/freebsd amd64+arm64 archives.
@@ -71,6 +71,9 @@ Seed: `admin@example.com` / `changeme`. TLS: `tls.auto_generate` or `scripts/gen
 - In-app / browser notifications (new mail, upcoming calendar) via SSE `/api/v1/notifications/stream`
 - Certificate authority (УЦ): self-signed / commercial PEM / Let’s Encrypt ACME — [docs/ca.md](docs/ca.md)
 - XMPP (optional C2S) + web Chat; bots via XEP-0114 / HTTP — see [docs/xmpp.md](docs/xmpp.md)
+- Web UI: floating rounded panels; independent day/night mode under **Appearance**
+- Server configuration: 27 grouped sections, typed modal forms and Russian help for every parameter; bootstrap storage remains read-only
+- Calendar: click a date to open its day; double-click to create an event on that date; invitations are in a separate inbox with a pending badge
 - UI screenshots: [docs/screenshots/](docs/screenshots/)
 - IDs: all entity PKs/FKs are UUIDs (fresh DB required after integer-ID builds)
 

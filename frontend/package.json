@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "Tayga Mail web UI (Tailwind) embedded via go:embed",
   "scripts": {
-    "build": "tailwindcss -i ./src/input.css -o ../internal/frontend/dist/assets/app.css --minify && cat ./src/i18n.js ./src/app.js > ../internal/frontend/dist/assets/app.js",
+    "build": "tailwindcss -i ./src/input.css -o ../internal/frontend/dist/assets/app.css --minify && cat ./src/i18n.js ./src/app.js ./src/admin-config.js > ../internal/frontend/dist/assets/app.js",
     "watch": "tailwindcss -i ./src/input.css -o ../internal/frontend/dist/assets/app.css --watch"
   },
   "devDependencies": {
