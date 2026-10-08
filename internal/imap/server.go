@@ -268,8 +268,8 @@ func (u *User) DeleteMailbox(name string) error {
 	if err := u.backend.requireWriter(u.user.ID); err != nil {
 		return err
 	}
-	if strings.EqualFold(name, "INBOX") {
-		return errors.New("cannot delete INBOX")
+	if storage.SystemMailboxRole(name) != "" {
+		return errors.New("cannot delete system mailbox")
 	}
 	ctx := context.Background()
 	mb, err := u.backend.store.GetMailbox(ctx, u.user.ID, name)
@@ -293,6 +293,9 @@ func (u *User) DeleteMailbox(name string) error {
 }
 
 func (u *User) RenameMailbox(existingName, newName string) error {
+	if storage.SystemMailboxRole(existingName) != "" || storage.SystemMailboxRole(newName) != "" {
+		return errors.New("cannot rename system mailbox")
+	}
 	if err := u.backend.requireWriter(u.user.ID); err != nil {
 		return err
 	}

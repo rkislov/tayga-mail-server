@@ -3,9 +3,19 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"path/filepath"
 	"strings"
 	"time"
 )
+
+// SystemMailboxRole identifies reserved protocol names independently of UI language.
+func SystemMailboxRole(name string) string {
+	switch strings.ToLower(name) {
+	case "inbox", "sent", "drafts", "trash", "junk", "archive":
+		return strings.ToLower(name)
+	}
+	return ""
+}
 
 const msgCols = `id, mailbox_id, uid, size, flags, internal_date, file_path, message_id, subject, from_addr, to_addr, date_hdr, archived, created_at`
 
@@ -48,7 +58,7 @@ func (s *Store) CreateMailbox(ctx context.Context, userID, name, path string) (*
 }
 
 func (s *Store) DeleteMailbox(ctx context.Context, userID, name string) error {
-	if strings.EqualFold(name, "INBOX") {
+	if SystemMailboxRole(name) != "" {
 		return ErrUnauthorized
 	}
 	q := s.rebind(`DELETE FROM mailboxes WHERE user_id = ? AND name = ?`)
@@ -67,22 +77,35 @@ func (s *Store) DeleteMailbox(ctx context.Context, userID, name string) error {
 }
 
 func (s *Store) RenameMailbox(ctx context.Context, userID, oldName, newName, newPath string) error {
-	if strings.EqualFold(oldName, "INBOX") {
+	if SystemMailboxRole(oldName) != "" || SystemMailboxRole(newName) != "" {
 		return ErrUnauthorized
 	}
-	q := s.rebind(`UPDATE mailboxes SET name = ?, path = ? WHERE user_id = ? AND name = ?`)
-	res, err := s.db.ExecContext(ctx, q, newName, newPath, userID, oldName)
-	if err != nil {
-		return mapErr(err)
-	}
-	n, err := res.RowsAffected()
+	mb, err := s.GetMailbox(ctx, userID, oldName)
 	if err != nil {
 		return err
 	}
-	if n == 0 {
-		return ErrNotFound
+	msgs, err := s.ListMessages(ctx, mb.ID)
+	if err != nil {
+		return err
 	}
-	return nil
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	_, err = tx.ExecContext(ctx, s.rebind(`UPDATE mailboxes SET name = ?, path = ? WHERE id = ?`), newName, newPath, mb.ID)
+	if err != nil {
+		return mapErr(err)
+	}
+	for _, m := range msgs {
+		oldSegment := string(filepath.Separator) + "." + oldName + string(filepath.Separator)
+		newSegment := string(filepath.Separator) + "." + newName + string(filepath.Separator)
+		path := strings.Replace(m.FilePath, oldSegment, newSegment, 1)
+		if _, err = tx.ExecContext(ctx, s.rebind(`UPDATE messages SET file_path = ? WHERE id = ?`), path, m.ID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 func (s *Store) GetMessageByUID(ctx context.Context, mailboxID string, uid int64) (*Message, error) {

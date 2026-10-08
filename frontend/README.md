@@ -36,3 +36,9 @@ Server settings are grouped into five categories. All 27 config sections open in
 The month calendar supports single-click day navigation and double-click event creation with that day's date. Enter opens a day; Shift+Enter creates an event. Invitations live in a separate inbox dialog with a pending count.
 
 On a disposable seeded server only, run `node scripts/check-admin-calendar.mjs` to check modal forms, saves, domain lists, calendar clicks and the invitation inbox. The check saves test settings; use `TMS_URL` and `CHROME_PATH` to override the local server and browser.
+
+### Почтовые папки
+
+Системные имена IMAP сохраняются в протоколе, а интерфейс переводит их по роли. «Входящие» всегда первые. Управление папками открывается отдельным модальным окном: стрелки сохраняют порядок в базе для учётной записи, пользовательские папки можно создать, переименовать и удалить после подтверждения. Системные и общие папки защищены от этих операций на API и в хранилище. Почта проверяет изменение счётчиков каждые 15 секунд, пока раздел открыт.
+
+Браузерная проверка: `node scripts/check-mail-folders.mjs` — только на временной установке с seed-аккаунтом. Она создаёт и удаляет тестовую папку и обновляет скриншоты модального окна.

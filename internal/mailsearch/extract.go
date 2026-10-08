@@ -13,11 +13,12 @@ import (
 
 // Document holds denormalized headers plus body text for FTS indexing.
 type Document struct {
-	Subject string
-	From    string
-	To      string
-	Date    string
-	Body    string
+	MessageID string
+	Subject   string
+	From      string
+	To        string
+	Date      string
+	Body      string
 }
 
 var htmlTagRe = regexp.MustCompile(`(?is)<[^>]+>`)
@@ -32,6 +33,7 @@ func ParseDocument(raw []byte) Document {
 		doc.Body = normalizeText(string(raw))
 		return doc
 	}
+	doc.MessageID = strings.TrimSpace(m.Header.Get("Message-ID"))
 	doc.Subject = strings.TrimSpace(m.Header.Get("Subject"))
 	doc.From = strings.TrimSpace(m.Header.Get("From"))
 	doc.To = strings.TrimSpace(m.Header.Get("To"))

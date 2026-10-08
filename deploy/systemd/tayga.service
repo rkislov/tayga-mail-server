@@ -1,0 +1,31 @@
+[Unit]
+Description=Tayga Mail Server
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=tayga
+Group=tayga
+WorkingDirectory=/var/lib/tayga
+ExecStart=/var/lib/tayga/bin/tayga-mail -config /var/lib/tayga/config/tayga.yaml
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=60
+UMask=0027
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/tayga/data /var/lib/tayga/maildir /var/lib/tayga/certs /var/lib/tayga/log
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
