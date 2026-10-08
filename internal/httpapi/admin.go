@@ -76,6 +76,9 @@ func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 		}
 		out := make([]map[string]any, 0, len(users))
 		for _, u := range users {
+			if u.AuthSource == "resource" {
+				continue // managed via /admin/resources
+			}
 			if !s.adminCanManageUser(r, admin, u) {
 				continue
 			}

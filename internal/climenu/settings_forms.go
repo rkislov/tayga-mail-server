@@ -328,39 +328,56 @@ func (m *Menu) editCoS() error {
 	})
 }
 
+type cosCLIConfig struct {
+	QuotaBytes       int64           `json:"quota_bytes"`
+	MaxMailSize      int64           `json:"max_mail_size"`
+	LargeAttachBytes int64           `json:"large_attach_bytes"`
+	ShareMaxTTLSec   int64           `json:"share_max_ttl_sec"`
+	Features         map[string]bool `json:"features"`
+}
+
+func defaultCoSCLI() cosCLIConfig {
+	return cosCLIConfig{
+		QuotaBytes: 0, MaxMailSize: 25 << 20, LargeAttachBytes: 10 << 20, ShareMaxTTLSec: 7 * 24 * 3600,
+		Features: map[string]bool{
+			"files": true, "dav": true, "flowsync": true, "sieve": true,
+			"shares": true, "delegates": true, "migration": true,
+		},
+	}
+}
+
 func (m *Menu) saveCoS(ctx context.Context, store storage.Driver, tenantID string, sc *storage.ServiceClass) error {
 	u := m.ui
+	cfg := defaultCoSCLI()
 	name := ""
-	cfgJSON := `{
-  "quota_bytes": 0,
-  "max_mail_size": 26214400,
-  "large_attach_bytes": 10485760,
-  "features": {"files": true, "dav": true, "migration": true}
-}`
 	if sc != nil {
 		name = sc.Name
-		if sc.Config != "" {
-			cfgJSON = sc.Config
+		_ = json.Unmarshal([]byte(sc.Config), &cfg)
+		if cfg.Features == nil {
+			cfg.Features = defaultCoSCLI().Features
 		}
 	}
 	name = u.Prompt("Имя класса", name)
 	if strings.TrimSpace(name) == "" {
 		return fmt.Errorf("имя обязательно")
 	}
-	u.Println("Config JSON (одна строка или текущий многострочный — введите '.' на пустой строке для конца):")
-	u.Println(cfgJSON)
-	next := u.Prompt("Новый JSON (пусто = оставить)", "")
-	if strings.TrimSpace(next) != "" {
-		cfgJSON = next
+	u.Println("Параметры (0 для квоты = без лимита):")
+	cfg.QuotaBytes = int64(promptInt64(u, "Квота ящика (байты)", cfg.QuotaBytes, 0))
+	cfg.MaxMailSize = int64(promptInt64(u, "Макс. размер письма (байты)", cfg.MaxMailSize, 25<<20))
+	cfg.LargeAttachBytes = int64(promptInt64(u, "Крупное вложение → ссылка (байты)", cfg.LargeAttachBytes, 10<<20))
+	cfg.ShareMaxTTLSec = int64(promptInt64(u, "TTL публичной ссылки (сек)", cfg.ShareMaxTTLSec, 7*24*3600))
+	for _, key := range []string{"files", "dav", "flowsync", "sieve", "shares", "delegates", "migration"} {
+		cfg.Features[key] = u.PromptYesNo("Фича "+key, cfg.Features[key])
 	}
-	if !json.Valid([]byte(cfgJSON)) {
-		return fmt.Errorf("невалидный JSON")
+	raw, err := json.Marshal(cfg)
+	if err != nil {
+		return err
 	}
 	if sc == nil {
 		_, err := store.CreateServiceClass(ctx, &storage.ServiceClass{
 			TenantID: tenantID,
 			Name:     name,
-			Config:   cfgJSON,
+			Config:   string(raw),
 		})
 		if err != nil {
 			return err
@@ -369,7 +386,7 @@ func (m *Menu) saveCoS(ctx context.Context, store storage.Driver, tenantID strin
 		return nil
 	}
 	sc.Name = name
-	sc.Config = cfgJSON
+	sc.Config = string(raw)
 	if err := store.UpdateServiceClass(ctx, sc); err != nil {
 		return err
 	}
@@ -384,6 +401,18 @@ func promptInt(u *UI, label string, cur, def int) int {
 	raw := u.Prompt(label, strconv.Itoa(cur))
 	n, err := strconv.Atoi(strings.TrimSpace(raw))
 	if err != nil || n <= 0 {
+		return cur
+	}
+	return n
+}
+
+func promptInt64(u *UI, label string, cur, def int64) int64 {
+	if cur < 0 {
+		cur = def
+	}
+	raw := u.Prompt(label, strconv.FormatInt(cur, 10))
+	n, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
+	if err != nil || n < 0 {
 		return cur
 	}
 	return n

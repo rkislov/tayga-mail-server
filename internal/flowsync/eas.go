@@ -103,6 +103,7 @@ func (h *easHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (h *easHandler) folderSync(ctx context.Context, u *storage.User, dev *storage.FlowSyncDevice, wbxml bool) (string, []byte, error) {
 	_ = h.store.EnsureDAVDefaults(ctx, u.ID)
+	_ = h.store.EnsureNoteDefaults(ctx, u.ID)
 
 	mbs, err := h.store.ListMailboxes(ctx, u.ID)
 	if err != nil {
@@ -116,6 +117,10 @@ func (h *easHandler) folderSync(ctx context.Context, u *storage.User, dev *stora
 	if err != nil {
 		return "", nil, err
 	}
+	nfs, err := h.store.ListNoteFoldersForUser(ctx, u.ID)
+	if err != nil {
+		return "", nil, err
+	}
 
 	key, err := h.store.GetFlowSyncSyncKey(ctx, dev.ID, "hierarchy")
 	if err != nil {
@@ -126,7 +131,7 @@ func (h *easHandler) folderSync(ctx context.Context, u *storage.User, dev *stora
 		return "", nil, err
 	}
 
-	folders := make([]folderChange, 0, len(mbs)+len(cals)+len(abs))
+	folders := make([]folderChange, 0, len(mbs)+len(cals)+len(abs)+len(nfs))
 	for _, mb := range mbs {
 		folders = append(folders, folderChange{
 			ServerID: mb.ID, ParentID: "0", DisplayName: mb.Name, Type: folderType(mb.Name),
@@ -148,6 +153,15 @@ func (h *easHandler) folderSync(ctx context.Context, u *storage.User, dev *stora
 		}
 		folders = append(folders, folderChange{
 			ServerID: ab.ID, ParentID: "0", DisplayName: name, Type: folderTypeContacts,
+		})
+	}
+	for _, nf := range nfs {
+		name := nf.DisplayName
+		if name == "" {
+			name = nf.Name
+		}
+		folders = append(folders, folderChange{
+			ServerID: nf.ID, ParentID: "0", DisplayName: name, Type: folderTypeNotes,
 		})
 	}
 	if wbxml {
@@ -230,6 +244,12 @@ func (h *easHandler) itemEstimate(ctx context.Context, u *storage.User, reqBody 
 			return "", nil, err
 		}
 		n = len(objs)
+	case kindNotes:
+		items, err := h.store.ListNoteItems(ctx, u.ID, collectionID, false)
+		if err != nil {
+			return "", nil, err
+		}
+		n = len(items)
 	default:
 		msgs, err := h.store.ListMessages(ctx, collectionID)
 		if err != nil {

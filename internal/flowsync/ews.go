@@ -75,6 +75,11 @@ func (h *ewsHandler) findFolder(ctx context.Context, u *storage.User) (string, e
 	if err != nil {
 		return "", err
 	}
+	_ = h.store.EnsureNoteDefaults(ctx, u.ID)
+	nfs, err := h.store.ListNoteFoldersForUser(ctx, u.ID)
+	if err != nil {
+		return "", err
+	}
 	var b strings.Builder
 	b.WriteString(`<m:FindFolderResponse xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types">`)
 	b.WriteString(`<m:ResponseMessages><m:FindFolderResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:RootFolder>`)
@@ -98,6 +103,14 @@ func (h *ewsHandler) findFolder(ctx context.Context, u *storage.User) (string, e
 		fmt.Fprintf(&b, `<t:Folders><t:ContactsFolder><t:FolderId Id="%s" ChangeKey="0"/><t:DisplayName>%s</t:DisplayName><t:FolderClass>IPF.Contact</t:FolderClass><t:TotalCount>0</t:TotalCount></t:ContactsFolder></t:Folders>`,
 			xmlEscape(ab.ID), xmlEscape(name))
 	}
+	for _, nf := range nfs {
+		name := nf.DisplayName
+		if name == "" {
+			name = nf.Name
+		}
+		fmt.Fprintf(&b, `<t:Folders><t:Folder><t:FolderId Id="%s" ChangeKey="%s"/><t:DisplayName>%s</t:DisplayName><t:FolderClass>IPF.StickyNote</t:FolderClass><t:TotalCount>0</t:TotalCount></t:Folder></t:Folders>`,
+			xmlEscape(nf.ID), xmlEscape(nf.CTag), xmlEscape(name))
+	}
 	b.WriteString(`</m:RootFolder></m:FindFolderResponseMessage></m:ResponseMessages></m:FindFolderResponse>`)
 	return b.String(), nil
 }
@@ -118,6 +131,9 @@ func (h *ewsHandler) findItem(ctx context.Context, u *storage.User, body string)
 	}
 	if ab, err := h.store.GetAddressBookByID(ctx, u.ID, folderID); err == nil {
 		return h.findContactItems(ctx, ab.ID)
+	}
+	if _, err := h.store.NoteFolderRightsForUser(ctx, folderID, u.ID); err == nil {
+		return h.findNoteItems(ctx, u, folderID)
 	}
 	return h.findMailItems(ctx, u, folderID)
 }
@@ -263,6 +279,9 @@ func (h *ewsHandler) getItem(ctx context.Context, u *storage.User, body string) 
 			return b.String(), nil
 		}
 	}
+	if _, err := h.store.NoteRightsForUser(ctx, id, u.ID); err == nil {
+		return h.getNoteItem(ctx, u, id)
+	}
 	return ewsFault("ErrorItemNotFound", "not found"), nil
 }
 
@@ -300,6 +319,15 @@ func (h *ewsHandler) syncFolderItems(ctx context.Context, u *storage.User, body 
 		for _, o := range objs {
 			fmt.Fprintf(&b, `<t:Create><t:Contact><t:ItemId Id="%s" ChangeKey="%s"/></t:Contact></t:Create>`,
 				xmlEscape(o.ID), xmlEscape(o.ID))
+		}
+	} else if _, err := h.store.NoteFolderRightsForUser(ctx, folderID, u.ID); err == nil {
+		items, err := h.store.ListNoteItemsInFolder(ctx, folderID, false)
+		if err != nil {
+			return "", err
+		}
+		for _, n := range items {
+			fmt.Fprintf(&b, `<t:Create><t:Message><t:ItemId Id="%s" ChangeKey="%s"/></t:Message></t:Create>`,
+				xmlEscape(n.ID), xmlEscape(n.ETag))
 		}
 	} else {
 		msgs, err := h.store.ListMessages(ctx, folderID)

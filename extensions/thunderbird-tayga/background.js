@@ -4,7 +4,7 @@ const DEFAULTS = {
   baseUrl: "https://mail.example.com",
   token: "",
   largeAttachBytes: 10 * 1024 * 1024,
-  theme: "taiga",
+  theme: "tayga",
 };
 
 async function settings() {

@@ -410,6 +410,20 @@ func (s *Store) UpdateUserEnabled(ctx context.Context, userID string, enabled bo
 	return nil
 }
 
+// DeleteUser removes a user row (cascades calendars/mailboxes via FK).
+func (s *Store) DeleteUser(ctx context.Context, userID string) error {
+	q := s.rebind(`DELETE FROM users WHERE id = ?`)
+	res, err := s.db.ExecContext(ctx, q, userID)
+	if err != nil {
+		return mapErr(err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (s *Store) ListUsersByTenant(ctx context.Context, tenantID string) ([]*User, error) {
 	q := s.rebind(`SELECT ` + userCols + ` FROM users WHERE tenant_id = ? ORDER BY email`)
 	rows, err := s.db.QueryContext(ctx, q, tenantID)

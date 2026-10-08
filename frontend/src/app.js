@@ -119,6 +119,11 @@ $("dialog-input")?.addEventListener("keydown", (e) => {
 });
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
+  const sheet = $("editor-sheet-backdrop");
+  if (sheet && !sheet.classList.contains("hidden")) {
+    closeEditorSheet();
+    return;
+  }
   const backdrop = $("dialog-backdrop");
   if (!backdrop || backdrop.classList.contains("hidden")) return;
   const inputMode = !$("dialog-field-wrap")?.classList.contains("hidden");
@@ -126,13 +131,13 @@ document.addEventListener("keydown", (e) => {
 });
 
 const THEMES = {
-  taiga: {
+  tayga: {
     label: "Тайга",
-    labelEn: "Taiga",
+    labelEn: "Tayga",
     blurb: "Северная тайга",
     blurbEn: "Northern forest",
-    image: "/assets/taiga-forest.jpg",
-    image2x: "/assets/taiga-forest@2x.jpg",
+    image: "/assets/tayga-forest.jpg",
+    image2x: "/assets/tayga-forest@2x.jpg",
   },
   cosmos: {
     label: "Космос",
@@ -219,9 +224,15 @@ function renderThemeGallery(active) {
   });
 }
 
+function normalizeThemeKey(name) {
+  // legacy spelling used before product branding settled on "tayga"
+  if (name === "taiga") return "tayga";
+  return name;
+}
+
 function applyTheme(name) {
-  const theme = THEMES[name] || THEMES.taiga;
-  const key = name in THEMES ? name : "taiga";
+  const key = normalizeThemeKey(name) in THEMES ? normalizeThemeKey(name) : "tayga";
+  const theme = THEMES[key];
   document.documentElement.dataset.theme = key;
   document.documentElement.style.setProperty(
     "--tayga-bg-image",
@@ -250,7 +261,7 @@ function updateNavUser(email, isAdmin) {
 }
 
 (function initTheme() {
-  const saved = localStorage.getItem("tayga.theme") || "taiga";
+  const saved = localStorage.getItem("tayga.theme") || "tayga";
   applyTheme(saved);
   document.getElementById("theme-select")?.addEventListener("change", (e) => {
     applyTheme(e.target.value);
@@ -258,7 +269,7 @@ function updateNavUser(email, isAdmin) {
 })();
 
 const APPS = [
-  "mail", "calendar", "contacts", "files", "chat",
+  "mail", "calendar", "contacts", "notes", "files", "chat",
   "profile", "security", "appearance", "filters", "language", "migration",
   "monitor", "maillog", "tenants", "tls", "xmpp", "server", "cos",
 ];
@@ -271,8 +282,16 @@ const calState = {
   events: [],
   month: new Date(),
   selectedDay: "",
+  attendees: [],
+  invites: [],
+  highlightInvite: "",
+  resources: [],
 };
 const contactState = { bookID: "", cardID: "", books: [], cards: [] };
+const notesState = {
+  folderID: "", noteID: "", folders: [], notes: [], etag: "", rights: "write",
+  shareTarget: null, saveTimer: null, drawing: false,
+};
 const filesState = { path: "", selected: null, entries: [] };
 const chatState = { peer: "", roster: [], messages: [], es: null, me: "" };
 
@@ -290,6 +309,7 @@ const APP_I18N = {
   mail: "nav_mail",
   calendar: "nav_calendar",
   contacts: "nav_contacts",
+  notes: "nav_notes",
   files: "nav_files",
   chat: "nav_chat",
   profile: "nav_profile",
@@ -337,6 +357,7 @@ function showApp(name) {
   if (app === "mail") refreshMail();
   if (app === "calendar") refreshCalendar();
   if (app === "contacts") refreshContacts();
+  if (app === "notes") refreshNotes();
   if (app === "files") refreshFiles();
   if (app === "chat") { refreshChat(); startChatLive(); }
   else stopChatLive();
@@ -1195,6 +1216,73 @@ $("form-create-domain")?.addEventListener("submit", async (e) => {
   }
 });
 
+async function refreshAdminResources() {
+  const list = $("admin-resource-list");
+  if (!list || !tenantNav.domainID) {
+    if (list) list.innerHTML = "";
+    return;
+  }
+  if ($("nr-local") && tenantNav.domainName) {
+    $("nr-local").placeholder = "room-201";
+  }
+  try {
+    const data = await api("/api/v1/admin/resources?domain_id=" + encodeURIComponent(tenantNav.domainID));
+    const items = data.resources || [];
+    list.innerHTML = items.map((r) => `
+      <li>
+        <span>
+          <strong>${escapeHtml(r.display_name || r.local_part)}</strong>
+          <span class="meta"> · ${escapeHtml(r.email)} · ${escapeHtml(r.kind)}${r.capacity ? " · " + r.capacity : ""}${r.auto_accept ? " · auto" : ""}</span>
+        </span>
+        <span class="actions">
+          <button type="button" class="btn-secondary" data-res-del="${escapeHtml(r.id)}">${escapeHtml(t("resources_delete"))}</button>
+        </span>
+      </li>`).join("") || `<li><span class="meta">${escapeHtml(t("resources_empty"))}</span></li>`;
+    list.querySelectorAll("[data-res-del]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        if (!await askConfirm(t("resources_delete") + "?", { danger: true })) return;
+        try {
+          await api("/api/v1/admin/resources/" + encodeURIComponent(btn.dataset.resDel), { method: "DELETE" });
+          await refreshAdminResources();
+        } catch (err) {
+          setMsg($("admin-msg"), err.message, "err");
+        }
+      });
+    });
+  } catch (err) {
+    list.innerHTML = `<li><span class="meta">${escapeHtml(err.message)}</span></li>`;
+  }
+}
+
+$("form-create-resource")?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!tenantNav.domainID) {
+    setMsg($("admin-msg"), "domain required", "err");
+    return;
+  }
+  setMsg($("admin-msg"), "…");
+  try {
+    await api("/api/v1/admin/resources", {
+      method: "POST",
+      body: JSON.stringify({
+        domain_id: tenantNav.domainID,
+        local_part: $("nr-local").value.trim(),
+        display_name: $("nr-name").value.trim(),
+        kind: $("nr-kind").value,
+        capacity: Number($("nr-capacity").value || 0),
+        description: $("nr-desc").value.trim(),
+        auto_accept: !!$("nr-auto")?.checked,
+      }),
+    });
+    setMsg($("admin-msg"), "OK", "ok");
+    $("form-create-resource").reset();
+    if ($("nr-auto")) $("nr-auto").checked = true;
+    await refreshAdminResources();
+  } catch (err) {
+    setMsg($("admin-msg"), err.message, "err");
+  }
+});
+
 async function refreshAdminUsers() {
   setTenantLevel("users");
   const list = $("admin-user-list");
@@ -1203,6 +1291,7 @@ async function refreshAdminUsers() {
   if ($("nu-email") && tenantNav.domainName && !$("nu-email").value) {
     $("nu-email").placeholder = "user@" + tenantNav.domainName;
   }
+  refreshAdminResources();
   try {
     const q = tenantNav.domainID
       ? "?domain_id=" + encodeURIComponent(tenantNav.domainID)
@@ -1793,8 +1882,24 @@ const SETTINGS_SECTION_LABELS = {
   server: "sec_server",
 };
 
+const SETTINGS_GUIDED = ["smtp", "spam", "scan", "siem", "log", "tls"];
+const SETTINGS_BLURBS = {
+  smtp: "smtp_outbound_hint",
+  spam: "spam_hint",
+  scan: "scan_hint",
+  siem: "siem_hint",
+  log: "log_hint",
+  tls: "ca_pick_hint",
+};
+
+function settingsSectionLabel(name) {
+  const key = SETTINGS_SECTION_LABELS[name];
+  return key ? t(key) : name;
+}
+
 function fillSettingsSectionSelect(sections) {
   const sel = $("settings-section");
+  if (!sel) return;
   const cur = sel.value;
   sel.innerHTML = "";
   const preferred = ["smtp", "spam", "scan", "siem", "log", "tls", "http", "server"];
@@ -1805,12 +1910,70 @@ function fillSettingsSectionSelect(sections) {
   ordered.forEach((name) => {
     const opt = document.createElement("option");
     opt.value = name;
-    const key = SETTINGS_SECTION_LABELS[name];
-    opt.textContent = key ? t(key) : name;
+    opt.textContent = settingsSectionLabel(name);
     sel.appendChild(opt);
   });
   if (cur && ordered.includes(cur)) sel.value = cur;
   else if (ordered.length) sel.value = ordered.includes("smtp") ? "smtp" : ordered[0];
+  renderSettingsSectionList(ordered);
+}
+
+function renderSettingsSectionList(ordered) {
+  const list = $("settings-section-list");
+  if (!list) return;
+  const guided = (ordered || []).filter((n) => SETTINGS_GUIDED.includes(n));
+  const other = (ordered || []).filter((n) => !SETTINGS_GUIDED.includes(n));
+  const rows = guided.map((name) => {
+    const blurbKey = SETTINGS_BLURBS[name];
+    const blurb = blurbKey ? t(blurbKey) : name;
+    return `<li>
+      <button type="button" class="friendly-list-item" data-settings-open="${escapeHtml(name)}">
+        <span>
+          <strong>${escapeHtml(settingsSectionLabel(name))}</strong>
+          <span class="meta">${escapeHtml(blurb)}</span>
+        </span>
+        <span class="meta">${escapeHtml(t("server_open"))}</span>
+      </button>
+    </li>`;
+  });
+  if (other.length) {
+    rows.push(`<li class="friendly-list-empty">${escapeHtml(t("server_other"))}</li>`);
+    other.forEach((name) => {
+      rows.push(`<li>
+        <button type="button" class="friendly-list-item" data-settings-open="${escapeHtml(name)}">
+          <span>
+            <strong>${escapeHtml(settingsSectionLabel(name))}</strong>
+            <span class="meta">${escapeHtml(name)}</span>
+          </span>
+          <span class="meta">${escapeHtml(t("server_open"))}</span>
+        </button>
+      </li>`);
+    });
+  }
+  list.innerHTML = rows.join("") || `<li class="friendly-list-empty">—</li>`;
+  list.querySelectorAll("[data-settings-open]").forEach((btn) => {
+    btn.addEventListener("click", () => openSettingsDetail(btn.dataset.settingsOpen));
+  });
+}
+
+function openSettingsDetail(name) {
+  const sel = $("settings-section");
+  if (sel) sel.value = name;
+  $("settings-home")?.classList.add("hidden");
+  $("settings-detail")?.classList.remove("hidden");
+  if ($("settings-detail-title")) $("settings-detail-title").textContent = settingsSectionLabel(name);
+  const blurbKey = SETTINGS_BLURBS[name];
+  if ($("settings-detail-lede")) {
+    $("settings-detail-lede").textContent = blurbKey ? t(blurbKey) : (SETTINGS_GUIDED.includes(name) ? "" : t("server_json_hint"));
+  }
+  showSettingsSection(name);
+  setMsg($("settings-msg"), "");
+}
+
+function closeSettingsDetail() {
+  $("settings-detail")?.classList.add("hidden");
+  $("settings-home")?.classList.remove("hidden");
+  setMsg($("settings-msg"), "");
 }
 
 async function fillSettingsCertSelect(activeId) {
@@ -1982,10 +2145,14 @@ function showSettingsSection(name) {
   scanPanel?.classList.add("hidden");
   siemPanel?.classList.add("hidden");
   logPanel?.classList.add("hidden");
+  jsonWrap?.classList.add("hidden");
+  // hide optional advanced JSON toggles in friendly UI
+  ["smtp-show-json", "spam-show-json", "scan-show-json", "siem-show-json", "log-show-json"].forEach((id) => {
+    $(id)?.closest("label")?.classList.add("hidden");
+  });
 
   if (name === "tls") {
     tlsPanel?.classList.remove("hidden");
-    jsonWrap?.classList.add("hidden");
     if ($("settings-tls-email")) $("settings-tls-email").value = val.acme?.email || "";
     if ($("settings-tls-staging")) $("settings-tls-staging").checked = !!val.acme?.staging;
     fillSettingsCertSelect(val.active_id || "");
@@ -1994,45 +2161,30 @@ function showSettingsSection(name) {
   if (name === "smtp") {
     smtpPanel?.classList.remove("hidden");
     fillSmtpForm(val);
-    const showJson = !!$("smtp-show-json")?.checked;
-    jsonWrap?.classList.toggle("hidden", !showJson);
-    $("settings-json").value = JSON.stringify(val, null, 2);
     return;
   }
   if (name === "spam") {
     spamPanel?.classList.remove("hidden");
     fillSpamForm(val);
-    const showJson = !!$("spam-show-json")?.checked;
-    jsonWrap?.classList.toggle("hidden", !showJson);
-    $("settings-json").value = JSON.stringify(val, null, 2);
     return;
   }
   if (name === "scan") {
     scanPanel?.classList.remove("hidden");
     fillScanForm(val);
-    const showJson = !!$("scan-show-json")?.checked;
-    jsonWrap?.classList.toggle("hidden", !showJson);
-    $("settings-json").value = JSON.stringify(val, null, 2);
     return;
   }
   if (name === "siem") {
     siemPanel?.classList.remove("hidden");
     fillSiemForm(val);
-    const showJson = !!$("siem-show-json")?.checked;
-    jsonWrap?.classList.toggle("hidden", !showJson);
-    $("settings-json").value = JSON.stringify(val, null, 2);
     return;
   }
   if (name === "log") {
     logPanel?.classList.remove("hidden");
     fillLogForm(val);
-    const showJson = !!$("log-show-json")?.checked;
-    jsonWrap?.classList.toggle("hidden", !showJson);
-    $("settings-json").value = JSON.stringify(val, null, 2);
     return;
   }
   jsonWrap?.classList.remove("hidden");
-  $("settings-json").value = JSON.stringify(val, null, 2);
+  if ($("settings-json")) $("settings-json").value = JSON.stringify(val, null, 2);
 }
 
 async function refreshSettings() {
@@ -2040,7 +2192,12 @@ async function refreshSettings() {
     const data = await api("/api/v1/admin/settings");
     settingsState.all = data;
     fillSettingsSectionSelect(data.sections || []);
-    showSettingsSection($("settings-section").value);
+    const detailOpen = !$("settings-detail")?.classList.contains("hidden");
+    if (detailOpen && $("settings-section")?.value) {
+      showSettingsSection($("settings-section").value);
+    } else {
+      closeSettingsDetail();
+    }
     $("settings-restart")?.classList.toggle("hidden", !data.restart_required);
     setMsg($("settings-msg"), "");
   } catch (err) {
@@ -2048,26 +2205,15 @@ async function refreshSettings() {
   }
 }
 
-$("settings-section")?.addEventListener("change", () => {
-  showSettingsSection($("settings-section").value);
-});
-$("smtp-show-json")?.addEventListener("change", () => {
-  if ($("settings-section")?.value === "smtp") showSettingsSection("smtp");
-});
-$("spam-show-json")?.addEventListener("change", () => {
-  if ($("settings-section")?.value === "spam") showSettingsSection("spam");
-});
-$("scan-show-json")?.addEventListener("change", () => {
-  if ($("settings-section")?.value === "scan") showSettingsSection("scan");
-});
-$("siem-show-json")?.addEventListener("change", () => {
-  if ($("settings-section")?.value === "siem") showSettingsSection("siem");
-});
-$("log-show-json")?.addEventListener("change", () => {
-  if ($("settings-section")?.value === "log") showSettingsSection("log");
-});
 $("scan-backend")?.addEventListener("change", () => updateScanBackendFields());
 $("btn-settings-refresh")?.addEventListener("click", () => refreshSettings());
+$("btn-settings-back")?.addEventListener("click", () => closeSettingsDetail());
+$("btn-settings-close")?.addEventListener("click", () => closeSettingsDetail());
+$("btn-settings-cancel")?.addEventListener("click", () => {
+  const section = $("settings-section")?.value;
+  if (section) showSettingsSection(section);
+  setMsg($("settings-msg"), "");
+});
 $("btn-settings-save")?.addEventListener("click", async () => {
   const section = $("settings-section").value;
   let parsed;
@@ -2092,45 +2238,15 @@ $("btn-settings-save")?.addEventListener("click", async () => {
       }
     }
   } else if (section === "smtp") {
-    const cur = (settingsState.all?.settings?.smtp) || {};
-    if ($("smtp-show-json")?.checked) {
-      try { parsed = JSON.parse($("settings-json").value); }
-      catch (err) { setMsg($("settings-msg"), "Invalid JSON: " + err.message, "err"); return; }
-    } else {
-      parsed = readSmtpForm(cur);
-    }
+    parsed = readSmtpForm((settingsState.all?.settings?.smtp) || {});
   } else if (section === "spam") {
-    const cur = (settingsState.all?.settings?.spam) || {};
-    if ($("spam-show-json")?.checked) {
-      try { parsed = JSON.parse($("settings-json").value); }
-      catch (err) { setMsg($("settings-msg"), "Invalid JSON: " + err.message, "err"); return; }
-    } else {
-      parsed = readSpamForm(cur);
-    }
+    parsed = readSpamForm((settingsState.all?.settings?.spam) || {});
   } else if (section === "scan") {
-    const cur = (settingsState.all?.settings?.scan) || {};
-    if ($("scan-show-json")?.checked) {
-      try { parsed = JSON.parse($("settings-json").value); }
-      catch (err) { setMsg($("settings-msg"), "Invalid JSON: " + err.message, "err"); return; }
-    } else {
-      parsed = readScanForm(cur);
-    }
+    parsed = readScanForm((settingsState.all?.settings?.scan) || {});
   } else if (section === "siem") {
-    const cur = (settingsState.all?.settings?.siem) || {};
-    if ($("siem-show-json")?.checked) {
-      try { parsed = JSON.parse($("settings-json").value); }
-      catch (err) { setMsg($("settings-msg"), "Invalid JSON: " + err.message, "err"); return; }
-    } else {
-      parsed = readSiemForm(cur);
-    }
+    parsed = readSiemForm((settingsState.all?.settings?.siem) || {});
   } else if (section === "log") {
-    const cur = (settingsState.all?.settings?.log) || {};
-    if ($("log-show-json")?.checked) {
-      try { parsed = JSON.parse($("settings-json").value); }
-      catch (err) { setMsg($("settings-msg"), "Invalid JSON: " + err.message, "err"); return; }
-    } else {
-      parsed = readLogForm(cur);
-    }
+    parsed = readLogForm((settingsState.all?.settings?.log) || {});
     if (!(parsed.file || "").trim()) {
       setMsg($("settings-msg"), t("log_file") + " required", "err");
       return;
@@ -2151,40 +2267,228 @@ $("btn-settings-save")?.addEventListener("click", async () => {
     });
     $("settings-restart")?.classList.toggle("hidden", !out.restart_required);
     setMsg($("settings-msg"), out.restart_required ? t("server_restart") : "OK", "ok");
+    const keep = section;
     await refreshSettings();
+    openSettingsDetail(keep);
   } catch (err) {
     setMsg($("settings-msg"), err.message, "err");
   }
 });
 
-const DEFAULT_COS_JSON = `{
-  "quota_bytes": 0,
-  "max_mail_size": 26214400,
-  "large_attach_bytes": 10485760,
-  "share_max_ttl_sec": 604800,
-  "features": {
-    "files": true,
-    "dav": true,
-    "flowsync": true,
-    "sieve": true,
-    "shares": true,
-    "delegates": true,
-    "migration": true
-  }
-}`;
+const DEFAULT_COS_CONFIG = {
+  quota_bytes: 0,
+  max_mail_size: 26214400,
+  large_attach_bytes: 10485760,
+  share_max_ttl_sec: 604800,
+  features: {
+    files: true,
+    dav: true,
+    flowsync: true,
+    sieve: true,
+    shares: true,
+    delegates: true,
+    migration: true,
+  },
+};
 
-function resetCoSForm(sc) {
-  if (sc) {
-    cosState.selected = sc.id;
-    if ($("cos-id")) $("cos-id").value = sc.id;
-    if ($("cos-name")) $("cos-name").value = sc.name || "";
-    if ($("cos-json")) $("cos-json").value = JSON.stringify(sc.config || {}, null, 2);
-  } else {
-    cosState.selected = "";
-    if ($("cos-id")) $("cos-id").value = "";
-    if ($("cos-name")) $("cos-name").value = "";
-    if ($("cos-json")) $("cos-json").value = DEFAULT_COS_JSON;
+const COS_FEATURES = [
+  ["files", "cos_feat_files", "cos_feat_files_hint"],
+  ["dav", "cos_feat_dav", "cos_feat_dav_hint"],
+  ["flowsync", "cos_feat_flowsync", "cos_feat_flowsync_hint"],
+  ["sieve", "cos_feat_sieve", "cos_feat_sieve_hint"],
+  ["shares", "cos_feat_shares", "cos_feat_shares_hint"],
+  ["delegates", "cos_feat_delegates", "cos_feat_delegates_hint"],
+  ["migration", "cos_feat_migration", "cos_feat_migration_hint"],
+];
+
+const editorSheet = {
+  mode: "",
+  draft: null,
+  onApply: null,
+  onDelete: null,
+};
+
+function openEditorSheet({ title, lede = "", bodyHTML, showDelete = false, onApply, onDelete }) {
+  editorSheet.onApply = onApply;
+  editorSheet.onDelete = onDelete;
+  if ($("editor-sheet-title")) $("editor-sheet-title").textContent = title || "";
+  if ($("editor-sheet-lede")) $("editor-sheet-lede").textContent = lede || "";
+  if ($("editor-sheet-body")) $("editor-sheet-body").innerHTML = bodyHTML || "";
+  $("editor-sheet-delete")?.classList.toggle("hidden", !showDelete);
+  setMsg($("editor-sheet-msg"), "");
+  $("editor-sheet-backdrop")?.classList.remove("hidden");
+}
+
+function closeEditorSheet() {
+  $("editor-sheet-backdrop")?.classList.add("hidden");
+  editorSheet.mode = "";
+  editorSheet.draft = null;
+  editorSheet.onApply = null;
+  editorSheet.onDelete = null;
+  if ($("editor-sheet-body")) $("editor-sheet-body").innerHTML = "";
+  setMsg($("editor-sheet-msg"), "");
+}
+
+$("editor-sheet-close")?.addEventListener("click", () => closeEditorSheet());
+$("editor-sheet-x")?.addEventListener("click", () => closeEditorSheet());
+$("editor-sheet-backdrop")?.addEventListener("click", (e) => {
+  if (e.target === $("editor-sheet-backdrop")) closeEditorSheet();
+});
+$("editor-sheet-cancel")?.addEventListener("click", () => {
+  if (editorSheet.mode === "cos") {
+    openCoSEditor(editorSheet.draft);
+    setMsg($("editor-sheet-msg"), "");
+    return;
   }
+  closeEditorSheet();
+});
+$("editor-sheet-apply")?.addEventListener("click", async () => {
+  if (typeof editorSheet.onApply === "function") {
+    await editorSheet.onApply();
+  }
+});
+$("editor-sheet-delete")?.addEventListener("click", async () => {
+  if (typeof editorSheet.onDelete === "function") {
+    await editorSheet.onDelete();
+  }
+});
+
+function cosConfigFrom(sc) {
+  const base = JSON.parse(JSON.stringify(DEFAULT_COS_CONFIG));
+  const cfg = sc && sc.config ? sc.config : {};
+  return {
+    id: sc?.id || "",
+    name: sc?.name || "",
+    quota_bytes: Number(cfg.quota_bytes ?? base.quota_bytes) || 0,
+    max_mail_size: Number(cfg.max_mail_size ?? base.max_mail_size) || 0,
+    large_attach_bytes: Number(cfg.large_attach_bytes ?? base.large_attach_bytes) || 0,
+    share_max_ttl_sec: Number(cfg.share_max_ttl_sec ?? base.share_max_ttl_sec) || 0,
+    features: {
+      ...base.features,
+      ...(cfg.features || {}),
+    },
+  };
+}
+
+function cosFormHTML(draft) {
+  const featRows = COS_FEATURES.map(([key, label, hint]) => `
+    <label class="form-row-check">
+      <input type="checkbox" data-cos-feat="${key}" ${draft.features[key] ? "checked" : ""} />
+      <span>
+        <strong>${escapeHtml(t(label))}</strong>
+        <span class="field-hint">${escapeHtml(t(hint))}</span>
+      </span>
+    </label>`).join("");
+  return `
+    <div class="form-row">
+      <label class="field-label" for="cos-name">${escapeHtml(t("cos_name"))}</label>
+      <p class="field-hint">${escapeHtml(t("cos_name_hint"))}</p>
+      <input class="field-input" id="cos-name" type="text" value="${escapeHtml(draft.name)}" placeholder="standard" />
+    </div>
+    <div class="form-row">
+      <label class="field-label" for="cos-quota">${escapeHtml(t("cos_quota"))}</label>
+      <p class="field-hint">${escapeHtml(t("cos_quota_hint"))}</p>
+      <input class="field-input" id="cos-quota" type="number" min="0" step="1" value="${draft.quota_bytes}" />
+    </div>
+    <div class="form-row">
+      <label class="field-label" for="cos-max-mail">${escapeHtml(t("cos_max_mail"))}</label>
+      <p class="field-hint">${escapeHtml(t("cos_max_mail_hint"))}</p>
+      <input class="field-input" id="cos-max-mail" type="number" min="0" step="1" value="${draft.max_mail_size}" />
+    </div>
+    <div class="form-row">
+      <label class="field-label" for="cos-large-attach">${escapeHtml(t("cos_large_attach"))}</label>
+      <p class="field-hint">${escapeHtml(t("cos_large_attach_hint"))}</p>
+      <input class="field-input" id="cos-large-attach" type="number" min="0" step="1" value="${draft.large_attach_bytes}" />
+    </div>
+    <div class="form-row">
+      <label class="field-label" for="cos-share-ttl">${escapeHtml(t("cos_share_ttl"))}</label>
+      <p class="field-hint">${escapeHtml(t("cos_share_ttl_hint"))}</p>
+      <input class="field-input" id="cos-share-ttl" type="number" min="0" step="1" value="${draft.share_max_ttl_sec}" />
+    </div>
+    <h4 class="heading form-section-title">${escapeHtml(t("cos_features"))}</h4>
+    ${featRows}
+  `;
+}
+
+function readCoSForm() {
+  const features = {};
+  COS_FEATURES.forEach(([key]) => {
+    features[key] = !!document.querySelector(`[data-cos-feat="${key}"]`)?.checked;
+  });
+  return {
+    name: ($("cos-name")?.value || "").trim(),
+    config: {
+      quota_bytes: Number($("cos-quota")?.value || 0),
+      max_mail_size: Number($("cos-max-mail")?.value || 0),
+      large_attach_bytes: Number($("cos-large-attach")?.value || 0),
+      share_max_ttl_sec: Number($("cos-share-ttl")?.value || 0),
+      features,
+    },
+  };
+}
+
+function openCoSEditor(sc) {
+  const draft = cosConfigFrom(sc);
+  editorSheet.mode = "cos";
+  editorSheet.draft = sc ? { id: sc.id, name: sc.name, config: sc.config } : null;
+  openEditorSheet({
+    title: sc ? t("cos_edit") : t("cos_new"),
+    lede: t("cos_lede"),
+    bodyHTML: cosFormHTML(draft),
+    showDelete: !!sc?.id,
+    onApply: async () => {
+      const { name, config } = readCoSForm();
+      if (!name) {
+        setMsg($("editor-sheet-msg"), t("cos_name") + " — ?", "err");
+        return;
+      }
+      setMsg($("editor-sheet-msg"), "…");
+      try {
+        if (sc?.id) {
+          await api("/api/v1/admin/service-classes/" + encodeURIComponent(sc.id), {
+            method: "PUT",
+            body: JSON.stringify({ name, config }),
+          });
+        } else {
+          await api("/api/v1/admin/service-classes", {
+            method: "POST",
+            body: JSON.stringify({ name, config }),
+          });
+        }
+        setMsg($("editor-sheet-msg"), "OK", "ok");
+        await refreshCoS();
+        closeEditorSheet();
+        setMsg($("cos-msg"), "OK", "ok");
+      } catch (err) {
+        setMsg($("editor-sheet-msg"), err.message, "err");
+      }
+    },
+    onDelete: async () => {
+      if (!sc?.id) return;
+      if (!await askConfirm(t("delete") + " " + (sc.name || sc.id) + "?", { danger: true })) return;
+      try {
+        await api("/api/v1/admin/service-classes/" + encodeURIComponent(sc.id), { method: "DELETE" });
+        closeEditorSheet();
+        setMsg($("cos-msg"), "OK", "ok");
+        await refreshCoS();
+      } catch (err) {
+        setMsg($("editor-sheet-msg"), err.message, "err");
+      }
+    },
+  });
+  $("cos-name")?.focus();
+}
+
+function cosSummary(sc) {
+  const cfg = sc.config || {};
+  const q = Number(cfg.quota_bytes || 0);
+  const quota = q > 0 ? fmtBytes(q) : t("cos_summary_unlimited");
+  const feats = Object.entries(cfg.features || {})
+    .filter(([, on]) => on)
+    .map(([k]) => k)
+    .slice(0, 5)
+    .join(", ");
+  return `${t("cos_summary_quota")}: ${quota}` + (feats ? ` · ${feats}` : "");
 }
 
 async function refreshCoS() {
@@ -2194,84 +2498,28 @@ async function refreshCoS() {
     const data = await api("/api/v1/admin/service-classes");
     cosState.items = data.service_classes || [];
     list.innerHTML = cosState.items.map((sc) => `
-      <li class="ca-cert-item">
-        <div>
-          <strong>${escapeHtml(sc.name || sc.id)}</strong>
-          <div class="meta">${escapeHtml(sc.id)}</div>
-        </div>
-        <div class="actions">
-          <button type="button" class="btn-secondary btn-sm" data-cos-edit="${escapeHtml(sc.id)}">${escapeHtml(t("cos_edit"))}</button>
-        </div>
-      </li>`).join("") || `<li class="meta">${escapeHtml(t("cos_empty"))}</li>`;
+      <li>
+        <button type="button" class="friendly-list-item" data-cos-edit="${escapeHtml(sc.id)}">
+          <span>
+            <strong>${escapeHtml(sc.name || sc.id)}</strong>
+            <span class="meta">${escapeHtml(cosSummary(sc))}</span>
+          </span>
+          <span class="meta">${escapeHtml(t("server_open"))}</span>
+        </button>
+      </li>`).join("") || `<li class="friendly-list-empty">${escapeHtml(t("cos_empty"))}</li>`;
     list.querySelectorAll("[data-cos-edit]").forEach((btn) => {
       btn.addEventListener("click", () => {
         const sc = cosState.items.find((x) => x.id === btn.dataset.cosEdit);
-        resetCoSForm(sc);
-        setMsg($("cos-msg"), "");
+        if (sc) openCoSEditor(sc);
       });
     });
-    if (!cosState.selected && !($("cos-json")?.value || "").trim()) resetCoSForm(null);
   } catch (err) {
-    list.innerHTML = `<li class="meta">${escapeHtml(err.message)}</li>`;
+    list.innerHTML = `<li class="friendly-list-empty">${escapeHtml(err.message)}</li>`;
   }
 }
 
 $("btn-cos-refresh")?.addEventListener("click", () => refreshCoS());
-$("btn-cos-new")?.addEventListener("click", () => {
-  resetCoSForm(null);
-  setMsg($("cos-msg"), "");
-  $("cos-name")?.focus();
-});
-$("btn-cos-save")?.addEventListener("click", async () => {
-  const name = ($("cos-name")?.value || "").trim();
-  if (!name) {
-    setMsg($("cos-msg"), "name required", "err");
-    return;
-  }
-  let cfg;
-  try {
-    cfg = JSON.parse($("cos-json")?.value || "{}");
-  } catch (err) {
-    setMsg($("cos-msg"), "Invalid JSON: " + err.message, "err");
-    return;
-  }
-  const id = ($("cos-id")?.value || "").trim();
-  setMsg($("cos-msg"), "…");
-  try {
-    if (id) {
-      await api("/api/v1/admin/service-classes/" + encodeURIComponent(id), {
-        method: "PUT",
-        body: JSON.stringify({ name, config: cfg }),
-      });
-    } else {
-      const created = await api("/api/v1/admin/service-classes", {
-        method: "POST",
-        body: JSON.stringify({ name, config: cfg }),
-      });
-      if (created?.id) {
-        cosState.selected = created.id;
-        if ($("cos-id")) $("cos-id").value = created.id;
-      }
-    }
-    setMsg($("cos-msg"), "OK", "ok");
-    await refreshCoS();
-  } catch (err) {
-    setMsg($("cos-msg"), err.message, "err");
-  }
-});
-$("btn-cos-delete")?.addEventListener("click", async () => {
-  const id = ($("cos-id")?.value || "").trim();
-  if (!id) return;
-  if (!await askConfirm(t("delete") + " " + ($("cos-name")?.value || id) + "?", { danger: true })) return;
-  try {
-    await api("/api/v1/admin/service-classes/" + encodeURIComponent(id), { method: "DELETE" });
-    resetCoSForm(null);
-    setMsg($("cos-msg"), "OK", "ok");
-    await refreshCoS();
-  } catch (err) {
-    setMsg($("cos-msg"), err.message, "err");
-  }
-});
+$("btn-cos-new")?.addEventListener("click", () => openCoSEditor(null));
 
 $("form-create-user")?.addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -2429,8 +2677,7 @@ function showToast(ev) {
   el.innerHTML = `<span class="toast-title">${escapeHtml(ev.title || t("notify_mail"))}</span>`
     + (ev.body ? `<span class="toast-body">${escapeHtml(ev.body)}</span>` : "");
   el.addEventListener("click", () => {
-    if (ev.href === "calendar") showApp("calendar");
-    else if (ev.href === "mail" || kind === "mail") showApp("mail");
+    openNotifyHref(ev.href);
     el.remove();
   });
   host.appendChild(el);
@@ -2444,11 +2691,24 @@ function showToast(ev) {
       });
       n.onclick = () => {
         window.focus();
-        if (ev.href === "calendar") showApp("calendar");
-        else showApp("mail");
+        openNotifyHref(ev.href);
         n.close();
       };
     } catch (_) {}
+  }
+}
+
+function openNotifyHref(href) {
+  if (!href) return;
+  if (href === "mail" || href.startsWith("mail")) {
+    showApp("mail");
+    return;
+  }
+  if (href === "calendar" || href.startsWith("calendar")) {
+    const m = String(href).match(/invite=([^&]+)/);
+    if (m) calState.highlightInvite = decodeURIComponent(m[1]);
+    showApp("calendar");
+    refreshCalInvites();
   }
 }
 
@@ -3029,11 +3289,255 @@ function showCalCompose(open) {
   $("cal-backdrop")?.classList.toggle("hidden", !open);
   if (open) {
     setMsg($("cal-msg"), "");
+    calState.attendees = [];
+    renderCalAttendeeChips();
+    const fb = $("cal-freebusy");
+    if (fb) fb.innerHTML = "";
+    if ($("cal-files")) $("cal-files").value = "";
+    if ($("cal-file-list")) $("cal-file-list").innerHTML = "";
+    loadCalResourceOptions();
     if (calState.selectedDay && $("cal-start") && !$("cal-start").value) {
       $("cal-start").value = calState.selectedDay + "T10:00";
       $("cal-end").value = calState.selectedDay + "T11:00";
     }
     $("cal-summary")?.focus();
+  }
+}
+
+async function uploadCalAttachment(eventID, file) {
+  const fd = new FormData();
+  fd.append("file", file, file.name);
+  const headers = {};
+  if (state.tokens?.access_token) headers.Authorization = "Bearer " + state.tokens.access_token;
+  const res = await fetch("/api/v1/calendar/events/" + encodeURIComponent(eventID) + "/attachments", {
+    method: "POST",
+    headers,
+    body: fd,
+  });
+  const text = await res.text();
+  let data;
+  try { data = JSON.parse(text); } catch { data = { error: text }; }
+  if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
+  return data;
+}
+
+function renderCalReadAttachments(atts) {
+  const row = $("cal-read-attach-row");
+  const dd = $("cal-read-attachments");
+  const upload = $("cal-attach-upload");
+  if (!row || !dd) return;
+  atts = atts || [];
+  if (!atts.length) {
+    row.classList.add("hidden");
+    dd.innerHTML = "";
+  } else {
+    row.classList.remove("hidden");
+    dd.innerHTML = atts.map((a) => {
+      const size = a.size != null ? ` · ${fmtBytes(a.size)}` : "";
+      return `<div class="cal-attach-item">
+        <button type="button" class="btn-secondary btn-sm" data-att-dl="${escapeHtml(a.id)}" data-name="${escapeHtml(a.filename || "file")}">${escapeHtml(a.filename || "file")}</button>
+        <span class="meta">${escapeHtml(a.content_type || "")}${size}</span>
+        <button type="button" class="btn-secondary btn-sm" data-att-del="${escapeHtml(a.id)}">${escapeHtml(t("cal_attach_delete"))}</button>
+      </div>`;
+    }).join("");
+    dd.querySelectorAll("[data-att-dl]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        try {
+          const headers = {};
+          if (state.tokens?.access_token) headers.Authorization = "Bearer " + state.tokens.access_token;
+          const res = await fetch("/api/v1/calendar/attachments/" + encodeURIComponent(btn.dataset.attDl), { headers });
+          if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = btn.dataset.name || "file";
+          a.click();
+          URL.revokeObjectURL(url);
+        } catch (err) {
+          setMsg($("cal-msg"), err.message, "err");
+        }
+      });
+    });
+    dd.querySelectorAll("[data-att-del]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        if (!await askConfirm(t("cal_attach_delete") + "?", { danger: true })) return;
+        try {
+          await api("/api/v1/calendar/attachments/" + encodeURIComponent(btn.dataset.attDel), { method: "DELETE" });
+          if (calState.eventID) openCalEvent(calState.eventID);
+        } catch (err) {
+          setMsg($("cal-msg"), err.message, "err");
+        }
+      });
+    });
+  }
+  if (upload) upload.classList.toggle("hidden", !calState.eventID);
+}
+
+async function loadCalResourceOptions() {
+  const sel = $("cal-resource-select");
+  if (!sel) return;
+  try {
+    const data = await api("/api/v1/calendar/resources");
+    calState.resources = data.resources || [];
+    sel.innerHTML = `<option value="">—</option>` + calState.resources.map((r) => {
+      const label = (r.display_name || r.local_part) + " · " + r.kind + (r.capacity ? " (" + r.capacity + ")" : "");
+      return `<option value="${escapeHtml(r.email)}" data-kind="resource" data-name="${escapeHtml(r.display_name || "")}">${escapeHtml(label)}</option>`;
+    }).join("");
+  } catch {
+    calState.resources = [];
+    sel.innerHTML = `<option value="">—</option>`;
+  }
+}
+
+function partstatLabel(ps) {
+  const u = String(ps || "NEEDS-ACTION").toUpperCase();
+  if (u === "ACCEPTED") return t("cal_partstat_accepted");
+  if (u === "DECLINED") return t("cal_partstat_declined");
+  if (u === "TENTATIVE") return t("cal_partstat_tentative");
+  return t("cal_partstat_needs");
+}
+
+function renderCalAttendeeChips() {
+  const host = $("cal-attendee-chips");
+  if (!host) return;
+  host.innerHTML = calState.attendees.map((a, i) => {
+    const tag = a.kind === "resource" ? ` <em class="meta">(${escapeHtml(t("cal_resources"))})</em>` : "";
+    const label = a.name ? `${a.name} <${a.email}>` : a.email;
+    return `<li class="cal-chip"><span>${escapeHtml(label)}${tag}</span>`
+      + `<button type="button" class="cal-chip-x" data-att-i="${i}" aria-label="remove">×</button></li>`;
+  }).join("");
+  host.querySelectorAll("[data-att-i]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      calState.attendees.splice(Number(btn.dataset.attI), 1);
+      renderCalAttendeeChips();
+    });
+  });
+}
+
+function addCalAttendee(email, opts = {}) {
+  email = String(email || "").trim().toLowerCase();
+  if (!email.includes("@")) return;
+  if (calState.attendees.some((a) => a.email === email)) return;
+  calState.attendees.push({
+    email,
+    name: opts.name || "",
+    kind: opts.kind || "individual",
+  });
+  renderCalAttendeeChips();
+}
+
+function addCalAttendeesFromInput() {
+  const input = $("cal-attendee-input");
+  if (!input) return;
+  const raw = String(input.value || "");
+  const parts = raw.split(/[,;\s]+/).map((s) => s.trim().toLowerCase()).filter(Boolean);
+  for (const email of parts) {
+    addCalAttendee(email);
+  }
+  input.value = "";
+}
+
+async function loadCalFreeBusy() {
+  const host = $("cal-freebusy");
+  if (!host) return;
+  if (!calState.attendees.length) {
+    host.innerHTML = `<p class="meta">${escapeHtml(t("cal_attendees_hint"))}</p>`;
+    return;
+  }
+  const start = localInputToISO($("cal-start")?.value || "");
+  const end = localInputToISO($("cal-end")?.value || "");
+  if (!start || !end) {
+    host.innerHTML = `<p class="meta">${escapeHtml(t("col_start"))} / ${escapeHtml(t("col_end"))}</p>`;
+    return;
+  }
+  host.innerHTML = "…";
+  try {
+    const emails = calState.attendees.map((a) => a.email).join(",");
+    const q = new URLSearchParams({ emails, from: start, to: end });
+    const data = await api("/api/v1/calendar/freebusy?" + q.toString());
+    const users = data.users || [];
+    host.innerHTML = users.map((u) => {
+      let status = t("cal_freebusy_unknown");
+      let cls = "is-unknown";
+      if (u.available === "local") {
+        const busy = (u.busy || []).length > 0;
+        status = busy ? t("cal_freebusy_busy") : t("cal_freebusy_free");
+        cls = busy ? "is-busy" : "is-free";
+      }
+      const intervals = (u.busy || []).map((b) => {
+        const a = fmtCalWhen(b.start);
+        const e = fmtCalWhen(b.end);
+        return `<span class="cal-fb-slot">${escapeHtml(a)}–${escapeHtml(e)}</span>`;
+      }).join(" ");
+      const label = u.display_name ? `${u.display_name} <${u.email}>` : u.email;
+      const typeTag = u.type === "resource" ? ` · ${escapeHtml(t("cal_resources"))}` : "";
+      return `<div class="cal-fb-row ${cls}"><strong>${escapeHtml(label)}</strong>`
+        + `<span class="cal-fb-status">${escapeHtml(status)}${typeTag}</span>${intervals}</div>`;
+    }).join("") || `<p class="meta">${escapeHtml(t("cal_freebusy_unknown"))}</p>`;
+  } catch (err) {
+    host.innerHTML = `<p class="msg err">${escapeHtml(err.message)}</p>`;
+  }
+}
+
+async function refreshCalInvites() {
+  const list = $("cal-invite-list");
+  if (!list) return;
+  try {
+    const data = await api("/api/v1/calendar/invites");
+    calState.invites = data.invites || [];
+    if (!calState.invites.length) {
+      list.innerHTML = `<li class="meta msg-empty">${escapeHtml(t("cal_invites_empty"))}</li>`;
+      return;
+    }
+    list.innerHTML = calState.invites.map((inv) => {
+      const when = inv.start ? fmtCalWhen(inv.start) : "";
+      const org = inv.organizer?.email || "";
+      const hi = inv.id === calState.highlightInvite ? " is-active" : "";
+      return `<li class="cal-invite-item${hi}" data-invite="${escapeHtml(inv.id)}">
+        <div class="cal-invite-main">
+          <strong>${escapeHtml(inv.summary || "—")}</strong>
+          <span class="meta">${escapeHtml(org)}${when ? " · " + escapeHtml(when) : ""}</span>
+        </div>
+        <div class="cal-invite-actions">
+          <button type="button" class="btn-spray btn-sm" data-inv-act="accept" data-id="${escapeHtml(inv.id)}">${escapeHtml(t("cal_accept"))}</button>
+          <button type="button" class="btn-secondary btn-sm" data-inv-act="tentative" data-id="${escapeHtml(inv.id)}">${escapeHtml(t("cal_tentative"))}</button>
+          <button type="button" class="btn-secondary btn-sm" data-inv-act="decline" data-id="${escapeHtml(inv.id)}">${escapeHtml(t("cal_decline"))}</button>
+          <button type="button" class="btn-secondary btn-sm" data-inv-act="counter" data-id="${escapeHtml(inv.id)}">${escapeHtml(t("cal_counter"))}</button>
+        </div>
+      </li>`;
+    }).join("");
+    list.querySelectorAll("[data-inv-act]").forEach((btn) => {
+      btn.addEventListener("click", () => replyCalInvite(btn.dataset.id, btn.dataset.invAct));
+    });
+  } catch (err) {
+    list.innerHTML = `<li class="meta msg-empty">${escapeHtml(err.message)}</li>`;
+  }
+}
+
+async function replyCalInvite(id, action) {
+  const body = { action };
+  if (action === "counter") {
+    const inv = calState.invites.find((x) => x.id === id);
+    const defStart = inv?.start ? String(inv.start).slice(0, 16) : "";
+    const defEnd = inv?.end ? String(inv.end).slice(0, 16) : "";
+    const start = await askPrompt(t("col_start"), { value: defStart, body: t("cal_counter") + " (YYYY-MM-DDTHH:mm)" });
+    if (start == null || !String(start).trim()) return;
+    const end = await askPrompt(t("col_end"), { value: defEnd, body: t("cal_counter") + " (YYYY-MM-DDTHH:mm)" });
+    if (end == null || !String(end).trim()) return;
+    body.start = localInputToISO(String(start).trim()) || String(start).trim();
+    body.end = localInputToISO(String(end).trim()) || String(end).trim();
+  }
+  try {
+    await api("/api/v1/calendar/invites/" + encodeURIComponent(id) + "/reply", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+    if (calState.highlightInvite === id) calState.highlightInvite = "";
+    await refreshCalInvites();
+    await loadCalEvents();
+  } catch (err) {
+    setMsg($("cal-msg"), err.message, "err");
   }
 }
 
@@ -3179,15 +3683,22 @@ async function refreshCalendar() {
   try {
     const data = await api("/api/v1/calendar/calendars");
     calState.calendars = data.calendars || [];
+    if (calState.calendarID && !calState.calendars.some((c) => c.id === calState.calendarID)) {
+      calState.calendarID = "";
+    }
     if (!calState.calendarID && calState.calendars.length) {
       calState.calendarID = calState.calendars[0].id;
     }
     folders.innerHTML = calState.calendars.map((c) => {
       const label = c.display_name || c.name || c.id;
-      return `<li>
+      const del = c.deletable
+        ? `<button type="button" class="btn-secondary btn-sm btn-ico folder-del" data-cal-del="${escapeHtml(c.id)}" data-i18n-title="cal_delete" title="${escapeHtml(t("cal_delete"))}" aria-label="${escapeHtml(t("cal_delete"))}"><span class="ico" data-ico="delete" aria-hidden="true"></span></button>`
+        : "";
+      return `<li class="folder-row">
         <button type="button" class="folder-btn${c.id === calState.calendarID ? " is-active" : ""}" data-cal="${escapeHtml(c.id)}">
           <span>${escapeHtml(label)}</span>
         </button>
+        ${del}
       </li>`;
     }).join("") || `<li class="meta msg-empty">${escapeHtml(t("empty_calendar"))}</li>`;
     folders.querySelectorAll("[data-cal]").forEach((btn) => {
@@ -3198,11 +3709,46 @@ async function refreshCalendar() {
         loadCalEvents();
       });
     });
+    folders.querySelectorAll("[data-cal-del]").forEach((btn) => {
+      btn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const id = btn.dataset.calDel;
+        const cal = calState.calendars.find((c) => c.id === id);
+        if (!cal?.deletable) {
+          setMsg($("cal-msg"), t("cal_delete_default"), "err");
+          return;
+        }
+        if (!await askConfirm(t("cal_delete_confirm") + "\n" + (cal.display_name || cal.name), { danger: true })) return;
+        try {
+          await api("/api/v1/calendar/calendars/" + encodeURIComponent(id), { method: "DELETE" });
+          if (calState.calendarID === id) calState.calendarID = "";
+          await refreshCalendar();
+        } catch (err) {
+          setMsg($("cal-msg"), err.message, "err");
+        }
+      });
+    });
     await loadCalEvents();
+    await refreshCalInvites();
   } catch (err) {
     setMsg($("cal-msg"), err.message, "err");
   }
 }
+
+$("btn-cal-add")?.addEventListener("click", async () => {
+  const name = await askPrompt(t("cal_new_prompt"), { value: "", body: t("cal_new") });
+  if (name == null || !String(name).trim()) return;
+  try {
+    const created = await api("/api/v1/calendar/calendars", {
+      method: "POST",
+      body: JSON.stringify({ display_name: String(name).trim() }),
+    });
+    if (created?.id) calState.calendarID = created.id;
+    await refreshCalendar();
+  } catch (err) {
+    setMsg($("cal-msg"), err.message, "err");
+  }
+});
 
 async function loadCalEvents() {
   const list = $("cal-event-list");
@@ -3246,6 +3792,22 @@ function showCalReader(ev) {
   $("cal-read-end").textContent = fmtCalWhen(ev.end);
   $("cal-read-location").textContent = ev.location || "—";
   $("cal-read-body").textContent = ev.description || "";
+  const row = $("cal-read-attendees-row");
+  const dd = $("cal-read-attendees");
+  const atts = ev.attendees || [];
+  if (row && dd) {
+    if (!atts.length) {
+      row.classList.add("hidden");
+      dd.textContent = "";
+    } else {
+      row.classList.remove("hidden");
+      dd.innerHTML = atts.map((a) => {
+        const label = a.name ? `${a.name} <${a.email}>` : a.email;
+        return `<span class="cal-partstat cal-partstat-${escapeHtml(String(a.partstat || "NEEDS-ACTION").toLowerCase())}">${escapeHtml(label)} · ${escapeHtml(partstatLabel(a.partstat))}</span>`;
+      }).join("<br>");
+    }
+  }
+  renderCalReadAttachments(ev.attachments || []);
 }
 
 async function openCalEvent(id) {
@@ -3289,8 +3851,52 @@ $("btn-cal-delete")?.addEventListener("click", async () => {
     setMsg($("cal-msg"), err.message, "err");
   }
 });
+$("btn-cal-attendee-add")?.addEventListener("click", () => addCalAttendeesFromInput());
+$("cal-attendee-input")?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" || e.key === ",") {
+    e.preventDefault();
+    addCalAttendeesFromInput();
+  }
+});
+$("btn-cal-resource-add")?.addEventListener("click", () => {
+  const sel = $("cal-resource-select");
+  if (!sel?.value) return;
+  const opt = sel.selectedOptions?.[0];
+  addCalAttendee(sel.value, {
+    kind: "resource",
+    name: opt?.dataset?.name || "",
+  });
+});
+$("btn-cal-freebusy")?.addEventListener("click", () => loadCalFreeBusy());
+
+$("cal-files")?.addEventListener("change", () => {
+  const list = $("cal-file-list");
+  const files = $("cal-files")?.files;
+  if (!list) return;
+  if (!files?.length) {
+    list.innerHTML = "";
+    return;
+  }
+  list.innerHTML = Array.from(files).map((f) => `<li>${escapeHtml(f.name)} · ${escapeHtml(fmtBytes(f.size))}</li>`).join("");
+});
+
+$("cal-read-files")?.addEventListener("change", async () => {
+  const input = $("cal-read-files");
+  if (!calState.eventID || !input?.files?.length) return;
+  try {
+    for (const file of Array.from(input.files)) {
+      await uploadCalAttachment(calState.eventID, file);
+    }
+    input.value = "";
+    await openCalEvent(calState.eventID);
+  } catch (err) {
+    setMsg($("cal-msg"), err.message, "err");
+  }
+});
+
 $("form-cal-event")?.addEventListener("submit", async (e) => {
   e.preventDefault();
+  addCalAttendeesFromInput();
   if (!calState.calendarID) {
     try {
       const data = await api("/api/v1/calendar/calendars");
@@ -3303,7 +3909,7 @@ $("form-cal-event")?.addEventListener("submit", async (e) => {
   }
   setMsg($("cal-msg"), "…");
   try {
-    await api("/api/v1/calendar/calendars/" + encodeURIComponent(calState.calendarID) + "/events", {
+    const created = await api("/api/v1/calendar/calendars/" + encodeURIComponent(calState.calendarID) + "/events", {
       method: "POST",
       body: JSON.stringify({
         summary: $("cal-summary").value,
@@ -3311,12 +3917,26 @@ $("form-cal-event")?.addEventListener("submit", async (e) => {
         description: $("cal-description")?.value || "",
         start: localInputToISO($("cal-start").value),
         end: localInputToISO($("cal-end").value),
+        attendees: calState.attendees.map((a) => ({
+          email: a.email,
+          name: a.name || "",
+          kind: a.kind || "individual",
+        })),
       }),
     });
+    const files = $("cal-files")?.files;
+    if (created?.id && files?.length) {
+      for (const file of Array.from(files)) {
+        await uploadCalAttachment(created.id, file);
+      }
+    }
     setMsg($("cal-msg"), "OK", "ok");
     $("form-cal-event").reset();
+    calState.attendees = [];
+    renderCalAttendeeChips();
     showCalCompose(false);
     await loadCalEvents();
+    if (created?.id) openCalEvent(created.id);
   } catch (err) {
     setMsg($("cal-msg"), err.message, "err");
   }
@@ -3907,6 +4527,394 @@ $("files-upload")?.addEventListener("change", async (e) => {
   }
 });
 
+/* —— Notes —— */
+function notePreview(n) {
+  const t0 = (n.title || "").trim();
+  if (t0) return t0;
+  const body = (n.body_text || "").trim().split(/\r?\n/)[0] || t("note_new");
+  return body.length > 72 ? body.slice(0, 72) + "…" : body;
+}
+
+async function refreshNotes() {
+  const folders = $("note-folder-list");
+  if (!folders) return;
+  try {
+    const data = await api("/api/v1/notes/folders");
+    notesState.folders = data.folders || [];
+    if (!notesState.folderID && notesState.folders.length) {
+      notesState.folderID = notesState.folders[0].id;
+    }
+    if (notesState.folderID === "__shared__") {
+      /* keep virtual shared folder */
+    } else if (notesState.folderID && !notesState.folders.some((f) => f.id === notesState.folderID)) {
+      notesState.folderID = notesState.folders[0]?.id || "";
+    }
+    const sharedActive = notesState.folderID === "__shared__";
+    folders.innerHTML = notesState.folders.map((f) => {
+      const label = (f.shared ? "↗ " : "") + (f.display_name || f.name || f.id);
+      return `<li>
+        <button type="button" class="folder-btn${f.id === notesState.folderID ? " is-active" : ""}" data-note-folder="${escapeHtml(f.id)}">
+          <span>${escapeHtml(label)}</span>
+        </button>
+      </li>`;
+    }).join("") + `<li>
+      <button type="button" class="folder-btn${sharedActive ? " is-active" : ""}" data-note-folder="__shared__">
+        <span>${escapeHtml(t("note_shared_with_me"))}</span>
+      </button>
+    </li>`;
+    folders.querySelectorAll("[data-note-folder]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        notesState.folderID = btn.dataset.noteFolder;
+        notesState.noteID = "";
+        folders.querySelectorAll(".folder-btn").forEach((b) => b.classList.toggle("is-active", b.dataset.noteFolder === notesState.folderID));
+        loadNoteList();
+      });
+    });
+    await loadNoteList();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function loadNoteList() {
+  const list = $("note-list");
+  const title = $("note-folder-title");
+  if (!list) return;
+  if (!notesState.folderID) {
+    list.innerHTML = `<li class="meta msg-empty">${escapeHtml(t("note_empty_list"))}</li>`;
+    showNoteEditor(null);
+    return;
+  }
+  const folder = notesState.folders.find((f) => f.id === notesState.folderID);
+  if (title) {
+    title.textContent = notesState.folderID === "__shared__"
+      ? t("note_shared_with_me")
+      : (folder?.display_name || folder?.name || t("nav_notes"));
+  }
+  try {
+    const q = notesState.folderID === "__shared__"
+      ? "/api/v1/notes?shared=1"
+      : "/api/v1/notes?folder_id=" + encodeURIComponent(notesState.folderID);
+    const data = await api(q);
+    notesState.notes = data.notes || [];
+    list.innerHTML = notesState.notes.map((n) => `
+      <li>
+        <button type="button" class="msg-item${n.id === notesState.noteID ? " is-active" : ""}" data-note="${escapeHtml(n.id)}">
+          <span class="msg-from">${escapeHtml(notePreview(n))}</span>
+          <span class="msg-subject">${escapeHtml((n.body_text || "").trim().slice(0, 80))}</span>
+          <span class="msg-date">${escapeHtml(n.shared || n.user_id !== folder?.owner_id ? "↗" : "")}</span>
+        </button>
+      </li>`).join("") || `<li class="meta msg-empty">${escapeHtml(t("note_empty_list"))}</li>`;
+    list.querySelectorAll("[data-note]").forEach((btn) => {
+      btn.addEventListener("click", () => openNote(btn.dataset.note));
+    });
+    if (notesState.noteID) openNote(notesState.noteID);
+    else showNoteEditor(null);
+  } catch (err) {
+    list.innerHTML = `<li class="meta msg-empty">${escapeHtml(err.message)}</li>`;
+  }
+}
+
+function showNoteEditor(n) {
+  const empty = $("note-empty");
+  const ed = $("note-editor");
+  if (!empty || !ed) return;
+  if (!n) {
+    empty.classList.remove("hidden");
+    ed.classList.add("hidden");
+    return;
+  }
+  empty.classList.add("hidden");
+  ed.classList.remove("hidden");
+  notesState.etag = n.etag || "";
+  notesState.rights = n.rights || "write";
+  const ro = notesState.rights !== "write";
+  $("note-title").value = n.title || "";
+  $("note-title").readOnly = ro;
+  const body = $("note-body");
+  body.innerHTML = n.body_html || "";
+  body.contentEditable = ro ? "false" : "true";
+  const badge = $("note-shared-badge");
+  const folder = notesState.folders.find((f) => f.id === notesState.folderID);
+  const isShared = notesState.folderID === "__shared__" || !!folder?.shared
+    || !!(n.user_id && state.me?.id && n.user_id !== state.me.id);
+  if (badge) badge.classList.toggle("hidden", !isShared);
+  $("note-save-status").textContent = "";
+  $("btn-note-save")?.classList.toggle("hidden", ro);
+  $("btn-note-delete")?.classList.toggle("hidden", ro);
+  $("btn-note-checklist")?.classList.toggle("hidden", ro);
+  $("btn-note-draw")?.classList.toggle("hidden", ro);
+  $("note-attach-input")?.closest("label")?.classList.toggle("hidden", ro);
+  renderNoteAttachments(n.attachments || []);
+  $("note-draw-wrap")?.classList.add("hidden");
+}
+
+function renderNoteAttachments(atts) {
+  const ul = $("note-attach-list");
+  if (!ul) return;
+  ul.innerHTML = (atts || []).filter((a) => a.kind !== "drawing").map((a) => `
+    <li><a href="${escapeHtml(a.url || ("/api/v1/notes/attachments/" + a.id))}" target="_blank" rel="noopener">${escapeHtml(a.filename || a.id)}</a></li>
+  `).join("");
+}
+
+async function openNote(id) {
+  notesState.noteID = id;
+  document.querySelectorAll("#note-list [data-note]").forEach((el) => {
+    el.classList.toggle("is-active", el.dataset.note === id);
+  });
+  try {
+    const n = await api("/api/v1/notes/" + encodeURIComponent(id));
+    showNoteEditor(n);
+    setMobilePane("read");
+  } catch (err) {
+    showNoteEditor(null);
+  }
+}
+
+function scheduleNoteSave() {
+  if (notesState.rights !== "write" || !notesState.noteID) return;
+  clearTimeout(notesState.saveTimer);
+  notesState.saveTimer = setTimeout(() => saveNote(false), 700);
+}
+
+async function saveNote(manual) {
+  if (!notesState.noteID || notesState.rights !== "write") return;
+  const status = $("note-save-status");
+  if (status) status.textContent = t("note_saving");
+  try {
+    const bodyHTML = $("note-body")?.innerHTML || "";
+    const title = $("note-title")?.value || "";
+    const n = await api("/api/v1/notes/" + encodeURIComponent(notesState.noteID), {
+      method: "PATCH",
+      headers: { "If-Match": notesState.etag || "" },
+      body: JSON.stringify({ title, body_html: bodyHTML, etag: notesState.etag }),
+    });
+    notesState.etag = n.etag || "";
+    if (status) status.textContent = t("note_saved");
+    const idx = notesState.notes.findIndex((x) => x.id === n.id);
+    if (idx >= 0) notesState.notes[idx] = Object.assign(notesState.notes[idx], n);
+    else if (!manual) { /* keep list */ }
+    const btn = document.querySelector(`#note-list [data-note="${CSS.escape(n.id)}"]`);
+    if (btn) {
+      const from = btn.querySelector(".msg-from");
+      const sub = btn.querySelector(".msg-subject");
+      if (from) from.textContent = notePreview(n);
+      if (sub) sub.textContent = (n.body_text || "").trim().slice(0, 80);
+    }
+  } catch (err) {
+    if (err.status === 409) {
+      if (status) status.textContent = t("note_conflict");
+      if (err.data?.note) showNoteEditor(err.data.note);
+    } else if (status) status.textContent = err.message;
+  }
+}
+
+$("btn-note-new")?.addEventListener("click", async () => {
+  let folderID = notesState.folderID;
+  if (!folderID || folderID === "__shared__") {
+    folderID = notesState.folders.find((f) => !f.shared)?.id || notesState.folders[0]?.id;
+  }
+  if (!folderID) return;
+  try {
+    const n = await api("/api/v1/notes", {
+      method: "POST",
+      body: JSON.stringify({ folder_id: folderID, title: "", body_html: "<p></p>" }),
+    });
+    notesState.folderID = folderID;
+    notesState.noteID = n.id;
+    await refreshNotes();
+    await openNote(n.id);
+  } catch (err) {
+    await askConfirm(err.message, { title: t("nav_notes") });
+  }
+});
+
+$("btn-note-folder-add")?.addEventListener("click", async () => {
+  const name = await askPrompt(t("note_folder_name"), { title: t("note_folder_new") });
+  if (!name || !String(name).trim()) return;
+  try {
+    const f = await api("/api/v1/notes/folders", {
+      method: "POST",
+      body: JSON.stringify({ display_name: String(name).trim() }),
+    });
+    notesState.folderID = f.id;
+    await refreshNotes();
+  } catch (err) {
+    await askConfirm(err.message, { title: t("note_folder_new") });
+  }
+});
+
+$("btn-notes-refresh")?.addEventListener("click", () => refreshNotes());
+$("btn-note-save")?.addEventListener("click", () => saveNote(true));
+$("note-title")?.addEventListener("input", scheduleNoteSave);
+$("note-body")?.addEventListener("input", scheduleNoteSave);
+
+$("btn-note-checklist")?.addEventListener("click", () => {
+  const body = $("note-body");
+  if (!body || notesState.rights !== "write") return;
+  body.focus();
+  const ul = document.createElement("ul");
+  ul.dataset.type = "checklist";
+  const li = document.createElement("li");
+  const cb = document.createElement("input");
+  cb.type = "checkbox";
+  li.appendChild(cb);
+  li.appendChild(document.createTextNode(" "));
+  ul.appendChild(li);
+  body.appendChild(ul);
+  scheduleNoteSave();
+});
+
+$("btn-note-delete")?.addEventListener("click", async () => {
+  if (!notesState.noteID) return;
+  if (!(await askConfirm(t("delete_confirm"), { danger: true }))) return;
+  try {
+    await api("/api/v1/notes/" + encodeURIComponent(notesState.noteID), { method: "DELETE" });
+    notesState.noteID = "";
+    await loadNoteList();
+  } catch (err) {
+    await askConfirm(err.message, { title: t("nav_notes") });
+  }
+});
+
+$("note-attach-input")?.addEventListener("change", async (e) => {
+  const file = e.target.files?.[0];
+  e.target.value = "";
+  if (!file || !notesState.noteID) return;
+  const fd = new FormData();
+  fd.append("file", file);
+  const headers = {};
+  if (state.tokens?.access_token) headers.Authorization = "Bearer " + state.tokens.access_token;
+  const res = await fetch("/api/v1/notes/" + encodeURIComponent(notesState.noteID) + "/attachments", {
+    method: "POST", headers, body: fd,
+  });
+  if (!res.ok) {
+    await askConfirm((await res.json().catch(() => ({}))).error || res.statusText, { title: t("note_attach") });
+    return;
+  }
+  await openNote(notesState.noteID);
+});
+
+let noteDrawCtx = null;
+let noteDrawing = false;
+$("btn-note-draw")?.addEventListener("click", () => {
+  const wrap = $("note-draw-wrap");
+  const canvas = $("note-draw-canvas");
+  if (!wrap || !canvas) return;
+  wrap.classList.remove("hidden");
+  noteDrawCtx = canvas.getContext("2d");
+  noteDrawCtx.strokeStyle = "#1a1a1a";
+  noteDrawCtx.lineWidth = 2;
+  noteDrawCtx.lineCap = "round";
+});
+function noteDrawPos(e, canvas) {
+  const r = canvas.getBoundingClientRect();
+  const pt = e.touches ? e.touches[0] : e;
+  return { x: (pt.clientX - r.left) * (canvas.width / r.width), y: (pt.clientY - r.top) * (canvas.height / r.height) };
+}
+["mousedown", "touchstart"].forEach((ev) => {
+  $("note-draw-canvas")?.addEventListener(ev, (e) => {
+    noteDrawing = true;
+    const p = noteDrawPos(e, e.target);
+    noteDrawCtx?.beginPath();
+    noteDrawCtx?.moveTo(p.x, p.y);
+    e.preventDefault();
+  }, { passive: false });
+});
+["mousemove", "touchmove"].forEach((ev) => {
+  $("note-draw-canvas")?.addEventListener(ev, (e) => {
+    if (!noteDrawing || !noteDrawCtx) return;
+    const p = noteDrawPos(e, e.target);
+    noteDrawCtx.lineTo(p.x, p.y);
+    noteDrawCtx.stroke();
+    e.preventDefault();
+  }, { passive: false });
+});
+["mouseup", "mouseleave", "touchend", "touchcancel"].forEach((ev) => {
+  $("note-draw-canvas")?.addEventListener(ev, () => { noteDrawing = false; });
+});
+$("btn-note-draw-cancel")?.addEventListener("click", () => {
+  $("note-draw-wrap")?.classList.add("hidden");
+});
+$("btn-note-draw-save")?.addEventListener("click", async () => {
+  if (!notesState.noteID) return;
+  const canvas = $("note-draw-canvas");
+  try {
+    await api("/api/v1/notes/" + encodeURIComponent(notesState.noteID) + "/drawing", {
+      method: "POST",
+      body: JSON.stringify({ strokes: "[]", preview_png: canvas.toDataURL("image/png") }),
+    });
+    $("note-draw-wrap")?.classList.add("hidden");
+    await openNote(notesState.noteID);
+  } catch (err) {
+    await askConfirm(err.message, { title: t("note_draw") });
+  }
+});
+
+async function openNoteShare(kind) {
+  notesState.shareTarget = kind; // folder | note
+  $("note-share-backdrop")?.classList.remove("hidden");
+  setMsg($("note-share-msg"), "");
+  await refreshNoteShareACL();
+}
+
+async function refreshNoteShareACL() {
+  const ul = $("note-share-acl");
+  if (!ul) return;
+  try {
+    let path = "";
+    if (notesState.shareTarget === "folder" && notesState.folderID && notesState.folderID !== "__shared__") {
+      path = "/api/v1/notes/folders/" + encodeURIComponent(notesState.folderID) + "/acl";
+    } else if (notesState.shareTarget === "note" && notesState.noteID) {
+      path = "/api/v1/notes/" + encodeURIComponent(notesState.noteID) + "/acl";
+    } else {
+      ul.innerHTML = "";
+      return;
+    }
+    const data = await api(path);
+    ul.innerHTML = (data.acl || []).map((e) => `
+      <li class="folder-btn" style="justify-content:space-between">
+        <span>${escapeHtml(e.email || e.user_id)} · ${escapeHtml(e.rights)}</span>
+        <button type="button" class="btn-secondary btn-sm" data-revoke="${escapeHtml(e.user_id)}">${escapeHtml(t("note_revoke"))}</button>
+      </li>`).join("") || `<li class="meta">${escapeHtml(t("note_empty_list"))}</li>`;
+    ul.querySelectorAll("[data-revoke]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        await api(path + "?user_id=" + encodeURIComponent(btn.dataset.revoke), { method: "DELETE" });
+        await refreshNoteShareACL();
+      });
+    });
+  } catch (err) {
+    setMsg($("note-share-msg"), err.message, "err");
+  }
+}
+
+$("btn-note-folder-share")?.addEventListener("click", () => openNoteShare("folder"));
+$("btn-note-share")?.addEventListener("click", () => openNoteShare("note"));
+$("btn-note-share-close")?.addEventListener("click", () => $("note-share-backdrop")?.classList.add("hidden"));
+$("form-note-share")?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  let path = "";
+  if (notesState.shareTarget === "folder" && notesState.folderID && notesState.folderID !== "__shared__") {
+    path = "/api/v1/notes/folders/" + encodeURIComponent(notesState.folderID) + "/acl";
+  } else if (notesState.shareTarget === "note" && notesState.noteID) {
+    path = "/api/v1/notes/" + encodeURIComponent(notesState.noteID) + "/acl";
+  } else return;
+  try {
+    await api(path, {
+      method: "PUT",
+      body: JSON.stringify({
+        email: $("note-share-email").value.trim(),
+        rights: $("note-share-rights").value || "write",
+      }),
+    });
+    $("note-share-email").value = "";
+    setMsg($("note-share-msg"), t("note_saved"), "ok");
+    await refreshNoteShareACL();
+  } catch (err) {
+    setMsg($("note-share-msg"), err.message, "err");
+  }
+});
+
 /* —— Nav / i18n —— */
 document.querySelectorAll(".nav-btn").forEach((btn) => {
   btn.addEventListener("click", () => showApp(btn.dataset.app));
@@ -3925,11 +4933,11 @@ document.addEventListener("keydown", (e) => {
 });
 $("lang-select")?.addEventListener("change", (e) => {
   applyLang(e.target.value);
-  renderThemeGallery(localStorage.getItem("tayga.theme") || "taiga");
+  renderThemeGallery(normalizeThemeKey(localStorage.getItem("tayga.theme") || "tayga"));
   updateNavUser(state.email, !$("nav-admin")?.classList.contains("hidden"));
 });
 applyLang(lang);
-renderThemeGallery(localStorage.getItem("tayga.theme") || "taiga");
+renderThemeGallery(normalizeThemeKey(localStorage.getItem("tayga.theme") || "tayga"));
 updateNavUser(state.email || localStorage.getItem("tayga.email") || "", false);
 
 // Restore session — invalid/expired tokens send user back to login

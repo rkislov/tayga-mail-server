@@ -64,7 +64,8 @@ func extractAppDataFields(block string) map[string]string {
 		"Email1Address", "Email2Address", "Email3Address",
 		"MobilePhoneNumber", "HomePhoneNumber", "BusinessPhoneNumber",
 		"CompanyName", "JobTitle", "Department", "OfficeLocation", "WebPage",
-		"Read", "Importance", "To", "Cc", "ReplyTo", "Body",
+		"Read", "Importance", "To", "Cc", "ReplyTo", "Body", "BodyType",
+		"LastModifiedDate", "Categories",
 	}
 	for _, k := range keys {
 		if v := extractTag(block, k); v != "" {
@@ -84,6 +85,8 @@ func (h *easHandler) applyWritebacks(ctx context.Context, u *storage.User, kind 
 			res.ServerID, err = h.wbCalendar(ctx, collectionID, op)
 		case kindContacts:
 			res.ServerID, err = h.wbContacts(ctx, collectionID, op)
+		case kindNotes:
+			res.ServerID, err = h.wbNotes(ctx, u, collectionID, op)
 		default:
 			res.ServerID, err = h.wbMail(ctx, u, collectionID, op)
 		}
