@@ -87,7 +87,7 @@
     <div class="editor-sheet" id="editor-sheet" role="dialog" aria-modal="true" aria-labelledby="editor-sheet-title">
       <div class="editor-sheet-head">
         <h3 class="heading" id="editor-sheet-title"></h3>
-        <button type="button" class="btn-icon" id="editor-sheet-x" aria-label="Close" title="Close">×</button>
+        <button type="button" class="btn-icon" id="editor-sheet-x" data-i18n-title="close" aria-label="Закрыть" title="Закрыть">×</button>
       </div>
       <p class="meta" id="editor-sheet-lede"></p>
       <div id="editor-sheet-body" class="editor-sheet-body"></div>
@@ -102,6 +102,51 @@
     </div>
   </div>
 
+<dialog id="xmpp-bot-dialog" class="migration-dialog" aria-labelledby="xmpp-bot-dialog-title"><div class="pane-head"><h3 class="heading" id="xmpp-bot-dialog-title" data-i18n="xmpp_bot_create">Создать бота</h3><button type="button" class="btn-secondary" id="xmpp-bot-close" data-i18n="close">Закрыть</button></div>
+<form id="xmpp-bot-form">
+<label class="field-label" for="xmpp-bot-name" data-i18n="xmpp_bot_name">Имя бота</label><input class="field-input" id="xmpp-bot-name" type="text" required />
+<label class="field-label" for="xmpp-bot-user" data-i18n="xmpp_bot_user">Пользователь</label><select class="field-input" id="xmpp-bot-user" required></select><p class="field-hint" data-i18n="xmpp_bots_hint">Бот действует от выбранной учётной записи.</p>
+<label class="field-label" for="xmpp-bot-webhook" data-i18n="xmpp_bot_webhook">Webhook URL (опц.)</label><input class="field-input" id="xmpp-bot-webhook" type="url" placeholder="https://…" /><div class="actions"><button type="submit" class="btn-spray" id="btn-xmpp-bot-create" data-i18n="xmpp_bot_create">Создать бота</button></div>
+</form><div id="xmpp-bot-result" class="hidden"><p class="field-hint" data-i18n="xmpp_bot_token_once">Сохраните токен: он показывается только один раз.</p><pre class="secret preview-box" id="xmpp-bot-token"></pre><button type="button" class="btn-secondary" id="xmpp-bot-copy" data-i18n="xmpp_copy_token">Копировать токен</button></div><p id="xmpp-bot-dialog-msg" class="msg" role="status"></p></dialog>
+<dialog id="mig-dialog" class="migration-dialog" aria-labelledby="mig-dialog-title"><div class="pane-head"><h3 class="heading" id="mig-dialog-title"></h3><button type="button" class="btn-secondary" id="mig-dialog-close" data-i18n="close">Закрыть</button></div><p class="meta" data-i18n="mig_credentials_hint">Используйте реквизиты старого сервера. Импорт будет выполнен в текущую учётную запись.</p><form id="mig-form-imap" class="migration-form hidden" data-mig-kind="imap">
+              <h4 class="heading" style="font-size:1rem">IMAP / imapsync</h4>
+              <label class="field-label" for="mig-imap-host" data-i18n="mig_host">Сервер</label>
+              <input class="field-input" id="mig-imap-host" type="text" required placeholder="imap.example.com" />
+              <label class="field-label" for="mig-imap-port" data-i18n="mig_port">Порт</label>
+              <input class="field-input" id="mig-imap-port" type="number" min="1" max="65535" value="993" required />
+              <label class="field-check"><input type="checkbox" id="mig-imap-tls" checked /> <span>TLS</span></label>
+              <label class="field-label" for="mig-imap-user" data-i18n="mig_source_login">Логин на старом сервере</label>
+              <input class="field-input" id="mig-imap-user" type="text" required autocomplete="username" />
+              <label class="field-label" for="mig-imap-pass" data-i18n="password">Пароль</label>
+              <input class="field-input" id="mig-imap-pass" type="password" required autocomplete="current-password" />
+              <div class="actions">
+                <button type="submit" class="btn-spray" id="btn-mig-imap" data-i18n="mig_start">Запустить</button>
+              </div>
+            </form><form id="mig-form-cal" class="migration-form hidden" data-mig-kind="cal">
+              <h4 class="heading" style="font-size:1rem">CalDAV</h4>
+              <p class="meta" data-i18n="mig_cal_hint">URL календаря на старом сервере (CalDAV).</p>
+              <label class="field-label" for="mig-cal-url">URL</label>
+              <input class="field-input" id="mig-cal-url" type="url" required placeholder="https://cal.example.com/dav/…" />
+              <label class="field-label" for="mig-cal-user" data-i18n="mig_source_login">Логин на старом сервере</label>
+              <input class="field-input" id="mig-cal-user" type="text" required />
+              <label class="field-label" for="mig-cal-pass" data-i18n="password">Пароль</label>
+              <input class="field-input" id="mig-cal-pass" type="password" required autocomplete="current-password" />
+              <div class="actions">
+                <button type="submit" class="btn-spray" id="btn-mig-cal" data-i18n="mig_start">Запустить</button>
+              </div>
+            </form><form id="mig-form-card" class="migration-form hidden" data-mig-kind="card">
+              <h4 class="heading" style="font-size:1rem">CardDAV</h4>
+              <p class="meta" data-i18n="mig_card_hint">URL адресной книги на старом сервере (CardDAV).</p>
+              <label class="field-label" for="mig-card-url">URL</label>
+              <input class="field-input" id="mig-card-url" type="url" required placeholder="https://…" />
+              <label class="field-label" for="mig-card-user" data-i18n="mig_source_login">Логин на старом сервере</label>
+              <input class="field-input" id="mig-card-user" type="text" required />
+              <label class="field-label" for="mig-card-pass" data-i18n="password">Пароль</label>
+              <input class="field-input" id="mig-card-pass" type="password" required autocomplete="current-password" />
+              <div class="actions">
+                <button type="submit" class="btn-spray" id="btn-mig-card" data-i18n="mig_start">Запустить</button>
+              </div>
+            </form><p id="mig-dialog-msg" class="msg" role="status"></p></dialog>
   <section id="view-account" class="app-shell hidden">
     <header class="app-topbar">
       <button type="button" class="burger" id="btn-nav-toggle" aria-expanded="false" aria-controls="app-nav" aria-label="Menu">
@@ -111,6 +156,7 @@
       </button>
       <p class="brand-sm">Tayga <span>Mail</span></p>
       <p class="app-topbar-title" id="app-topbar-title" data-i18n="nav_mail">Почта</p>
+      <div class="color-mode-switch" role="group" data-i18n-title="color_mode" aria-label="Режим интерфейса"><button type="button" data-color-mode="light" data-i18n-title="color_mode_light" aria-label="Дневной режим">☀</button><button type="button" data-color-mode="auto" data-i18n="color_mode_auto">Авто</button><button type="button" data-color-mode="dark" data-i18n-title="color_mode_dark" aria-label="Ночной режим">☾</button></div>
       <button type="button" class="btn-secondary btn-sm btn-ico topbar-notify" id="btn-notify-perm" data-i18n-title="notify_enable" title="Уведомления" aria-label="Уведомления"><span class="ico" data-ico="chat" aria-hidden="true"></span></button>
     </header>
 
@@ -487,6 +533,7 @@
               <button type="button" class="btn-secondary btn-sm btn-ico hidden" id="btn-files-up" data-i18n-title="files_up" title="Назад" aria-label="Назад"><span class="ico" data-ico="back" aria-hidden="true"></span></button>
               <button type="button" class="btn-secondary btn-sm btn-ico" id="btn-files-refresh" data-i18n-title="refresh" title="Обновить" aria-label="Обновить"><span class="ico" data-ico="refresh" aria-hidden="true"></span></button>
               <button type="button" class="btn-secondary btn-sm btn-ico" id="btn-files-mkdir" data-i18n-title="mkdir" title="Папка" aria-label="Папка"><span class="ico" data-ico="mkdir" aria-hidden="true"></span></button>
+              <label class="btn-secondary btn-sm btn-file" data-i18n-title="files_upload_folder" title="Загрузить папку"><span data-i18n="files_upload_folder">Папку</span><input type="file" id="files-upload-folder" webkitdirectory multiple /></label>
               <label class="btn-spray btn-sm btn-file btn-ico" id="btn-files-upload" data-i18n-title="upload" title="Загрузить" aria-label="Загрузить">
                 <span class="ico" data-ico="upload" aria-hidden="true"></span>
                 <input type="file" id="files-upload" multiple />
@@ -505,6 +552,7 @@
             <span data-i18n="col_size">Размер</span>
             <span data-i18n="col_type">Тип</span>
           </div>
+          <p class="meta files-drop-hint" data-i18n="files_drop_hint">Перетащите сюда файлы или папки. Меню ⋯ — действия с элементом.</p>
           <ul id="files-list" class="msg-list"></ul>
           <p id="files-msg" class="msg files-msg"></p>
         </div>
@@ -615,6 +663,7 @@
           <h3 class="heading" data-i18n="appearance_title">Внешний вид</h3>
           <label class="field-label" for="color-mode-select" data-i18n="color_mode">Режим интерфейса</label>
           <select class="field-input" id="color-mode-select">
+            <option value="auto" data-i18n="color_mode_auto">Авто</option>
             <option value="light" data-i18n="color_mode_light">Дневной</option>
             <option value="dark" data-i18n="color_mode_dark">Ночной</option>
           </select>
@@ -665,49 +714,11 @@
             <h4 class="heading" style="font-size:1rem" data-i18n="mig_admin_jobs">Задачи тенанта</h4>
             <ul class="creds" id="mig-admin-job-list"></ul>
           </div>
-          <ul class="creds" id="mig-job-list"></ul>
-          <div class="ca-panels" id="mig-forms">
-            <section class="ca-panel">
-              <h4 class="heading" style="font-size:1rem">IMAP / imapsync</h4>
-              <label class="field-label" for="mig-imap-host">Host</label>
-              <input class="field-input" id="mig-imap-host" type="text" placeholder="imap.example.com" />
-              <label class="field-label" for="mig-imap-port">Port</label>
-              <input class="field-input" id="mig-imap-port" type="number" value="993" />
-              <label class="field-check"><input type="checkbox" id="mig-imap-tls" checked /> <span>TLS</span></label>
-              <label class="field-label" for="mig-imap-user" data-i18n="email">Email</label>
-              <input class="field-input" id="mig-imap-user" type="text" autocomplete="username" />
-              <label class="field-label" for="mig-imap-pass" data-i18n="password">Пароль</label>
-              <input class="field-input" id="mig-imap-pass" type="password" autocomplete="current-password" />
-              <div class="actions">
-                <button type="button" class="btn-spray" id="btn-mig-imap" data-i18n="mig_start">Запустить</button>
-              </div>
-            </section>
-            <section class="ca-panel">
-              <h4 class="heading" style="font-size:1rem">CalDAV</h4>
-              <p class="meta" data-i18n="mig_cal_hint">URL календаря на старом сервере (CalDAV).</p>
-              <label class="field-label" for="mig-cal-url">URL</label>
-              <input class="field-input" id="mig-cal-url" type="url" placeholder="https://cal.example.com/dav/…" />
-              <label class="field-label" for="mig-cal-user" data-i18n="email">Email</label>
-              <input class="field-input" id="mig-cal-user" type="text" />
-              <label class="field-label" for="mig-cal-pass" data-i18n="password">Пароль</label>
-              <input class="field-input" id="mig-cal-pass" type="password" />
-              <div class="actions">
-                <button type="button" class="btn-spray" id="btn-mig-cal" data-i18n="mig_start">Запустить</button>
-              </div>
-            </section>
-            <section class="ca-panel">
-              <h4 class="heading" style="font-size:1rem">CardDAV</h4>
-              <p class="meta" data-i18n="mig_card_hint">URL адресной книги на старом сервере (CardDAV).</p>
-              <label class="field-label" for="mig-card-url">URL</label>
-              <input class="field-input" id="mig-card-url" type="url" placeholder="https://…" />
-              <label class="field-label" for="mig-card-user" data-i18n="email">Email</label>
-              <input class="field-input" id="mig-card-user" type="text" />
-              <label class="field-label" for="mig-card-pass" data-i18n="password">Пароль</label>
-              <input class="field-input" id="mig-card-pass" type="password" />
-              <div class="actions">
-                <button type="button" class="btn-spray" id="btn-mig-card" data-i18n="mig_start">Запустить</button>
-              </div>
-            </section>
+          <h4 class="heading" data-i18n="mig_my_jobs">Мои задания</h4><ul class="creds" id="mig-job-list"></ul>
+          <div class="migration-options" id="mig-forms">
+            <button type="button" class="migration-option" data-mig-open="imap"><strong data-i18n="nav_mail">Почта</strong><span class="meta">IMAP</span><span class="field-hint" data-i18n="mig_mail_hint">Письма и папки с другого сервера</span><span data-i18n="mig_configure">Настроить перенос →</span></button>
+            <button type="button" class="migration-option" data-mig-open="cal"><strong data-i18n="nav_calendar">Календарь</strong><span class="meta">CalDAV</span><span class="field-hint" data-i18n="mig_cal_hint">URL календаря на старом сервере (CalDAV).</span><span data-i18n="mig_configure">Настроить перенос →</span></button>
+            <button type="button" class="migration-option" data-mig-open="card"><strong data-i18n="nav_contacts">Контакты</strong><span class="meta">CardDAV</span><span class="field-hint" data-i18n="mig_card_hint">URL адресной книги на старом сервере (CardDAV).</span><span data-i18n="mig_configure">Настроить перенос →</span></button>
           </div>
           <div class="actions">
             <button type="button" class="btn-secondary" id="btn-mig-refresh" data-i18n="refresh">Обновить</button>
@@ -962,40 +973,13 @@ keep;</textarea>
       <!-- ADMIN XMPP -->
       <div id="app-xmpp" class="app-page hidden panel-page panel-page-wide">
         <div class="card" id="card-xmpp">
-          <h3 class="heading" data-i18n="xmpp_title">XMPP / чат</h3>
-          <p class="meta" data-i18n="xmpp_lede">C2S для внешних клиентов, компоненты (XEP-0114) и HTTP-боты. Веб-чат работает и при выключенном C2S.</p>
-          <p class="meta" id="xmpp-status">Loading…</p>
-          <p class="meta" data-i18n="xmpp_restart_hint">Смена слушателей XMPP требует перезапуска tayga-mail.</p>
-
-          <h4 class="heading" style="font-size:1rem;margin-top:1rem" data-i18n="xmpp_status">Состояние</h4>
-          <label class="field-check"><input type="checkbox" id="xmpp-enabled" /> <span data-i18n="xmpp_enabled">C2S включён</span></label>
-          <label class="field-label" for="xmpp-listen">C2S listen</label>
-          <input class="field-input" id="xmpp-listen" type="text" placeholder=":5222" />
-          <label class="field-label" for="xmpp-listen-tls">C2S TLS</label>
-          <input class="field-input" id="xmpp-listen-tls" type="text" placeholder=":5223" />
-          <label class="field-label" for="xmpp-component-listen">Component listen</label>
-          <input class="field-input" id="xmpp-component-listen" type="text" placeholder=":5347" />
-          <label class="field-check"><input type="checkbox" id="xmpp-require-tls" /> <span>require_tls</span></label>
-          <div class="actions">
-            <button type="button" class="btn-spray" id="btn-xmpp-save" data-i18n="xmpp_save_cfg">Сохранить C2S</button>
-            <button type="button" class="btn-secondary" id="btn-xmpp-refresh" data-i18n="refresh">Обновить</button>
+          <div class="pane-head"><h3 class="heading" data-i18n="xmpp_title">XMPP / чат</h3><button type="button" class="btn-secondary" id="btn-xmpp-refresh" data-i18n="refresh">Обновить</button></div>
+          <p class="meta" data-i18n="xmpp_lede">Внешние клиенты, компоненты и HTTP-боты.</p>
+          <div class="xmpp-section-grid">
+            <section class="xmpp-section"><h4 class="heading" data-i18n="xmpp_connections">Подключения клиентов</h4><div id="xmpp-status" role="status"></div><p class="field-hint" data-i18n="xmpp_restart_hint">Изменение слушателей требует перезапуска службы.</p><button type="button" class="btn-secondary" data-xmpp-config data-i18n="xmpp_configure">Настроить XMPP</button></section>
+            <section class="xmpp-section"><h4 class="heading" data-i18n="xmpp_components">Компоненты</h4><p class="field-hint" data-i18n="xmpp_components_hint">Подключение внешних сервисов по XEP-0114.</p><ul class="creds" id="xmpp-component-list"></ul><button type="button" class="btn-secondary" data-xmpp-config data-i18n="xmpp_manage_components">Управление компонентами</button></section>
           </div>
-
-          <h4 class="heading" style="font-size:1rem;margin-top:1.25rem" data-i18n="xmpp_components">Компоненты</h4>
-          <ul class="creds" id="xmpp-component-list"></ul>
-
-          <h4 class="heading" style="font-size:1rem;margin-top:1.25rem" data-i18n="xmpp_bots">HTTP-боты</h4>
-          <ul class="creds" id="xmpp-bot-list"></ul>
-          <label class="field-label" for="xmpp-bot-name" data-i18n="xmpp_bot_name">Имя бота</label>
-          <input class="field-input" id="xmpp-bot-name" type="text" />
-          <label class="field-label" for="xmpp-bot-user" data-i18n="xmpp_bot_user">Пользователь (mailbox)</label>
-          <select class="field-input" id="xmpp-bot-user"></select>
-          <label class="field-label" for="xmpp-bot-webhook" data-i18n="xmpp_bot_webhook">Webhook URL (опц.)</label>
-          <input class="field-input" id="xmpp-bot-webhook" type="url" placeholder="https://…" />
-          <div class="actions">
-            <button type="button" class="btn-spray" id="btn-xmpp-bot-create" data-i18n="xmpp_bot_create">Создать бота</button>
-          </div>
-          <pre class="secret preview-box hidden" id="xmpp-bot-token"></pre>
+          <section class="xmpp-section xmpp-bots-section"><div class="pane-head"><h4 class="heading" data-i18n="xmpp_bots">HTTP-боты</h4><button type="button" class="btn-spray" id="btn-xmpp-bot-open" data-i18n="xmpp_bot_create">Создать бота</button></div><p class="field-hint" data-i18n="xmpp_bots_hint">Бот действует от выбранной учётной записи и может получать сообщения через webhook.</p><ul class="creds" id="xmpp-bot-list"></ul></section>
           <p id="xmpp-msg" class="msg"></p>
         </div>
       </div>

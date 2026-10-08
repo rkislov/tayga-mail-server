@@ -42,3 +42,13 @@ On a disposable seeded server only, run `node scripts/check-admin-calendar.mjs` 
 Системные имена IMAP сохраняются в протоколе, а интерфейс переводит их по роли. «Входящие» всегда первые. Управление папками открывается отдельным модальным окном: стрелки сохраняют порядок в базе для учётной записи, пользовательские папки можно создать, переименовать и удалить после подтверждения. Системные и общие папки защищены от этих операций на API и в хранилище. Почта проверяет изменение счётчиков каждые 15 секунд, пока раздел открыт.
 
 Браузерная проверка: `node scripts/check-mail-folders.mjs` — только на временной установке с seed-аккаунтом. Она создаёт и удаляет тестовую папку и обновляет скриншоты модального окна.
+
+### Проверка компоновки
+
+`node scripts/check-ui-layout.mjs` проверяет все разделы на ширинах 390, 768, 1024, 1440, 1920 px, равную ширину списка писем и области чтения на широких экранах, форму CoS без внутренней прокрутки на desktop и модальные формы переноса. Параметры миграции скрыты до выбора типа импорта; пароль очищается при закрытии, ошибки отображаются внутри формы, прогресс автоматически обновляется раз в 5 секунд. В CoS лимиты и возможности разделены на группы; Escape и «Отмена» закрывают форму, Tab остаётся внутри окна.
+
+Calendar menu items have a properties dialog for name, description and color, user grants (`read` / `write`), and an optional read-only public ICS subscription. Public links use random tokens, can be rotated or disabled, and stop working immediately after revocation. Shared users cannot change collection properties or grants. Calendar URLs keep their stable internal collection names when their display names change.
+
+The header includes Light / Auto / Dark controls. Auto follows the OS preference live and the choice persists locally. Files support desktop file/folder drops (including nested and empty folders), dragging entries into folders, keyboard/right-click/ellipsis action menus, rename/delete, and ZIP downloads of folders. XMPP configuration and bot creation use separate dialogs; newly created bot tokens remain visible until that dialog closes.
+
+Run `node scripts/check-calendar-files-theme.mjs` against a disposable seeded instance to check calendar publication/revocation, theme following, bot token retention, nested folder drops, renaming, deleting and ZIP download. It temporarily publishes the local test calendar and creates/deletes test files. Do not run against production.

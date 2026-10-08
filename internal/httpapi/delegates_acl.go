@@ -21,16 +21,16 @@ func (s *Server) handleDelegates(w http.ResponseWriter, r *http.Request) {
 		mine, _ := s.store.ListMailboxDelegates(r.Context(), au.ID)
 		forMe, _ := s.store.ListDelegationsFor(r.Context(), au.ID)
 		writeJSON(w, http.StatusOK, map[string]any{
-			"delegates":   serializeDelegates(mine),
-			"acting_for":  serializeDelegates(forMe),
+			"delegates":  serializeDelegates(mine),
+			"acting_for": serializeDelegates(forMe),
 		})
 
 	case r.Method == http.MethodPost && path == "":
 		var req struct {
-			Email            string `json:"email"`
-			CanRead          *bool  `json:"can_read"`
-			CanSendAs        bool   `json:"can_send_as"`
-			CanSendOnBehalf  bool   `json:"can_send_on_behalf"`
+			Email           string `json:"email"`
+			CanRead         *bool  `json:"can_read"`
+			CanSendAs       bool   `json:"can_send_as"`
+			CanSendOnBehalf bool   `json:"can_send_on_behalf"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
@@ -193,6 +193,14 @@ func (s *Server) handleCalendarACL(w http.ResponseWriter, r *http.Request, au *a
 		if rights == "" {
 			rights = "read"
 		}
+		if rights != "read" && rights != "write" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "rights must be read or write"})
+			return
+		}
+		if u.ID == au.ID {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "owner already has access"})
+			return
+		}
 		if err := s.store.SetCalendarACL(r.Context(), calendarID, u.ID, rights); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
@@ -200,7 +208,10 @@ func (s *Server) handleCalendarACL(w http.ResponseWriter, r *http.Request, au *a
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 
 	case r.Method == http.MethodDelete && path != "":
-		_ = s.store.DeleteCalendarACL(r.Context(), calendarID, path)
+		if err := s.store.DeleteCalendarACL(r.Context(), calendarID, path); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
 		writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 
 	default:
