@@ -290,6 +290,21 @@ const I18N = {
     send: "Отправить",
     refresh: "Обновить",
     folders: "Папки",
+    mail_folder_inbox: "Входящие",
+    mail_folder_sent: "Отправленные",
+    mail_folder_drafts: "Черновики",
+    mail_folder_trash: "Корзина",
+    mail_folder_junk: "Спам",
+    mail_folder_archive: "Архив",
+    mail_shared: "Общая папка",
+    mail_manage_folders: "Управление папками",
+    mail_folder_help: "Меняйте порядок стрелками. Входящие всегда сверху. Системные папки нельзя переименовать или удалить.",
+    mail_folder_up: "Переместить выше",
+    mail_folder_down: "Переместить ниже",
+    mail_folder_rename: "Переименовать",
+    mail_folder_system: "Системная",
+    mail_folder_delete_confirm: "Удалить папку «{name}» и все письма в ней?",
+
     empty_mailbox: "Нет писем",
     select_message: "Выберите письмо",
     to: "Кому",
@@ -698,6 +713,21 @@ const I18N = {
     send: "Send",
     refresh: "Refresh",
     folders: "Folders",
+    mail_folder_inbox: "Inbox",
+    mail_folder_sent: "Sent",
+    mail_folder_drafts: "Drafts",
+    mail_folder_trash: "Trash",
+    mail_folder_junk: "Junk",
+    mail_folder_archive: "Archive",
+    mail_shared: "Shared folder",
+    mail_manage_folders: "Manage folders",
+    mail_folder_help: "Use the arrows to reorder folders. Inbox stays first. System folders cannot be renamed or deleted.",
+    mail_folder_up: "Move up",
+    mail_folder_down: "Move down",
+    mail_folder_rename: "Rename",
+    mail_folder_system: "System",
+    mail_folder_delete_confirm: "Delete folder \u201c{name}\u201d and all its messages?",
+
     empty_mailbox: "No messages",
     select_message: "Select a message",
     to: "To",
@@ -1148,7 +1178,7 @@ const APPS = [
   "monitor", "maillog", "tenants", "tls", "xmpp", "server", "cos",
 ];
 
-const mailState = { mailboxID: "", messageID: "", mailboxes: [], searchQ: "" };
+const mailState = { mailboxID: "", messageID: "", mailboxes: [], order: [], searchQ: "" };
 const calState = {
   calendarID: "",
   eventID: "",
@@ -3384,20 +3414,100 @@ $("btn-passkey-add").addEventListener("click", async () => {
 });
 
 /* —— Mail —— */
+function mailFolderLabel(mb) {
+  const role = mb.role || (["inbox", "sent", "drafts", "trash", "junk", "archive"].includes(mb.name?.toLowerCase()) ? mb.name.toLowerCase() : "");
+  const name = role ? t("mail_folder_" + role) : mb.name;
+  return name + (mb.shared ? " · " + t("mail_shared") : "");
+}
+function sortMailFolders(folders) {
+  const rank = id => { const i = mailState.order.indexOf(id); return i < 0 ? 100000 : i; };
+  return folders.sort((a,b) => {
+    const inbox = m => !m.shared && (m.role === "inbox" || m.name === "INBOX");
+    return Number(inbox(b))-Number(inbox(a)) || rank(a.id)-rank(b.id) || a.name.localeCompare(b.name);
+  });
+}
+async function moveMailFolder(id, direction) {
+  const folders = [...mailState.mailboxes];
+  const i = folders.findIndex(m => m.id === id), j = i + direction;
+  if (i < 1 || j < 1 || j >= folders.length) return;
+  [folders[i], folders[j]] = [folders[j], folders[i]];
+  await api("/api/v1/mail/mailboxes/order", {method:"PUT", body:JSON.stringify({order:folders.map(m=>m.id)})});
+  await refreshMail();
+}
+async function createMailFolder() {
+  const name = await askPrompt(t("note_folder_name"), {title:t("note_folder_new")});
+  if (!name?.trim()) return;
+  await api("/api/v1/mail/mailboxes", {method:"POST",body:JSON.stringify({name})});
+  await refreshMail();
+}
+const mailFoldersDialog = document.createElement("dialog");
+mailFoldersDialog.className = "mail-folders-dialog";
+mailFoldersDialog.setAttribute("aria-labelledby", "mail-folders-dialog-title");
+document.body.append(mailFoldersDialog);
+function renderMailFolderManager() {
+  mailFoldersDialog.innerHTML = `<div class="pane-head"><strong id="mail-folders-dialog-title">${t("mail_manage_folders")}</strong><button class="btn-secondary" data-close>${t("close")}</button></div>
+    <p class="meta">${t("mail_folder_help")}</p><div class="mail-folder-manager">${mailState.mailboxes.map((m,i) => `<div class="mail-folder-manager-row"><span>${escapeHtml(mailFolderLabel(m))}</span><div>
+    <button class="btn-secondary btn-sm" data-up="${m.id}" aria-label="${t("mail_folder_up")}" ${i<2?"disabled":""}>↑</button>
+    <button class="btn-secondary btn-sm" data-down="${m.id}" aria-label="${t("mail_folder_down")}" ${i===0||i===mailState.mailboxes.length-1?"disabled":""}>↓</button>
+    ${!m.system&&!m.shared ? `<button class="btn-secondary btn-sm" data-rename="${m.id}">${t("mail_folder_rename")}</button><button class="btn-secondary btn-sm" data-delete="${m.id}">${t("delete")}</button>` : `<span class="meta">${t(m.shared?"mail_shared":"mail_folder_system")}</span>`}
+    </div></div>`).join("")}</div><button class="btn-spray" data-create>${t("note_folder_new")}</button><p class="meta" id="mail-folder-manager-error" role="alert"></p>`;
+  mailFoldersDialog.querySelector("[data-close]").onclick=()=>mailFoldersDialog.close();
+  mailFoldersDialog.querySelectorAll("[data-up],[data-down],[data-rename],[data-delete],[data-create]").forEach(btn=>btn.onclick=async()=>{
+    try {
+      if(btn.hasAttribute("data-create")) { mailFoldersDialog.close(); await createMailFolder(); }
+      else if(btn.dataset.up) await moveMailFolder(btn.dataset.up,-1);
+      else if(btn.dataset.down) await moveMailFolder(btn.dataset.down,1);
+      else {
+        const id=btn.dataset.rename||btn.dataset.delete;
+        const mb=mailState.mailboxes.find(m=>m.id===id);
+        // Temporarily close the native modal so shared confirmation controls can receive focus.
+        mailFoldersDialog.close();
+        if(btn.dataset.rename) {
+          const name=await askPrompt(t("note_folder_name"),{value:mb.name,title:t("mail_folder_rename")});
+          if(name?.trim()) await api("/api/v1/mail/mailboxes/"+encodeURIComponent(id),{method:"PATCH",body:JSON.stringify({name})});
+        } else if(await askConfirm(t("mail_folder_delete_confirm").replace("{name}",mailFolderLabel(mb)),{danger:true})) {
+          await api("/api/v1/mail/mailboxes/"+encodeURIComponent(id),{method:"DELETE"});
+        }
+        await refreshMail();
+      }
+      renderMailFolderManager();
+      if(!mailFoldersDialog.open) mailFoldersDialog.showModal();
+    } catch(err) {
+      if(!mailFoldersDialog.open)mailFoldersDialog.showModal();
+      document.getElementById("mail-folder-manager-error").textContent=err.message;
+    }
+  });
+}
+$("btn-mail-folders")?.addEventListener("click",async()=>{await refreshMail();renderMailFolderManager();mailFoldersDialog.showModal();});
+
+let mailFolderSnapshot = "";
+let mailRefreshBusy = false;
+setInterval(async () => {
+  if (!state.tokens?.access_token || document.hidden || $("app-mail")?.classList.contains("hidden") || mailFoldersDialog.open || mailRefreshBusy) return;
+  mailRefreshBusy = true;
+  try {
+    const data = await api("/api/v1/mail/mailboxes");
+    if (JSON.stringify(data) !== mailFolderSnapshot) await refreshMail();
+  } catch (err) { console.warn("Mail refresh:", err.message); }
+  finally { mailRefreshBusy = false; }
+}, 15000);
+
 async function refreshMail() {
   try {
     const data = await api("/api/v1/mail/mailboxes");
-    mailState.mailboxes = data.mailboxes || [];
+    mailFolderSnapshot = JSON.stringify(data);
+    mailState.order = data.order || [];
+    mailState.mailboxes = sortMailFolders(data.mailboxes || []);
     const list = $("mail-folder-list");
     if (!list) return;
-    if (!mailState.mailboxID && mailState.mailboxes.length) {
+    if (!mailState.mailboxes.some(m => m.id === mailState.mailboxID) && mailState.mailboxes.length) {
       const inbox = mailState.mailboxes.find((m) => m.name === "INBOX") || mailState.mailboxes[0];
       mailState.mailboxID = inbox.id;
     }
     list.innerHTML = mailState.mailboxes.map((mb) => `
       <li>
         <button type="button" class="folder-btn${mb.id === mailState.mailboxID ? " is-active" : ""}" data-mb="${escapeHtml(mb.id)}">
-          <span>${escapeHtml(mb.name)}</span>
+          <span>${escapeHtml(mailFolderLabel(mb))}</span>
           <span class="meta">${mb.unread ? mb.unread + " · " : ""}${mb.messages || 0}</span>
         </button>
       </li>`).join("") || `<li class="meta">${t("empty_mailbox")}</li>`;
@@ -3456,7 +3566,7 @@ async function refreshMailMessages() {
   const mb = mailState.mailboxes.find((m) => m.id === mailState.mailboxID);
   const q = (mailState.searchQ || "").trim();
   if ($("mail-folder-title")) {
-    $("mail-folder-title").textContent = q ? (lang === "en" ? "Search" : "Поиск") : (mb?.name || "INBOX");
+    $("mail-folder-title").textContent = q ? (lang === "en" ? "Search" : "Поиск") : (mb ? mailFolderLabel(mb) : t("mail_folder_inbox"));
   }
   try {
     let data;
@@ -3474,7 +3584,7 @@ async function refreshMailMessages() {
     }
     list.innerHTML = msgs.map((m) => {
       const folder = q && m.mailbox_name
-        ? `<span class="msg-folder meta">${escapeHtml(m.mailbox_name)}</span>`
+        ? `<span class="msg-folder meta">${escapeHtml(mailFolderLabel({name:m.mailbox_name}))}</span>`
         : "";
       const dateBits = [
         folder,
@@ -5517,6 +5627,7 @@ document.addEventListener("keydown", (e) => {
 });
 $("lang-select")?.addEventListener("change", (e) => {
   applyLang(e.target.value);
+  if (state.email) refreshMail();
   renderThemeGallery(normalizeThemeKey(localStorage.getItem("tayga.theme") || "tayga"));
   updateNavUser(state.email, !$("nav-admin")?.classList.contains("hidden"));
 });

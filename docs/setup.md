@@ -25,20 +25,26 @@ CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o tayga-mail ./cmd/tayga
 ./tayga-mail version
 ```
 
-Готовые архивы: GitHub Releases (`v*`) или `VERSION=v0.9.0 ./scripts/crossbuild.sh`.
+Готовые архивы: GitHub Releases (`v*`) или `VERSION=0.9.2 ./scripts/crossbuild.sh`.
 
 Интерактивное меню (wizard, backup/restore, перенос sqlite↔postgres, секции настроек):
 
 ```bash
-./tayga-mail menu -config /etc/tayga/tayga.yaml
+./tayga-mail menu -config /var/lib/tayga/config/tayga.yaml
 # синонимы: setup, console
 ```
 
-Скопируйте бинарник, например в `/usr/local/bin/tayga-mail`, и создайте каталог данных:
+Скопируйте бинарник, например в `/var/lib/tayga/bin/tayga-mail`, и создайте каталог данных:
 
 ```bash
-sudo mkdir -p /var/lib/tayga/{maildir,certs}
-sudo useradd -r -s /usr/sbin/nologin tayga   # опционально
+sudo useradd --system --home-dir /var/lib/tayga --no-create-home --shell /usr/sbin/nologin tayga
+sudo mkdir -p /var/lib/tayga/{bin,config,data,maildir,certs,log,backups}
+sudo install -m 0755 tayga-mail /var/lib/tayga/bin/tayga-mail
+sudo chown -R tayga:tayga /var/lib/tayga/{data,maildir,certs,log}
+sudo chmod 0750 /var/lib/tayga/{data,maildir,certs,log}
+sudo chown root:tayga /var/lib/tayga/config
+sudo chmod 0750 /var/lib/tayga/config
+sudo chmod 0700 /var/lib/tayga/backups
 ```
 
 ## 2. Bootstrap YAML
@@ -48,7 +54,7 @@ sudo useradd -r -s /usr/sbin/nologin tayga   # опционально
 Скопируйте пример и отредактируйте под себя:
 
 ```bash
-cp configs/tayga.example.yaml /etc/tayga/tayga.yaml
+sudo install -o root -g tayga -m 0640 configs/tayga.example.yaml /var/lib/tayga/config/tayga.yaml
 ```
 
 Обязательные поля:
@@ -56,17 +62,25 @@ cp configs/tayga.example.yaml /etc/tayga/tayga.yaml
 ```yaml
 server:
   hostname: mail.example.com   # EHLO, authserv-id, автоконфиг клиентов
+  secrets_key: "<случайный постоянный секрет, минимум 32 байта>"
 
 storage:
   driver: sqlite               # или postgres
   sqlite:
-    path: /var/lib/tayga/tayga.db
+    path: /var/lib/tayga/data/tayga.db
   # postgres:
   #   dsn: "postgres://tayga:SECRET@db:5432/tayga?sslmode=require"
 
 mailstore:
   root: /var/lib/tayga/maildir
+
+log:
+  level: info
+  format: json
+  file: /var/lib/tayga/log/tayga.log
 ```
+
+В конфигурации используйте абсолютные пути: рабочий каталог службы — `/var/lib/tayga`, но относительные пути затрудняют перенос установки. Постоянный `server.secrets_key` можно сгенерировать командой `openssl rand -base64 32`; сохраните его в закрытом YAML и резервной копии. Он нужен для расшифровки паролей переноса. Без явно заданного секрета сервис пытается создать `secrets.key` рядом с maildir, а защищённая служба не пишет в корень каталога.
 
 Первый администратор (создаётся только если пользователя ещё нет):
 
@@ -104,10 +118,27 @@ tls:
 
 ## 3. Первый запуск
 
+На Linux используйте службу из [`deploy/systemd/tayga.service`](../deploy/systemd/tayga.service):
+
 ```bash
-sudo tayga-mail -config /etc/tayga/tayga.yaml
-# или systemd unit с ExecStart=… -config …
+sudo install -m 0644 deploy/systemd/tayga.service /etc/systemd/system/tayga.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now tayga.service
+sudo systemctl status tayga.service --no-pager
+sudo journalctl -u tayga.service -n 50 --no-pager
 ```
+
+Служба запускается от `tayga`, получает только `CAP_NET_BIND_SERVICE` для стандартных портов и автоматически перезапускается при сбое. Бинарник, YAML и резервные копии принадлежат root; служба пишет только в `data`, `maildir`, `certs`, `log`. `ProtectHome=true` запрещает зависимость от файлов в `/home`. Единственный файл вне `/var/lib/tayga` — unit systemd в `/etc/systemd/system`.
+
+После первого успешного запуска выключите `seed.enabled` и удалите seed-пароль из YAML: существующая учётная запись уже хранится в базе. Смените первоначальный пароль при входе. Для перезапуска после изменения настроек:
+
+```bash
+sudo systemctl restart tayga.service
+curl -kfsS https://127.0.0.1/healthz
+curl -kfsS https://127.0.0.1/readyz
+```
+
+`-k` допустим для локальной проверки первоначального самоподписанного сертификата. Для обычного доступа выпустите доверенный сертификат через **Админ → Сертификаты**; самоподписанный сертификат не считается завершённой настройкой публичного TLS.
 
 Проверки:
 
@@ -229,7 +260,7 @@ dkim:
 ## 9. Бэкап с первого дня
 
 ```bash
-tayga-mail backup -config /etc/tayga/tayga.yaml -out /backup/tayga-$(date +%F).tar.gz
+tayga-mail backup -config /var/lib/tayga/config/tayga.yaml -out /backup/tayga-$(date +%F).tar.gz
 # или Админ → backup; restore: tayga-mail restore …
 ```
 
