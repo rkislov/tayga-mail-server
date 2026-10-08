@@ -18,6 +18,8 @@ type Calendar struct {
 	Name        string
 	DisplayName string
 	Description string
+	Color       string
+	PublicToken string
 	CTag        string
 	CreatedAt   time.Time
 }
@@ -93,6 +95,9 @@ func (s *Store) EnsureCalendar(ctx context.Context, userID, name, displayName st
 
 func (s *Store) CreateCalendar(ctx context.Context, c *Calendar) (*Calendar, error) {
 	now := time.Now().UTC()
+	if c.Color == "" {
+		c.Color = "#c77c35"
+	}
 	c.CreatedAt = now
 	if c.ID == "" {
 		c.ID = NewID()
@@ -100,14 +105,14 @@ func (s *Store) CreateCalendar(ctx context.Context, c *Calendar) (*Calendar, err
 	if c.CTag == "" {
 		c.CTag = newCTag()
 	}
-	q := s.rebind(`INSERT INTO calendars (id, user_id, name, display_name, description, ctag, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`)
-	_, err := s.db.ExecContext(ctx, q, c.ID, c.UserID, c.Name, c.DisplayName, c.Description, c.CTag, now)
+	q := s.rebind(`INSERT INTO calendars (id, user_id, name, display_name, description, color, public_token, ctag, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	_, err := s.db.ExecContext(ctx, q, c.ID, c.UserID, c.Name, c.DisplayName, c.Description, c.Color, c.PublicToken, c.CTag, now)
 	return c, err
 }
 
 func (s *Store) ListCalendars(ctx context.Context, userID string) ([]*Calendar, error) {
-	q := s.rebind(`SELECT id, user_id, name, display_name, description, ctag, created_at FROM calendars WHERE user_id = ? ORDER BY name`)
+	q := s.rebind(`SELECT id, user_id, name, display_name, description, color, public_token, ctag, created_at FROM calendars WHERE user_id = ? ORDER BY name`)
 	rows, err := s.db.QueryContext(ctx, q, userID)
 	if err != nil {
 		return nil, err
@@ -116,7 +121,7 @@ func (s *Store) ListCalendars(ctx context.Context, userID string) ([]*Calendar, 
 	var out []*Calendar
 	for rows.Next() {
 		c := &Calendar{}
-		if err := rows.Scan(&c.ID, &c.UserID, &c.Name, &c.DisplayName, &c.Description, &c.CTag, &c.CreatedAt); err != nil {
+		if err := rows.Scan(&c.ID, &c.UserID, &c.Name, &c.DisplayName, &c.Description, &c.Color, &c.PublicToken, &c.CTag, &c.CreatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, c)
@@ -125,9 +130,9 @@ func (s *Store) ListCalendars(ctx context.Context, userID string) ([]*Calendar, 
 }
 
 func (s *Store) GetCalendarByName(ctx context.Context, userID, name string) (*Calendar, error) {
-	q := s.rebind(`SELECT id, user_id, name, display_name, description, ctag, created_at FROM calendars WHERE user_id = ? AND name = ?`)
+	q := s.rebind(`SELECT id, user_id, name, display_name, description, color, public_token, ctag, created_at FROM calendars WHERE user_id = ? AND name = ?`)
 	c := &Calendar{}
-	err := s.db.QueryRowContext(ctx, q, userID, name).Scan(&c.ID, &c.UserID, &c.Name, &c.DisplayName, &c.Description, &c.CTag, &c.CreatedAt)
+	err := s.db.QueryRowContext(ctx, q, userID, name).Scan(&c.ID, &c.UserID, &c.Name, &c.DisplayName, &c.Description, &c.Color, &c.PublicToken, &c.CTag, &c.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
 	}
@@ -138,9 +143,9 @@ func (s *Store) GetCalendarByName(ctx context.Context, userID, name string) (*Ca
 }
 
 func (s *Store) GetCalendarByID(ctx context.Context, userID, id string) (*Calendar, error) {
-	q := s.rebind(`SELECT id, user_id, name, display_name, description, ctag, created_at FROM calendars WHERE user_id = ? AND id = ?`)
+	q := s.rebind(`SELECT id, user_id, name, display_name, description, color, public_token, ctag, created_at FROM calendars WHERE user_id = ? AND id = ?`)
 	c := &Calendar{}
-	err := s.db.QueryRowContext(ctx, q, userID, id).Scan(&c.ID, &c.UserID, &c.Name, &c.DisplayName, &c.Description, &c.CTag, &c.CreatedAt)
+	err := s.db.QueryRowContext(ctx, q, userID, id).Scan(&c.ID, &c.UserID, &c.Name, &c.DisplayName, &c.Description, &c.Color, &c.PublicToken, &c.CTag, &c.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
 	}
@@ -488,4 +493,27 @@ func (s *Store) EnsureDAVDefaults(ctx context.Context, userID string) error {
 		return fmt.Errorf("ensure addressbook: %w", err)
 	}
 	return nil
+}
+
+func (s *Store) UpdateCalendar(ctx context.Context, c *Calendar) error {
+	res, err := s.db.ExecContext(ctx, s.rebind(`UPDATE calendars SET display_name=?, description=?, color=?, public_token=?, ctag=? WHERE id=? AND user_id=?`), c.DisplayName, c.Description, c.Color, c.PublicToken, newCTag(), c.ID, c.UserID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+func (s *Store) GetPublicCalendar(ctx context.Context, token string) (*Calendar, error) {
+	if token == "" {
+		return nil, ErrNotFound
+	}
+	c := &Calendar{}
+	err := s.db.QueryRowContext(ctx, s.rebind(`SELECT id,user_id,name,display_name,description,color,public_token,ctag,created_at FROM calendars WHERE public_token=?`), token).Scan(&c.ID, &c.UserID, &c.Name, &c.DisplayName, &c.Description, &c.Color, &c.PublicToken, &c.CTag, &c.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, ErrNotFound
+	}
+	return c, err
 }

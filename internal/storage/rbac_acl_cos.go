@@ -387,7 +387,7 @@ func (s *Store) CalendarRightsForUser(ctx context.Context, calendarID, userID st
 }
 
 func (s *Store) ListSharedCalendars(ctx context.Context, userID string) ([]*Calendar, error) {
-	q := s.rebind(`SELECT c.id, c.user_id, c.name, c.display_name, c.description, c.ctag, c.created_at
+	q := s.rebind(`SELECT c.id, c.user_id, c.name, c.display_name, c.description, c.color, c.public_token, c.ctag, c.created_at
 		FROM calendars c
 		INNER JOIN calendar_acl a ON a.calendar_id = c.id
 		WHERE a.grantee_user_id = ?`)
@@ -399,7 +399,7 @@ func (s *Store) ListSharedCalendars(ctx context.Context, userID string) ([]*Cale
 	var out []*Calendar
 	for rows.Next() {
 		c := &Calendar{}
-		if err := rows.Scan(&c.ID, &c.UserID, &c.Name, &c.DisplayName, &c.Description, &c.CTag, &c.CreatedAt); err != nil {
+		if err := rows.Scan(&c.ID, &c.UserID, &c.Name, &c.DisplayName, &c.Description, &c.Color, &c.PublicToken, &c.CTag, &c.CreatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, c)

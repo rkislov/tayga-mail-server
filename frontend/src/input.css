@@ -942,6 +942,10 @@ html[data-theme="teriberka"] {
     min-height: calc(100dvh - 4.5rem);
   }
 
+  .mail-layout:where(#app-mail) {
+    grid-template-columns: clamp(11rem, 14%, 15rem) minmax(0, 1fr) minmax(0, 1fr);
+  }
+
   .cal-layout {
     grid-template-columns: 11rem minmax(22rem, 1.35fr) minmax(14rem, 0.85fr);
   }
@@ -3070,3 +3074,87 @@ html[data-color-mode="light"] {
 .mail-folder-manager-row > div { display:flex; align-items:center; gap:6px; }
 .mail-folder-manager-row button:disabled { opacity:.3; cursor:default; }
 #btn-mail-folders { margin:8px 12px; }
+
+@layer components {
+  .editor-sheet.is-cos { width: min(72rem, calc(100vw - 2rem)); max-height: calc(100dvh - 3rem); }
+  .cos-identity { max-width: 30rem; }
+  .cos-editor-grid { display:grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap:1.5rem; }
+  .cos-editor-grid section { min-width:0; }
+  .cos-editor-grid h4 { font-size:1rem; margin:0 0 1rem; }
+  .cos-limit-grid, .cos-feature-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1rem; align-items:start; }
+  .cos-limit-grid .form-row { margin:0; display:flex; flex-direction:column; height:100%; }
+  .cos-limit-grid .field-input { margin-top:auto; }
+  .cos-feature-grid .form-row-check { margin:0; padding:.75rem; border:1px solid rgba(var(--ui-ink-rgb),.12); border-radius:1rem; height:100%; }
+  .editor-sheet.is-cos .editor-sheet-actions { flex-shrink:0; }
+  @media(max-width:800px) { .cos-editor-grid { grid-template-columns:1fr; } }
+  @media(max-width:500px) { .cos-limit-grid, .cos-feature-grid { grid-template-columns:1fr; } }
+}
+
+@layer components {
+  .editor-sheet.is-cos #editor-sheet-close { display:none; }
+  .migration-options { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:1rem; margin:1.5rem 0; }
+  .migration-option { display:flex; flex-direction:column; text-align:left; gap:.65rem; padding:1.25rem; border:1px solid rgba(var(--ui-ink-rgb),.15); border-radius:1.25rem; background:var(--panel-bg); color:var(--ui-text); cursor:pointer; }
+  .migration-option strong { font-size:1.15rem; }
+  .migration-option .field-hint { flex:1; }
+  .migration-option:hover { border-color:var(--accent); }
+  .migration-dialog { width:min(42rem,calc(100vw - 2rem)); max-height:calc(100dvh - 3rem); overflow:auto; background:var(--panel-bg); color:var(--ui-text); border:1px solid var(--ui-text-45); border-radius:1.5rem; padding:1.5rem; box-shadow:0 24px 80px #0006; }
+  .migration-dialog::backdrop { background:#0007; backdrop-filter:blur(8px); }
+  .migration-form { display:grid; grid-template-columns:1fr; }
+  .migration-form .field-input { margin-bottom:1rem; }
+  .migration-form > h4 { display:none; }
+  @media(max-width:650px) { .migration-options { grid-template-columns:1fr; } }
+}
+
+@layer components {
+ .xmpp-section-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1rem; margin:1.5rem 0; }
+ .xmpp-section { border:1px solid rgba(var(--ui-ink-rgb),.15); border-radius:1.25rem; padding:1.25rem; min-width:0; }
+ .xmpp-section h4 { font-size:1.1rem; margin:0 0 .75rem; }
+ .xmpp-status-grid { display:grid; grid-template-columns:auto minmax(0,1fr); gap:.5rem 1rem; margin:1rem 0; }
+ .xmpp-status-grid dd { margin:0; overflow-wrap:anywhere; }
+ .xmpp-status-grid dt { color:var(--ui-text-70); }
+ .xmpp-section .field-hint { margin-bottom:1rem; }
+ #xmpp-bot-form .field-input { margin-bottom:1rem; }
+ #xmpp-bot-token { white-space:pre-wrap; overflow-wrap:anywhere; user-select:all; }
+ @media(max-width:650px) { .xmpp-section-grid { grid-template-columns:1fr; } }
+}
+
+@layer components {
+ .color-mode-switch { display:flex; align-items:center; margin-left:auto; border:1px solid rgba(var(--ui-ink-rgb),.2); border-radius:999px; padding:3px; gap:2px; flex-shrink:0; }
+ .color-mode-switch button { border:0; background:transparent; color:var(--ui-text-70); border-radius:999px; min-width:30px; min-height:30px; padding:3px 7px; cursor:pointer; font-size:.8rem; }
+ .color-mode-switch button[aria-pressed="true"] { background:var(--btn-bg); color:#fff; }
+ .color-mode-switch button:first-child,.color-mode-switch button:last-child { font-size:1.15rem; }
+ .app-topbar .topbar-notify { margin-left:0; }
+}
+
+@layer components {
+ .file-row { display:flex; align-items:center; min-width:0; }
+ .file-row .file-item { flex:1; min-width:0; }
+ .file-more { flex-shrink:0; align-self:stretch; width:2rem; border:0; background:transparent; color:var(--ui-text-70); cursor:pointer; font-size:1.4rem; }
+ .file-more:hover { color:var(--ui-text); background:rgba(var(--ui-ink-rgb),.08); }
+ .files-context-menu { position:fixed; z-index:150; min-width:12rem; padding:.4rem; border:1px solid var(--ui-text-45); border-radius:1rem; background:var(--panel-bg); backdrop-filter:blur(24px); box-shadow:0 16px 40px #0005; }
+ .files-context-menu button { display:block; width:100%; border:0; border-radius:.65rem; padding:.65rem .8rem; text-align:left; color:var(--ui-text); background:transparent; cursor:pointer; }
+ .files-context-menu button:hover,.files-context-menu button:focus-visible { background:rgba(var(--ui-ink-rgb),.12); }
+ .files-context-menu [data-file-action="delete"] { color:#d45f5f; }
+ .files-drop-hint { padding:.5rem .75rem; font-size:.78rem; }
+ #app-files.is-drag-over .files-list-pane,.file-item.is-drop-target { outline:2px dashed var(--accent); outline-offset:-4px; background:rgba(var(--ui-ink-rgb),.1); }
+}
+
+.calendar-properties-dialog { width:min(52rem,calc(100vw - 2rem)); max-height:calc(100dvh - 2rem); padding:1.5rem; }
+.calendar-properties-dialog::backdrop { background:rgba(0,0,0,.55); backdrop-filter:blur(5px); }
+.calendar-properties-body { overflow-y:auto; max-height:calc(100dvh - 14rem); }
+.calendar-properties-body section { margin-top:1.5rem; padding-top:1rem; border-top:1px solid rgba(var(--ui-ink-rgb),.15); }
+.calendar-properties-body .field-input { margin-bottom:.75rem; }
+.calendar-property-grid { display:grid; grid-template-columns:minmax(0,1fr) 6rem; gap:1rem; }
+#calendar-property-color { min-height:2.75rem; padding:.25rem; cursor:pointer; }
+.calendar-access-form { display:grid; grid-template-columns:minmax(0,1fr) minmax(9rem,.7fr) auto; align-items:start; gap:.5rem; }
+#calendar-access-list li { display:flex; align-items:center; justify-content:space-between; gap:1rem; margin:.5rem 0; }
+#calendar-access-list span { overflow-wrap:anywhere; min-width:0; }
+.calendar-color-dot { width:.65rem; height:.65rem; border-radius:50%; flex-shrink:0; }
+#app-calendar .cal-item { border-left:3px solid var(--calendar-color); }
+@media(max-width:650px) { .calendar-access-form { grid-template-columns:1fr; } .calendar-properties-dialog { padding:1rem; } }
+.app-topbar-title { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dialog-head { display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:1rem; }
+@media(max-width:500px) { .app-topbar .brand-sm { display:none; } .app-topbar { gap:.5rem; } }
+.migration-dialog { margin:auto; }
+.calendar-properties-dialog h2 { margin:0; font-size:1.25rem; font-weight:600; }
+.calendar-properties-dialog h3 { font-size:1rem; font-weight:600; margin-bottom:.35rem; }

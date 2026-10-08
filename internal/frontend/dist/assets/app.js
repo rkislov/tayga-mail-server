@@ -1,5 +1,28 @@
 const I18N = {
   ru: {
+    cal_shared: "Общий календарь",
+    cal_properties: "Свойства календаря",
+    cal_name: "Название",
+    cal_description: "Описание",
+    cal_color: "Цвет",
+    cal_access: "Доступ пользователям",
+    cal_read: "Просмотр",
+    cal_write: "Просмотр и редактирование",
+    cal_access_hint: "Введите email пользователя этого сервера. Владелец всегда имеет полный доступ.",
+    cal_grant: "Добавить доступ",
+    cal_revoke: "Убрать доступ",
+    cal_public: "Публичная ссылка",
+    cal_public_hint: "Любой, у кого есть ссылка, сможет читать все события и подписаться на календарь в формате ICS. Редактирование недоступно.",
+    cal_publish: "Открыть по ссылке",
+    cal_unpublish: "Отключить ссылку",
+    cal_rotate: "Заменить ссылку",
+    cal_copy: "Копировать ссылку",
+    cal_copied: "Ссылка скопирована",
+    cal_saved: "Свойства сохранены",
+    cal_readonly: "Этот календарь доступен только для просмотра.",
+    files_preparing: "Подготовка скачивания…",
+    files_download_error: "Не удалось скачать файл",
+
     cal_grid_hint: "Клик — открыть день · двойной клик — создать событие · Shift+Enter — создать с клавиатуры",
     cal_back_month: "К месяцу",
     cal_hour_add: "Двойной клик",
@@ -29,6 +52,8 @@ const I18N = {
     config_saved: "Настройки сохранены. Для применения перезапустите сервер.",
 
     color_mode: "Режим интерфейса",
+    color_mode_short: "День / Ночь",
+    color_mode_auto: "Авто",
     color_mode_light: "Дневной",
     color_mode_dark: "Ночной",
     brand: "Tayga Mail",
@@ -93,6 +118,25 @@ const I18N = {
     nav_language: "Язык",
     nav_migration: "Миграция",
     mig_title: "Миграция",
+    mig_my_jobs: "Мои задания",
+    mig_host: "Адрес старого сервера",
+    mig_port: "Порт",
+    mig_source_login: "Логин на старом сервере",
+    mig_mail_hint: "Письма и папки с другого сервера.",
+    mig_configure: "Настроить перенос →",
+    mig_credentials_hint: "Используйте реквизиты старого сервера. Импорт будет выполнен в текущую учётную запись.",
+    mig_starting: "Создаём задание…",
+    mig_started: "Перенос запущен. Прогресс обновляется автоматически.",
+    mig_status_pending: "Ожидает запуска",
+    mig_status_running: "Выполняется",
+    mig_status_paused: "Приостановлено",
+    mig_status_done: "Завершено",
+    mig_status_failed: "Ошибка",
+    mig_status_cancelled: "Отменено",
+    mig_copied: "перенесено",
+    mig_skipped: "пропущено",
+    mig_errors: "ошибок",
+
     mig_lede: "Импорт почты (IMAP), календаря (CalDAV) и контактов (CardDAV) с другого сервера.",
     mig_start: "Запустить",
     mig_cancel: "Отменить",
@@ -188,6 +232,8 @@ const I18N = {
     cos_share_ttl: "TTL публичной ссылки",
     cos_share_ttl_hint: "Макс. время жизни share-ссылки, секунды (7 суток = 604800).",
     cos_features: "Возможности",
+    cos_limits: "Лимиты",
+    cos_editor_lede: "Задайте лимиты и выберите доступные пользователям возможности.",
     cos_feat_files: "Файлы",
     cos_feat_files_hint: "Личное файловое хранилище в веб-UI.",
     cos_feat_dav: "CalDAV / CardDAV",
@@ -240,6 +286,16 @@ const I18N = {
     scan_icap_url: "ICAP URL",
     scan_icap_hint: "icap://host:1344/service или icaps://… (TLS). REQMOD, Allow: 204.",
     xmpp_title: "XMPP / чат",
+    xmpp_connections: "Подключения клиентов",
+    xmpp_configure: "Настроить XMPP",
+    xmpp_components_hint: "Подключение внешних сервисов по XEP-0114.",
+    xmpp_manage_components: "Управление компонентами",
+    xmpp_bots_hint: "Бот действует от выбранной учётной записи и может получать сообщения через webhook.",
+    xmpp_bot_token_once: "Сохраните токен: он показывается только один раз.",
+    xmpp_copy_token: "Копировать токен",
+    xmpp_token_copied: "Токен скопирован",
+    xmpp_copy_manual: "Выделите и скопируйте токен вручную.",
+
     xmpp_lede: "C2S для внешних клиентов, компоненты (XEP-0114) и HTTP-боты. Веб-чат работает и при выключенном C2S.",
     xmpp_status: "Состояние",
     xmpp_enabled: "C2S включён",
@@ -253,7 +309,7 @@ const I18N = {
     xmpp_bot_create: "Создать бота",
     xmpp_bot_token: "Токен (сохраните — показывается один раз)",
     xmpp_no_bots: "Ботов пока нет",
-    xmpp_no_components: "Компоненты не настроены (секция xmpp в Сервер)",
+    xmpp_no_components: "Компоненты пока не настроены",
     xmpp_save_cfg: "Сохранить C2S",
     xmpp_restart_hint: "Смена слушателей XMPP требует перезапуска tayga-mail.",
     notify_enable: "Уведомления браузера",
@@ -383,6 +439,14 @@ const I18N = {
     col_org: "Орг",
     col_note: "Заметка",
     files_title: "Файлы",
+    files_actions: "Действия",
+    files_rename: "Переименовать",
+    files_upload_folder: "Загрузить папку",
+    files_drop_hint: "Перетащите сюда файлы или папки. Меню ⋯ — действия с элементом.",
+    files_upload_busy: "Дождитесь завершения текущей загрузки.",
+    files_reading_drop: "Читаем перетаскиваемые файлы…",
+    files_name_invalid: "Название не должно содержать / или \\.",
+
     upload: "Загрузить",
     upload_progress: "Загрузка",
     upload_done: "Готово",
@@ -422,6 +486,29 @@ const I18N = {
     save: "Сохранить",
   },
   en: {
+    cal_shared: "Shared calendar",
+    cal_properties: "Calendar properties",
+    cal_name: "Name",
+    cal_description: "Description",
+    cal_color: "Color",
+    cal_access: "User access",
+    cal_read: "View",
+    cal_write: "View and edit",
+    cal_access_hint: "Enter a user email on this server. The owner always has full access.",
+    cal_grant: "Grant access",
+    cal_revoke: "Remove access",
+    cal_public: "Public link",
+    cal_public_hint: "Anyone with the link can read all events and subscribe in ICS format. Editing is unavailable.",
+    cal_publish: "Enable public link",
+    cal_unpublish: "Disable link",
+    cal_rotate: "Replace link",
+    cal_copy: "Copy link",
+    cal_copied: "Link copied",
+    cal_saved: "Properties saved",
+    cal_readonly: "This calendar is read-only.",
+    files_preparing: "Preparing download…",
+    files_download_error: "Download failed",
+
     cal_grid_hint: "Click to open a day · double-click to create an event · Shift+Enter to create with the keyboard",
     cal_back_month: "Back to month",
     cal_hour_add: "Double-click",
@@ -451,6 +538,8 @@ const I18N = {
     config_saved: "Settings saved. Restart the server to apply them.",
 
     color_mode: "Interface mode",
+    color_mode_short: "Day / Night",
+    color_mode_auto: "Auto",
     color_mode_light: "Day",
     color_mode_dark: "Night",
     brand: "Tayga Mail",
@@ -515,6 +604,25 @@ const I18N = {
     nav_language: "Language",
     nav_migration: "Migration",
     mig_title: "Migration",
+    mig_my_jobs: "My jobs",
+    mig_host: "Source server address",
+    mig_port: "Port",
+    mig_source_login: "Source server login",
+    mig_mail_hint: "Messages and folders from another server.",
+    mig_configure: "Configure import →",
+    mig_credentials_hint: "Use the source server credentials. Data will be imported into your current account.",
+    mig_starting: "Creating a job…",
+    mig_started: "Import started. Progress updates automatically.",
+    mig_status_pending: "Pending",
+    mig_status_running: "Running",
+    mig_status_paused: "Paused",
+    mig_status_done: "Done",
+    mig_status_failed: "Failed",
+    mig_status_cancelled: "Cancelled",
+    mig_copied: "copied",
+    mig_skipped: "skipped",
+    mig_errors: "errors",
+
     mig_lede: "Import mail (IMAP), calendar (CalDAV), and contacts (CardDAV) from another server.",
     mig_start: "Start",
     mig_cancel: "Cancel",
@@ -610,6 +718,8 @@ const I18N = {
     cos_share_ttl: "Public share TTL",
     cos_share_ttl_hint: "Max share link lifetime in seconds (7 days = 604800).",
     cos_features: "Features",
+    cos_limits: "Limits",
+    cos_editor_lede: "Set limits and choose the features available to users.",
     cos_feat_files: "Files",
     cos_feat_files_hint: "Personal file storage in the web UI.",
     cos_feat_dav: "CalDAV / CardDAV",
@@ -662,6 +772,16 @@ const I18N = {
     scan_icap_url: "ICAP URL",
     scan_icap_hint: "icap://host:1344/service or icaps://… (TLS). REQMOD, Allow: 204.",
     xmpp_title: "XMPP / chat",
+    xmpp_connections: "Client connections",
+    xmpp_configure: "Configure XMPP",
+    xmpp_components_hint: "Connect external services using XEP-0114.",
+    xmpp_manage_components: "Manage components",
+    xmpp_bots_hint: "The bot acts as the selected account and can receive messages via a webhook.",
+    xmpp_bot_token_once: "Save this token: it is shown only once.",
+    xmpp_copy_token: "Copy token",
+    xmpp_token_copied: "Token copied",
+    xmpp_copy_manual: "Select and copy the token manually.",
+
     xmpp_lede: "C2S for external clients, XEP-0114 components, and HTTP bots. Web Chat works even when C2S is off.",
     xmpp_status: "Status",
     xmpp_enabled: "C2S enabled",
@@ -675,7 +795,7 @@ const I18N = {
     xmpp_bot_create: "Create bot",
     xmpp_bot_token: "Token (save it — shown once)",
     xmpp_no_bots: "No bots yet",
-    xmpp_no_components: "No components configured (xmpp section in Server)",
+    xmpp_no_components: "No components configured yet",
     xmpp_save_cfg: "Save C2S",
     xmpp_restart_hint: "Changing XMPP listeners requires a tayga-mail restart.",
     notify_enable: "Browser notifications",
@@ -806,6 +926,14 @@ const I18N = {
     col_org: "Org",
     col_note: "Note",
     files_title: "Files",
+    files_actions: "Actions",
+    files_rename: "Rename",
+    files_upload_folder: "Upload folder",
+    files_drop_hint: "Drop files or folders here. Use ⋯ for item actions.",
+    files_upload_busy: "Wait for the current upload to finish.",
+    files_reading_drop: "Reading dropped files…",
+    files_name_invalid: "Names must not contain / or \\.",
+
     upload: "Upload",
     upload_progress: "Upload",
     upload_done: "Done",
@@ -1151,18 +1279,19 @@ function updateNavUser(email, isAdmin) {
   }
 }
 
+const systemColorMode = window.matchMedia("(prefers-color-scheme: dark)");
 function applyColorMode(mode) {
-  const value = mode === "light" ? "light" : "dark";
-  document.documentElement.dataset.colorMode = value;
-  localStorage.setItem("tayga.colorMode", value);
-  const select = document.getElementById("color-mode-select");
-  if (select) select.value = value;
+  const choice = ["light", "dark", "auto"].includes(mode) ? mode : "auto";
+  document.documentElement.dataset.colorMode = choice === "auto" ? (systemColorMode.matches ? "dark" : "light") : choice;
+  localStorage.setItem("tayga.colorMode", choice);
+  const select = $("color-mode-select");
+  if (select) select.value = choice;
+  document.querySelectorAll(".color-mode-switch button").forEach(button => button.setAttribute("aria-pressed", String(button.dataset.colorMode === choice)));
 }
-
-applyColorMode(localStorage.getItem("tayga.colorMode") || "dark");
-document.getElementById("color-mode-select")?.addEventListener("change", (event) => {
-  applyColorMode(event.target.value);
-});
+document.querySelectorAll(".color-mode-switch button").forEach(button => button.addEventListener("click",()=>applyColorMode(button.dataset.colorMode)));
+systemColorMode.addEventListener("change",()=>{if(localStorage.getItem("tayga.colorMode")==="auto")applyColorMode("auto");});
+applyColorMode(localStorage.getItem("tayga.colorMode") || "auto");
+$("color-mode-select")?.addEventListener("change",event=>applyColorMode(event.target.value));
 
 (function initTheme() {
   const saved = localStorage.getItem("tayga.theme") || "tayga";
@@ -2491,19 +2620,7 @@ function renderXMPPStatus(st) {
     el.textContent = "—";
     return;
   }
-  const lines = [
-    st.enabled ? t("xmpp_enabled") : t("xmpp_disabled"),
-    "C2S: " + (st.listen || "—") + (st.listen_tls ? " / TLS " + st.listen_tls : ""),
-    "components: " + (st.component_listen || "—"),
-    t("xmpp_webchat") + ": " + (st.web_chat ? "OK" : "—"),
-    st.hostname ? "JID domain: " + st.hostname : "",
-  ].filter(Boolean);
-  el.textContent = lines.join(" · ");
-  if ($("xmpp-enabled")) $("xmpp-enabled").checked = !!st.enabled;
-  if ($("xmpp-listen")) $("xmpp-listen").value = st.listen || "";
-  if ($("xmpp-listen-tls")) $("xmpp-listen-tls").value = st.listen_tls || "";
-  if ($("xmpp-component-listen")) $("xmpp-component-listen").value = st.component_listen || "";
-  if ($("xmpp-require-tls")) $("xmpp-require-tls").checked = !!st.require_tls;
+  el.innerHTML = `<p><strong>${escapeHtml(st.enabled?t("xmpp_enabled"):t("xmpp_disabled"))}</strong></p><dl class="xmpp-status-grid"><dt>C2S</dt><dd>${escapeHtml(st.listen||"—")}</dd><dt>TLS</dt><dd>${escapeHtml(st.listen_tls||"—")}</dd><dt>${t("xmpp_components")}</dt><dd>${escapeHtml(st.component_listen||"—")}</dd><dt>${t("xmpp_webchat")}</dt><dd>${st.web_chat?"OK":"—"}</dd><dt>JID</dt><dd>${escapeHtml(st.hostname||"—")}</dd></dl>`;
 }
 
 function renderXMPPComponents(list) {
@@ -2568,7 +2685,6 @@ async function fillXMPPUsers() {
 
 async function refreshXMPP() {
   setMsg($("xmpp-msg"), "");
-  $("xmpp-bot-token")?.classList.add("hidden");
   try {
     const data = await api("/api/v1/admin/bots");
     xmppState.status = data.status || null;
@@ -2577,16 +2693,7 @@ async function refreshXMPP() {
     renderXMPPComponents(data.components || (data.status && data.status.components) || []);
     renderXMPPBots(xmppState.bots);
     await fillXMPPUsers();
-    // merge live settings for form accuracy
-    try {
-      const settings = await api("/api/v1/admin/settings/xmpp");
-      const x = settings.value || {};
-      if ($("xmpp-enabled")) $("xmpp-enabled").checked = !!x.enabled;
-      if ($("xmpp-listen") && x.listen != null) $("xmpp-listen").value = x.listen;
-      if ($("xmpp-listen-tls") && x.listen_tls != null) $("xmpp-listen-tls").value = x.listen_tls;
-      if ($("xmpp-component-listen") && x.component_listen != null) $("xmpp-component-listen").value = x.component_listen;
-      if ($("xmpp-require-tls")) $("xmpp-require-tls").checked = !!x.require_tls;
-    } catch (_) {}
+
   } catch (err) {
     if ($("xmpp-status")) $("xmpp-status").textContent = err.message;
     setMsg($("xmpp-msg"), err.message, "err");
@@ -2594,59 +2701,36 @@ async function refreshXMPP() {
 }
 
 $("btn-xmpp-refresh")?.addEventListener("click", () => refreshXMPP());
-$("btn-xmpp-save")?.addEventListener("click", async () => {
-  setMsg($("xmpp-msg"), "…");
-  try {
-    let cur = {};
-    try {
-      const settings = await api("/api/v1/admin/settings/xmpp");
-      cur = settings.value || {};
-    } catch (_) {}
-    const body = {
-      ...cur,
-      enabled: !!$("xmpp-enabled")?.checked,
-      listen: $("xmpp-listen")?.value || ":5222",
-      listen_tls: $("xmpp-listen-tls")?.value || "",
-      component_listen: $("xmpp-component-listen")?.value || "",
-      require_tls: !!$("xmpp-require-tls")?.checked,
-    };
-    const out = await api("/api/v1/admin/settings/xmpp", {
-      method: "PUT",
-      body: JSON.stringify(body),
-    });
-    setMsg($("xmpp-msg"), out.restart_required
-      ? t("xmpp_restart_hint")
-      : "OK", out.restart_required ? "err" : "ok");
-    refreshXMPP();
-  } catch (err) { setMsg($("xmpp-msg"), err.message, "err"); }
+document.querySelectorAll("[data-xmpp-config]").forEach(btn=>btn.addEventListener("click",async()=>{
+ try {settingsState.all=await api("/api/v1/admin/settings");await openAdminConfig("xmpp");}
+ catch(err){setMsg($("xmpp-msg"),err.message,"err");}
+}));
+const xmppBotDialog=$("xmpp-bot-dialog");
+let xmppBotBusy=false;
+$("btn-xmpp-bot-open")?.addEventListener("click",async()=>{await fillXMPPUsers();xmppBotDialog.showModal();$("xmpp-bot-name").focus();});
+$("xmpp-bot-close")?.addEventListener("click",()=>{if(!xmppBotBusy)xmppBotDialog.close();});
+xmppBotDialog?.addEventListener("cancel",event=>{if(xmppBotBusy)event.preventDefault();});
+xmppBotDialog?.addEventListener("close",()=>{
+ $("xmpp-bot-form").classList.remove("hidden");$("xmpp-bot-result").classList.add("hidden");
+ $("xmpp-bot-token").textContent="";$("xmpp-bot-token").dataset.token="";
+ $("xmpp-bot-name").value="";$("xmpp-bot-webhook").value="";setMsg($("xmpp-bot-dialog-msg"),"");
 });
-$("btn-xmpp-bot-create")?.addEventListener("click", async () => {
-  const name = ($("xmpp-bot-name")?.value || "").trim();
-  const userID = $("xmpp-bot-user")?.value || "";
-  if (!name || !userID) {
-    setMsg($("xmpp-msg"), "name + user required", "err");
-    return;
-  }
-  setMsg($("xmpp-msg"), "…");
-  try {
-    const info = await api("/api/v1/admin/bots", {
-      method: "POST",
-      body: JSON.stringify({
-        name,
-        user_id: userID,
-        webhook_url: ($("xmpp-bot-webhook")?.value || "").trim(),
-      }),
-    });
-    const tok = $("xmpp-bot-token");
-    if (tok && info.token) {
-      tok.textContent = t("xmpp_bot_token") + ":\n" + info.token;
-      tok.classList.remove("hidden");
-    }
-    if ($("xmpp-bot-name")) $("xmpp-bot-name").value = "";
-    if ($("xmpp-bot-webhook")) $("xmpp-bot-webhook").value = "";
-    setMsg($("xmpp-msg"), "OK", "ok");
-    refreshXMPP();
-  } catch (err) { setMsg($("xmpp-msg"), err.message, "err"); }
+$("xmpp-bot-copy")?.addEventListener("click",async()=>{
+ try {await navigator.clipboard.writeText($("xmpp-bot-token").dataset.token);setMsg($("xmpp-bot-dialog-msg"),t("xmpp_token_copied"),"ok");}
+ catch {setMsg($("xmpp-bot-dialog-msg"),t("xmpp_copy_manual"),"err");}
+});
+$("xmpp-bot-form")?.addEventListener("submit",async event=>{
+ event.preventDefault();if(xmppBotBusy || !event.target.reportValidity())return;
+ xmppBotBusy=true;$("btn-xmpp-bot-create").disabled=true;$("xmpp-bot-close").disabled=true;
+ setMsg($("xmpp-bot-dialog-msg"),"…");
+ try {
+   const info=await api("/api/v1/admin/bots",{method:"POST",body:JSON.stringify({name:$("xmpp-bot-name").value.trim(),user_id:$("xmpp-bot-user").value,webhook_url:$("xmpp-bot-webhook").value.trim()})});
+   await refreshXMPP();
+   $("xmpp-bot-form").classList.add("hidden");$("xmpp-bot-result").classList.remove("hidden");
+   $("xmpp-bot-token").textContent=info.token||"";$("xmpp-bot-token").dataset.token=info.token||"";
+   setMsg($("xmpp-bot-dialog-msg"),"OK","ok");$("xmpp-bot-copy").focus();
+ }catch(err){setMsg($("xmpp-bot-dialog-msg"),err.message,"err");}
+ finally{xmppBotBusy=false;$("btn-xmpp-bot-create").disabled=false;$("xmpp-bot-close").disabled=false;}
 });
 
 function renderMigJobs(listEl, jobs) {
@@ -2658,13 +2742,13 @@ function renderMigJobs(listEl, jobs) {
   listEl.innerHTML = jobs.map((j) => `
     <li class="ca-cert-item">
       <div>
-        <strong>${escapeHtml(j.kind)}</strong> · ${escapeHtml(j.status)}
+        <strong>${escapeHtml(j.kind)}</strong> · ${escapeHtml(t("mig_status_"+j.status))}
         ${j.user_email ? `<div class="meta">${escapeHtml(j.user_email)}</div>` : ""}
-        <div class="meta">${j.copied || 0} copied · ${j.skipped || 0} skipped · ${j.errors || 0} errors</div>
+        <div class="meta">${j.copied || 0} ${t("mig_copied")} · ${j.skipped || 0} ${t("mig_skipped")} · ${j.errors || 0} ${t("mig_errors")}</div>
         ${j.last_error ? `<div class="meta">${escapeHtml(j.last_error)}</div>` : ""}
       </div>
       <div class="actions">
-        ${j.status === "pending" || j.status === "running" || j.status === "paused"
+        ${["pending","running","paused"].includes(j.status) && (!j.user_id || j.user_id === state.me?.id)
           ? `<button type="button" class="btn-secondary btn-sm" data-mig-cancel="${escapeHtml(j.id)}">${t("mig_cancel")}</button>`
           : ""}
       </div>
@@ -2710,7 +2794,9 @@ async function refreshMigration() {
     adminBox.classList.remove("hidden");
     try {
       const adm = await api("/api/v1/admin/migration");
-      renderMigJobs($("mig-admin-job-list"), adm.jobs || []);
+      const otherJobs=(adm.jobs||[]).filter(job=>job.user_id!==state.me?.id);
+      adminBox.classList.toggle("hidden",!otherJobs.length);
+      renderMigJobs($("mig-admin-job-list"),otherJobs);
     } catch (err) {
       const al = $("mig-admin-job-list");
       if (al) al.innerHTML = `<li class="meta">${escapeHtml(err.message)}</li>`;
@@ -2718,15 +2804,6 @@ async function refreshMigration() {
   } else {
     adminBox?.classList.add("hidden");
   }
-}
-
-async function startMigration(kind, body) {
-  setMsg($("mig-msg"), "…");
-  try {
-    await api("/api/v1/migration/jobs", { method: "POST", body: JSON.stringify({ kind, ...body }) });
-    setMsg($("mig-msg"), "OK", "ok");
-    refreshMigration();
-  } catch (err) { setMsg($("mig-msg"), err.message, "err"); }
 }
 
 $("btn-mig-refresh")?.addEventListener("click", () => refreshMigration());
@@ -2757,23 +2834,44 @@ $("btn-mig-enable-domain")?.addEventListener("click", async () => {
     refreshMigration();
   } catch (err) { setMsg($("mig-msg"), err.message, "err"); }
 });
-$("btn-mig-imap")?.addEventListener("click", () => startMigration("imap", {
-  host: ($("mig-imap-host")?.value || "").trim(),
-  port: Number($("mig-imap-port")?.value || 993),
-  tls: !!$("mig-imap-tls")?.checked,
-  username: ($("mig-imap-user")?.value || "").trim(),
-  password: $("mig-imap-pass")?.value || "",
+const migrationDialog = $("mig-dialog");
+let migrationStarting = false;
+document.querySelectorAll("[data-mig-open]").forEach(btn => btn.addEventListener("click", () => {
+  if (!state.me?.features?.migration) return;
+  const kind = btn.dataset.migOpen;
+  document.querySelectorAll("[data-mig-kind]").forEach(form => form.classList.toggle("hidden", form.dataset.migKind !== kind));
+  $("mig-dialog-title").textContent = t({imap:"nav_mail",cal:"nav_calendar",card:"nav_contacts"}[kind]) + " · " + t("mig_title");
+  setMsg($("mig-dialog-msg"), "");
+  migrationDialog.showModal();
+  $("mig-form-"+kind).querySelector("input")?.focus();
 }));
-$("btn-mig-cal")?.addEventListener("click", () => startMigration("caldav", {
-  url: ($("mig-cal-url")?.value || "").trim(),
-  username: ($("mig-cal-user")?.value || "").trim(),
-  password: $("mig-cal-pass")?.value || "",
+$("mig-imap-tls")?.addEventListener("change",event=>{
+ const port=$("mig-imap-port");
+ if(port && ["143","993"].includes(port.value))port.value=event.target.checked?"993":"143";
+});
+$("mig-dialog-close")?.addEventListener("click", () => { if (!migrationStarting) migrationDialog.close(); });
+migrationDialog?.addEventListener("cancel", event => {if(migrationStarting)event.preventDefault();});
+migrationDialog?.addEventListener("close", () => {migrationDialog.querySelectorAll('input[type="password"]').forEach(input=>input.value="");});
+document.querySelectorAll("[data-mig-kind]").forEach(form => form.addEventListener("submit", async event => {
+  event.preventDefault();
+  if (migrationStarting || !form.reportValidity()) return;
+  const kind=form.dataset.migKind;
+  const body={username:$("mig-"+kind+"-user").value.trim(),password:$("mig-"+kind+"-pass").value};
+  if(kind==="imap") Object.assign(body,{host:$("mig-imap-host").value.trim(),port:Number($("mig-imap-port").value),tls:$("mig-imap-tls").checked});
+  else body.url=$("mig-"+kind+"-url").value.trim();
+  migrationStarting=true;
+  form.querySelector('button[type="submit"]').disabled=true;
+  $("mig-dialog-close").disabled=true;
+  setMsg($("mig-dialog-msg"),t("mig_starting"));
+  try {
+    await api("/api/v1/migration/jobs", {method:"POST",body:JSON.stringify({kind:{imap:"imap",cal:"caldav",card:"carddav"}[kind],...body})});
+    migrationDialog.close();
+    await refreshMigration();
+    setMsg($("mig-msg"),t("mig_started"),"ok");
+  } catch(err) {setMsg($("mig-dialog-msg"),err.message,"err");}
+  finally {migrationStarting=false;form.querySelector('button[type="submit"]').disabled=false;$("mig-dialog-close").disabled=false;}
 }));
-$("btn-mig-card")?.addEventListener("click", () => startMigration("carddav", {
-  url: ($("mig-card-url")?.value || "").trim(),
-  username: ($("mig-card-user")?.value || "").trim(),
-  password: $("mig-card-pass")?.value || "",
-}));
+setInterval(()=>{if(state.tokens?.access_token&&!document.hidden&&!$("app-migration")?.classList.contains("hidden")&&!migrationDialog.open)refreshMigration();},5000);
 
 const settingsState = { all: null };
 const cosState = { items: [], selected: "" };
@@ -2822,6 +2920,9 @@ const editorSheet = {
 };
 
 function openEditorSheet({ title, lede = "", bodyHTML, showDelete = false, onApply, onDelete }) {
+  $("editor-sheet")?.classList.toggle("is-cos", editorSheet.mode === "cos");
+  editorSheet.focus = document.activeElement;
+  if ($("view-account")) $("view-account").inert = true;
   editorSheet.onApply = onApply;
   editorSheet.onDelete = onDelete;
   if ($("editor-sheet-title")) $("editor-sheet-title").textContent = title || "";
@@ -2834,6 +2935,8 @@ function openEditorSheet({ title, lede = "", bodyHTML, showDelete = false, onApp
 
 function closeEditorSheet() {
   $("editor-sheet-backdrop")?.classList.add("hidden");
+  if ($("view-account")) $("view-account").inert = false;
+  if (editorSheet.focus?.isConnected) editorSheet.focus.focus();
   editorSheet.mode = "";
   editorSheet.draft = null;
   editorSheet.onApply = null;
@@ -2842,17 +2945,21 @@ function closeEditorSheet() {
   setMsg($("editor-sheet-msg"), "");
 }
 
+document.addEventListener("keydown", event => {
+  if ($("editor-sheet-backdrop")?.classList.contains("hidden") || !$("dialog-backdrop")?.classList.contains("hidden")) return;
+  if (event.key === "Escape") { event.preventDefault(); closeEditorSheet(); return; }
+  if (event.key !== "Tab") return;
+  const controls = [...$("editor-sheet").querySelectorAll("button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex='0']")].filter(el=>el.getClientRects().length);
+  const first=controls[0],last=controls.at(-1);
+  if (event.shiftKey && document.activeElement===first) {event.preventDefault();last?.focus();}
+  else if (!event.shiftKey && document.activeElement===last) {event.preventDefault();first?.focus();}
+});
 $("editor-sheet-close")?.addEventListener("click", () => closeEditorSheet());
 $("editor-sheet-x")?.addEventListener("click", () => closeEditorSheet());
 $("editor-sheet-backdrop")?.addEventListener("click", (e) => {
   if (e.target === $("editor-sheet-backdrop")) closeEditorSheet();
 });
 $("editor-sheet-cancel")?.addEventListener("click", () => {
-  if (editorSheet.mode === "cos") {
-    openCoSEditor(editorSheet.draft);
-    setMsg($("editor-sheet-msg"), "");
-    return;
-  }
   closeEditorSheet();
 });
 $("editor-sheet-apply")?.addEventListener("click", async () => {
@@ -2892,35 +2999,22 @@ function cosFormHTML(draft) {
         <span class="field-hint">${escapeHtml(t(hint))}</span>
       </span>
     </label>`).join("");
+  const limits = [
+    ["cos-quota", "cos_quota", "cos_quota_hint", draft.quota_bytes],
+    ["cos-max-mail", "cos_max_mail", "cos_max_mail_hint", draft.max_mail_size],
+    ["cos-large-attach", "cos_large_attach", "cos_large_attach_hint", draft.large_attach_bytes],
+    ["cos-share-ttl", "cos_share_ttl", "cos_share_ttl_hint", draft.share_max_ttl_sec],
+  ].map(([id,label,hint,value]) => `<div class="form-row"><label class="field-label" for="${id}">${escapeHtml(t(label))}</label><p class="field-hint">${escapeHtml(t(hint))}</p><input class="field-input" id="${id}" type="number" min="0" step="1" value="${value}" /></div>`).join("");
   return `
-    <div class="form-row">
+    <div class="form-row cos-identity">
       <label class="field-label" for="cos-name">${escapeHtml(t("cos_name"))}</label>
       <p class="field-hint">${escapeHtml(t("cos_name_hint"))}</p>
       <input class="field-input" id="cos-name" type="text" value="${escapeHtml(draft.name)}" placeholder="standard" />
     </div>
-    <div class="form-row">
-      <label class="field-label" for="cos-quota">${escapeHtml(t("cos_quota"))}</label>
-      <p class="field-hint">${escapeHtml(t("cos_quota_hint"))}</p>
-      <input class="field-input" id="cos-quota" type="number" min="0" step="1" value="${draft.quota_bytes}" />
-    </div>
-    <div class="form-row">
-      <label class="field-label" for="cos-max-mail">${escapeHtml(t("cos_max_mail"))}</label>
-      <p class="field-hint">${escapeHtml(t("cos_max_mail_hint"))}</p>
-      <input class="field-input" id="cos-max-mail" type="number" min="0" step="1" value="${draft.max_mail_size}" />
-    </div>
-    <div class="form-row">
-      <label class="field-label" for="cos-large-attach">${escapeHtml(t("cos_large_attach"))}</label>
-      <p class="field-hint">${escapeHtml(t("cos_large_attach_hint"))}</p>
-      <input class="field-input" id="cos-large-attach" type="number" min="0" step="1" value="${draft.large_attach_bytes}" />
-    </div>
-    <div class="form-row">
-      <label class="field-label" for="cos-share-ttl">${escapeHtml(t("cos_share_ttl"))}</label>
-      <p class="field-hint">${escapeHtml(t("cos_share_ttl_hint"))}</p>
-      <input class="field-input" id="cos-share-ttl" type="number" min="0" step="1" value="${draft.share_max_ttl_sec}" />
-    </div>
-    <h4 class="heading form-section-title">${escapeHtml(t("cos_features"))}</h4>
-    ${featRows}
-  `;
+    <div class="cos-editor-grid">
+      <section aria-labelledby="cos-limits-title"><h4 class="heading" id="cos-limits-title">${t("cos_limits")}</h4><div class="cos-limit-grid">${limits}</div></section>
+      <section aria-labelledby="cos-features-title"><h4 class="heading" id="cos-features-title">${t("cos_features")}</h4><div class="cos-feature-grid">${featRows}</div></section>
+    </div>`;
 }
 
 function readCoSForm() {
@@ -2946,10 +3040,11 @@ function openCoSEditor(sc) {
   editorSheet.draft = sc ? { id: sc.id, name: sc.name, config: sc.config } : null;
   openEditorSheet({
     title: sc ? t("cos_edit") : t("cos_new"),
-    lede: t("cos_lede"),
+    lede: t("cos_editor_lede"),
     bodyHTML: cosFormHTML(draft),
     showDelete: !!sc?.id,
     onApply: async () => {
+      if ([...$("editor-sheet-body").querySelectorAll("input")].some(input => !input.reportValidity())) return;
       const { name, config } = readCoSForm();
       if (!name) {
         setMsg($("editor-sheet-msg"), t("cos_name") + " — ?", "err");
@@ -4293,6 +4388,7 @@ function renderCalDay() {
 }
 
 function startNewCalEvent(day = calState.selectedDay || calDayKey(new Date()), hour = 10) {
+  if (calState.calendars.find(c=>c.id===calState.calendarID)?.writable===false) {setMsg($("cal-msg"),t("cal_readonly"),"err");return;}
   clearTimeout(calState.dayClickTimer);
   calState.selectedDay = day;
   $("form-cal-event")?.reset();
@@ -4384,13 +4480,11 @@ async function refreshCalendar() {
       calState.calendarID = calState.calendars[0].id;
     }
     folders.innerHTML = calState.calendars.map((c) => {
-      const label = c.display_name || c.name || c.id;
-      const del = c.deletable
-        ? `<button type="button" class="btn-secondary btn-sm btn-ico folder-del" data-cal-del="${escapeHtml(c.id)}" data-i18n-title="cal_delete" title="${escapeHtml(t("cal_delete"))}" aria-label="${escapeHtml(t("cal_delete"))}"><span class="ico" data-ico="delete" aria-hidden="true"></span></button>`
-        : "";
+      const label = (c.display_name || c.name || c.id) + (c.shared ? " · " + t("cal_shared") : "");
+      const del = `<button type="button" class="btn-secondary btn-sm btn-ico" data-cal-properties="${escapeHtml(c.id)}" title="${escapeHtml(t("cal_properties"))}" aria-label="${escapeHtml(t("cal_properties"))}">⋯</button>`;
       return `<li class="folder-row">
         <button type="button" class="folder-btn${c.id === calState.calendarID ? " is-active" : ""}" data-cal="${escapeHtml(c.id)}">
-          <span>${escapeHtml(label)}</span>
+          <span class="calendar-color-dot" style="background:${/^#[0-9a-fA-F]{6}$/.test(c.color)?c.color:"#c77c35"}"></span><span>${escapeHtml(label)}</span>
         </button>
         ${del}
       </li>`;
@@ -4403,25 +4497,7 @@ async function refreshCalendar() {
         loadCalEvents();
       });
     });
-    folders.querySelectorAll("[data-cal-del]").forEach((btn) => {
-      btn.addEventListener("click", async (e) => {
-        e.stopPropagation();
-        const id = btn.dataset.calDel;
-        const cal = calState.calendars.find((c) => c.id === id);
-        if (!cal?.deletable) {
-          setMsg($("cal-msg"), t("cal_delete_default"), "err");
-          return;
-        }
-        if (!await askConfirm(t("cal_delete_confirm") + "\n" + (cal.display_name || cal.name), { danger: true })) return;
-        try {
-          await api("/api/v1/calendar/calendars/" + encodeURIComponent(id), { method: "DELETE" });
-          if (calState.calendarID === id) calState.calendarID = "";
-          await refreshCalendar();
-        } catch (err) {
-          setMsg($("cal-msg"), err.message, "err");
-        }
-      });
-    });
+    folders.querySelectorAll("[data-cal-properties]").forEach(btn=>btn.addEventListener("click",()=>openCalendarProperties(btn.dataset.calProperties)));
     await loadCalEvents();
     await refreshCalInvites();
   } catch (err) {
@@ -4455,6 +4531,8 @@ async function loadCalEvents() {
     return;
   }
   const cal = calState.calendars.find((c) => c.id === calState.calendarID);
+  $("app-calendar").style.setProperty("--calendar-color", /^#[0-9a-fA-F]{6}$/.test(cal?.color)?cal.color:"#c77c35");
+  ["btn-cal-new","btn-cal-new-mobile","btn-cal-delete"].forEach(id=>{if($(id))$(id).disabled=cal?.writable===false;});
   if (title) title.textContent = cal?.display_name || cal?.name || t("calendar_title");
   try {
     const ev = await api("/api/v1/calendar/calendars/" + encodeURIComponent(calState.calendarID) + "/events");
@@ -4815,7 +4893,7 @@ function showFileReader(entry) {
   $("files-read-path").textContent = "/" + joinPath(filesState.path, entry.name);
   $("files-read-size").textContent = entry.is_dir ? "—" : fmtBytes(entry.size || 0);
   $("files-read-type").textContent = entry.is_dir ? t("type_folder") : t("type_file");
-  $("btn-files-download")?.classList.toggle("hidden", !!entry.is_dir);
+  $("btn-files-download")?.classList.remove("hidden");
   $("btn-files-open")?.classList.toggle("hidden", !entry.is_dir);
 }
 
@@ -4829,20 +4907,14 @@ function selectFileEntry(name) {
 }
 
 async function downloadFile(name) {
-  const path = joinPath(filesState.path, name);
-  const headers = {};
-  if (state.tokens?.access_token) headers.Authorization = "Bearer " + state.tokens.access_token;
-  const res = await fetch("/api/v1/files/content?path=" + encodeURIComponent(path), { headers });
-  if (!res.ok) {
-    setMsg($("files-msg"), "download failed", "err");
-    return;
-  }
-  const blob = await res.blob();
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = name;
-  a.click();
-  URL.revokeObjectURL(a.href);
+  const path=joinPath(filesState.path,name),isFolder=!!filesState.entries.find(e=>e.name===name)?.is_dir;
+  setMsg($("files-msg"),t("files_preparing"));
+  try {
+    const headers={};if(state.tokens?.access_token)headers.Authorization="Bearer "+state.tokens.access_token;
+    const res=await fetch("/api/v1/files/"+(isFolder?"archive":"content")+"?path="+encodeURIComponent(path),{headers});
+    if(!res.ok)throw new Error(t("files_download_error"));
+    const blob=await res.blob(),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name+(isFolder?".zip":"");a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);setMsg($("files-msg"),"");
+  }catch(err){setMsg($("files-msg"),err.message,"err");}
 }
 
 function chatBare(jid) {
@@ -5016,17 +5088,26 @@ async function refreshFiles() {
       </li>`;
     }
     html += filesState.entries.map((e) => `
-      <li>
-        <button type="button" class="file-item${e.is_dir ? " is-dir" : ""}${filesState.selected?.name === e.name ? " is-active" : ""}" data-name="${escapeHtml(e.name)}">
+      <li class="file-row">
+        <button type="button" draggable="true" class="file-item${e.is_dir ? " is-dir" : ""}${filesState.selected?.name === e.name ? " is-active" : ""}" data-name="${escapeHtml(e.name)}">
           <span class="file-name">${escapeHtml(e.name)}</span>
           <span class="file-size">${e.is_dir ? "—" : escapeHtml(fmtBytes(e.size || 0))}</span>
           <span class="file-kind">${escapeHtml(e.is_dir ? t("type_folder") : t("type_file"))}</span>
-        </button>
+        </button><button type="button" class="file-more" data-file-menu="${escapeHtml(e.name)}" aria-label="${escapeHtml(t("files_actions")+": "+e.name)}">⋯</button>
       </li>`).join("") || (!filesState.path ? `<li class="meta msg-empty">${escapeHtml(t("empty_files"))}</li>` : "");
     list.innerHTML = html;
     $("files-up")?.addEventListener("click", () => filesGoUp());
     list.querySelectorAll("[data-name]").forEach((btn) => {
       btn.addEventListener("click", () => selectFileEntry(btn.dataset.name));
+      btn.addEventListener("contextmenu",event=>{event.preventDefault();openFileContext(btn.dataset.name,event.clientX,event.clientY,btn);});
+      btn.addEventListener("keydown",event=>{if(event.key==="ContextMenu"||(event.shiftKey&&event.key==="F10")){event.preventDefault();const rect=btn.getBoundingClientRect();openFileContext(btn.dataset.name,rect.left+20,rect.top+20,btn);}});
+      btn.addEventListener("dragstart",event=>{event.dataTransfer.setData("application/x-tayga-file",JSON.stringify({path:joinPath(filesState.path,btn.dataset.name),name:btn.dataset.name}));event.dataTransfer.effectAllowed="move";});
+      const entry=filesState.entries.find(item=>item.name===btn.dataset.name);
+      if(entry?.is_dir){
+        btn.addEventListener("dragover",event=>{event.preventDefault();event.stopPropagation();btn.classList.add("is-drop-target");});
+        btn.addEventListener("dragleave",()=>btn.classList.remove("is-drop-target"));
+        btn.addEventListener("drop",event=>{event.preventDefault();event.stopPropagation();btn.classList.remove("is-drop-target");handleFileDrop(event,joinPath(filesState.path,entry.name));});
+      }
       btn.addEventListener("dblclick", () => {
         const entry = filesState.entries.find((e) => e.name === btn.dataset.name);
         if (entry?.is_dir) {
@@ -5038,6 +5119,9 @@ async function refreshFiles() {
         }
       });
     });
+    list.querySelectorAll("[data-file-menu]").forEach(button=>button.onclick=()=>{const rect=button.getBoundingClientRect();openFileContext(button.dataset.fileMenu,rect.left,rect.bottom,button);});
+    $("files-up")?.addEventListener("dragover",event=>event.preventDefault());
+    $("files-up")?.addEventListener("drop",event=>{event.preventDefault();event.stopPropagation();handleFileDrop(event,filesState.path.split("/").slice(0,-1).join("/"));});
     if (filesState.selected) {
       const still = filesState.entries.find((e) => e.name === filesState.selected.name);
       showFileReader(still || null);
@@ -5063,7 +5147,7 @@ $("btn-files-mkdir")?.addEventListener("click", async () => {
   } catch (err) { setMsg($("files-msg"), err.message, "err"); }
 });
 $("btn-files-download")?.addEventListener("click", () => {
-  if (filesState.selected && !filesState.selected.is_dir) downloadFile(filesState.selected.name);
+  if (filesState.selected) downloadFile(filesState.selected.name);
 });
 $("btn-files-open")?.addEventListener("click", () => {
   if (!filesState.selected?.is_dir) return;
@@ -5082,6 +5166,61 @@ $("btn-files-delete")?.addEventListener("click", async () => {
     refreshFiles();
   } catch (err) { setMsg($("files-msg"), err.message, "err"); }
 });
+const fileContext=document.createElement("div");
+fileContext.className="files-context-menu hidden";fileContext.setAttribute("role","menu");document.body.append(fileContext);
+let fileContextFocus=null;
+function closeFileContext(restore=true){fileContext.classList.add("hidden");if(restore&&fileContextFocus?.isConnected)fileContextFocus.focus();}
+function openFileContext(name,x,y,focus){
+ selectFileEntry(name);fileContextFocus=focus;
+ fileContext.innerHTML=[['rename',t('files_rename')],['download',t('download')+(filesState.selected?.is_dir?' · ZIP':'')],['delete',t('delete')]].map(([action,label])=>`<button type="button" role="menuitem" data-file-action="${action}">${escapeHtml(label)}</button>`).join('');
+ fileContext.classList.remove("hidden");
+ fileContext.style.left=Math.max(8,Math.min(x,innerWidth-fileContext.offsetWidth-8))+"px";
+ fileContext.style.top=Math.max(8,Math.min(y,innerHeight-fileContext.offsetHeight-8))+"px";
+ fileContext.querySelectorAll('[data-file-action]').forEach(button=>button.onclick=async()=>{
+  const action=button.dataset.fileAction;closeFileContext();
+  if(action==='download')downloadFile(name);
+  else if(action==='delete')$("btn-files-delete").click();
+  else {
+   const updated=(await askPrompt(t('files_rename'),{value:name}))?.trim();
+   if(!updated||updated===name)return;
+   if(/[\\/]/.test(updated)||['.','..'].includes(updated)){setMsg($("files-msg"),t('files_name_invalid'),'err');return;}
+   try {await api('/api/v1/files/move',{method:'POST',body:JSON.stringify({from:joinPath(filesState.path,name),to:joinPath(filesState.path,updated)})});filesState.selected=null;await refreshFiles();}
+   catch(err){setMsg($("files-msg"),err.message,'err');}
+  }
+ });fileContext.querySelector('button')?.focus();
+}
+document.addEventListener('pointerdown',event=>{if(!fileContext.contains(event.target))closeFileContext(false);});
+fileContext.addEventListener('keydown',event=>{
+ if(event.key==='Escape'||event.key==='Tab'){closeFileContext();if(event.key==='Escape')event.preventDefault();return;}
+ if(!['ArrowDown','ArrowUp','Home','End'].includes(event.key))return;
+ event.preventDefault();const buttons=[...fileContext.querySelectorAll('button')];let i=buttons.indexOf(document.activeElement);
+ i=event.key==='Home'?0:event.key==='End'?buttons.length-1:(i+(event.key==='ArrowDown'?1:-1)+buttons.length)%buttons.length;buttons[i].focus();
+});
+window.addEventListener('resize',()=>closeFileContext(false));
+async function droppedFiles(transfer){
+ const roots=[...(transfer.items||[])].map(item=>item.webkitGetAsEntry?.()).filter(Boolean);
+ const files=[],folders=[];
+ async function walk(entry,parent=''){
+  const path=joinPath(parent,entry.name);
+  if(entry.isFile){const file=await new Promise((resolve,reject)=>entry.file(resolve,reject));files.push({file,relativePath:path});}
+  else if(entry.isDirectory){folders.push(path);const reader=entry.createReader();let batch;do{batch=await new Promise((resolve,reject)=>reader.readEntries(resolve,reject));for(const child of batch)await walk(child,path);}while(batch.length);}
+ }
+ if(roots.length){for(const entry of roots)await walk(entry);}
+ else files.push(...Array.from(transfer.files));
+ return {files,folders};
+}
+async function handleFileDrop(event,target){
+ $("app-files").classList.remove('is-drag-over');
+ const internal=event.dataTransfer.getData('application/x-tayga-file');
+ try {
+  if(internal){const item=JSON.parse(internal);await api('/api/v1/files/move',{method:'POST',body:JSON.stringify({from:item.path,to:joinPath(target,item.name)})});filesState.selected=null;await refreshFiles();}
+  else {setMsg($("files-msg"),t('files_reading_drop'));const items=await droppedFiles(event.dataTransfer);await uploadFiles(items.files,target,items.folders);}
+ }catch(err){setMsg($("files-msg"),err.message,'err');}
+}
+$("app-files")?.addEventListener('dragover',event=>{event.preventDefault();$("app-files").classList.add('is-drag-over');});
+$("app-files")?.addEventListener('dragleave',event=>{if(!$("app-files").contains(event.relatedTarget))$("app-files").classList.remove('is-drag-over');});
+$("app-files")?.addEventListener('drop',event=>{event.preventDefault();handleFileDrop(event,filesState.path);});
+
 function tFmt(key, vars) {
   let s = t(key);
   for (const [k, v] of Object.entries(vars || {})) {
@@ -5142,7 +5281,7 @@ function renderUploadPanel(jobs) {
     if (j.status === "err") status = t("upload_failed") + (j.error ? ": " + j.error : "");
     const cls = j.status === "done" ? " is-done" : (j.status === "err" ? " is-err" : "");
     return `<li class="files-upload-item${cls}" data-id="${escapeHtml(j.id)}">
-      <span class="fu-name" title="${escapeHtml(j.file.name)}">${escapeHtml(j.file.name)}</span>
+      <span class="fu-name" title="${escapeHtml(j.relativePath || j.file.name)}">${escapeHtml(j.relativePath || j.file.name)}</span>
       <span class="fu-meta">${escapeHtml(meta)}</span>
       <div class="fu-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><span style="width:${pct}%"></span></div>
       <span class="fu-status">${escapeHtml(status)}</span>
@@ -5150,16 +5289,20 @@ function renderUploadPanel(jobs) {
   }).join("");
 }
 
-$("files-upload")?.addEventListener("change", async (e) => {
-  const files = Array.from(e.target.files || []);
-  e.target.value = "";
-  if (!files.length) return;
-
+let filesUploading = false;
+async function uploadFiles(files, targetPath=filesState.path, folders=[]) {
+  if (filesUploading) {setMsg($("files-msg"),t("files_upload_busy"),"err");return;}
+  filesUploading=true;
+  for(const folder of folders) {
+    try{await api("/api/v1/files/mkdir",{method:"POST",body:JSON.stringify({path:joinPath(targetPath,folder)})});}
+    catch(err){filesUploading=false;setMsg($("files-msg"),err.message,"err");return;}
+  }
   const jobs = files.map((file, i) => ({
     id: "u" + i,
-    file,
+    file: file.file || file,
+    relativePath: file.relativePath || file.webkitRelativePath || file.name,
     loaded: 0,
-    total: file.size || 0,
+    total: (file.file || file).size || 0,
     status: "waiting",
     error: "",
   }));
@@ -5174,7 +5317,7 @@ $("files-upload")?.addEventListener("change", async (e) => {
     job.status = "uploading";
     renderUploadPanel(jobs);
     try {
-      const path = joinPath(filesState.path, job.file.name);
+      const path = joinPath(targetPath, job.relativePath);
       await putFileWithProgress(job.file, path, (loaded, total) => {
         job.loaded = loaded;
         job.total = total || job.file.size;
@@ -5205,6 +5348,7 @@ $("files-upload")?.addEventListener("change", async (e) => {
     renderUploadPanel(jobs);
   }
 
+  filesUploading=false;
   uploadBtn?.classList.remove("is-busy");
   if (err === 0) {
     setMsg($("files-msg"), tFmt("upload_ok", { n: ok }), "ok");
@@ -5219,7 +5363,10 @@ $("files-upload")?.addEventListener("change", async (e) => {
       if (panel && !uploadBtn?.classList.contains("is-busy")) panel.classList.add("hidden");
     }, 2200);
   }
-});
+}
+$("files-upload")?.addEventListener("change",event=>{const files=Array.from(event.target.files||[]);event.target.value="";if(files.length)uploadFiles(files);});
+$("files-upload-folder")?.addEventListener("change",event=>{const files=Array.from(event.target.files||[]);event.target.value="";if(files.length)uploadFiles(files);});
+
 
 /* —— Notes —— */
 function notePreview(n) {
@@ -5653,6 +5800,72 @@ try {
     forceLogin(t("session_expired"));
   }
 })();
+
+const calendarPropertiesDialog=document.createElement('dialog');
+calendarPropertiesDialog.id='calendar-properties-dialog';calendarPropertiesDialog.className='migration-dialog calendar-properties-dialog';
+calendarPropertiesDialog.setAttribute('aria-labelledby','calendar-properties-title');document.body.append(calendarPropertiesDialog);
+let calendarPropertiesID='',calendarPropertiesBusy=false;
+calendarPropertiesDialog.addEventListener('cancel',event=>{if(calendarPropertiesBusy)event.preventDefault();});
+calendarPropertiesDialog.addEventListener('close',()=>{calendarPropertiesID='';calendarPropertiesDialog.innerHTML='';});
+function calendarPropertiesPath(){return '/api/v1/calendar/calendars/'+encodeURIComponent(calendarPropertiesID);}
+async function openCalendarProperties(id) {
+ try {
+  const props=await api('/api/v1/calendar/calendars/'+encodeURIComponent(id));
+  calendarPropertiesID=id;renderCalendarProperties(props);
+  calendarPropertiesDialog.showModal();$('calendar-property-name').focus();
+  if(props.owned)await loadCalendarAccess();
+ }catch(err){setMsg($('cal-msg'),err.message,'err');}
+}
+function renderCalendarProperties(props) {
+ const owned=props.owned,disabled=owned?'':'disabled';
+ calendarPropertiesDialog.innerHTML=`<header class="dialog-head"><h2 id="calendar-properties-title">${t('cal_properties')}</h2><button type="button" class="btn-secondary btn-ico" data-cal-action="close" aria-label="${t('close')}">×</button></header>
+ <div class="calendar-properties-body"><form id="calendar-property-form"><div class="calendar-property-grid"><div><label class="field-label" for="calendar-property-name">${t('cal_name')}</label><input class="field-input" id="calendar-property-name" required maxlength="200" value="${escapeHtml(props.display_name||'')}" ${disabled}></div><div><label class="field-label" for="calendar-property-color">${t('cal_color')}</label><input type="color" class="field-input" id="calendar-property-color" value="${/^#[0-9a-fA-F]{6}$/.test(props.color)?props.color:'#c77c35'}" ${disabled}></div></div><label class="field-label" for="calendar-property-description">${t('cal_description')}</label><textarea class="field-input" id="calendar-property-description" maxlength="4000" rows="2" ${disabled}>${escapeHtml(props.description||'')}</textarea>${owned?`<button class="btn-spray" type="submit">${t('save')}</button>`:''}</form>
+ ${owned?`<section><h3>${t('cal_access')}</h3><p class="meta">${t('cal_access_hint')}</p><ul id="calendar-access-list"></ul><form id="calendar-access-form" class="calendar-access-form"><input class="field-input" id="calendar-access-email" type="email" required placeholder="user@example.com" aria-label="Email"><select class="field-input" id="calendar-access-rights" aria-label="${t('cal_access')}"><option value="read">${t('cal_read')}</option><option value="write">${t('cal_write')}</option></select><button class="btn-secondary" type="submit">${t('cal_grant')}</button></form></section>
+ <section><h3>${t('cal_public')}</h3><p class="meta">${t('cal_public_hint')}</p><div id="calendar-public-controls"></div></section>`:''}</div>
+ <p id="calendar-properties-msg" class="msg" role="status"></p><footer class="actions">${props.deletable?`<button class="btn-secondary" data-cal-action="delete" type="button">${t('cal_delete')}</button>`:''}<button class="btn-secondary" type="button" data-cal-action="close">${t('close')}</button></footer>`;
+ if(owned)renderCalendarPublic(props);
+}
+function renderCalendarPublic(props) {
+ const active=props.public_enabled;
+ $('calendar-public-controls').innerHTML=`${active?`<input class="field-input" id="calendar-public-url" readonly value="${escapeHtml(props.public_url)}" aria-label="${t('cal_public')}">`:''}<div class="actions"><button class="btn-secondary" type="button" data-cal-action="${active?'unpublish':'publish'}">${t(active?'cal_unpublish':'cal_publish')}</button>${active?`<button class="btn-secondary" type="button" data-cal-action="copy">${t('cal_copy')}</button><button class="btn-secondary" type="button" data-cal-action="rotate">${t('cal_rotate')}</button>`:''}</div>`;
+}
+async function loadCalendarAccess() {
+ const data=await api(calendarPropertiesPath()+'/acl');
+ $('calendar-access-list').innerHTML=(data.acl||[]).map(e=>`<li><span>${escapeHtml(e.email)} · ${t(e.rights==='write'?'cal_write':'cal_read')}</span><button class="btn-secondary btn-sm" type="button" data-cal-revoke="${escapeHtml(e.user_id)}">${t('cal_revoke')}</button></li>`).join('');
+}
+async function calendarPropertiesOperation(operation) {
+ if(calendarPropertiesBusy)return;calendarPropertiesBusy=true;
+ calendarPropertiesDialog.querySelectorAll('button').forEach(b=>b.disabled=true);
+ try {await operation();}catch(err){setMsg($('calendar-properties-msg'),err.message,'err');}
+ finally {calendarPropertiesBusy=false;calendarPropertiesDialog.querySelectorAll('button').forEach(b=>b.disabled=false);}
+}
+calendarPropertiesDialog.addEventListener('submit',event=>{
+ event.preventDefault();
+ calendarPropertiesOperation(async()=>{
+  if(event.target.id==='calendar-property-form') {
+   await api(calendarPropertiesPath(),{method:'PATCH',body:JSON.stringify({display_name:$('calendar-property-name').value.trim(),description:$('calendar-property-description').value,color:$('calendar-property-color').value})});
+   await refreshCalendar();setMsg($('calendar-properties-msg'),t('cal_saved'),'ok');
+  }else if(event.target.id==='calendar-access-form') {
+   await api(calendarPropertiesPath()+'/acl',{method:'PUT',body:JSON.stringify({email:$('calendar-access-email').value.trim(),rights:$('calendar-access-rights').value})});
+   $('calendar-access-email').value='';await loadCalendarAccess();setMsg($('calendar-properties-msg'),t('cal_saved'),'ok');
+  }
+ });
+});
+calendarPropertiesDialog.addEventListener('click',event=>{
+ const button=event.target.closest('[data-cal-action],[data-cal-revoke]');if(!button||calendarPropertiesBusy)return;
+ const action=button.dataset.calAction;
+ if(action==='close'){calendarPropertiesDialog.close();return;}
+ if(action==='delete') {
+  const id=calendarPropertiesID,name=$('calendar-property-name').value;
+  calendarPropertiesDialog.close();
+  (async()=>{if(!await askConfirm(t('cal_delete_confirm')+'\n'+name,{danger:true})){await openCalendarProperties(id);return;}try{await api('/api/v1/calendar/calendars/'+encodeURIComponent(id),{method:'DELETE'});await refreshCalendar();}catch(err){setMsg($('cal-msg'),err.message,'err');}})();return;
+ }
+ calendarPropertiesOperation(async()=>{
+  if(button.dataset.calRevoke){await api(calendarPropertiesPath()+'/acl/'+encodeURIComponent(button.dataset.calRevoke),{method:'DELETE'});await loadCalendarAccess();}
+  else if(action==='copy'){try{await navigator.clipboard.writeText($('calendar-public-url').value);setMsg($('calendar-properties-msg'),t('cal_copied'),'ok');}catch{$('calendar-public-url').select();}}
+  else if(['publish','unpublish','rotate'].includes(action)){const props=await api(calendarPropertiesPath(),{method:'PATCH',body:JSON.stringify({public_enabled:action!=='unpublish',rotate_link:action==='rotate'})});renderCalendarPublic(props);setMsg($('calendar-properties-msg'),t('cal_saved'),'ok');}
+ });
+});
 /* Typed configuration forms follow the schema exposed by the server. */
 const CONFIG_GROUPS = [
   { title: ["Почта и клиенты", "Mail and clients"], icon: "mail", sections: ["smtp", "imap", "pop3", "managesieve", "flowsync", "xmpp"] },
