@@ -126,7 +126,13 @@ func (h *Hub) ListAll() (map[string]any, error) {
 		}
 		sections[name] = m
 	}
+	bootstrap, err := toJSONMap(&cfg.Storage)
+	if err != nil {
+		return nil, err
+	}
+	sections["storage"] = bootstrap
 	return map[string]any{
+		"schema":           ConfigSchema(),
 		"sections":         EditableSections,
 		"settings":         sections,
 		"restart_required": h.RestartRequired(),
@@ -151,6 +157,11 @@ func (h *Hub) PutSection(ctx context.Context, section string, body []byte) error
 		return fmt.Errorf("invalid json: %w", err)
 	}
 	preserveSecrets(cur, next)
+	for _, component := range next.XMPP.Components {
+		if component.Secret == redacted {
+			return fmt.Errorf("xmpp component %q: provide the secret again when changing its identity", component.Name)
+		}
+	}
 	preserveBootstrap(h.bootstrap, next)
 
 	if err := next.Validate(); err != nil {
