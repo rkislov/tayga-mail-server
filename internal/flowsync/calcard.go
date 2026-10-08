@@ -12,6 +12,7 @@ import (
 const (
 	folderTypeCalendar = 8
 	folderTypeContacts = 9
+	// folderTypeNotes is ActiveSync folder type for Notes (MS-ASCMD).
 )
 
 type collectionKind int
@@ -20,6 +21,7 @@ const (
 	kindMail collectionKind = iota
 	kindCalendar
 	kindContacts
+	kindNotes
 )
 
 type calendarAdd struct {
@@ -51,11 +53,15 @@ func (h *easHandler) resolveCollection(ctx context.Context, userID, collectionID
 	if _, err := h.store.GetAddressBookByID(ctx, userID, collectionID); err == nil {
 		return kindContacts, nil
 	}
+	if _, err := h.store.GetNoteFolderByID(ctx, userID, collectionID); err == nil {
+		return kindNotes, nil
+	}
 	return 0, storage.ErrNotFound
 }
 
 func (h *easHandler) syncCollection(ctx context.Context, u *storage.User, dev *storage.FlowSyncDevice, reqBody []byte, wbxml bool) (string, []byte, error) {
 	_ = h.store.EnsureDAVDefaults(ctx, u.ID)
+	_ = h.store.EnsureNoteDefaults(ctx, u.ID)
 
 	collectionID := extractCollectionID(reqBody)
 	classHint := strings.ToLower(extractClass(reqBody))
@@ -74,6 +80,12 @@ func (h *easHandler) syncCollection(ctx context.Context, u *storage.User, dev *s
 				return "", nil, err
 			}
 			collectionID = ab.ID
+		case classHint == "notes":
+			nf, err := h.store.EnsureNoteFolder(ctx, u.ID, "notes", "Notes")
+			if err != nil {
+				return "", nil, err
+			}
+			collectionID = nf.ID
 		default:
 			mb, err := h.store.GetMailbox(ctx, u.ID, "INBOX")
 			if err != nil {
@@ -104,6 +116,8 @@ func (h *easHandler) syncCollection(ctx context.Context, u *storage.User, dev *s
 		return h.syncCalendar(ctx, collectionID, next, wbxml, wbResults)
 	case kindContacts:
 		return h.syncContacts(ctx, collectionID, next, wbxml, wbResults)
+	case kindNotes:
+		return h.syncNotes(ctx, u, collectionID, next, wbxml, wbResults)
 	default:
 		return h.syncMailCollection(ctx, u, collectionID, next, wbxml, wbResults)
 	}

@@ -25,7 +25,7 @@ CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o tayga-mail ./cmd/tayga
 ./tayga-mail version
 ```
 
-Готовые архивы: GitHub Releases (`v*`) или `VERSION=v0.8.0 ./scripts/crossbuild.sh`.
+Готовые архивы: GitHub Releases (`v*`) или `VERSION=v0.9.0 ./scripts/crossbuild.sh`.
 
 Интерактивное меню (wizard, backup/restore, перенос sqlite↔postgres, секции настроек):
 

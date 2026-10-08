@@ -24,7 +24,7 @@ sudo ./tayga-mail -config configs/tayga.example.yaml
 ### Cross-platform release builds
 
 ```bash
-VERSION=v0.8.1 ./scripts/crossbuild.sh   # → dist/*.tar.gz|zip + checksums.txt
+VERSION=v0.9.0 ./scripts/crossbuild.sh   # → dist/*.tar.gz|zip + checksums.txt
 ```
 
 GitHub Releases: push a `v*` tag; [GoReleaser](https://goreleaser.com) (`.github/workflows/release.yml`) publishes linux/darwin/windows/freebsd amd64+arm64 archives.
@@ -44,6 +44,7 @@ Seed: `admin@example.com` / `changeme`. TLS: `tls.auto_generate` or `scripts/gen
 - Auth API: `POST /api/v1/auth/login` → opaque tokens; TOTP MFA; OIDC per-domain
 - IMAP/SMTP: SASL `XOAUTH2` / `OAUTHBEARER` with access tokens from the auth API
 - CalDAV / CardDAV: `/dav/cal/`, `/dav/card/`; `/.well-known/caldav|carddav`
+- Notes: `/api/v1/notes*` (folders, rich notes, attachments, drawing); folder/note ACL for multi-user edit; FlowSync Notes (type 10) + EWS sticky notes
 - FlowSync (original): ActiveSync `/Microsoft-Server-ActiveSync`, EWS `/EWS/Exchange.asmx`, Autodiscover (POX/JSON) + Mozilla autoconfig
 - Admin: tenant domains, users, УЦ, **XMPP** (C2S / bots), **Server settings** (DB-backed config), monitoring, backup (`/api/v1/admin/*`)
 - Metrics: `GET /metrics` (Prometheus `tayga_*`)
@@ -77,4 +78,4 @@ Seed: `admin@example.com` / `changeme`. TLS: `tls.auto_generate` or `scripts/gen
 
 Copyright © Кислов Роман Сергеевич. Licensed under the Apache License, Version 2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
-UI backdrop art (taiga / cosmos / city / kalyazin / temple) © Алиса Кислова; `moscow` (Москва-Сити) — generated backdrop.
+UI backdrop art (tayga / cosmos / city / kalyazin / temple) © Алиса Кислова; `moscow` (Москва-Сити) — generated backdrop.

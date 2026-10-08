@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/tayga/tms/internal/noteutil"
 	"github.com/tayga/tms/internal/storage"
 )
 
@@ -80,7 +81,19 @@ func (h *ewsHandler) createItem(ctx context.Context, u *storage.User, body strin
 		return ewsCreateResponse("Contact", o.ID), nil
 	}
 
-	return ewsFault("ErrorInvalidRequest", "FlowSync: CreateItem supports CalendarItem and Contact"), nil
+	isSticky := strings.Contains(body, "IPM.StickyNote") || strings.Contains(body, "StickyNote")
+	if !isSticky && folderID != "" {
+		if _, err := h.store.NoteFolderRightsForUser(ctx, folderID, u.ID); err == nil {
+			isSticky = true
+		}
+	}
+	if isSticky {
+		subject := extractTag(body, "Subject")
+		bodyHTML := extractTag(body, "Body")
+		return h.createStickyNote(ctx, u, folderID, subject, bodyHTML)
+	}
+
+	return ewsFault("ErrorInvalidRequest", "FlowSync: CreateItem supports CalendarItem, Contact, StickyNote"), nil
 }
 
 func (h *ewsHandler) updateItem(ctx context.Context, u *storage.User, body string) (string, error) {
@@ -156,6 +169,25 @@ func (h *ewsHandler) updateItem(ctx context.Context, u *storage.User, body strin
 		return ewsUpdateResponse("Message", msg.ID), nil
 	}
 
+	if n, err := h.store.GetNoteItemByID(ctx, id); err == nil {
+		rights, err := h.store.NoteRightsForUser(ctx, n.ID, u.ID)
+		if err != nil || rights != "write" {
+			return ewsFault("ErrorAccessDenied", "forbidden"), nil
+		}
+		if v := extractTag(body, "Subject"); v != "" {
+			n.Title = v
+		}
+		if v := extractTag(body, "Body"); v != "" {
+			doc := noteutil.DocumentFromHTMLOrText(v)
+			n.DocumentJSON = noteutil.MarshalDocumentJSON(doc)
+			n.BodyHTML, n.BodyText = noteutil.DeriveBodies(n.DocumentJSON)
+		}
+		if err := h.store.UpdateNoteItem(ctx, n); err != nil {
+			return "", err
+		}
+		return ewsUpdateResponse("Message", n.ID), nil
+	}
+
 	return ewsFault("ErrorItemNotFound", "not found"), nil
 }
 
@@ -187,6 +219,16 @@ func (h *ewsHandler) deleteItem(ctx context.Context, u *storage.User, body strin
 			return ewsFault("ErrorAccessDenied", "forbidden"), nil
 		}
 		if err := h.store.DeleteMessage(ctx, msg.ID); err != nil {
+			return "", err
+		}
+		return ewsDeleteResponse(), nil
+	}
+	if n, err := h.store.GetNoteItemByID(ctx, id); err == nil {
+		rights, err := h.store.NoteRightsForUser(ctx, n.ID, u.ID)
+		if err != nil || rights != "write" {
+			return ewsFault("ErrorAccessDenied", "forbidden"), nil
+		}
+		if err := h.store.DeleteNoteItemByID(ctx, n.ID); err != nil {
 			return "", err
 		}
 		return ewsDeleteResponse(), nil

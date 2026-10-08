@@ -14,7 +14,7 @@
   --color-mist-ink: #f4f1ea;
 }
 
-/* Default = taiga */
+/* Default = tayga */
 html {
   --panel-bg: rgba(12, 32, 24, 0.72);
   --accent: #e8b84a;
@@ -612,6 +612,90 @@ html[data-theme="teriberka"] {
     background: currentColor;
     clip-path: polygon(0 0, 100% 0, 35% 100%);
     border-radius: 0;
+  }
+
+  .nav-ico[data-ico="notes"]::before {
+    inset: 10% 18% 10% 18%;
+    border-radius: 0.2rem 0.55rem 0.2rem 0.2rem;
+  }
+  .nav-ico[data-ico="notes"]::after {
+    inset: 28% 30% 48% 30%;
+    border: 0;
+    border-radius: 0;
+    background: currentColor;
+    height: 2px;
+    box-shadow: 0 5px 0 currentColor, 0 10px 0 currentColor;
+  }
+
+  .notes-layout {
+    grid-template-columns: minmax(10rem, 14rem) minmax(14rem, 20rem) 1fr;
+  }
+  .note-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    height: 100%;
+    min-height: 0;
+    padding: 0.75rem 1rem 1rem;
+  }
+  .note-title-input {
+    font-size: 1.25rem;
+    font-weight: 600;
+    border: 0;
+    background: transparent;
+    padding-left: 0;
+  }
+  .note-body {
+    flex: 1;
+    min-height: 12rem;
+    overflow: auto;
+    outline: none;
+    line-height: 1.55;
+    padding: 0.25rem 0;
+  }
+  .note-body:empty::before {
+    content: attr(data-placeholder);
+    opacity: 0.45;
+  }
+  .note-body ul {
+    list-style: disc;
+    padding-left: 1.25rem;
+  }
+  .note-body ul[data-type="checklist"] {
+    list-style: none;
+    padding-left: 0;
+  }
+  .note-body ul[data-type="checklist"] li {
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-start;
+  }
+  .note-attach-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  .note-attach-list a {
+    font-size: 0.85rem;
+  }
+  .note-draw-wrap canvas {
+    width: 100%;
+    max-width: 40rem;
+    border: 1px solid color-mix(in srgb, var(--fg) 18%, transparent);
+    border-radius: 0.5rem;
+    background: #fff;
+    touch-action: none;
+  }
+  .note-meta {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+  }
+  .note-toolbar {
+    flex-wrap: wrap;
   }
 
   .chat-layout {
@@ -1335,6 +1419,171 @@ html[data-theme="teriberka"] {
     background: color-mix(in srgb, var(--btn-spray) 28%, transparent);
   }
 
+  .pane-head-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+
+  .folder-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.15rem;
+  }
+
+  .folder-row .folder-btn {
+    min-width: 0;
+  }
+
+  .folder-row .folder-btn span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .folder-del {
+    opacity: 0.55;
+    flex-shrink: 0;
+  }
+
+  .folder-row:hover .folder-del,
+  .folder-row:focus-within .folder-del {
+    opacity: 1;
+  }
+
+  .cal-invites-block {
+    margin-top: 0.75rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    padding-top: 0.35rem;
+  }
+
+  .cal-invite-list {
+    max-height: 14rem;
+    overflow: auto;
+  }
+
+  .cal-invite-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 0.45rem 0.55rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .cal-invite-item.is-active {
+    background: color-mix(in srgb, var(--btn-spray) 18%, transparent);
+  }
+
+  .cal-invite-main {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    min-width: 0;
+  }
+
+  .cal-invite-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+
+  .cal-attendee-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.4rem;
+    align-items: center;
+  }
+
+  .cal-attendee-chips {
+    list-style: none;
+    margin: 0.35rem 0 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+  }
+
+  .cal-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.15rem 0.45rem;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 0.35rem;
+    font-size: 0.85rem;
+  }
+
+  .cal-chip-x {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    opacity: 0.7;
+    line-height: 1;
+  }
+
+  .cal-freebusy {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    min-height: 0.5rem;
+  }
+
+  .cal-fb-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.6rem;
+    align-items: baseline;
+    font-size: 0.85rem;
+    padding: 0.25rem 0.4rem;
+    border-left: 3px solid transparent;
+  }
+
+  .cal-fb-row.is-busy {
+    border-left-color: #c45c5c;
+  }
+
+  .cal-fb-row.is-free {
+    border-left-color: #3d9a6a;
+  }
+
+  .cal-fb-row.is-unknown {
+    border-left-color: rgba(255, 255, 255, 0.25);
+  }
+
+  .cal-fb-status {
+    opacity: 0.8;
+  }
+
+  .cal-fb-slot {
+    opacity: 0.7;
+    font-size: 0.8rem;
+  }
+
+  .cal-partstat {
+    display: inline-block;
+  }
+
+  .cal-file-list {
+    list-style: none;
+    margin: 0.25rem 0 0;
+    padding: 0;
+  }
+
+  .cal-attach-item {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.6rem;
+    align-items: center;
+    margin-bottom: 0.35rem;
+  }
+
+  .cal-attach-upload {
+    margin-top: 0.75rem;
+  }
+
   .msg-item {
     display: grid;
     grid-template-columns: 0.7rem 7.5rem minmax(0, 1fr) 3.6rem;
@@ -1697,6 +1946,151 @@ html[data-theme="teriberka"] {
 
   .dialog-backdrop.hidden {
     display: none;
+  }
+
+  .editor-sheet {
+    width: min(100%, 36rem);
+    max-height: min(92dvh, 44rem);
+    display: flex;
+    flex-direction: column;
+    border-radius: 0.4rem;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    padding: 1.1rem 1.25rem 1.15rem;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.4);
+    background: var(--panel-bg);
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+  }
+
+  .editor-sheet-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .editor-sheet-head .heading {
+    margin: 0;
+    font-size: 1.2rem;
+  }
+
+  .editor-sheet-body {
+    overflow: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+    margin: 0.5rem 0 0.75rem;
+    padding-right: 0.15rem;
+  }
+
+  .editor-sheet-actions {
+    flex-wrap: wrap;
+    margin-top: 0.25rem;
+  }
+
+  .editor-sheet-spacer {
+    flex: 1 1 auto;
+  }
+
+  .btn-icon {
+    border: 0;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 1.5rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0.15rem 0.45rem;
+  }
+
+  .btn-icon:hover {
+    color: #fff;
+  }
+
+  .friendly-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.55rem;
+  }
+
+  .friendly-list-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.75rem;
+    align-items: center;
+    width: 100%;
+    text-align: left;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 0.35rem;
+    background: rgba(255, 255, 255, 0.04);
+    color: inherit;
+    padding: 0.85rem 1rem;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+
+  .friendly-list-item:hover,
+  .friendly-list-item:focus-visible {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.28);
+    outline: none;
+  }
+
+  .friendly-list-item strong {
+    display: block;
+    font-size: 1rem;
+  }
+
+  .friendly-list-item .meta {
+    margin: 0.2rem 0 0;
+  }
+
+  .friendly-list-empty {
+    color: rgba(255, 255, 255, 0.65);
+    padding: 0.5rem 0;
+  }
+
+  .form-row {
+    display: grid;
+    gap: 0.25rem;
+    margin: 0 0 0.9rem;
+  }
+
+  .form-row .field-label {
+    margin: 0;
+  }
+
+  .form-row .field-hint {
+    margin: 0;
+    font-size: 0.82rem;
+    color: rgba(255, 255, 255, 0.62);
+    line-height: 1.35;
+  }
+
+  .form-row-check {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.55rem 0.7rem;
+    align-items: start;
+    margin: 0 0 0.75rem;
+    padding: 0.55rem 0.65rem;
+    border-radius: 0.3rem;
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .form-row-check input {
+    margin-top: 0.2rem;
+  }
+
+  .form-row-check strong {
+    display: block;
+    font-size: 0.92rem;
+  }
+
+  .form-section-title {
+    margin: 1rem 0 0.55rem;
+    font-size: 0.95rem;
   }
 
   .dialog-panel {
@@ -2217,7 +2611,8 @@ html[data-theme="teriberka"] {
 
   @media (max-width: 1100px) {
     .mail-layout,
-    .contacts-layout {
+    .contacts-layout,
+    .notes-layout {
       grid-template-columns: 10rem minmax(16rem, 1fr) minmax(0, 1.1fr);
     }
 
@@ -2280,6 +2675,7 @@ html[data-theme="teriberka"] {
     .mail-layout,
     .cal-layout,
     .contacts-layout,
+    .notes-layout,
     .files-layout {
       grid-template-columns: 1fr;
       min-height: auto;
@@ -2288,13 +2684,15 @@ html[data-theme="teriberka"] {
     /* Master-detail: one surface at a time */
     #view-account.pane-mode-list .mail-layout > .mail-folders,
     #view-account.pane-mode-list .cal-layout > .mail-folders,
-    #view-account.pane-mode-list .contacts-layout > .mail-folders {
+    #view-account.pane-mode-list .contacts-layout > .mail-folders,
+    #view-account.pane-mode-list .notes-layout > .mail-folders {
       display: none;
     }
 
     #view-account.pane-mode-list .mail-layout > .mail-read,
     #view-account.pane-mode-list .cal-layout > .mail-read,
     #view-account.pane-mode-list .contacts-layout > .mail-read,
+    #view-account.pane-mode-list .notes-layout > .mail-read,
     #view-account.pane-mode-list .files-layout > .mail-read {
       display: none;
     }
@@ -2302,9 +2700,11 @@ html[data-theme="teriberka"] {
     #view-account.pane-mode-read .mail-layout > .mail-folders,
     #view-account.pane-mode-read .cal-layout > .mail-folders,
     #view-account.pane-mode-read .contacts-layout > .mail-folders,
+    #view-account.pane-mode-read .notes-layout > .mail-folders,
     #view-account.pane-mode-read .mail-layout > .mail-list,
     #view-account.pane-mode-read .cal-layout > .mail-list,
     #view-account.pane-mode-read .contacts-layout > .mail-list,
+    #view-account.pane-mode-read .notes-layout > .mail-list,
     #view-account.pane-mode-read .files-layout > .mail-list {
       display: none;
     }

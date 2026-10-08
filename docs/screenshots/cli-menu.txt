@@ -1,4 +1,4 @@
-Tayga Mail console · tayga-mail v0.8.1 (f9bba07) built 2026-10-08T02:28:27Z
+Tayga Mail console · tayga-mail v0.9.0 (c35cb51) built 2026-10-08T03:31:28Z
 config: configs/tayga.example.yaml
 
 === Главное меню ===
@@ -11,7 +11,7 @@ config: configs/tayga.example.yaml
   7) Настройки сервера (SMTP / spam / AV / SIEM / log / CoS)
   8) О версии
   0) Назад / выход
-Выбор: tayga-mail v0.8.1 (f9bba07) built 2026-10-08T02:28:27Z
+Выбор: tayga-mail v0.9.0 (c35cb51) built 2026-10-08T03:31:28Z
 
 === Главное меню ===
   1) Первичная настройка (wizard → YAML)
