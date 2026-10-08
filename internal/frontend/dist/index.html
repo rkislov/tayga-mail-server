@@ -57,6 +57,15 @@
     </footer>
   </div>
 
+  <div id="cal-invites-backdrop" class="dialog-backdrop hidden">
+    <section id="cal-invites-dialog" class="config-dialog cal-invites-dialog" role="dialog" aria-modal="true" aria-labelledby="cal-invites-title">
+      <div class="config-dialog-head"><h3 class="heading" id="cal-invites-title" data-i18n="cal_invites">Приглашения</h3><button type="button" class="btn-icon" id="btn-cal-invites-close" data-i18n-title="close" aria-label="Закрыть">×</button></div>
+      <p class="meta" data-i18n="cal_inbox_hint">Ответьте на приглашения. После ответа они исчезнут из лотка.</p>
+      <ul id="cal-invite-list" class="cal-invite-list"></ul>
+      <p id="cal-invite-msg" class="msg" role="status"></p>
+    </section>
+  </div>
+
   <div id="toast-host" class="toast-host" aria-live="polite" aria-relevant="additions"></div>
 
   <div id="dialog-backdrop" class="dialog-backdrop hidden" role="presentation">
@@ -141,7 +150,7 @@
           <button type="button" class="nav-btn" data-app="cos"><span class="nav-ico" data-ico="filter" aria-hidden="true"></span><span data-i18n="nav_cos">CoS</span></button>
         </div>
       </nav>
-      <button type="button" class="btn-secondary w-full nav-logout btn-ico" id="btn-logout" data-i18n-title="logout" title="Выйти" aria-label="Выйти"><span class="ico" data-ico="logout" aria-hidden="true"></span></button>
+      <button type="button" class="btn-secondary w-full nav-logout btn-ico btn-labeled" id="btn-logout" data-i18n-title="logout" title="Выйти" aria-label="Выйти"><span class="ico" data-ico="logout" aria-hidden="true"></span><span data-i18n="logout">Выйти</span></button>
     </aside>
 
     <div class="app-main">
@@ -150,7 +159,7 @@
         <div class="mail-folders panel-pane">
           <div class="pane-head">
             <strong data-i18n="folders">Папки</strong>
-            <button type="button" class="btn-spray btn-sm btn-ico" id="btn-compose" data-i18n-title="compose" title="Написать" aria-label="Написать"><span class="ico" data-ico="compose" aria-hidden="true"></span></button>
+            <button type="button" class="btn-spray btn-sm btn-ico btn-labeled" id="btn-compose" data-i18n-title="compose" title="Написать" aria-label="Написать"><span class="ico" data-ico="compose" aria-hidden="true"></span><span data-i18n="compose">Написать</span></button>
           </div>
           <ul id="mail-folder-list" class="folder-list"></ul>
         </div>
@@ -158,7 +167,7 @@
           <div class="pane-head mail-list-toolbar">
             <strong id="mail-folder-title">INBOX</strong>
             <div class="mail-search-wrap">
-              <input type="search" class="field-input field-input-sm" id="mail-search" data-i18n-placeholder="mail_search_placeholder" placeholder="Поиск…" autocomplete="off" />
+              <input type="search" class="field-input field-input-sm" id="mail-search" data-i18n-title="mail_search_placeholder" data-i18n-placeholder="mail_search_placeholder" placeholder="Поиск…" autocomplete="off" />
             </div>
             <button type="button" class="btn-secondary btn-sm btn-ico" id="btn-mail-refresh" data-i18n-title="refresh" title="Обновить" aria-label="Обновить"><span class="ico" data-ico="refresh" aria-hidden="true"></span></button>
           </div>
@@ -174,7 +183,7 @@
           <div id="mail-reader" class="hidden">
             <div class="reader-actions">
               <button type="button" class="btn-secondary btn-sm btn-ico mobile-only" data-pane-back data-i18n-title="back_list" title="К списку" aria-label="К списку"><span class="ico" data-ico="back" aria-hidden="true"></span></button>
-              <button type="button" class="btn-secondary btn-sm btn-ico" id="btn-mail-reply" data-i18n-title="reply" title="Ответить" aria-label="Ответить"><span class="ico" data-ico="reply" aria-hidden="true"></span></button>
+              <button type="button" class="btn-secondary btn-sm btn-ico btn-labeled" id="btn-mail-reply" data-i18n-title="reply" title="Ответить" aria-label="Ответить"><span class="ico" data-ico="reply" aria-hidden="true"></span><span data-i18n="reply">Ответить</span></button>
               <button type="button" class="btn-secondary btn-sm btn-ico" id="btn-mail-archive" data-i18n-title="archive" title="Архив" aria-label="Архив"><span class="ico" data-ico="archive" aria-hidden="true"></span></button>
               <button type="button" class="btn-secondary btn-sm btn-ico" id="btn-mail-delete" data-i18n-title="delete" title="Удалить" aria-label="Удалить"><span class="ico" data-ico="delete" aria-hidden="true"></span></button>
             </div>
@@ -190,13 +199,13 @@
       </div>
 
       <div id="compose-backdrop" class="compose-backdrop hidden">
-        <div id="compose-panel" class="compose-panel" role="dialog" aria-modal="true">
-          <h3 class="heading" data-i18n="compose">Написать</h3>
-          <label class="field-label" data-i18n="to">Кому</label>
+        <div id="compose-panel" class="compose-panel" role="dialog" aria-modal="true" aria-labelledby="compose-title">
+          <h3 class="heading" id="compose-title" data-i18n="compose">Написать</h3>
+          <label for="compose-to" class="field-label" data-i18n="to">Кому</label>
           <input class="field-input" id="compose-to" />
-          <label class="field-label" data-i18n="subject">Тема</label>
+          <label for="compose-subject" class="field-label" data-i18n="subject">Тема</label>
           <input class="field-input" id="compose-subject" />
-          <label class="field-label" data-i18n="body">Текст</label>
+          <label id="compose-body-label" class="field-label" data-i18n="body">Текст</label>
           <div class="rte" id="compose-rte">
             <div class="rte-toolbar" id="compose-rte-toolbar" role="toolbar" aria-label="Format">
               <button type="button" data-cmd="bold" title="Bold"><b>B</b></button>
@@ -210,13 +219,13 @@
               <button type="button" data-cmd="createLink" title="Link">URL</button>
               <button type="button" data-cmd="removeFormat" title="Clear">Tx</button>
             </div>
-            <div class="rte-surface" id="compose-body" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder=""></div>
+            <div class="rte-surface" id="compose-body" aria-labelledby="compose-body-label" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder=""></div>
           </div>
-          <label class="field-label" data-i18n="attach_file">Вложение (крупное → ссылка)</label>
+          <label for="compose-attach" class="field-label" data-i18n="attach_file">Вложение (крупное → ссылка)</label>
           <input class="field-input" type="file" id="compose-attach" />
           <div class="actions">
-            <button type="button" class="btn-spray btn-ico" id="btn-compose-send" data-i18n-title="send" title="Отправить" aria-label="Отправить"><span class="ico" data-ico="send" aria-hidden="true"></span></button>
-            <button type="button" class="btn-secondary btn-ico" id="btn-compose-close" data-i18n-title="back" title="Назад" aria-label="Назад"><span class="ico" data-ico="back" aria-hidden="true"></span></button>
+            <button type="button" class="btn-spray btn-ico btn-labeled" id="btn-compose-send" data-i18n-title="send" title="Отправить" aria-label="Отправить"><span class="ico" data-ico="send" aria-hidden="true"></span><span data-i18n="send">Отправить</span></button>
+            <button type="button" class="btn-secondary btn-ico btn-labeled" id="btn-compose-close" data-i18n-title="cancel" title="Отмена" aria-label="Отмена"><span class="ico" data-ico="back" aria-hidden="true"></span><span data-i18n="cancel">Отмена</span></button>
           </div>
           <p id="compose-msg" class="msg"></p>
         </div>
@@ -233,12 +242,6 @@
             </div>
           </div>
           <ul id="cal-folder-list" class="folder-list"></ul>
-          <div class="cal-invites-block">
-            <div class="pane-head">
-              <strong data-i18n="cal_invites">Приглашения</strong>
-            </div>
-            <ul id="cal-invite-list" class="msg-list cal-invite-list"></ul>
-          </div>
         </div>
         <div class="mail-list panel-pane mail-list-pane cal-main-pane">
           <div class="pane-head mail-list-toolbar cal-month-toolbar">
@@ -248,10 +251,20 @@
               <strong id="cal-month-label" class="cal-month-label"></strong>
               <button type="button" class="btn-secondary btn-sm" id="btn-cal-next" aria-label="Next">›</button>
               <button type="button" class="btn-secondary btn-sm" id="btn-cal-today" data-i18n="cal_today">Сегодня</button>
+              <button type="button" class="btn-secondary btn-sm btn-ico cal-inbox-button" id="btn-cal-invites" aria-haspopup="dialog" aria-controls="cal-invites-dialog" data-i18n-title="cal_invites" title="Приглашения" aria-label="Приглашения">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 5h16l2 12v3H2v-3L4 5Z"/><path d="M2 16h6l2 3h4l2-3h6"/></svg>
+                <span id="cal-invite-count" class="cal-inbox-count hidden" aria-hidden="true"></span>
+              </button>
+              <button type="button" class="btn-spray btn-sm btn-ico mobile-only" id="btn-cal-new-mobile" data-i18n-title="new_event" aria-label="Событие"><span class="ico" data-ico="event" aria-hidden="true"></span></button>
               <button type="button" class="btn-secondary btn-sm btn-ico" id="btn-cal-refresh" data-i18n-title="refresh" title="Обновить" aria-label="Обновить"><span class="ico" data-ico="refresh" aria-hidden="true"></span></button>
             </div>
           </div>
+          <p class="meta cal-grid-hint" data-i18n="cal_grid_hint">Клик — открыть день · двойной клик — создать событие</p>
           <div id="cal-month" class="cal-month" aria-label="Month"></div>
+          <section id="cal-day-view" class="cal-day-view hidden" aria-labelledby="cal-day-title">
+            <div class="cal-day-view-head"><button type="button" class="btn-secondary btn-sm" id="btn-cal-month-view" data-i18n="cal_back_month">К месяцу</button><strong id="cal-day-title"></strong></div>
+            <div id="cal-day-schedule" class="cal-day-schedule"></div>
+          </section>
           <div class="cal-log-head">
             <strong id="cal-log-title" data-i18n="cal_event_log">События</strong>
           </div>
@@ -599,6 +612,11 @@
       <div id="app-appearance" class="app-page hidden panel-page panel-page-wide">
         <div class="card" id="card-appearance">
           <h3 class="heading" data-i18n="appearance_title">Внешний вид</h3>
+          <label class="field-label" for="color-mode-select" data-i18n="color_mode">Режим интерфейса</label>
+          <select class="field-input" id="color-mode-select">
+            <option value="light" data-i18n="color_mode_light">Дневной</option>
+            <option value="dark" data-i18n="color_mode_dark">Ночной</option>
+          </select>
           <p class="meta" data-i18n="appearance_hint">Выберите фон рабочего стола — превью обновляется сразу.</p>
           <label class="field-label sr-only" for="theme-select" data-i18n="theme">Тема</label>
           <select class="field-input sr-only" id="theme-select" tabindex="-1" aria-hidden="true">
@@ -987,164 +1005,38 @@ keep;</textarea>
           <h3 class="heading" data-i18n="nav_server">Сервер</h3>
           <p class="meta" data-i18n="server_lede">Выберите раздел настроек. Основные параметры — в простых формах; после сохранения обычно нужен перезапуск.</p>
           <p class="meta hidden" id="settings-restart" data-i18n="server_restart">Нужен перезапуск tayga-mail.</p>
-          <select class="field-input hidden" id="settings-section" aria-hidden="true" tabindex="-1"></select>
 
           <div id="settings-home">
-            <ul class="friendly-list" id="settings-section-list"></ul>
+            <label class="sr-only" for="settings-search" data-i18n="config_catalog_search">Поиск раздела или параметра</label>
+            <input type="search" id="settings-search" class="field-input" data-i18n-placeholder="config_catalog_search" placeholder="Поиск раздела или параметра…" />
+            <p class="meta" id="settings-summary"></p>
+            <div id="settings-section-list" class="settings-catalog"></div>
             <div class="actions" style="margin-top:1rem">
               <button type="button" class="btn-secondary" id="btn-settings-refresh" data-i18n="refresh">Обновить</button>
             </div>
           </div>
 
-          <div id="settings-detail" class="hidden">
-            <button type="button" class="btn-secondary btn-sm" id="btn-settings-back" data-i18n="back">Назад</button>
-            <h4 class="heading settings-detail-title" id="settings-detail-title" style="font-size:1.1rem;margin:0.75rem 0 0.35rem"></h4>
-            <p class="meta" id="settings-detail-lede"></p>
-
-          <div id="settings-tls-panel" class="hidden settings-form-panel">
-            <label class="field-label" for="settings-tls-cert" data-i18n="ca_pick">Сертификат для сервисов</label>
-            <p class="meta" data-i18n="ca_pick_hint">Один активный сертификат используется HTTPS, IMAPS, SMTPS и остальными TLS-слушателями.</p>
-            <select class="field-input" id="settings-tls-cert"></select>
-            <label class="field-label" for="settings-tls-email" data-i18n="ca_email">Email ACME</label>
-            <input class="field-input" id="settings-tls-email" type="email" />
-            <label class="field-check"><input type="checkbox" id="settings-tls-staging" /> <span data-i18n="ca_staging">Staging (тест)</span></label>
-          </div>
-
-          <div id="settings-smtp-panel" class="hidden settings-form-panel">
-            <h4 class="heading" style="font-size:1rem" data-i18n="smtp_outbound">Исходящая почта</h4>
-            <p class="meta" data-i18n="smtp_outbound_hint">Relayhost (smarthost) или прямая доставка по MX. Пустой host + outbound_direct = MX.</p>
-            <label class="field-check"><input type="checkbox" id="smtp-outbound-direct" /> <span data-i18n="smtp_outbound_direct">Прямая доставка (MX)</span></label>
-            <label class="field-label" for="smtp-relay-host" data-i18n="smtp_relay_host">Relay host</label>
-            <input class="field-input" id="smtp-relay-host" type="text" placeholder="smtp.example.com:587" autocomplete="off" />
-            <label class="field-label" for="smtp-relay-user" data-i18n="smtp_relay_user">Relay username</label>
-            <input class="field-input" id="smtp-relay-user" type="text" autocomplete="off" />
-            <label class="field-label" for="smtp-relay-pass" data-i18n="smtp_relay_pass">Relay password</label>
-            <input class="field-input" id="smtp-relay-pass" type="password" autocomplete="new-password" placeholder="••••••••" />
-            <label class="field-check"><input type="checkbox" id="smtp-relay-no-starttls" /> <span data-i18n="smtp_relay_no_starttls">Disable STARTTLS</span></label>
-            <h4 class="heading" style="font-size:1rem;margin-top:1rem" data-i18n="smtp_queue">Очередь</h4>
-            <label class="field-check"><input type="checkbox" id="smtp-queue-enabled" checked /> <span data-i18n="smtp_queue_enabled">Включить очередь</span></label>
-            <label class="field-label" for="smtp-queue-workers" data-i18n="smtp_queue_workers">Workers</label>
-            <input class="field-input" id="smtp-queue-workers" type="number" min="1" value="1" />
-            <label class="field-label" for="smtp-queue-max" data-i18n="smtp_queue_max">Max attempts</label>
-            <input class="field-input" id="smtp-queue-max" type="number" min="1" value="8" />
-            <label class="field-check"><input type="checkbox" id="smtp-show-json" /> <span data-i18n="smtp_show_json">Показать полный JSON</span></label>
-          </div>
-
-          <div id="settings-spam-panel" class="hidden settings-form-panel">
-            <h4 class="heading" style="font-size:1rem" data-i18n="spam_title">Rspamd / антиспам</h4>
-            <p class="meta" data-i18n="spam_hint">Проверка входящей почты через Rspamd (HTTP API, обычно :11333).</p>
-            <label class="field-check"><input type="checkbox" id="spam-enabled" /> <span data-i18n="spam_enabled">Включить</span></label>
-            <label class="field-label" for="spam-backend" data-i18n="spam_backend">Backend</label>
-            <select class="field-input" id="spam-backend">
-              <option value="rspamd">rspamd</option>
-              <option value="none">none</option>
-            </select>
-            <label class="field-label" for="spam-url" data-i18n="spam_url">URL</label>
-            <input class="field-input" id="spam-url" type="url" placeholder="http://127.0.0.1:11333" />
-            <label class="field-label" for="spam-password" data-i18n="spam_password">Password</label>
-            <input class="field-input" id="spam-password" type="password" autocomplete="new-password" />
-            <label class="field-label" for="spam-folder" data-i18n="spam_folder">Junk folder</label>
-            <input class="field-input" id="spam-folder" type="text" value="Junk" />
-            <label class="field-check"><input type="checkbox" id="spam-fail-open" checked /> <span data-i18n="spam_fail_open">Fail open</span></label>
-            <label class="field-check"><input type="checkbox" id="spam-follow" checked /> <span data-i18n="spam_follow">Follow Rspamd actions</span></label>
-            <label class="field-check"><input type="checkbox" id="spam-show-json" /> <span data-i18n="smtp_show_json">Показать полный JSON</span></label>
-          </div>
-
-          <div id="settings-scan-panel" class="hidden settings-form-panel">
-            <h4 class="heading" style="font-size:1rem" data-i18n="scan_title">Антивирус</h4>
-            <p class="meta" data-i18n="scan_hint">Проверка входящей почты: ClamAV, внешняя команда (exec) или ICAP REQMOD.</p>
-            <label class="field-check"><input type="checkbox" id="scan-enabled" /> <span data-i18n="scan_enabled">Включить</span></label>
-            <label class="field-label" for="scan-backend" data-i18n="scan_backend">Backend</label>
-            <select class="field-input" id="scan-backend">
-              <option value="clamav">ClamAV</option>
-              <option value="exec">exec</option>
-              <option value="icap">ICAP</option>
-              <option value="none">none</option>
-            </select>
-            <label class="field-label" for="scan-action" data-i18n="scan_action">Action</label>
-            <select class="field-input" id="scan-action">
-              <option value="quarantine">quarantine</option>
-              <option value="reject">reject</option>
-              <option value="tag">tag</option>
-            </select>
-            <label class="field-label" for="scan-folder" data-i18n="scan_folder">Quarantine folder</label>
-            <input class="field-input" id="scan-folder" type="text" value="Quarantine" />
-            <label class="field-check"><input type="checkbox" id="scan-fail-open" /> <span data-i18n="scan_fail_open">Fail open</span></label>
-
-            <div id="scan-clamav-fields" class="scan-backend-fields">
-              <h4 class="heading" style="font-size:0.95rem" data-i18n="scan_clamav">ClamAV</h4>
-              <label class="field-label" for="scan-clamav-addr" data-i18n="scan_clamav_addr">clamd address</label>
-              <input class="field-input" id="scan-clamav-addr" type="text" placeholder="127.0.0.1:3310" />
-            </div>
-            <div id="scan-exec-fields" class="scan-backend-fields hidden">
-              <h4 class="heading" style="font-size:0.95rem" data-i18n="scan_exec">exec</h4>
-              <label class="field-label" for="scan-exec-cmd" data-i18n="scan_exec_cmd">Command (space-separated)</label>
-              <input class="field-input" id="scan-exec-cmd" type="text" placeholder="clamdscan --fdpass --no-summary -" />
-            </div>
-            <div id="scan-icap-fields" class="scan-backend-fields hidden">
-              <h4 class="heading" style="font-size:0.95rem" data-i18n="scan_icap">ICAP</h4>
-              <label class="field-label" for="scan-icap-url" data-i18n="scan_icap_url">ICAP URL</label>
-              <input class="field-input" id="scan-icap-url" type="text" placeholder="icap://127.0.0.1:1344/reqmod" />
-              <p class="meta" data-i18n="scan_icap_hint">icap://host:1344/service или icaps://… (TLS). REQMOD, Allow: 204.</p>
-            </div>
-            <label class="field-check"><input type="checkbox" id="scan-show-json" /> <span data-i18n="smtp_show_json">Показать полный JSON</span></label>
-          </div>
-
-          <div id="settings-siem-panel" class="hidden settings-form-panel">
-            <h4 class="heading" style="font-size:1rem" data-i18n="siem_title">SIEM / syslog CEF</h4>
-            <p class="meta" data-i18n="siem_hint">Отправка событий (логин, почтовый журнал) в SIEM по syslog в формате CEF.</p>
-            <label class="field-check"><input type="checkbox" id="siem-enabled" /> <span data-i18n="siem_enabled">Включить</span></label>
-            <label class="field-label" for="siem-protocol" data-i18n="siem_protocol">Protocol</label>
-            <select class="field-input" id="siem-protocol">
-              <option value="udp">udp</option>
-              <option value="tcp">tcp</option>
-              <option value="tls">tls</option>
-            </select>
-            <label class="field-label" for="siem-address" data-i18n="siem_address">Address (host:port)</label>
-            <input class="field-input" id="siem-address" type="text" placeholder="127.0.0.1:514" />
-            <label class="field-label" for="siem-facility" data-i18n="siem_facility">Facility</label>
-            <input class="field-input" id="siem-facility" type="text" value="local0" />
-            <label class="field-label" for="siem-format" data-i18n="siem_format">Format</label>
-            <select class="field-input" id="siem-format">
-              <option value="cef">cef</option>
-            </select>
-            <label class="field-check"><input type="checkbox" id="siem-tls-skip" /> <span data-i18n="siem_tls_skip">TLS skip verify</span></label>
-            <label class="field-check"><input type="checkbox" id="siem-show-json" /> <span data-i18n="smtp_show_json">Показать полный JSON</span></label>
-          </div>
-
-          <div id="settings-log-panel" class="hidden settings-form-panel">
-            <h4 class="heading" style="font-size:1rem" data-i18n="log_title">Логирование</h4>
-            <p class="meta" data-i18n="log_hint">Запись логов в файл обязательна (дублируется в stdout). После смены пути нужен перезапуск.</p>
-            <label class="field-label" for="log-level" data-i18n="log_level">Level</label>
-            <select class="field-input" id="log-level">
-              <option value="debug">debug</option>
-              <option value="info">info</option>
-              <option value="warn">warn</option>
-              <option value="error">error</option>
-            </select>
-            <label class="field-label" for="log-format" data-i18n="log_format">Format</label>
-            <select class="field-input" id="log-format">
-              <option value="json">json</option>
-              <option value="text">text</option>
-            </select>
-            <label class="field-label" for="log-file" data-i18n="log_file">File</label>
-            <input class="field-input" id="log-file" type="text" placeholder="./data/tayga.log" />
-            <label class="field-check"><input type="checkbox" id="log-show-json" /> <span data-i18n="smtp_show_json">Показать полный JSON</span></label>
-          </div>
-
-          <div id="settings-json-wrap" class="hidden">
-            <label class="field-label" for="settings-json">JSON</label>
-            <p class="meta" data-i18n="server_json_hint">Расширенная секция без отдельной формы — правьте JSON осторожно.</p>
-            <textarea class="field-input-mono" id="settings-json" spellcheck="false" rows="16"></textarea>
-          </div>
-          <div class="actions settings-detail-actions">
-            <button type="button" class="btn-secondary" id="btn-settings-cancel" data-i18n="cancel">Отмена</button>
-            <button type="button" class="btn-spray" id="btn-settings-save" data-i18n="apply">Применить</button>
-            <button type="button" class="btn-secondary" id="btn-settings-close" data-i18n="close">Закрыть</button>
-          </div>
-          <p id="settings-msg" class="msg"></p>
-          </div>
+          <p id="settings-msg" class="msg" role="status"></p>
         </div>
+      </div>
+
+      <div id="config-backdrop" class="dialog-backdrop hidden">
+        <form id="config-dialog" class="config-dialog" role="dialog" aria-modal="true" aria-labelledby="config-title">
+          <div class="config-dialog-head">
+            <div><p class="config-eyebrow" id="config-category"></p><h3 class="heading" id="config-title"></h3></div>
+            <button type="button" class="btn-icon" id="config-x" data-i18n-title="close" aria-label="Закрыть">×</button>
+          </div>
+          <p class="meta" id="config-lede"></p>
+          <p class="config-notice" id="config-notice"></p>
+          <label class="sr-only" for="config-search" data-i18n="config_search">Поиск параметра</label>
+          <input type="search" id="config-search" class="field-input" data-i18n-placeholder="config_search" placeholder="Поиск параметра…" />
+          <div id="config-fields" class="config-fields"></div>
+          <p id="config-msg" class="msg" role="status"></p>
+          <div class="config-dialog-actions">
+            <button type="button" class="btn-secondary" id="config-cancel" data-i18n="cancel">Отмена</button>
+            <button type="submit" class="btn-spray" id="config-save" data-i18n="save">Сохранить</button>
+          </div>
+        </form>
       </div>
 
       <!-- ADMIN CoS -->

@@ -12,6 +12,15 @@ func redactConfig(cfg *config.Config) {
 	if cfg == nil {
 		return
 	}
+	if cfg.Server.SecretsKey != "" {
+		cfg.Server.SecretsKey = redacted
+	}
+	if cfg.Seed.Password != "" {
+		cfg.Seed.Password = redacted
+	}
+	if cfg.Storage.Postgres.DSN != "" {
+		cfg.Storage.Postgres.DSN = redacted
+	}
 	if cfg.SMTP.Relay.Password != "" {
 		cfg.SMTP.Relay.Password = redacted
 	}
@@ -48,6 +57,12 @@ func preserveSecrets(old, neu *config.Config) {
 	if old == nil || neu == nil {
 		return
 	}
+	if isSecretUnset(neu.Server.SecretsKey) {
+		neu.Server.SecretsKey = old.Server.SecretsKey
+	}
+	if isSecretUnset(neu.Seed.Password) {
+		neu.Seed.Password = old.Seed.Password
+	}
 	if isSecretUnset(neu.SMTP.Relay.Password) {
 		neu.SMTP.Relay.Password = old.SMTP.Relay.Password
 	}
@@ -72,12 +87,17 @@ func preserveSecrets(old, neu *config.Config) {
 			neu.OIDC.Domains[k] = d
 		}
 	}
-	for i := range neu.XMPP.Components {
-		if !isSecretUnset(neu.XMPP.Components[i].Secret) {
+	for i, component := range neu.XMPP.Components {
+		if !isSecretUnset(component.Secret) {
 			continue
 		}
-		if i < len(old.XMPP.Components) {
-			neu.XMPP.Components[i].Secret = old.XMPP.Components[i].Secret
+		// Components can be removed or reordered in the form. Preserve by identity,
+		// never by array index, which could transfer another component's secret.
+		for _, previous := range old.XMPP.Components {
+			if component.Subdomain == previous.Subdomain && component.Domain == previous.Domain && component.Name == previous.Name {
+				neu.XMPP.Components[i].Secret = previous.Secret
+				break
+			}
 		}
 	}
 }

@@ -13,6 +13,13 @@ OUT="${OUT:-dist}"
 LDFLAGS="-s -w -X github.com/tayga/tms/internal/version.Version=${VERSION} -X github.com/tayga/tms/internal/version.Commit=${COMMIT} -X github.com/tayga/tms/internal/version.Date=${DATE}"
 
 mkdir -p "$OUT"
+OUT="$(cd "$OUT" && pwd)"
+PACKAGE_STAGE="$(mktemp -d)"
+trap 'rm -rf "$PACKAGE_STAGE"' EXIT
+mkdir -p "$PACKAGE_STAGE/configs"
+cp LICENSE NOTICE README.md "$PACKAGE_STAGE/"
+cp configs/tayga.example.yaml "$PACKAGE_STAGE/configs/"
+archives=()
 
 targets=(
   "linux amd64"
@@ -36,22 +43,20 @@ for t in "${targets[@]}"; do
   fi
   echo "  ${goos}/${goarch}"
   CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" go build -trimpath -ldflags="$LDFLAGS" \
-    -o "${OUT}/${name}${ext}" ./cmd/tayga
-  (
-    cd "$OUT"
-    if [[ "$goos" == "windows" ]]; then
-      zip -q "${name}.zip" "${name}${ext}"
-      rm -f "${name}${ext}"
-    else
-      tar -czf "${name}.tar.gz" "${name}${ext}"
-      rm -f "${name}${ext}"
-    fi
-  )
+    -o "${PACKAGE_STAGE}/tayga-mail${ext}" ./cmd/tayga
+  if [[ "$goos" == "windows" ]]; then
+    (cd "$PACKAGE_STAGE" && zip -q "${OUT}/${name}.zip" "tayga-mail${ext}" LICENSE NOTICE README.md configs/tayga.example.yaml)
+    archives+=("${name}.zip")
+  else
+    COPYFILE_DISABLE=1 tar -czf "${OUT}/${name}.tar.gz" -C "$PACKAGE_STAGE" tayga-mail LICENSE NOTICE README.md configs/tayga.example.yaml
+    archives+=("${name}.tar.gz")
+  fi
+  rm -f "${PACKAGE_STAGE}/tayga-mail${ext}"
 done
 
 (
   cd "$OUT"
-  shasum -a 256 *.tar.gz *.zip 2>/dev/null | tee checksums.txt
+  shasum -a 256 "${archives[@]}" | tee checksums.txt
 )
 
 echo "done."

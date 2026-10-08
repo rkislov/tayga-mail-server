@@ -8,17 +8,20 @@
  */
 import { chromium } from "playwright-core";
 import path from "node:path";
+import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
 const outDir = path.join(root, "docs/screenshots");
 const base = process.env.TMS_URL || "http://127.0.0.1:18080";
-const chrome =
-  process.env.CHROME_PATH ||
-  `${process.env.HOME}/Library/Caches/ms-playwright/chromium-1208/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing`;
+const chrome = process.env.CHROME_PATH || [
+  `${process.env.HOME}/Library/Caches/ms-playwright/chromium-1208/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing`,
+  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+].find((file) => fs.existsSync(file));
 
 async function shot(page, name) {
+  await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(600);
   await page.screenshot({ path: path.join(outDir, name), fullPage: false });
   console.log("wrote", name);
@@ -30,6 +33,7 @@ async function login(page) {
     localStorage.clear();
     localStorage.setItem("tayga.theme", "tayga");
     localStorage.setItem("tayga.lang", "ru");
+    localStorage.setItem("tayga.colorMode", "dark");
   });
   await page.reload({ waitUntil: "networkidle" });
   await page.waitForSelector("#email", { timeout: 15000 });
@@ -58,6 +62,7 @@ async function theme(page, name) {
 }
 
 async function main() {
+  fs.mkdirSync(outDir, { recursive: true });
   const browser = await chromium.launch({
     executablePath: chrome,
     headless: true,
@@ -72,6 +77,7 @@ async function main() {
     localStorage.clear();
     localStorage.setItem("tayga.theme", "tayga");
     localStorage.setItem("tayga.lang", "ru");
+    localStorage.setItem("tayga.colorMode", "dark");
   });
   await page.reload({ waitUntil: "networkidle" });
   await page.waitForTimeout(700);
@@ -113,6 +119,48 @@ async function main() {
   await goApp(page, "mail");
   await shot(page, "ui-mail-teriberka.png");
 
+  await theme(page, "tayga");
+  await page.evaluate(() => applyColorMode("light"));
+  for (const app of ["mail", "calendar", "contacts", "notes", "files", "chat", "tls", "xmpp", "server", "cos", "monitor", "appearance"]) {
+    await goApp(page, app);
+    const name = app === "tls" ? "ca" : app === "monitor" ? "admin" : app;
+    await shot(page, `ui-${name}-tayga-light.png`);
+  }
+  await goApp(page, "server");
+  await page.evaluate(() => openAdminConfig("smtp"));
+  await shot(page, "ui-settings-smtp-tayga-light.png");
+  await page.evaluate(() => closeAdminConfig());
+  await page.evaluate(() => applyColorMode("dark"));
+  await page.evaluate(() => openAdminConfig("smtp"));
+  await shot(page, "ui-settings-smtp-tayga.png");
+  await page.evaluate(() => closeAdminConfig());
+  await page.evaluate(() => applyColorMode("light"));
+  await goApp(page, "calendar");
+  await page.evaluate(() => openCalDay(calDayKey(new Date())));
+  await shot(page, "ui-calendar-day-tayga-light.png");
+  await page.evaluate(() => {calState.view = "month"; renderCalMonth();});
+  await page.evaluate(() => openCalInviteInbox());
+  await shot(page, "ui-calendar-invites-tayga-light.png");
+  await page.evaluate(() => closeCalInviteInbox());
+  await goApp(page, "mail");
+  await page.evaluate(() => openCompose());
+  await shot(page, "ui-compose-tayga-light.png");
+  await page.evaluate(() => document.getElementById("compose-backdrop").classList.add("hidden"));
+  await goApp(page, "mail");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await shot(page, "ui-mail-tayga-light-mobile.png");
+  await page.evaluate(() => applyColorMode("dark"));
+  await shot(page, "ui-mail-tayga-mobile.png");
+  await page.evaluate(() => setNavOpen(true));
+  await shot(page, "ui-navigation-tayga-mobile.png");
+  await page.evaluate(() => setNavOpen(false));
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await goApp(page, "appearance");
+  await shot(page, "ui-appearance-tayga.png");
+
+  await page.evaluate(() => { localStorage.clear(); localStorage.setItem("tayga.lang", "ru"); localStorage.setItem("tayga.colorMode", "light"); });
+  await page.reload({ waitUntil: "networkidle" });
+  await shot(page, "ui-login-tayga-light.png");
   await browser.close();
 }
 
