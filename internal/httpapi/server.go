@@ -20,6 +20,7 @@ import (
 	"github.com/tayga/tms/internal/migrate"
 	"github.com/tayga/tms/internal/notify"
 	"github.com/tayga/tms/internal/settings"
+	"github.com/tayga/tms/internal/siem"
 	"github.com/tayga/tms/internal/storage"
 	"github.com/tayga/tms/internal/tlsutil"
 	"github.com/tayga/tms/internal/xmpp"
@@ -37,11 +38,19 @@ type Server struct {
 	xmpp    xmpp.Gateway
 	migrate *migrate.Service
 	notify  *notify.Hub
+	siem    *siem.Exporter
 	servers []*http.Server
 }
 
 func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth.Layer, ms *mailstore.Store, tlsMgr *tlsutil.Manager, hub *settings.Hub) *Server {
 	return &Server{cfg: cfg, log: log, store: store, authn: authn, ms: ms, tls: tlsMgr, hub: hub}
+}
+
+// SetSIEM attaches a CEF syslog exporter (optional).
+func (s *Server) SetSIEM(e *siem.Exporter) {
+	if s != nil {
+		s.siem = e
+	}
 }
 
 // cfgLive returns DB-merged config when the settings hub is present.
@@ -94,6 +103,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/admin/users", s.handleAdminUsers)
 	mux.HandleFunc("/api/v1/admin/users/", s.handleAdminUsers)
 	mux.HandleFunc("/api/v1/admin/tenant", s.handleAdminTenant)
+	mux.HandleFunc("/api/v1/admin/tenants", s.handleAdminTenants)
+	mux.HandleFunc("/api/v1/admin/tenants/", s.handleAdminTenants)
 	mux.HandleFunc("/api/v1/admin/domains", s.handleAdminDomains)
 	mux.HandleFunc("/api/v1/admin/domains/", s.handleAdminDomains)
 	mux.HandleFunc("/api/v1/admin/tls", s.handleAdminTLS)

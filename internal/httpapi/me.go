@@ -38,21 +38,23 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		}
 		features["migration"] = s.migrationAllowed(r, su)
 		writeJSON(w, http.StatusOK, map[string]any{
-			"id":               su.ID,
-			"email":            su.Email,
-			"display_name":     su.DisplayName,
-			"auth_source":      su.AuthSource,
-			"quota_bytes":      su.QuotaBytes,
-			"used_bytes":       used,
-			"enabled":          su.Enabled,
-			"roles":            storage.ParseRoles(su.Roles),
-			"admin_scope":      storage.AdminScope(su.Roles),
-			"is_admin":         s.isAdminUser(su),
-			"is_global_admin":  s.isGlobalAdminUser(su),
-			"domain_ids":       domainIDs,
-			"service_class_id": su.ServiceClassID,
+			"id":                su.ID,
+			"email":             su.Email,
+			"display_name":      su.DisplayName,
+			"auth_source":       su.AuthSource,
+			"quota_bytes":       su.QuotaBytes,
+			"used_bytes":        used,
+			"enabled":           su.Enabled,
+			"roles":             storage.ParseRoles(su.Roles),
+			"admin_scope":       storage.AdminScope(su.Roles),
+			"is_admin":          s.isAdminUser(su),
+			"is_global_admin":   s.isGlobalAdminUser(su),
+			"domain_id":         su.DomainID,
+			"domain_ids":        domainIDs,
+			"tenant_id":         su.TenantID,
+			"service_class_id":  su.ServiceClassID,
 			"migration_enabled": su.MigrationEnabled,
-			"features":         features,
+			"features":          features,
 		})
 	case http.MethodPatch:
 		var req patchMeRequest

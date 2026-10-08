@@ -29,7 +29,7 @@ func Run(cfgPath string) error {
 			"Backup (.tar.gz)",
 			"Restore из .tar.gz",
 			"Перенос БД / хранилища (sqlite ↔ postgres)",
-			"Настройки сервера (секции DB)",
+			"Настройки сервера (SMTP / spam / AV / SIEM / log / CoS)",
 			"О версии",
 		})
 		var err error

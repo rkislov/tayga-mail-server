@@ -30,6 +30,7 @@ type Config struct {
 	HA          HAConfig          `yaml:"ha"`
 	Scan        ScanConfig        `yaml:"scan"`
 	Spam        SpamConfig        `yaml:"spam"`
+	SIEM        SIEMConfig        `yaml:"siem"`
 	DKIMVerify  DKIMVerifyConfig  `yaml:"dkim_verify"`
 	SPF         SPFConfig         `yaml:"spf"`
 	IPRev       IPRevConfig       `yaml:"iprev"`
@@ -38,6 +39,21 @@ type Config struct {
 	DMARC       DMARCConfig       `yaml:"dmarc"`
 	ARC         ARCConfig         `yaml:"arc"`
 	Log         LogConfig         `yaml:"log"`
+}
+
+// SIEMConfig exports security events to a SIEM over syslog (CEF).
+type SIEMConfig struct {
+	Enabled       bool   `yaml:"enabled" json:"enabled"`
+	Protocol      string `yaml:"protocol" json:"protocol"` // udp | tcp | tls
+	Address       string `yaml:"address" json:"address"`   // host:port
+	Facility      string `yaml:"facility" json:"facility"` // local0..local7 | auth | mail | …
+	Format        string `yaml:"format" json:"format"`     // cef
+	Vendor        string `yaml:"vendor" json:"vendor"`
+	Product       string `yaml:"product" json:"product"`
+	Version       string `yaml:"version" json:"version"`
+	Hostname      string `yaml:"hostname" json:"hostname"`
+	TLSSkipVerify bool   `yaml:"tls_skip_verify" json:"tls_skip_verify"`
+	QueueSize     int    `yaml:"queue_size" json:"queue_size"`
 }
 
 // GreylistConfig temporarily defers unknown (ip,from,rcpt) triplets on MX.
@@ -131,13 +147,14 @@ type SpamConfig struct {
 // ScanConfig configures antivirus scanning of inbound SMTP messages.
 type ScanConfig struct {
 	Enabled          bool           `yaml:"enabled"`
-	Backend          string         `yaml:"backend"` // clamav | exec | none
+	Backend          string         `yaml:"backend"` // clamav | exec | icap | none
 	Action           string         `yaml:"action"`  // reject | quarantine | tag
 	QuarantineFolder string         `yaml:"quarantine_folder"`
 	Timeout          time.Duration  `yaml:"timeout"`
 	FailOpen         bool           `yaml:"fail_open"` // deliver on scanner errors
 	ClamAV           ClamAVConfig   `yaml:"clamav"`
 	Exec             ExecScanConfig `yaml:"exec"`
+	ICAP             ICAPConfig     `yaml:"icap"`
 }
 
 type ClamAVConfig struct {
@@ -146,6 +163,11 @@ type ClamAVConfig struct {
 
 type ExecScanConfig struct {
 	Command []string `yaml:"command"` // e.g. [clamdscan, --fdpass, --no-summary, -]
+}
+
+// ICAPConfig talks to an ICAP REQMOD antivirus gateway (RFC 3507).
+type ICAPConfig struct {
+	URL string `yaml:"url"` // icap://host:1344/reqmod or icaps://…
 }
 
 // HAConfig enables optional active/standby or per-user sticky writer fencing.
@@ -442,8 +464,9 @@ type SeedConfig struct {
 }
 
 type LogConfig struct {
-	Level  string `yaml:"level"`  // debug, info, warn, error
-	Format string `yaml:"format"` // json, text
+	Level  string `yaml:"level" json:"level"`   // debug, info, warn, error
+	Format string `yaml:"format" json:"format"` // json, text
+	File   string `yaml:"file" json:"file"`     // required path; always written
 }
 
 // Load reads and validates configuration from path.
@@ -557,6 +580,8 @@ func Default() *Config {
 			Timeout:          30 * time.Second,
 			FailOpen:         false,
 			ClamAV:           ClamAVConfig{Address: "127.0.0.1:3310"},
+			Exec:             ExecScanConfig{Command: []string{"clamdscan", "--fdpass", "--no-summary", "-"}},
+			ICAP:             ICAPConfig{URL: "icap://127.0.0.1:1344/reqmod"},
 		},
 		Spam: SpamConfig{
 			Enabled:      false,
@@ -566,6 +591,16 @@ func Default() *Config {
 			FailOpen:     true,
 			Folder:       "Junk",
 			FollowRspamd: true,
+		},
+		SIEM: SIEMConfig{
+			Enabled:  false,
+			Protocol: "udp",
+			Address:  "127.0.0.1:514",
+			Facility: "local0",
+			Format:   "cef",
+			Vendor:   "Tayga",
+			Product:  "TaygaMail",
+			QueueSize: 256,
 		},
 		DKIMVerify: DKIMVerifyConfig{
 			Enabled:  false,
@@ -612,7 +647,7 @@ func Default() *Config {
 			Action:   "tag",
 			FailOpen: true,
 		},
-		Log: LogConfig{Level: "info", Format: "json"},
+		Log: LogConfig{Level: "info", Format: "json", File: "./data/tayga.log"},
 	}
 }
 
@@ -848,12 +883,12 @@ func (c *Config) Validate() error {
 	}
 	if c.Scan.Enabled {
 		switch c.Scan.Backend {
-		case "", "clamav", "exec", "none", "noop":
+		case "", "clamav", "exec", "icap", "none", "noop":
 			if c.Scan.Backend == "" {
 				c.Scan.Backend = "clamav"
 			}
 		default:
-			return fmt.Errorf("scan.backend must be clamav, exec, or none, got %q", c.Scan.Backend)
+			return fmt.Errorf("scan.backend must be clamav, exec, icap, or none, got %q", c.Scan.Backend)
 		}
 		switch c.Scan.Action {
 		case "", "reject", "quarantine", "tag":
@@ -875,6 +910,49 @@ func (c *Config) Validate() error {
 		if c.Scan.Backend == "exec" && len(c.Scan.Exec.Command) == 0 {
 			return fmt.Errorf("scan.exec.command is required when backend is exec")
 		}
+		if c.Scan.Backend == "icap" && c.Scan.ICAP.URL == "" {
+			c.Scan.ICAP.URL = "icap://127.0.0.1:1344/reqmod"
+		}
+	}
+	if c.SIEM.Enabled {
+		switch strings.ToLower(strings.TrimSpace(c.SIEM.Protocol)) {
+		case "", "udp", "tcp", "tls":
+			if c.SIEM.Protocol == "" {
+				c.SIEM.Protocol = "udp"
+			}
+		default:
+			return fmt.Errorf("siem.protocol must be udp, tcp, or tls, got %q", c.SIEM.Protocol)
+		}
+		if strings.TrimSpace(c.SIEM.Address) == "" {
+			return fmt.Errorf("siem.address is required when siem.enabled")
+		}
+		switch strings.ToLower(strings.TrimSpace(c.SIEM.Format)) {
+		case "", "cef":
+			c.SIEM.Format = "cef"
+		default:
+			return fmt.Errorf("siem.format must be cef, got %q", c.SIEM.Format)
+		}
+		if c.SIEM.Facility == "" {
+			c.SIEM.Facility = "local0"
+		}
+		if c.SIEM.Vendor == "" {
+			c.SIEM.Vendor = "Tayga"
+		}
+		if c.SIEM.Product == "" {
+			c.SIEM.Product = "TaygaMail"
+		}
+		if c.SIEM.QueueSize <= 0 {
+			c.SIEM.QueueSize = 256
+		}
+	}
+	if c.Log.Level == "" {
+		c.Log.Level = "info"
+	}
+	if c.Log.Format == "" {
+		c.Log.Format = "json"
+	}
+	if strings.TrimSpace(c.Log.File) == "" {
+		return fmt.Errorf("log.file is required (file logging is mandatory)")
 	}
 	if c.Spam.Enabled {
 		switch c.Spam.Backend {

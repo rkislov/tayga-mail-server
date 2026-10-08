@@ -42,9 +42,18 @@ seed:
 #     - name: support-bot
 #       subdomain: bots
 #       secret: change-me-component-secret
-# log:
-#   level: info
-#   format: json
+log:
+  level: info
+  format: json
+  file: ./data/tayga.log # required — always written (also mirrored to stdout)
+
+# Optional SIEM export (also Admin → Server → siem; restart to apply):
+# siem:
+#   enabled: true
+#   protocol: udp # udp | tcp | tls
+#   address: "siem.example.com:514"
+#   facility: local0
+#   format: cef
 # tls:
 #   cert_file: ./data/certs/server.crt
 #   key_file: ./data/certs/server.key

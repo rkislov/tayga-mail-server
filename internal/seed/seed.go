@@ -3,6 +3,7 @@ package seed
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 
@@ -20,6 +21,15 @@ func Run(ctx context.Context, cfg config.SeedConfig, store storage.Driver, hashe
 	if cfg.Domain == "" || cfg.Email == "" || cfg.Password == "" {
 		return errors.New("seed requires domain, email, and password")
 	}
+	email := strings.ToLower(strings.TrimSpace(cfg.Email))
+	seedDomain := strings.ToLower(strings.TrimSpace(cfg.Domain))
+	emailDomain := storage.DomainOfEmail(email)
+	if emailDomain == "" {
+		return fmt.Errorf("seed: email %q has no domain part", email)
+	}
+	if emailDomain != seedDomain {
+		return fmt.Errorf("seed: email domain %q does not match seed.domain %q (fix typo in /etc/tayga/tayga.yaml)", emailDomain, seedDomain)
+	}
 	tenantName := cfg.Tenant
 	if tenantName == "" {
 		tenantName = "default"
@@ -33,15 +43,13 @@ func Run(ctx context.Context, cfg config.SeedConfig, store storage.Driver, hashe
 		return err
 	}
 
-	domain, err := store.GetDomainByName(ctx, cfg.Domain)
+	domain, err := store.GetDomainByName(ctx, seedDomain)
 	if errors.Is(err, storage.ErrNotFound) {
-		domain, err = store.CreateDomain(ctx, tenant.ID, cfg.Domain)
+		domain, err = store.CreateDomain(ctx, tenant.ID, seedDomain)
 	}
 	if err != nil {
 		return err
 	}
-
-	email := strings.ToLower(cfg.Email)
 	if existing, err := store.GetUserByEmail(ctx, email); err == nil {
 		if err := store.EnsureDAVDefaults(ctx, existing.ID); err != nil {
 			return err

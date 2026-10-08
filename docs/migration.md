@@ -8,10 +8,11 @@
 
 1. override пользователя (`on` / `off` / `inherit`)
 2. иначе override домена
-3. иначе CoS `features.migration`
+3. иначе CoS `features.migration` (по умолчанию **вкл**)
 4. иначе **выкл**
 
-Админ: **Домены и пользователи** (select у домена/пользователя) или CoS JSON (`"migration": true`).
+В UI: **Настройки → Миграция** и **Админ → Миграция IMAP/DAV** (формы IMAP / CalDAV / CardDAV).  
+Админ также включает политику у домена/пользователя в **Домены и пользователи** или CoS JSON (`"migration": true`).
 
 ## API
 
