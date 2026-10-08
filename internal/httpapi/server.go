@@ -97,6 +97,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/files/shares/", s.handleFileShares)
 	mux.HandleFunc("/api/v1/files/", s.handleFiles)
 	mux.HandleFunc("/api/v1/files", s.handleFiles)
+	mux.HandleFunc("/calendar/public/", s.handlePublicCalendar)
 	mux.HandleFunc("/s/", s.handlePublicShare)
 	mux.HandleFunc("/api/v1/sieve/scripts", s.handleSieveScripts)
 	mux.HandleFunc("/api/v1/sieve/scripts/", s.handleSieveScripts)

@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"io"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -24,6 +25,8 @@ func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request) {
 	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/v1/files"), "/")
 
 	switch {
+	case r.Method == http.MethodGet && path == "archive":
+		s.downloadFileArchive(w, r, root)
 	case r.Method == http.MethodGet && path == "":
 		rel := r.URL.Query().Get("path")
 		abs, err := safeJoin(root, rel)
@@ -77,7 +80,7 @@ func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/octet-stream")
-		w.Header().Set("Content-Disposition", `attachment; filename="`+filepath.Base(abs)+`"`)
+		w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": filepath.Base(abs)}))
 		http.ServeContent(w, r, filepath.Base(abs), st.ModTime(), f)
 
 	case r.Method == http.MethodPut && path == "content":
@@ -91,9 +94,9 @@ func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
-		data, err := io.ReadAll(io.LimitReader(r.Body, 64<<20))
+		data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 64<<20))
 		if err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "read failed"})
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "file exceeds 64 MiB or could not be read"})
 			return
 		}
 		if err := os.WriteFile(abs, data, 0o640); err != nil {
@@ -132,6 +135,10 @@ func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
+		if abs == root {
+			writeJSON(w, 400, map[string]string{"error": "cannot delete root"})
+			return
+		}
 		if err := os.RemoveAll(abs); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
@@ -155,6 +162,14 @@ func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request) {
 		dst, err := safeJoin(root, req.To)
 		if err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		if src == root || dst == root || src == dst || strings.HasPrefix(dst, src+string(os.PathSeparator)) {
+			writeJSON(w, 400, map[string]string{"error": "invalid move"})
+			return
+		}
+		if _, err := os.Lstat(dst); err == nil {
+			writeJSON(w, 409, map[string]string{"error": "destination already exists"})
 			return
 		}
 		if err := os.MkdirAll(filepath.Dir(dst), 0o750); err != nil {
@@ -192,12 +207,28 @@ func cleanRel(rel string) string {
 }
 
 func safeJoin(root, rel string) (string, error) {
+	for _, part := range strings.Split(strings.ReplaceAll(rel, "\\", "/"), "/") {
+		if part == ".." {
+			return "", errPathEscape
+		}
+	}
 	rel = cleanRel(rel)
 	abs := filepath.Join(root, filepath.FromSlash(rel))
 	abs = filepath.Clean(abs)
 	rootClean := filepath.Clean(root)
 	if abs != rootClean && !strings.HasPrefix(abs, rootClean+string(os.PathSeparator)) {
 		return "", errPathEscape
+	}
+	// Reject symbolic-link ancestors, including paths for files not yet created.
+	// User uploads cannot create links, and a local link must not escape isolation.
+	for current := abs; current != rootClean; current = filepath.Dir(current) {
+		info, err := os.Lstat(current)
+		if err == nil && info.Mode()&os.ModeSymlink != 0 {
+			return "", errPathEscape
+		}
+		if err != nil && !os.IsNotExist(err) {
+			return "", err
+		}
 	}
 	return abs, nil
 }

@@ -11,7 +11,7 @@ try {
  await page.evaluate(async()=>{await refreshMail();for(const m of mailState.mailboxes.filter(m=>['Проверка папок','Рабочая папка'].includes(m.name)))await api('/api/v1/mail/mailboxes/'+m.id,{method:'DELETE'});await refreshMail();});
  await page.click('#btn-mail-folders');assert.equal(await page.locator('dialog[open] [data-delete]').count(),0);assert.equal(await page.locator('dialog[open] [data-rename]').count(),0);
  await page.click('[data-create]');await page.fill('#dialog-input','Проверка папок');await page.click('#dialog-ok');await page.waitForSelector('dialog[open] [data-rename]');
- const id=await page.locator('[data-rename]').getAttribute('data-rename');const previousIndex=await page.evaluate(id=>mailState.mailboxes.findIndex(m=>m.id===id),id);await page.click(`[data-down="${id}"]`);await page.waitForFunction(({id,i})=>mailState.mailboxes[i+1]?.id===id,{id,i:previousIndex});
+ const id=await page.locator('[data-rename]').getAttribute('data-rename');const previousIndex=await page.evaluate(id=>mailState.mailboxes.findIndex(m=>m.id===id),id);const step=await page.locator(`[data-down="${id}"]`).isEnabled()?1:-1;await page.click(`[data-${step===1?"down":"up"}="${id}"]`);await page.waitForFunction(({id,i,step})=>mailState.mailboxes[i+step]?.id===id,{id,i:previousIndex,step});
  assert.equal(await page.evaluate(()=>mailState.mailboxes[0].name),'INBOX');
  await page.click(`[data-rename="${id}"]`);await page.fill('#dialog-input','Рабочая папка');await page.click('#dialog-ok');await page.waitForFunction(()=>mailState.mailboxes.some(m=>m.name==='Рабочая папка'));
  await page.screenshot({path:'docs/screenshots/ui-mail-folders-tayga-light.png'});

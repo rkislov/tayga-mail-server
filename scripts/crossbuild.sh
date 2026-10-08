@@ -16,9 +16,11 @@ mkdir -p "$OUT"
 OUT="$(cd "$OUT" && pwd)"
 PACKAGE_STAGE="$(mktemp -d)"
 trap 'rm -rf "$PACKAGE_STAGE"' EXIT
-mkdir -p "$PACKAGE_STAGE/configs"
+mkdir -p "$PACKAGE_STAGE/configs" "$PACKAGE_STAGE/deploy/systemd" "$PACKAGE_STAGE/docs"
 cp LICENSE NOTICE README.md "$PACKAGE_STAGE/"
 cp configs/tayga.example.yaml "$PACKAGE_STAGE/configs/"
+cp deploy/systemd/tayga.service "$PACKAGE_STAGE/deploy/systemd/"
+cp docs/setup.md docs/migration.md "$PACKAGE_STAGE/docs/"
 archives=()
 
 targets=(
@@ -45,10 +47,10 @@ for t in "${targets[@]}"; do
   CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" go build -trimpath -ldflags="$LDFLAGS" \
     -o "${PACKAGE_STAGE}/tayga-mail${ext}" ./cmd/tayga
   if [[ "$goos" == "windows" ]]; then
-    (cd "$PACKAGE_STAGE" && zip -q "${OUT}/${name}.zip" "tayga-mail${ext}" LICENSE NOTICE README.md configs/tayga.example.yaml)
+    (cd "$PACKAGE_STAGE" && zip -qr "${OUT}/${name}.zip" "tayga-mail${ext}" LICENSE NOTICE README.md configs/tayga.example.yaml deploy docs)
     archives+=("${name}.zip")
   else
-    COPYFILE_DISABLE=1 tar -czf "${OUT}/${name}.tar.gz" -C "$PACKAGE_STAGE" tayga-mail LICENSE NOTICE README.md configs/tayga.example.yaml
+    COPYFILE_DISABLE=1 tar -czf "${OUT}/${name}.tar.gz" -C "$PACKAGE_STAGE" tayga-mail LICENSE NOTICE README.md configs/tayga.example.yaml deploy docs
     archives+=("${name}.tar.gz")
   fi
   rm -f "${PACKAGE_STAGE}/tayga-mail${ext}"
