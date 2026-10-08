@@ -1,0 +1,82 @@
+#!/usr/bin/env node
+/** Integration check. Run only against a disposable seeded server: this saves test settings. */
+import {chromium} from 'playwright-core';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const base = process.env.TMS_URL || 'http://127.0.0.1:18080';
+const chrome = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const browser = await chromium.launch({executablePath:chrome,headless:true});
+try {
+ const page = await browser.newPage({viewport:{width:1440,height:900}});
+ page.setDefaultTimeout(10000);
+ const errors=[]; page.on('pageerror',error=>errors.push(error.message));
+ await page.goto(base);
+ await page.evaluate(()=>{localStorage.clear();localStorage.setItem('tayga.lang','ru');localStorage.setItem('tayga.colorMode','light');});
+ await page.reload();
+ await page.fill('#email','admin@example.com');await page.fill('#password','changeme');
+ await page.click('#form-login button[type=submit]');await page.waitForSelector('#view-account:not(.hidden)');
+ await page.evaluate(()=>showApp('server'));
+ await page.waitForSelector('[data-config-open="smtp"]');
+ const count = await page.locator('[data-config-open]').count();
+ assert.equal(count,27,'every configuration section must be visible');
+ for (const section of await page.locator('[data-config-open]').evaluateAll(items=>items.map(item=>item.dataset.configOpen))) {
+  await page.click(`[data-config-open="${section}"]`);
+  await page.waitForSelector('#config-backdrop:not(.hidden)');
+  assert.ok(await page.locator('#config-fields .config-field, #config-fields .config-collection').count(),`missing fields: ${section}`);
+  assert.equal(await page.locator('#config-fields .field-hint').evaluateAll(items=>items.filter(item=>!item.textContent.trim()).length),0,`missing hints: ${section}`);
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,`overflow: ${section}`);
+  if(section==='storage') {assert.equal(await page.locator('#config-save').isVisible(),false);assert.equal(await page.locator('#config-fields input:not(:disabled), #config-fields select:not(:disabled)').count(),0);}
+  await page.click('#config-x');
+ }
+ console.log('All 27 sections open with typed fields and help');
+ await page.fill('#settings-search','rp_origins');assert.equal(await page.locator('[data-config-open]').count(),1);await page.fill('#settings-search','');
+ await page.click('[data-config-open="smtp"]');
+ const smtpBefore=await page.evaluate(()=>structuredClone(settingsState.all.settings.smtp));
+ await page.locator('.config-field').filter({has:page.locator('code', {hasText:/^max_size$/})}).locator('input').fill('31457280');
+ await page.click('#config-save');await page.waitForFunction(()=>!configEditor.busy && document.getElementById('config-msg').classList.contains('ok'));
+ const smtpAfter=await page.evaluate(()=>settingsState.all.settings.smtp);
+ assert.equal(smtpAfter.max_size,31457280);
+ assert.deepEqual(smtpAfter.relay,smtpBefore.relay);assert.deepEqual(smtpAfter.queue,smtpBefore.queue);
+ assert.equal(smtpAfter.read_timeout,smtpBefore.read_timeout);
+ await page.screenshot({path:'/private/tmp/tayga-admin-smtp-light.png'});
+ await page.click('#config-x');
+ await page.click('[data-config-open="oidc"]');
+ await page.click('[data-config-add]');await page.fill('#dialog-input','ui-check.example.com');await page.click('#dialog-ok');
+ await page.waitForSelector('code:text-is("domains.ui-check.example.com.issuer")');
+ await page.click('#config-save');await page.waitForFunction(()=>!configEditor.busy && document.getElementById('config-msg').classList.contains('ok'));
+ assert.ok(await page.evaluate(()=>settingsState.all.settings.oidc.domains['ui-check.example.com']));
+ await page.click('[data-config-remove]');await page.click('#config-save');await page.waitForFunction(()=>!configEditor.busy && document.getElementById('config-msg').classList.contains('ok'));
+ await page.click('#config-x');
+ await page.click('[data-config-open="log"]');
+ await page.locator('.config-field').filter({has:page.locator('code',{hasText:/^file$/})}).locator('input').fill('/private/tmp/tayga-screenshot-data/changed.log');
+ await page.click('#config-cancel');await page.waitForSelector('#dialog-backdrop:not(.hidden)');await page.click('#dialog-cancel');assert.equal(await page.locator('#config-dialog').isVisible(),true);
+ await page.click('#config-cancel');await page.click('#dialog-ok');await page.waitForSelector('#config-backdrop.hidden',{state:'attached'});
+ await page.setViewportSize({width:390,height:844});await page.click('[data-config-open="smtp"]');
+ assert.equal(await page.locator('#config-dialog').evaluate(el=>el.scrollWidth>el.clientWidth),false);
+ await page.screenshot({path:'/private/tmp/tayga-admin-smtp-mobile.png'});
+ await page.click('#config-x');await page.setViewportSize({width:1440,height:900});
+ await page.evaluate(()=>showApp('calendar'));await page.waitForSelector('#cal-month [data-day]');
+ const cell=page.locator('#cal-month [data-day]').filter({hasNot:page.locator('[data-ev]')}).first();
+ const day=await cell.getAttribute('data-day');await cell.click();
+ await page.waitForSelector('#cal-day-view:not(.hidden)');
+ assert.equal(await page.evaluate(()=>calState.selectedDay),day);assert.equal(await page.locator('.cal-hour-slot').count(),24);
+ await page.click('#btn-cal-month-view');
+ await page.evaluate(()=>document.getElementById('cal-start').value='2000-01-01T10:00');
+ await page.locator(`[data-day="${day}"]`).dblclick();await page.waitForSelector('#cal-backdrop:not(.hidden)');
+ assert.equal(await page.inputValue('#cal-start'),day+'T10:00');assert.equal(await page.inputValue('#cal-end'),day+'T11:00');
+ assert.equal(await page.evaluate(()=>calState.view),'month','double click must not navigate away');
+ await page.click('#btn-cal-close');
+ await page.locator(`[data-day="${day}"]`).focus();await page.keyboard.press('Shift+Enter');await page.waitForSelector('#cal-backdrop:not(.hidden)');assert.equal(await page.inputValue('#cal-start'),day+'T10:00');await page.click('#btn-cal-close');
+ let invites=[{id:'check-1',summary:'Обсуждение проекта',organizer:{email:'colleague@example.com'},start:day+'T09:00:00Z'},{id:'check-2',summary:'Планирование команды',organizer:{email:'team@example.com'},start:day+'T12:00:00Z'}];
+ await page.route('**/api/v1/calendar/invites',route=>route.fulfill({json:{invites}}));
+ await page.route('**/api/v1/calendar/invites/*/reply',route=>{invites=invites.slice(1);return route.fulfill({json:{status:'ok'}});});
+ await page.evaluate(()=>refreshCalInvites());assert.equal(await page.locator('#cal-invite-count').innerText(),'2');
+ await page.click('#btn-cal-invites');await page.waitForSelector('#cal-invites-backdrop:not(.hidden)');assert.equal(await page.locator('.cal-invite-item').count(),2);
+ await page.screenshot({path:'/private/tmp/tayga-calendar-invites.png'});
+ await page.locator('[data-inv-act="accept"]').first().click();await page.waitForFunction(()=>document.getElementById('cal-invite-count').textContent==='1');
+ await page.keyboard.press('Escape');await page.waitForSelector('#cal-invites-backdrop.hidden',{state:'attached'});
+ await page.setViewportSize({width:390,height:844});assert.equal(await page.locator('#btn-cal-invites').isVisible(),true);assert.equal(await page.locator('#btn-cal-new-mobile').isVisible(),true);
+ assert.deepEqual(errors,[],'uncaught browser errors');
+ console.log('Saved settings preserve nested data; domains, discard confirmation and mobile dialog passed');
+ console.log('Calendar single/double clicks, date prefill, keyboard creation and invitation badge/reply passed');
+} finally {await browser.close();}
