@@ -40,6 +40,14 @@ func (h *easHandler) folderCreate(ctx context.Context, u *storage.User, body []b
 			return "", nil, err
 		}
 		return folderOpStatusXML("FolderCreate", 1, ab.ID), nil, nil
+	case folderTypeNotes:
+		nf, err := h.store.CreateNoteFolder(ctx, &storage.NoteFolder{
+			UserID: u.ID, Name: sanitizeFolderName(display), DisplayName: display,
+		})
+		if err != nil {
+			return "", nil, err
+		}
+		return folderOpStatusXML("FolderCreate", 1, nf.ID), nil, nil
 	default:
 		path := display
 		if h.ms != nil {
@@ -86,6 +94,12 @@ func (h *easHandler) folderDelete(ctx context.Context, u *storage.User, body []b
 		}
 		if err := h.store.DeleteAddressBook(ctx, u.ID, ab.Name); err != nil {
 			return "", nil, err
+		}
+		return folderOpStatusXML("FolderDelete", 1, ""), nil, nil
+	}
+	if nf, err := h.store.GetNoteFolderByID(ctx, u.ID, serverID); err == nil {
+		if err := h.store.DeleteNoteFolder(ctx, u.ID, nf.ID); err != nil {
+			return folderOpStatusXML("FolderDelete", 5, ""), nil, nil
 		}
 		return folderOpStatusXML("FolderDelete", 1, ""), nil, nil
 	}

@@ -7,7 +7,7 @@ Themes in this tree:
 
 | Dir | Theme | Subject |
 |-----|-------|---------|
-| `taiga/` | Тайга (default UI) | northern forest |
+| `tayga/` | Тайга (default UI) | northern forest |
 | `cosmos/` | Космос | abstract space |
 | `city/` | Город | riverside city at dusk |
 | `kalyazin/` | Колязин | flooded bell tower |
@@ -29,7 +29,7 @@ Each theme folder has masters (`master-16x9`, `master-4x3`, `master-9x16`, `sour
 # from repo root
 rm -rf dist/wallpaper-pack
 mkdir -p dist/wallpaper-pack
-for theme in taiga cosmos city kalyazin temple moscow street-art teriberka; do
+for theme in tayga cosmos city kalyazin temple moscow street-art teriberka; do
   mkdir -p "dist/wallpaper-pack/$theme"
   for f in desktop-1080p desktop-1440p desktop-4k desktop-5k \
            laptop-16x10 mbp14-retina mbp16-retina \
@@ -42,4 +42,4 @@ cp assets/wallpapers/README.md dist/wallpaper-pack/README.md
 (cd dist && zip -qr tayga-wallpaper-pack.zip wallpaper-pack)
 ```
 
-UI embeds 1x/2x under `internal/frontend/dist/assets/` (`taiga-forest`, `cosmic-abstract`, `city`, `kalyazin`, `temple-nerl`, `moscow-city`, `street-art`, `teriberka`).
+UI embeds 1x/2x under `internal/frontend/dist/assets/` (`tayga-forest`, `cosmic-abstract`, `city`, `kalyazin`, `temple-nerl`, `moscow-city`, `street-art`, `teriberka`).

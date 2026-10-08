@@ -82,6 +82,11 @@ func migrate(ctx context.Context, db *sql.DB, dialect Dialect) error {
 			"018_mail_archive_search.sqlite.sql",
 			"019_migration.sqlite.sql",
 			"020_mail_log.sqlite.sql",
+			"021_calendar_invites.sqlite.sql",
+			"022_calendar_resources.sqlite.sql",
+			"023_calendar_attachments.sqlite.sql",
+			"024_notes.sqlite.sql",
+			"025_note_acl.sqlite.sql",
 		}
 	case DialectPostgres:
 		files = []string{
@@ -105,6 +110,11 @@ func migrate(ctx context.Context, db *sql.DB, dialect Dialect) error {
 			"018_mail_archive_search.postgres.sql",
 			"019_migration.postgres.sql",
 			"020_mail_log.postgres.sql",
+			"021_calendar_invites.postgres.sql",
+			"022_calendar_resources.postgres.sql",
+			"023_calendar_attachments.postgres.sql",
+			"024_notes.postgres.sql",
+			"025_note_acl.postgres.sql",
 		}
 	default:
 		return fmt.Errorf("unsupported dialect")
