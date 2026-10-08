@@ -17,7 +17,7 @@ tayga-mail menu -config /etc/tayga/tayga.yaml
 | Backup | `backup.WriteTarGz` (с maildir по желанию) |
 | Restore | `backup.RestoreTarGz` в текущий storage/maildir |
 | Перенос БД / хранилища | экспорт из источника → импорт в sqlite или postgres → новый YAML |
-| Настройки сервера | GET/PUT секции DB (`settings` hub), JSON одной строкой |
+| Настройки сервера | Guided-формы: SMTP, spam/Rspamd, AV/ICAP, SIEM (syslog CEF), log, CoS; плюс raw JSON для остальных секций |
 | О версии | `version.String()` |
 
 Перед переносом sqlite↔postgres **остановите** `tayga-mail`. После переноса запускайте с новым config.

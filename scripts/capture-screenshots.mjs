@@ -89,6 +89,7 @@ async function main() {
     ["tls", "ui-ca-taiga.png"],
     ["xmpp", "ui-xmpp-taiga.png"],
     ["server", "ui-server-taiga.png"],
+    ["cos", "ui-cos-taiga.png"],
     ["monitor", "ui-admin-taiga.png"],
   ]) {
     await goApp(page, app);

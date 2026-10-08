@@ -3,10 +3,127 @@ const state = {
   email: "",
   challenge: "",
   methods: [],
+  me: null,
 };
 
 const $ = (id) => document.getElementById(id);
 
+let dialogResolve = null;
+
+function closeDialog(result) {
+  const backdrop = $("dialog-backdrop");
+  if (!backdrop) return;
+  backdrop.classList.add("hidden");
+  $("dialog-panel")?.classList.remove("is-danger");
+  const resolve = dialogResolve;
+  dialogResolve = null;
+  if (resolve) resolve(result);
+}
+
+function openDialog({ title, body = "", danger = false, input = false, label = "", value = "", placeholder = "", okText = "", cancelText = "", password = false, alertOnly = false }) {
+  return new Promise((resolve) => {
+    if (dialogResolve) closeDialog(input ? null : false);
+    dialogResolve = resolve;
+    const backdrop = $("dialog-backdrop");
+    const panel = $("dialog-panel");
+    const fieldWrap = $("dialog-field-wrap");
+    const inputEl = $("dialog-input");
+    if (!backdrop || !panel) {
+      resolve(input ? null : false);
+      return;
+    }
+    $("dialog-title").textContent = title || (input ? t("prompt_title") : t("confirm_title"));
+    $("dialog-body").textContent = body || "";
+    panel.classList.toggle("is-danger", !!danger);
+    fieldWrap?.classList.toggle("hidden", !input);
+    if (input && inputEl) {
+      $("dialog-label").textContent = label || "";
+      inputEl.type = password ? "password" : "text";
+      inputEl.value = value || "";
+      inputEl.placeholder = placeholder || "";
+    }
+    const ok = $("dialog-ok");
+    const cancel = $("dialog-cancel");
+    if (ok) ok.textContent = okText || t("ok");
+    if (cancel) {
+      cancel.textContent = cancelText || t("cancel");
+      cancel.classList.toggle("hidden", !!alertOnly);
+    }
+    backdrop.classList.remove("hidden");
+    requestAnimationFrame(() => {
+      if (input && inputEl) {
+        inputEl.focus();
+        inputEl.select();
+      } else {
+        ok?.focus();
+      }
+    });
+  });
+}
+
+function askAlert(message, opts = {}) {
+  return openDialog({
+    title: opts.title || t("confirm_title"),
+    body: message,
+    alertOnly: true,
+    okText: opts.okText || t("ok"),
+  });
+}
+
+function askConfirm(message, opts = {}) {
+  return openDialog({
+    title: opts.title || t("confirm_title"),
+    body: message,
+    danger: !!opts.danger,
+    okText: opts.okText,
+    cancelText: opts.cancelText,
+  });
+}
+
+function askPrompt(label, opts = {}) {
+  return openDialog({
+    title: opts.title || t("prompt_title"),
+    body: opts.body || "",
+    input: true,
+    label: label || "",
+    value: opts.value || "",
+    placeholder: opts.placeholder || "",
+    password: !!opts.password,
+    okText: opts.okText,
+    cancelText: opts.cancelText,
+  });
+}
+
+$("dialog-ok")?.addEventListener("click", () => {
+  const inputMode = !$("dialog-field-wrap")?.classList.contains("hidden");
+  closeDialog(inputMode ? ($("dialog-input")?.value ?? "") : true);
+});
+$("dialog-cancel")?.addEventListener("click", () => {
+  const inputMode = !$("dialog-field-wrap")?.classList.contains("hidden");
+  closeDialog(inputMode ? null : false);
+});
+$("dialog-backdrop")?.addEventListener("click", (e) => {
+  if (e.target === $("dialog-backdrop")) {
+    const inputMode = !$("dialog-field-wrap")?.classList.contains("hidden");
+    closeDialog(inputMode ? null : false);
+  }
+});
+$("dialog-input")?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    closeDialog($("dialog-input")?.value ?? "");
+  } else if (e.key === "Escape") {
+    e.preventDefault();
+    closeDialog(null);
+  }
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  const backdrop = $("dialog-backdrop");
+  if (!backdrop || backdrop.classList.contains("hidden")) return;
+  const inputMode = !$("dialog-field-wrap")?.classList.contains("hidden");
+  closeDialog(inputMode ? null : false);
+});
 
 const THEMES = {
   taiga: {
@@ -143,11 +260,18 @@ function updateNavUser(email, isAdmin) {
 const APPS = [
   "mail", "calendar", "contacts", "files", "chat",
   "profile", "security", "appearance", "filters", "language", "migration",
-  "monitor", "maillog", "tenants", "tls", "xmpp", "server",
+  "monitor", "maillog", "tenants", "tls", "xmpp", "server", "cos",
 ];
 
 const mailState = { mailboxID: "", messageID: "", mailboxes: [], searchQ: "" };
-const calState = { calendarID: "", eventID: "", calendars: [], events: [] };
+const calState = {
+  calendarID: "",
+  eventID: "",
+  calendars: [],
+  events: [],
+  month: new Date(),
+  selectedDay: "",
+};
 const contactState = { bookID: "", cardID: "", books: [], cards: [] };
 const filesState = { path: "", selected: null, entries: [] };
 const chatState = { peer: "", roster: [], messages: [], es: null, me: "" };
@@ -180,6 +304,7 @@ const APP_I18N = {
   tls: "nav_tls",
   xmpp: "nav_xmpp",
   server: "nav_server",
+  cos: "nav_cos",
 };
 
 function setNavOpen(open) {
@@ -219,11 +344,12 @@ function showApp(name) {
   if (app === "monitor") { refreshMonitor(); startMonitorLive(); }
   else stopMonitorLive();
   if (app === "maillog") refreshMailLog();
-  if (app === "tenants") { refreshTenant(); refreshAdminUsers(); }
+  if (app === "tenants") refreshTenantNav();
   if (app === "tls") refreshTLS();
   if (app === "xmpp") refreshXMPP();
   if (app === "migration") refreshMigration();
   if (app === "server") refreshSettings();
+  if (app === "cos") refreshCoS();
   if (app === "security") refreshPasskeys();
   if (app === "profile") loadMe();
   setMobilePane("list");
@@ -411,6 +537,7 @@ function fmtBytes(n) {
 async function loadMe() {
   try {
     const me = await api("/api/v1/me");
+    state.me = me;
     state.email = me.email || state.email;
     $("acct-email").textContent = me.email;
     localStorage.setItem("tayga.email", state.email);
@@ -420,7 +547,8 @@ async function loadMe() {
     $("acct-quota").textContent = q;
     $("acct-role").textContent = me.is_admin ? "admin" : "live";
     $("nav-admin")?.classList.toggle("hidden", !me.is_admin);
-    $("nav-migration")?.classList.toggle("hidden", !(me.features && me.features.migration));
+    // Migration is always listed; forms unlock when features.migration is true.
+    $("nav-migration")?.classList.remove("hidden");
     updateNavUser(me.email, !!me.is_admin);
   } catch (err) {
     if (err.status === 401) return;
@@ -533,23 +661,23 @@ function renderSparkline(values, color) {
 }
 
 function renderMonitorCharts(d) {
-  const t = d.tenant || {};
+  const ten = d.tenant || {};
   const s = d.server || {};
   const g = d.go || {};
   renderBarGroup($("chart-bars"), [
-    { label: "Users", a: t.users || 0, b: s.users || 0 },
-    { label: "Msgs", a: t.messages || 0, b: s.messages || 0 },
-    { label: "Domains", a: t.domains || 0, b: s.domains || 0 },
+    { label: "Users", a: ten.users || 0, b: s.users || 0 },
+    { label: "Msgs", a: ten.messages || 0, b: s.messages || 0 },
+    { label: "Domains", a: ten.domains || 0, b: s.domains || 0 },
   ], {
     series: ["a", "b"],
     seriesLabels: ["Tenant", "Server"],
     colors: ["#e8b84a", "#5b8def"],
   });
   renderHBars($("chart-storage"), [
-    { label: "Tenant", value: t.bytes_stored || 0, display: fmtBytes(t.bytes_stored || 0) },
+    { label: "Tenant", value: ten.bytes_stored || 0, display: fmtBytes(ten.bytes_stored || 0) },
     { label: "Server", value: s.bytes_stored || 0, display: fmtBytes(s.bytes_stored || 0) },
-    { label: "Enabled", value: t.users_enabled || 0, display: fmtNum(t.users_enabled || 0) + " users" },
-    { label: "Mailboxes", value: s.mailboxes || t.mailboxes || 0, display: fmtNum(s.mailboxes || t.mailboxes || 0) },
+    { label: "Enabled", value: ten.users_enabled || 0, display: fmtNum(ten.users_enabled || 0) + " users" },
+    { label: "Mailboxes", value: s.mailboxes || ten.mailboxes || 0, display: fmtNum(s.mailboxes || ten.mailboxes || 0) },
   ], { color: "#d97706" });
   renderHBars($("chart-runtime"), [
     { label: "Outbound", value: s.outbound_queued || 0, display: fmtNum(s.outbound_queued || 0) },
@@ -596,16 +724,16 @@ function stopMonitorLive() {
 async function refreshMonitor() {
   try {
     const d = await api("/api/v1/admin/status");
-    const t = d.tenant || {};
+    const ten = d.tenant || {};
     const s = d.server || {};
     const g = d.go || {};
     const rows = [
-      ["Tenant", t.tenant_name || "—"],
+      ["Tenant", ten.tenant_name || "—"],
       ["Uptime", (d.uptime_sec || 0) + "s"],
-      ["Users (tenant)", fmtNum(t.users) + " / " + fmtNum(t.users_enabled) + " enabled"],
-      ["Domains", fmtNum(t.domains)],
-      ["Messages (tenant)", fmtNum(t.messages)],
-      ["Bytes (tenant)", fmtBytes(t.bytes_stored || 0)],
+      ["Users (tenant)", fmtNum(ten.users) + " / " + fmtNum(ten.users_enabled) + " enabled"],
+      ["Domains", fmtNum(ten.domains)],
+      ["Messages (tenant)", fmtNum(ten.messages)],
+      ["Bytes (tenant)", fmtBytes(ten.bytes_stored || 0)],
       ["Users (server)", fmtNum(s.users)],
       ["Messages (server)", fmtNum(s.messages)],
       ["Bytes (server)", fmtBytes(s.bytes_stored || 0)],
@@ -703,7 +831,7 @@ async function refreshQuarantine() {
     });
     list.querySelectorAll("[data-q-del]").forEach((btn) => {
       btn.addEventListener("click", async () => {
-        if (!confirm("Permanently delete this quarantined message?")) return;
+        if (!await askConfirm("Permanently delete this quarantined message?", { danger: true })) return;
         try {
           await api("/api/v1/admin/quarantine/" + btn.getAttribute("data-q-del"), { method: "DELETE" });
           setMsg($("monitor-msg"), "Deleted.", "ok");
@@ -802,7 +930,7 @@ async function refreshOutbound() {
     });
     list.querySelectorAll("[data-out-del]").forEach((btn) => {
       btn.addEventListener("click", async () => {
-        if (!confirm("Drop this queued message without DSN?")) return;
+        if (!await askConfirm("Drop this queued message without DSN?", { danger: true })) return;
         try {
           await api("/api/v1/admin/outbound/" + btn.getAttribute("data-out-del"), { method: "DELETE" });
           setMsg($("monitor-msg"), "Dropped.", "ok");
@@ -848,7 +976,7 @@ $("btn-restore").addEventListener("click", async () => {
     setMsg($("monitor-msg"), "choose a backup file", "err");
     return;
   }
-  if (!confirm("Restore will create missing tenants/users and may update existing accounts. Continue?")) return;
+  if (!await askConfirm("Restore will create missing tenants/users and may update existing accounts. Continue?", { danger: true })) return;
   setMsg($("monitor-msg"), "Restoring…");
   try {
     const fd = new FormData();
@@ -867,41 +995,147 @@ $("btn-restore").addEventListener("click", async () => {
       (data.scripts_restored || 0) + " scripts, " +
       (data.mail_files || 0) + " mail files.", "ok");
     refreshMonitor();
-    refreshTenant();
-    refreshAdminUsers();
+    refreshTenantNav();
   } catch (err) {
     setMsg($("monitor-msg"), err.message, "err");
   }
 });
 
-async function refreshTenant() {
+const tenantNav = {
+  level: "tenants", // tenants | domains | users
+  tenantID: "",
+  tenantName: "",
+  domainID: "",
+  domainName: "",
+  global: false,
+};
+
+function setTenantLevel(level) {
+  tenantNav.level = level;
+  $("tenant-level-tenants")?.classList.toggle("hidden", level !== "tenants");
+  $("tenant-level-domains")?.classList.toggle("hidden", level !== "domains");
+  $("tenant-level-users")?.classList.toggle("hidden", level !== "users");
+  const heading = $("tenant-heading");
+  if (heading) {
+    const key = level === "domains" ? "domains_title" : level === "users" ? "users_title" : "tenants_title";
+    heading.setAttribute("data-i18n", key);
+    heading.textContent = t(key);
+  }
+  const crumb = $("tenant-crumb");
+  if (crumb) {
+    const parts = [];
+    if (level === "tenants") {
+      parts.push(`<span class="crumb-current">${escapeHtml(t("tenants_title"))}</span>`);
+    } else {
+      parts.push(`<button type="button" data-crumb="tenants">${escapeHtml(t("tenants_title"))}</button>`);
+    }
+    if (level === "domains" || level === "users") {
+      parts.push(`<span class="crumb-sep">/</span>`);
+      if (level === "domains") {
+        parts.push(`<span class="crumb-current">${escapeHtml(tenantNav.tenantName || tenantNav.tenantID)}</span>`);
+      } else {
+        parts.push(`<button type="button" data-crumb="domains">${escapeHtml(tenantNav.tenantName || tenantNav.tenantID)}</button>`);
+        parts.push(`<span class="crumb-sep">/</span>`);
+        parts.push(`<span class="crumb-current">${escapeHtml(tenantNav.domainName || tenantNav.domainID)}</span>`);
+      }
+    }
+    crumb.innerHTML = parts.join(" ");
+    crumb.querySelectorAll("[data-crumb]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        if (btn.dataset.crumb === "tenants") {
+          tenantNav.tenantID = "";
+          tenantNav.tenantName = "";
+          tenantNav.domainID = "";
+          tenantNav.domainName = "";
+          refreshTenantNav();
+        } else if (btn.dataset.crumb === "domains") {
+          tenantNav.domainID = "";
+          tenantNav.domainName = "";
+          refreshTenantDomains();
+        }
+      });
+    });
+  }
+}
+
+async function refreshTenantNav() {
+  setTenantLevel("tenants");
+  const list = $("admin-tenant-list");
+  const meta = $("tenant-meta");
+  if (meta) meta.textContent = t("tenants_lede");
   try {
-    const data = await api("/api/v1/admin/tenant");
-    const t = data.tenant || {};
-    $("tenant-meta").textContent = (t.name || "") + " · " + (t.user_count || 0) + " users · " + (t.id || "");
-    const list = $("admin-domain-list");
-    list.innerHTML = (data.domains || []).map((d) => `
+    const data = await api("/api/v1/admin/tenants");
+    tenantNav.global = !!data.scope?.global;
+    $("form-create-tenant")?.classList.toggle("hidden", !tenantNav.global);
+    const items = data.tenants || [];
+    if (!list) return;
+    list.innerHTML = items.map((ten) => `
+      <li>
+        <span>
+          <strong>${escapeHtml(ten.name)}</strong><br/>
+          <span class="meta">${ten.domain_count || 0} ${escapeHtml(t("domains_title").toLowerCase())} · ${ten.user_count || 0} · ${escapeHtml(ten.id)}</span>
+        </span>
+        <span class="actions">
+          <button type="button" class="btn-spray" data-open-tenant="${escapeHtml(ten.id)}" data-name="${escapeHtml(ten.name)}">${escapeHtml(t("tenants_open"))}</button>
+        </span>
+      </li>`).join("") || `<li><span class="meta">${escapeHtml(t("tenants_empty"))}</span></li>`;
+    list.querySelectorAll("[data-open-tenant]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        tenantNav.tenantID = btn.dataset.openTenant;
+        tenantNav.tenantName = btn.dataset.name || "";
+        tenantNav.domainID = "";
+        tenantNav.domainName = "";
+        refreshTenantDomains();
+      });
+    });
+  } catch (err) {
+    if (meta) meta.textContent = err.message;
+    if (list) list.innerHTML = "";
+  }
+}
+
+async function refreshTenantDomains() {
+  setTenantLevel("domains");
+  const list = $("admin-domain-list");
+  const meta = $("tenant-meta");
+  if (meta) meta.textContent = tenantNav.tenantName + " · " + tenantNav.tenantID;
+  try {
+    const data = await api("/api/v1/admin/domains?tenant_id=" + encodeURIComponent(tenantNav.tenantID));
+    const items = data.domains || [];
+    if (!list) return;
+    list.innerHTML = items.map((d) => `
       <li>
         <span>
           <strong>${escapeHtml(d.name)}</strong><br/>
-          <span class="meta">${d.user_count || 0} users · ${escapeHtml(d.id)}</span>
+          <span class="meta">${d.user_count || 0} · ${escapeHtml(d.id)}</span>
         </span>
         <span class="actions">
-          <select class="field-input" data-dom-mig="${escapeHtml(d.id)}" title="${t("mig_policy")}" style="max-width:9rem">
-            <option value="inherit" ${d.migration_enabled === "inherit" || !d.migration_enabled ? "selected" : ""}>${t("mig_inherit")}</option>
-            <option value="on" ${d.migration_enabled === "on" ? "selected" : ""}>${t("mig_on")}</option>
-            <option value="off" ${d.migration_enabled === "off" ? "selected" : ""}>${t("mig_off")}</option>
-          </select>
-        <button type="button" class="btn-secondary" data-del-domain="${escapeHtml(d.name)}" ${d.user_count > 0 ? "disabled" : ""}>Remove</button>
+          <label class="mig-policy-label" title="${escapeHtml(t("mig_policy_hint"))}">
+            <span>${escapeHtml(t("mig_policy"))}</span>
+            <select class="field-input" data-dom-mig="${escapeHtml(d.id)}" style="max-width:9rem">
+              <option value="inherit" ${d.migration_enabled === "inherit" || !d.migration_enabled ? "selected" : ""}>${escapeHtml(t("mig_inherit"))}</option>
+              <option value="on" ${d.migration_enabled === "on" ? "selected" : ""}>${escapeHtml(t("mig_on"))}</option>
+              <option value="off" ${d.migration_enabled === "off" ? "selected" : ""}>${escapeHtml(t("mig_off"))}</option>
+            </select>
+          </label>
+          <button type="button" class="btn-spray" data-open-domain="${escapeHtml(d.id)}" data-name="${escapeHtml(d.name)}">${escapeHtml(t("domains_open"))}</button>
+          <button type="button" class="btn-secondary" data-del-domain="${escapeHtml(d.name)}" ${d.user_count > 0 ? "disabled" : ""}>${escapeHtml(t("domains_remove"))}</button>
         </span>
-      </li>`).join("") || "<li><span class=\"meta\">No domains yet.</span></li>";
+      </li>`).join("") || `<li><span class="meta">${escapeHtml(t("domains_empty"))}</span></li>`;
+    list.querySelectorAll("[data-open-domain]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        tenantNav.domainID = btn.dataset.openDomain;
+        tenantNav.domainName = btn.dataset.name || "";
+        refreshAdminUsers();
+      });
+    });
     list.querySelectorAll("[data-del-domain]").forEach((btn) => {
       btn.addEventListener("click", async () => {
-        if (!confirm("Remove domain " + btn.dataset.delDomain + "?")) return;
+        if (!await askConfirm(t("domains_remove") + " " + btn.dataset.delDomain + "?", { danger: true })) return;
         try {
           await api("/api/v1/admin/domains/" + encodeURIComponent(btn.dataset.delDomain), { method: "DELETE" });
-          setMsg($("admin-msg"), "Domain removed.", "ok");
-          refreshTenant();
+          setMsg($("admin-msg"), "OK", "ok");
+          refreshTenantDomains();
         } catch (err) {
           setMsg($("admin-msg"), err.message, "err");
         }
@@ -921,47 +1155,97 @@ async function refreshTenant() {
       });
     });
   } catch (err) {
-    $("tenant-meta").textContent = err.message;
+    if (meta) meta.textContent = err.message;
+    if (list) list.innerHTML = "";
   }
 }
 
-$("form-create-domain").addEventListener("submit", async (e) => {
+$("form-create-tenant")?.addEventListener("submit", async (e) => {
   e.preventDefault();
-  setMsg($("admin-msg"), "Adding domain…");
+  setMsg($("admin-msg"), "…");
+  try {
+    await api("/api/v1/admin/tenants", {
+      method: "POST",
+      body: JSON.stringify({ name: $("nt-name").value.trim() }),
+    });
+    setMsg($("admin-msg"), "OK", "ok");
+    $("form-create-tenant").reset();
+    refreshTenantNav();
+  } catch (err) {
+    setMsg($("admin-msg"), err.message, "err");
+  }
+});
+
+$("form-create-domain")?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  setMsg($("admin-msg"), "…");
   try {
     await api("/api/v1/admin/domains", {
       method: "POST",
-      body: JSON.stringify({ name: $("nd-name").value.trim() }),
+      body: JSON.stringify({
+        name: $("nd-name").value.trim(),
+        tenant_id: tenantNav.tenantID,
+      }),
     });
-    setMsg($("admin-msg"), "Domain added.", "ok");
+    setMsg($("admin-msg"), "OK", "ok");
     $("form-create-domain").reset();
-    refreshTenant();
+    refreshTenantDomains();
   } catch (err) {
     setMsg($("admin-msg"), err.message, "err");
   }
 });
 
 async function refreshAdminUsers() {
+  setTenantLevel("users");
+  const list = $("admin-user-list");
+  const meta = $("tenant-meta");
+  if (meta) meta.textContent = tenantNav.domainName + " · " + tenantNav.tenantName;
+  if ($("nu-email") && tenantNav.domainName && !$("nu-email").value) {
+    $("nu-email").placeholder = "user@" + tenantNav.domainName;
+  }
   try {
-    const data = await api("/api/v1/admin/users");
-    const list = $("admin-user-list");
-    list.innerHTML = (data.users || []).map((u) => `
+    const q = tenantNav.domainID
+      ? "?domain_id=" + encodeURIComponent(tenantNav.domainID)
+      : "?tenant_id=" + encodeURIComponent(tenantNav.tenantID);
+    const [data, cosData] = await Promise.all([
+      api("/api/v1/admin/users" + q),
+      api("/api/v1/admin/service-classes").catch(() => ({ service_classes: [] })),
+    ]);
+    if (!list) return;
+    const users = data.users || [];
+    const classes = cosData.service_classes || [];
+    const cosOptions = (selected) => [
+      `<option value="">${escapeHtml(t("cos_none"))}</option>`,
+      ...classes.map((sc) =>
+        `<option value="${escapeHtml(sc.id)}" ${sc.id === selected ? "selected" : ""}>${escapeHtml(sc.name || sc.id)}</option>`
+      ),
+    ].join("");
+    list.innerHTML = users.map((u) => `
       <li>
         <span>
           <strong>${escapeHtml(u.email)}</strong>${u.enabled ? "" : " · disabled"}<br/>
           <span class="meta">${fmtBytes(u.used_bytes)} / ${u.quota_bytes > 0 ? fmtBytes(u.quota_bytes) : "∞"} · ${escapeHtml(u.id)}</span>
         </span>
         <span class="actions">
-          <select class="field-input" data-user-mig="${escapeHtml(u.id)}" title="${t("mig_policy")}" style="max-width:9rem">
-            <option value="inherit" ${u.migration_enabled === "inherit" || !u.migration_enabled ? "selected" : ""}>${t("mig_inherit")}</option>
-            <option value="on" ${u.migration_enabled === "on" ? "selected" : ""}>${t("mig_on")}</option>
-            <option value="off" ${u.migration_enabled === "off" ? "selected" : ""}>${t("mig_off")}</option>
-          </select>
+          <label class="mig-policy-label" title="${escapeHtml(t("cos_lede"))}">
+            <span>${escapeHtml(t("cos_assign"))}</span>
+            <select class="field-input" data-user-cos="${escapeHtml(u.id)}" style="max-width:9rem">
+              ${cosOptions(u.service_class_id || "")}
+            </select>
+          </label>
+          <label class="mig-policy-label" title="${escapeHtml(t("mig_policy_hint"))}">
+            <span>${escapeHtml(t("mig_policy"))}</span>
+            <select class="field-input" data-user-mig="${escapeHtml(u.id)}" style="max-width:9rem">
+              <option value="inherit" ${u.migration_enabled === "inherit" || !u.migration_enabled ? "selected" : ""}>${escapeHtml(t("mig_inherit"))}</option>
+              <option value="on" ${u.migration_enabled === "on" ? "selected" : ""}>${escapeHtml(t("mig_on"))}</option>
+              <option value="off" ${u.migration_enabled === "off" ? "selected" : ""}>${escapeHtml(t("mig_off"))}</option>
+            </select>
+          </label>
           <button type="button" class="btn-secondary" data-quota="${escapeHtml(u.id)}">Quota</button>
-          <button type="button" class="btn-secondary" data-toggle="${escapeHtml(u.id)}" data-enabled="${u.enabled ? "1" : "0"}">${u.enabled ? "Disable" : "Enable"}</button>
-          <button type="button" class="btn-secondary" data-pass="${escapeHtml(u.id)}">Reset pw</button>
+          <button type="button" class="btn-secondary" data-toggle="${escapeHtml(u.id)}" data-enabled="${u.enabled ? "1" : "0"}">${escapeHtml(u.enabled ? t("users_disable") : t("users_enable"))}</button>
+          <button type="button" class="btn-secondary" data-pass="${escapeHtml(u.id)}">${escapeHtml(t("users_reset_pw"))}</button>
         </span>
-      </li>`).join("");
+      </li>`).join("") || `<li><span class="meta">${escapeHtml(t("users_empty"))}</span></li>`;
     list.querySelectorAll("[data-user-mig]").forEach((sel) => {
       sel.addEventListener("change", async () => {
         try {
@@ -975,9 +1259,22 @@ async function refreshAdminUsers() {
         }
       });
     });
+    list.querySelectorAll("[data-user-cos]").forEach((sel) => {
+      sel.addEventListener("change", async () => {
+        try {
+          await api("/api/v1/admin/users/" + encodeURIComponent(sel.dataset.userCos), {
+            method: "PATCH",
+            body: JSON.stringify({ service_class_id: sel.value }),
+          });
+          setMsg($("admin-msg"), "OK", "ok");
+        } catch (err) {
+          setMsg($("admin-msg"), err.message, "err");
+        }
+      });
+    });
     list.querySelectorAll("[data-quota]").forEach((btn) => {
       btn.addEventListener("click", async () => {
-        const raw = prompt("Quota bytes (0 = unlimited)", "0");
+        const raw = await askPrompt(t("users_quota"), { value: "0", body: "0 = ∞" });
         if (raw == null) return;
         const quota_bytes = Number(raw);
         if (Number.isNaN(quota_bytes) || quota_bytes < 0) {
@@ -989,7 +1286,7 @@ async function refreshAdminUsers() {
             method: "PUT",
             body: JSON.stringify({ quota_bytes }),
           });
-          setMsg($("admin-msg"), "Quota updated.", "ok");
+          setMsg($("admin-msg"), "OK", "ok");
           refreshAdminUsers();
           loadMe();
         } catch (err) {
@@ -1005,7 +1302,7 @@ async function refreshAdminUsers() {
             method: "PATCH",
             body: JSON.stringify({ enabled }),
           });
-          setMsg($("admin-msg"), enabled ? "User enabled." : "User disabled.", "ok");
+          setMsg($("admin-msg"), "OK", "ok");
           refreshAdminUsers();
         } catch (err) {
           setMsg($("admin-msg"), err.message, "err");
@@ -1014,7 +1311,7 @@ async function refreshAdminUsers() {
     });
     list.querySelectorAll("[data-pass]").forEach((btn) => {
       btn.addEventListener("click", async () => {
-        const password = prompt("New password (min 8 characters)");
+        const password = await askPrompt(t("password"), { password: true, body: "min 8 characters" });
         if (password == null) return;
         if (password.length < 8) {
           setMsg($("admin-msg"), "password too short", "err");
@@ -1025,7 +1322,7 @@ async function refreshAdminUsers() {
             method: "PUT",
             body: JSON.stringify({ password }),
           });
-          setMsg($("admin-msg"), "Password reset.", "ok");
+          setMsg($("admin-msg"), "OK", "ok");
         } catch (err) {
           setMsg($("admin-msg"), err.message, "err");
         }
@@ -1033,6 +1330,7 @@ async function refreshAdminUsers() {
     });
   } catch (err) {
     setMsg($("admin-msg"), err.message, "err");
+    if (list) list.innerHTML = "";
   }
 }
 
@@ -1101,7 +1399,7 @@ function renderCertList(certs) {
   });
   list.querySelectorAll("[data-ca-del]").forEach((btn) => {
     btn.addEventListener("click", async () => {
-      if (!confirm(t("ca_delete") + "?")) return;
+      if (!await askConfirm(t("ca_delete") + "?", { danger: true })) return;
       try {
         await api("/api/v1/admin/certs/" + encodeURIComponent(btn.dataset.caDel), { method: "DELETE" });
         refreshTLS();
@@ -1242,7 +1540,7 @@ function renderXMPPBots(bots) {
     </li>`).join("");
   ul.querySelectorAll("[data-xmpp-bot-del]").forEach((btn) => {
     btn.addEventListener("click", async () => {
-      if (!confirm(t("ca_delete") + "?")) return;
+      if (!await askConfirm(t("ca_delete") + "?", { danger: true })) return;
       try {
         await api("/api/v1/admin/bots/" + encodeURIComponent(btn.dataset.xmppBotDel), { method: "DELETE" });
         refreshXMPP();
@@ -1355,44 +1653,74 @@ $("btn-xmpp-bot-create")?.addEventListener("click", async () => {
   } catch (err) { setMsg($("xmpp-msg"), err.message, "err"); }
 });
 
+function renderMigJobs(listEl, jobs) {
+  if (!listEl) return;
+  if (!jobs.length) {
+    listEl.innerHTML = `<li class="meta">${t("mig_no_jobs")}</li>`;
+    return;
+  }
+  listEl.innerHTML = jobs.map((j) => `
+    <li class="ca-cert-item">
+      <div>
+        <strong>${escapeHtml(j.kind)}</strong> · ${escapeHtml(j.status)}
+        ${j.user_email ? `<div class="meta">${escapeHtml(j.user_email)}</div>` : ""}
+        <div class="meta">${j.copied || 0} copied · ${j.skipped || 0} skipped · ${j.errors || 0} errors</div>
+        ${j.last_error ? `<div class="meta">${escapeHtml(j.last_error)}</div>` : ""}
+      </div>
+      <div class="actions">
+        ${j.status === "pending" || j.status === "running" || j.status === "paused"
+          ? `<button type="button" class="btn-secondary btn-sm" data-mig-cancel="${escapeHtml(j.id)}">${t("mig_cancel")}</button>`
+          : ""}
+      </div>
+    </li>`).join("");
+  listEl.querySelectorAll("[data-mig-cancel]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      try {
+        await api("/api/v1/migration/jobs/" + encodeURIComponent(btn.dataset.migCancel) + "/cancel", { method: "POST" });
+        refreshMigration();
+      } catch (err) { setMsg($("mig-msg"), err.message, "err"); }
+    });
+  });
+}
+
 async function refreshMigration() {
   setMsg($("mig-msg"), "");
   const list = $("mig-job-list");
+  const locked = $("mig-locked");
+  const forms = $("mig-forms");
+  const adminBox = $("mig-admin-jobs");
   if (!list) return;
+
+  const me = state.me || {};
+  const allowed = !!(me.features && me.features.migration);
+  locked?.classList.toggle("hidden", allowed);
+  forms?.classList.toggle("hidden", !allowed);
+  forms?.querySelectorAll("input,button").forEach((el) => {
+    el.disabled = !allowed;
+  });
+  const canAdmin = !!me.is_admin;
+  $("btn-mig-enable-me")?.classList.toggle("hidden", allowed || !canAdmin || !me.id);
+  $("btn-mig-enable-domain")?.classList.toggle("hidden", allowed || !canAdmin || !me.domain_id);
+  $("btn-mig-goto-tenants")?.classList.toggle("hidden", !canAdmin);
+
   try {
     const data = await api("/api/v1/migration");
-    if (!data.allowed) {
-      list.innerHTML = `<li class="meta">${t("mig_no_jobs")}</li>`;
-      return;
-    }
-    const jobs = data.jobs || [];
-    if (!jobs.length) {
-      list.innerHTML = `<li class="meta">${t("mig_no_jobs")}</li>`;
-      return;
-    }
-    list.innerHTML = jobs.map((j) => `
-      <li class="ca-cert-item">
-        <div>
-          <strong>${escapeHtml(j.kind)}</strong> · ${escapeHtml(j.status)}
-          <div class="meta">${j.copied || 0} copied · ${j.skipped || 0} skipped · ${j.errors || 0} errors</div>
-          ${j.last_error ? `<div class="meta">${escapeHtml(j.last_error)}</div>` : ""}
-        </div>
-        <div class="actions">
-          ${j.status === "pending" || j.status === "running" || j.status === "paused"
-            ? `<button type="button" class="btn-secondary btn-sm" data-mig-cancel="${escapeHtml(j.id)}">${t("mig_cancel")}</button>`
-            : ""}
-        </div>
-      </li>`).join("");
-    list.querySelectorAll("[data-mig-cancel]").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        try {
-          await api("/api/v1/migration/jobs/" + encodeURIComponent(btn.dataset.migCancel) + "/cancel", { method: "POST" });
-          refreshMigration();
-        } catch (err) { setMsg($("mig-msg"), err.message, "err"); }
-      });
-    });
+    renderMigJobs(list, data.allowed ? (data.jobs || []) : []);
   } catch (err) {
     list.innerHTML = `<li class="meta">${escapeHtml(err.message)}</li>`;
+  }
+
+  if (canAdmin && adminBox) {
+    adminBox.classList.remove("hidden");
+    try {
+      const adm = await api("/api/v1/admin/migration");
+      renderMigJobs($("mig-admin-job-list"), adm.jobs || []);
+    } catch (err) {
+      const al = $("mig-admin-job-list");
+      if (al) al.innerHTML = `<li class="meta">${escapeHtml(err.message)}</li>`;
+    }
+  } else {
+    adminBox?.classList.add("hidden");
   }
 }
 
@@ -1406,6 +1734,33 @@ async function startMigration(kind, body) {
 }
 
 $("btn-mig-refresh")?.addEventListener("click", () => refreshMigration());
+$("btn-mig-goto-tenants")?.addEventListener("click", () => showApp("tenants"));
+$("btn-mig-enable-me")?.addEventListener("click", async () => {
+  const id = state.me?.id;
+  if (!id) return;
+  try {
+    await api("/api/v1/admin/users/" + encodeURIComponent(id), {
+      method: "PATCH",
+      body: JSON.stringify({ migration_enabled: "on" }),
+    });
+    await loadMe();
+    setMsg($("mig-msg"), "OK", "ok");
+    refreshMigration();
+  } catch (err) { setMsg($("mig-msg"), err.message, "err"); }
+});
+$("btn-mig-enable-domain")?.addEventListener("click", async () => {
+  const domainID = state.me?.domain_id;
+  if (!domainID) return;
+  try {
+    await api("/api/v1/admin/domains/" + encodeURIComponent(domainID), {
+      method: "PATCH",
+      body: JSON.stringify({ migration_enabled: "on" }),
+    });
+    await loadMe();
+    setMsg($("mig-msg"), "OK", "ok");
+    refreshMigration();
+  } catch (err) { setMsg($("mig-msg"), err.message, "err"); }
+});
 $("btn-mig-imap")?.addEventListener("click", () => startMigration("imap", {
   host: ($("mig-imap-host")?.value || "").trim(),
   port: Number($("mig-imap-port")?.value || 993),
@@ -1425,19 +1780,37 @@ $("btn-mig-card")?.addEventListener("click", () => startMigration("carddav", {
 }));
 
 const settingsState = { all: null, certs: [] };
+const cosState = { items: [], selected: "" };
+
+const SETTINGS_SECTION_LABELS = {
+  smtp: "sec_smtp",
+  spam: "sec_spam",
+  scan: "sec_scan",
+  siem: "sec_siem",
+  log: "sec_log",
+  tls: "sec_tls",
+  http: "sec_http",
+  server: "sec_server",
+};
 
 function fillSettingsSectionSelect(sections) {
   const sel = $("settings-section");
   const cur = sel.value;
   sel.innerHTML = "";
-  (sections || []).forEach((name) => {
+  const preferred = ["smtp", "spam", "scan", "siem", "log", "tls", "http", "server"];
+  const ordered = [
+    ...preferred.filter((n) => (sections || []).includes(n)),
+    ...(sections || []).filter((n) => !preferred.includes(n)),
+  ];
+  ordered.forEach((name) => {
     const opt = document.createElement("option");
     opt.value = name;
-    opt.textContent = name;
+    const key = SETTINGS_SECTION_LABELS[name];
+    opt.textContent = key ? t(key) : name;
     sel.appendChild(opt);
   });
-  if (cur && sections && sections.includes(cur)) sel.value = cur;
-  else if (sections && sections.length) sel.value = sections.includes("spam") ? "spam" : sections[0];
+  if (cur && ordered.includes(cur)) sel.value = cur;
+  else if (ordered.length) sel.value = ordered.includes("smtp") ? "smtp" : ordered[0];
 }
 
 async function fillSettingsCertSelect(activeId) {
@@ -1459,22 +1832,207 @@ async function fillSettingsCertSelect(activeId) {
   }
 }
 
+function fillSmtpForm(val) {
+  const v = val || {};
+  const relay = v.relay || {};
+  const queue = v.queue || {};
+  if ($("smtp-outbound-direct")) $("smtp-outbound-direct").checked = !!v.outbound_direct;
+  if ($("smtp-relay-host")) $("smtp-relay-host").value = relay.host || "";
+  if ($("smtp-relay-user")) $("smtp-relay-user").value = relay.username || "";
+  if ($("smtp-relay-pass")) $("smtp-relay-pass").value = "";
+  if ($("smtp-relay-pass")) $("smtp-relay-pass").placeholder = relay.password ? "••••••••" : "";
+  if ($("smtp-relay-no-starttls")) $("smtp-relay-no-starttls").checked = !!relay.disable_starttls;
+  if ($("smtp-queue-enabled")) $("smtp-queue-enabled").checked = queue.enabled !== false;
+  if ($("smtp-queue-workers")) $("smtp-queue-workers").value = queue.workers || 1;
+  if ($("smtp-queue-max")) $("smtp-queue-max").value = queue.max_attempts || 8;
+}
+
+function readSmtpForm(base) {
+  const cur = JSON.parse(JSON.stringify(base || {}));
+  cur.outbound_direct = !!$("smtp-outbound-direct")?.checked;
+  cur.relay = cur.relay || {};
+  cur.relay.host = ($("smtp-relay-host")?.value || "").trim();
+  cur.relay.username = ($("smtp-relay-user")?.value || "").trim();
+  const pass = $("smtp-relay-pass")?.value || "";
+  if (pass) cur.relay.password = pass;
+  else if (!cur.relay.password) cur.relay.password = "";
+  cur.relay.disable_starttls = !!$("smtp-relay-no-starttls")?.checked;
+  cur.queue = cur.queue || {};
+  cur.queue.enabled = !!$("smtp-queue-enabled")?.checked;
+  cur.queue.workers = Number($("smtp-queue-workers")?.value || 1);
+  cur.queue.max_attempts = Number($("smtp-queue-max")?.value || 8);
+  return cur;
+}
+
+function fillSpamForm(val) {
+  const v = val || {};
+  if ($("spam-enabled")) $("spam-enabled").checked = !!v.enabled;
+  if ($("spam-backend")) $("spam-backend").value = v.backend || "rspamd";
+  if ($("spam-url")) $("spam-url").value = v.url || "http://127.0.0.1:11333";
+  if ($("spam-password")) $("spam-password").value = "";
+  if ($("spam-password")) $("spam-password").placeholder = v.password ? "••••••••" : "";
+  if ($("spam-folder")) $("spam-folder").value = v.folder || "Junk";
+  if ($("spam-fail-open")) $("spam-fail-open").checked = v.fail_open !== false;
+  if ($("spam-follow")) $("spam-follow").checked = v.follow_rspamd !== false;
+}
+
+function readSpamForm(base) {
+  const cur = JSON.parse(JSON.stringify(base || {}));
+  cur.enabled = !!$("spam-enabled")?.checked;
+  cur.backend = $("spam-backend")?.value || "rspamd";
+  cur.url = ($("spam-url")?.value || "").trim();
+  const pass = $("spam-password")?.value || "";
+  if (pass) cur.password = pass;
+  else if (cur.password == null) cur.password = "";
+  cur.folder = ($("spam-folder")?.value || "Junk").trim() || "Junk";
+  cur.fail_open = !!$("spam-fail-open")?.checked;
+  cur.follow_rspamd = !!$("spam-follow")?.checked;
+  return cur;
+}
+
+function updateScanBackendFields() {
+  const backend = $("scan-backend")?.value || "clamav";
+  $("scan-clamav-fields")?.classList.toggle("hidden", backend !== "clamav");
+  $("scan-exec-fields")?.classList.toggle("hidden", backend !== "exec");
+  $("scan-icap-fields")?.classList.toggle("hidden", backend !== "icap");
+}
+
+function fillScanForm(val) {
+  const v = val || {};
+  if ($("scan-enabled")) $("scan-enabled").checked = !!v.enabled;
+  if ($("scan-backend")) $("scan-backend").value = v.backend || "clamav";
+  if ($("scan-action")) $("scan-action").value = v.action || "quarantine";
+  if ($("scan-folder")) $("scan-folder").value = v.quarantine_folder || "Quarantine";
+  if ($("scan-fail-open")) $("scan-fail-open").checked = !!v.fail_open;
+  if ($("scan-clamav-addr")) $("scan-clamav-addr").value = (v.clamav && v.clamav.address) || "127.0.0.1:3310";
+  if ($("scan-exec-cmd")) {
+    const cmd = (v.exec && Array.isArray(v.exec.command)) ? v.exec.command.join(" ") : "clamdscan --fdpass --no-summary -";
+    $("scan-exec-cmd").value = cmd;
+  }
+  if ($("scan-icap-url")) $("scan-icap-url").value = (v.icap && v.icap.url) || "icap://127.0.0.1:1344/reqmod";
+  updateScanBackendFields();
+}
+
+function readScanForm(base) {
+  const cur = JSON.parse(JSON.stringify(base || {}));
+  cur.enabled = !!$("scan-enabled")?.checked;
+  cur.backend = $("scan-backend")?.value || "clamav";
+  cur.action = $("scan-action")?.value || "quarantine";
+  cur.quarantine_folder = ($("scan-folder")?.value || "Quarantine").trim() || "Quarantine";
+  cur.fail_open = !!$("scan-fail-open")?.checked;
+  cur.clamav = cur.clamav || {};
+  cur.clamav.address = ($("scan-clamav-addr")?.value || "").trim() || "127.0.0.1:3310";
+  cur.exec = cur.exec || {};
+  const rawCmd = ($("scan-exec-cmd")?.value || "").trim();
+  cur.exec.command = rawCmd ? rawCmd.split(/\s+/).filter(Boolean) : [];
+  cur.icap = cur.icap || {};
+  cur.icap.url = ($("scan-icap-url")?.value || "").trim() || "icap://127.0.0.1:1344/reqmod";
+  return cur;
+}
+
+function fillSiemForm(val) {
+  const v = val || {};
+  if ($("siem-enabled")) $("siem-enabled").checked = !!v.enabled;
+  if ($("siem-protocol")) $("siem-protocol").value = v.protocol || "udp";
+  if ($("siem-address")) $("siem-address").value = v.address || "127.0.0.1:514";
+  if ($("siem-facility")) $("siem-facility").value = v.facility || "local0";
+  if ($("siem-format")) $("siem-format").value = v.format || "cef";
+  if ($("siem-tls-skip")) $("siem-tls-skip").checked = !!v.tls_skip_verify;
+}
+
+function readSiemForm(base) {
+  const cur = JSON.parse(JSON.stringify(base || {}));
+  cur.enabled = !!$("siem-enabled")?.checked;
+  cur.protocol = $("siem-protocol")?.value || "udp";
+  cur.address = ($("siem-address")?.value || "").trim();
+  cur.facility = ($("siem-facility")?.value || "local0").trim() || "local0";
+  cur.format = $("siem-format")?.value || "cef";
+  cur.tls_skip_verify = !!$("siem-tls-skip")?.checked;
+  return cur;
+}
+
+function fillLogForm(val) {
+  const v = val || {};
+  if ($("log-level")) $("log-level").value = v.level || "info";
+  if ($("log-format")) $("log-format").value = v.format || "json";
+  if ($("log-file")) $("log-file").value = v.file || "./data/tayga.log";
+}
+
+function readLogForm(base) {
+  const cur = JSON.parse(JSON.stringify(base || {}));
+  cur.level = $("log-level")?.value || "info";
+  cur.format = $("log-format")?.value || "json";
+  cur.file = ($("log-file")?.value || "").trim();
+  return cur;
+}
+
 function showSettingsSection(name) {
   if (!settingsState.all || !settingsState.all.settings) return;
   const val = settingsState.all.settings[name] || {};
   const tlsPanel = $("settings-tls-panel");
+  const smtpPanel = $("settings-smtp-panel");
+  const spamPanel = $("settings-spam-panel");
+  const scanPanel = $("settings-scan-panel");
+  const siemPanel = $("settings-siem-panel");
+  const logPanel = $("settings-log-panel");
   const jsonWrap = $("settings-json-wrap");
+  tlsPanel?.classList.add("hidden");
+  smtpPanel?.classList.add("hidden");
+  spamPanel?.classList.add("hidden");
+  scanPanel?.classList.add("hidden");
+  siemPanel?.classList.add("hidden");
+  logPanel?.classList.add("hidden");
+
   if (name === "tls") {
     tlsPanel?.classList.remove("hidden");
     jsonWrap?.classList.add("hidden");
     if ($("settings-tls-email")) $("settings-tls-email").value = val.acme?.email || "";
     if ($("settings-tls-staging")) $("settings-tls-staging").checked = !!val.acme?.staging;
     fillSettingsCertSelect(val.active_id || "");
-  } else {
-    tlsPanel?.classList.add("hidden");
-    jsonWrap?.classList.remove("hidden");
-  $("settings-json").value = JSON.stringify(val, null, 2);
+    return;
   }
+  if (name === "smtp") {
+    smtpPanel?.classList.remove("hidden");
+    fillSmtpForm(val);
+    const showJson = !!$("smtp-show-json")?.checked;
+    jsonWrap?.classList.toggle("hidden", !showJson);
+    $("settings-json").value = JSON.stringify(val, null, 2);
+    return;
+  }
+  if (name === "spam") {
+    spamPanel?.classList.remove("hidden");
+    fillSpamForm(val);
+    const showJson = !!$("spam-show-json")?.checked;
+    jsonWrap?.classList.toggle("hidden", !showJson);
+    $("settings-json").value = JSON.stringify(val, null, 2);
+    return;
+  }
+  if (name === "scan") {
+    scanPanel?.classList.remove("hidden");
+    fillScanForm(val);
+    const showJson = !!$("scan-show-json")?.checked;
+    jsonWrap?.classList.toggle("hidden", !showJson);
+    $("settings-json").value = JSON.stringify(val, null, 2);
+    return;
+  }
+  if (name === "siem") {
+    siemPanel?.classList.remove("hidden");
+    fillSiemForm(val);
+    const showJson = !!$("siem-show-json")?.checked;
+    jsonWrap?.classList.toggle("hidden", !showJson);
+    $("settings-json").value = JSON.stringify(val, null, 2);
+    return;
+  }
+  if (name === "log") {
+    logPanel?.classList.remove("hidden");
+    fillLogForm(val);
+    const showJson = !!$("log-show-json")?.checked;
+    jsonWrap?.classList.toggle("hidden", !showJson);
+    $("settings-json").value = JSON.stringify(val, null, 2);
+    return;
+  }
+  jsonWrap?.classList.remove("hidden");
+  $("settings-json").value = JSON.stringify(val, null, 2);
 }
 
 async function refreshSettings() {
@@ -1483,18 +2041,34 @@ async function refreshSettings() {
     settingsState.all = data;
     fillSettingsSectionSelect(data.sections || []);
     showSettingsSection($("settings-section").value);
-    $("settings-restart").classList.toggle("hidden", !data.restart_required);
+    $("settings-restart")?.classList.toggle("hidden", !data.restart_required);
     setMsg($("settings-msg"), "");
   } catch (err) {
     setMsg($("settings-msg"), err.message, "err");
   }
 }
 
-$("settings-section").addEventListener("change", () => {
+$("settings-section")?.addEventListener("change", () => {
   showSettingsSection($("settings-section").value);
 });
-$("btn-settings-refresh").addEventListener("click", () => refreshSettings());
-$("btn-settings-save").addEventListener("click", async () => {
+$("smtp-show-json")?.addEventListener("change", () => {
+  if ($("settings-section")?.value === "smtp") showSettingsSection("smtp");
+});
+$("spam-show-json")?.addEventListener("change", () => {
+  if ($("settings-section")?.value === "spam") showSettingsSection("spam");
+});
+$("scan-show-json")?.addEventListener("change", () => {
+  if ($("settings-section")?.value === "scan") showSettingsSection("scan");
+});
+$("siem-show-json")?.addEventListener("change", () => {
+  if ($("settings-section")?.value === "siem") showSettingsSection("siem");
+});
+$("log-show-json")?.addEventListener("change", () => {
+  if ($("settings-section")?.value === "log") showSettingsSection("log");
+});
+$("scan-backend")?.addEventListener("change", () => updateScanBackendFields());
+$("btn-settings-refresh")?.addEventListener("click", () => refreshSettings());
+$("btn-settings-save")?.addEventListener("click", async () => {
   const section = $("settings-section").value;
   let parsed;
   if (section === "tls") {
@@ -1517,36 +2091,198 @@ $("btn-settings-save").addEventListener("click", async () => {
         return;
       }
     }
+  } else if (section === "smtp") {
+    const cur = (settingsState.all?.settings?.smtp) || {};
+    if ($("smtp-show-json")?.checked) {
+      try { parsed = JSON.parse($("settings-json").value); }
+      catch (err) { setMsg($("settings-msg"), "Invalid JSON: " + err.message, "err"); return; }
+    } else {
+      parsed = readSmtpForm(cur);
+    }
+  } else if (section === "spam") {
+    const cur = (settingsState.all?.settings?.spam) || {};
+    if ($("spam-show-json")?.checked) {
+      try { parsed = JSON.parse($("settings-json").value); }
+      catch (err) { setMsg($("settings-msg"), "Invalid JSON: " + err.message, "err"); return; }
+    } else {
+      parsed = readSpamForm(cur);
+    }
+  } else if (section === "scan") {
+    const cur = (settingsState.all?.settings?.scan) || {};
+    if ($("scan-show-json")?.checked) {
+      try { parsed = JSON.parse($("settings-json").value); }
+      catch (err) { setMsg($("settings-msg"), "Invalid JSON: " + err.message, "err"); return; }
+    } else {
+      parsed = readScanForm(cur);
+    }
+  } else if (section === "siem") {
+    const cur = (settingsState.all?.settings?.siem) || {};
+    if ($("siem-show-json")?.checked) {
+      try { parsed = JSON.parse($("settings-json").value); }
+      catch (err) { setMsg($("settings-msg"), "Invalid JSON: " + err.message, "err"); return; }
+    } else {
+      parsed = readSiemForm(cur);
+    }
+  } else if (section === "log") {
+    const cur = (settingsState.all?.settings?.log) || {};
+    if ($("log-show-json")?.checked) {
+      try { parsed = JSON.parse($("settings-json").value); }
+      catch (err) { setMsg($("settings-msg"), "Invalid JSON: " + err.message, "err"); return; }
+    } else {
+      parsed = readLogForm(cur);
+    }
+    if (!(parsed.file || "").trim()) {
+      setMsg($("settings-msg"), t("log_file") + " required", "err");
+      return;
+    }
   } else {
-  try {
-    parsed = JSON.parse($("settings-json").value);
-  } catch (err) {
-    setMsg($("settings-msg"), "Invalid JSON: " + err.message, "err");
-    return;
+    try {
+      parsed = JSON.parse($("settings-json").value);
+    } catch (err) {
+      setMsg($("settings-msg"), "Invalid JSON: " + err.message, "err");
+      return;
     }
   }
-  setMsg($("settings-msg"), "Saving…");
+  setMsg($("settings-msg"), "…");
   try {
     const out = await api("/api/v1/admin/settings/" + encodeURIComponent(section), {
       method: "PUT",
       body: JSON.stringify(parsed),
     });
-    $("settings-restart").classList.toggle("hidden", !out.restart_required);
-    setMsg($("settings-msg"), out.restart_required
-      ? "Saved. Restart tayga-mail to apply."
-      : "Saved.", "ok");
+    $("settings-restart")?.classList.toggle("hidden", !out.restart_required);
+    setMsg($("settings-msg"), out.restart_required ? t("server_restart") : "OK", "ok");
     await refreshSettings();
   } catch (err) {
     setMsg($("settings-msg"), err.message, "err");
   }
 });
 
-$("form-create-user").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  setMsg($("admin-msg"), "Creating…");
+const DEFAULT_COS_JSON = `{
+  "quota_bytes": 0,
+  "max_mail_size": 26214400,
+  "large_attach_bytes": 10485760,
+  "share_max_ttl_sec": 604800,
+  "features": {
+    "files": true,
+    "dav": true,
+    "flowsync": true,
+    "sieve": true,
+    "shares": true,
+    "delegates": true,
+    "migration": true
+  }
+}`;
+
+function resetCoSForm(sc) {
+  if (sc) {
+    cosState.selected = sc.id;
+    if ($("cos-id")) $("cos-id").value = sc.id;
+    if ($("cos-name")) $("cos-name").value = sc.name || "";
+    if ($("cos-json")) $("cos-json").value = JSON.stringify(sc.config || {}, null, 2);
+  } else {
+    cosState.selected = "";
+    if ($("cos-id")) $("cos-id").value = "";
+    if ($("cos-name")) $("cos-name").value = "";
+    if ($("cos-json")) $("cos-json").value = DEFAULT_COS_JSON;
+  }
+}
+
+async function refreshCoS() {
+  const list = $("cos-list");
+  if (!list) return;
   try {
+    const data = await api("/api/v1/admin/service-classes");
+    cosState.items = data.service_classes || [];
+    list.innerHTML = cosState.items.map((sc) => `
+      <li class="ca-cert-item">
+        <div>
+          <strong>${escapeHtml(sc.name || sc.id)}</strong>
+          <div class="meta">${escapeHtml(sc.id)}</div>
+        </div>
+        <div class="actions">
+          <button type="button" class="btn-secondary btn-sm" data-cos-edit="${escapeHtml(sc.id)}">${escapeHtml(t("cos_edit"))}</button>
+        </div>
+      </li>`).join("") || `<li class="meta">${escapeHtml(t("cos_empty"))}</li>`;
+    list.querySelectorAll("[data-cos-edit]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const sc = cosState.items.find((x) => x.id === btn.dataset.cosEdit);
+        resetCoSForm(sc);
+        setMsg($("cos-msg"), "");
+      });
+    });
+    if (!cosState.selected && !($("cos-json")?.value || "").trim()) resetCoSForm(null);
+  } catch (err) {
+    list.innerHTML = `<li class="meta">${escapeHtml(err.message)}</li>`;
+  }
+}
+
+$("btn-cos-refresh")?.addEventListener("click", () => refreshCoS());
+$("btn-cos-new")?.addEventListener("click", () => {
+  resetCoSForm(null);
+  setMsg($("cos-msg"), "");
+  $("cos-name")?.focus();
+});
+$("btn-cos-save")?.addEventListener("click", async () => {
+  const name = ($("cos-name")?.value || "").trim();
+  if (!name) {
+    setMsg($("cos-msg"), "name required", "err");
+    return;
+  }
+  let cfg;
+  try {
+    cfg = JSON.parse($("cos-json")?.value || "{}");
+  } catch (err) {
+    setMsg($("cos-msg"), "Invalid JSON: " + err.message, "err");
+    return;
+  }
+  const id = ($("cos-id")?.value || "").trim();
+  setMsg($("cos-msg"), "…");
+  try {
+    if (id) {
+      await api("/api/v1/admin/service-classes/" + encodeURIComponent(id), {
+        method: "PUT",
+        body: JSON.stringify({ name, config: cfg }),
+      });
+    } else {
+      const created = await api("/api/v1/admin/service-classes", {
+        method: "POST",
+        body: JSON.stringify({ name, config: cfg }),
+      });
+      if (created?.id) {
+        cosState.selected = created.id;
+        if ($("cos-id")) $("cos-id").value = created.id;
+      }
+    }
+    setMsg($("cos-msg"), "OK", "ok");
+    await refreshCoS();
+  } catch (err) {
+    setMsg($("cos-msg"), err.message, "err");
+  }
+});
+$("btn-cos-delete")?.addEventListener("click", async () => {
+  const id = ($("cos-id")?.value || "").trim();
+  if (!id) return;
+  if (!await askConfirm(t("delete") + " " + ($("cos-name")?.value || id) + "?", { danger: true })) return;
+  try {
+    await api("/api/v1/admin/service-classes/" + encodeURIComponent(id), { method: "DELETE" });
+    resetCoSForm(null);
+    setMsg($("cos-msg"), "OK", "ok");
+    await refreshCoS();
+  } catch (err) {
+    setMsg($("cos-msg"), err.message, "err");
+  }
+});
+
+$("form-create-user")?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  setMsg($("admin-msg"), "…");
+  try {
+    let email = $("nu-email").value.trim();
+    if (email && !email.includes("@") && tenantNav.domainName) {
+      email = email + "@" + tenantNav.domainName;
+    }
     const body = {
-      email: $("nu-email").value.trim(),
+      email,
       display_name: $("nu-name").value.trim(),
       password: $("nu-pass").value,
       quota_bytes: Number($("nu-quota").value) || 0,
@@ -1555,7 +2291,7 @@ $("form-create-user").addEventListener("submit", async (e) => {
       method: "POST",
       body: JSON.stringify(body),
     });
-    setMsg($("admin-msg"), "Created " + created.email + " (" + created.id + ")", "ok");
+    setMsg($("admin-msg"), "OK · " + created.email, "ok");
     $("form-create-user").reset();
     $("nu-quota").value = "0";
     refreshAdminUsers();
@@ -1601,7 +2337,7 @@ async function refreshSieve() {
     });
     list.querySelectorAll("[data-sieve-del]").forEach((btn) => {
       btn.addEventListener("click", async () => {
-        if (!confirm("Delete script " + btn.dataset.sieveDel + "?")) return;
+        if (!await askConfirm("Delete script " + btn.dataset.sieveDel + "?", { danger: true })) return;
         try {
           await api("/api/v1/sieve/scripts/" + encodeURIComponent(btn.dataset.sieveDel), { method: "DELETE" });
           setMsg($("sieve-msg"), "Deleted.", "ok");
@@ -1888,7 +2624,7 @@ $("btn-passkey-add").addEventListener("click", async () => {
     const begin = await api("/api/v1/auth/webauthn/register/begin", { method: "POST", body: "{}" });
     const publicKey = reviveCreation(begin.options.publicKey);
     const cred = await navigator.credentials.create({ publicKey });
-    const name = prompt("Name this passkey", "This device") || "Passkey";
+    const name = (await askPrompt(t("prompt_title"), { value: "This device", label: "Passkey" })) || "Passkey";
     await api("/api/v1/auth/webauthn/register/finish", {
       method: "POST",
       body: JSON.stringify({
@@ -1993,17 +2729,33 @@ async function refreshMailMessages() {
       showMailReader(null);
       return;
     }
-    list.innerHTML = msgs.map((m) => `
-      <li>
-        <button type="button" class="msg-item${!m.seen ? " unread" : ""}${m.id === mailState.messageID ? " is-active" : ""}" data-msg="${escapeHtml(m.id)}" title="${escapeHtml(m.from || "")}">
+    list.innerHTML = msgs.map((m) => {
+      const folder = q && m.mailbox_name
+        ? `<span class="msg-folder meta">${escapeHtml(m.mailbox_name)}</span>`
+        : "";
+      const dateBits = [
+        folder,
+        `<span class="msg-date-val">${escapeHtml(mailDateShort(m.internal_date))}</span>`,
+      ].filter(Boolean).join("");
+      return `<li>
+        <button type="button" class="msg-item${!m.seen ? " unread" : ""}${m.id === mailState.messageID ? " is-active" : ""}${q ? " is-search" : ""}" data-msg="${escapeHtml(m.id)}" data-mailbox="${escapeHtml(m.mailbox_id || "")}" title="${escapeHtml((m.mailbox_name ? m.mailbox_name + " · " : "") + (m.from || ""))}">
           <span class="msg-flag" aria-hidden="true"></span>
           <span class="msg-from">${escapeHtml(mailFromDisplay(m.from))}</span>
           <span class="msg-subject">${escapeHtml(m.subject || "(no subject)")}${m.snippet ? `<span class="msg-snippet meta"> — ${escapeHtml(m.snippet)}</span>` : ""}</span>
-          <span class="msg-date">${escapeHtml(mailDateShort(m.internal_date))}</span>
+          <span class="msg-date">${dateBits}</span>
         </button>
-      </li>`).join("");
+      </li>`;
+    }).join("");
     list.querySelectorAll("[data-msg]").forEach((btn) => {
-      btn.addEventListener("click", () => openMailMessage(btn.dataset.msg));
+      btn.addEventListener("click", () => {
+        if (btn.dataset.mailbox) {
+          mailState.mailboxID = btn.dataset.mailbox;
+          document.querySelectorAll("#mail-folder-list .folder-btn").forEach((b) => {
+            b.classList.toggle("is-active", b.dataset.mb === mailState.mailboxID);
+          });
+        }
+        openMailMessage(btn.dataset.msg);
+      });
     });
     if (mailState.messageID) openMailMessage(mailState.messageID);
     else showMailReader(null);
@@ -2076,16 +2828,89 @@ $("btn-mail-archive")?.addEventListener("click", async () => {
     mailState.messageID = "";
     await refreshMail();
   } catch (err) {
-    alert(err.message);
+    askAlert(err.message);
   }
 });
-$("btn-compose")?.addEventListener("click", () => {
+function composeBodyEl() {
+  return $("compose-body");
+}
+
+function setComposeBody(htmlOrText, asHTML) {
+  const el = composeBodyEl();
+  if (!el) return;
+  if (el.isContentEditable) {
+    if (asHTML) {
+      el.innerHTML = htmlOrText || "";
+    } else {
+      el.textContent = "";
+      const text = String(htmlOrText || "");
+      text.split(/\n/).forEach((line, i) => {
+        if (i) el.appendChild(document.createElement("br"));
+        el.appendChild(document.createTextNode(line));
+      });
+    }
+    return;
+  }
+  el.value = htmlOrText || "";
+}
+
+function getComposeHTML() {
+  const el = composeBodyEl();
+  if (!el) return "";
+  if (el.isContentEditable) return (el.innerHTML || "").trim();
+  return "";
+}
+
+function getComposeText() {
+  const el = composeBodyEl();
+  if (!el) return "";
+  if (el.isContentEditable) {
+    const tmp = document.createElement("div");
+    tmp.innerHTML = el.innerHTML || "";
+    tmp.querySelectorAll("br").forEach((br) => br.replaceWith("\n"));
+    tmp.querySelectorAll("div, p, li, blockquote").forEach((n) => {
+      n.prepend(document.createTextNode("\n"));
+      n.append(document.createTextNode("\n"));
+    });
+    return (tmp.textContent || "").replace(/\n{3,}/g, "\n\n").trim();
+  }
+  return el.value || "";
+}
+
+function openCompose({ to = "", subject = "", body = "", bodyHTML = "" } = {}) {
   $("compose-backdrop")?.classList.remove("hidden");
-  $("compose-to").value = "";
-  $("compose-subject").value = "";
-  $("compose-body").value = "";
+  if ($("compose-to")) $("compose-to").value = to;
+  if ($("compose-subject")) $("compose-subject").value = subject;
+  if (bodyHTML) setComposeBody(bodyHTML, true);
+  else setComposeBody(body, false);
+  const surface = composeBodyEl();
+  if (surface?.dataset) surface.dataset.placeholder = t("body");
   setMsg($("compose-msg"), "");
+  surface?.focus?.();
+}
+
+$("compose-rte-toolbar")?.addEventListener("click", async (e) => {
+  const btn = e.target.closest("button[data-cmd]");
+  if (!btn) return;
+  e.preventDefault();
+  const cmd = btn.dataset.cmd;
+  const surface = composeBodyEl();
+  surface?.focus?.();
+  if (cmd === "createLink") {
+    const url = await askPrompt("URL", { value: "https://" });
+    if (!url) return;
+    surface?.focus?.();
+    document.execCommand("createLink", false, url);
+    return;
+  }
+  if (cmd === "formatBlock") {
+    document.execCommand("formatBlock", false, btn.dataset.value || "p");
+    return;
+  }
+  document.execCommand(cmd, false, btn.dataset.value || null);
 });
+
+$("btn-compose")?.addEventListener("click", () => openCompose());
 $("btn-compose-close")?.addEventListener("click", () => $("compose-backdrop")?.classList.add("hidden"));
 $("compose-backdrop")?.addEventListener("click", (e) => {
   if (e.target === $("compose-backdrop")) $("compose-backdrop").classList.add("hidden");
@@ -2094,23 +2919,27 @@ $("btn-compose-send")?.addEventListener("click", async () => {
   const to = ($("compose-to").value || "").split(/[,;]/).map((s) => s.trim()).filter(Boolean);
   setMsg($("compose-msg"), "…");
   try {
-    let text = $("compose-body").value || "";
+    let text = getComposeText();
+    let html = getComposeHTML();
     const file = $("compose-attach")?.files?.[0];
     if (file && file.size >= LARGE_ATTACH_BYTES) {
       setMsg($("compose-msg"), "Uploading…");
       const url = await uploadLargeAttach(file);
       text += `\n\n${file.name}: ${url}\n`;
+      html += `<p><a href="${escapeHtml(url)}">${escapeHtml(file.name)}</a></p>`;
     } else if (file && file.size > 0) {
       setMsg($("compose-msg"), "large attachments only via link (≥10 MiB); smaller files: use Files app", "err");
       return;
     }
+    const payload = {
+      to,
+      subject: $("compose-subject").value,
+      text,
+    };
+    if (html && /<[a-z][\s\S]*>/i.test(html)) payload.html = html;
     await api("/api/v1/mail/send", {
       method: "POST",
-      body: JSON.stringify({
-        to,
-        subject: $("compose-subject").value,
-        text,
-      }),
+      body: JSON.stringify(payload),
     });
     setMsg($("compose-msg"), "OK", "ok");
     if ($("compose-attach")) $("compose-attach").value = "";
@@ -2123,28 +2952,34 @@ $("btn-compose-send")?.addEventListener("click", async () => {
 $("btn-mail-reply")?.addEventListener("click", () => {
   const fromRaw = $("mail-from")?.textContent || "";
   const addr = (fromRaw.match(/<([^>]+)>/) || [])[1] || fromRaw.trim();
-  $("compose-backdrop")?.classList.remove("hidden");
-  $("compose-to").value = addr === "—" ? "" : addr;
-  $("compose-subject").value = "Re: " + ($("mail-subject")?.textContent || "");
-  $("compose-body").value = "\n\n---\n" + ($("mail-body")?.textContent || "").slice(0, 2000);
+  const quoted = ($("mail-body")?.textContent || "").slice(0, 2000);
+  openCompose({
+    to: addr === "—" ? "" : addr,
+    subject: "Re: " + ($("mail-subject")?.textContent || ""),
+    body: "\n\n---\n" + quoted,
+  });
 });
 $("btn-mail-delete")?.addEventListener("click", async () => {
-  if (!mailState.messageID || !confirm("Delete?")) return;
+  if (!mailState.messageID || !await askConfirm(t("delete_confirm"), { danger: true })) return;
   try {
     await api("/api/v1/mail/messages/" + encodeURIComponent(mailState.messageID), { method: "DELETE" });
     mailState.messageID = "";
     refreshMailMessages();
   } catch (err) {
-    alert(err.message);
+    if ($("mail-empty")) $("mail-empty").textContent = err.message;
   }
 });
 
 /* —— Calendar —— */
+function calLocale() {
+  return lang === "en" ? "en-GB" : "ru-RU";
+}
+
 function fmtCalWhen(v) {
   if (!v) return "—";
   const d = new Date(v);
   if (Number.isNaN(d.getTime())) return String(v);
-  return d.toLocaleString(lang === "en" ? "en-GB" : "ru-RU", {
+  return d.toLocaleString(calLocale(), {
     day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
   });
 }
@@ -2153,9 +2988,16 @@ function fmtCalShort(v) {
   if (!v) return "—";
   const d = new Date(v);
   if (Number.isNaN(d.getTime())) return String(v).slice(5, 16);
-  return d.toLocaleString(lang === "en" ? "en-GB" : "ru-RU", {
+  return d.toLocaleString(calLocale(), {
     day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
   });
+}
+
+function fmtCalTime(v) {
+  if (!v) return "";
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString(calLocale(), { hour: "2-digit", minute: "2-digit" });
 }
 
 function localInputToISO(v) {
@@ -2165,12 +3007,169 @@ function localInputToISO(v) {
   return d.toISOString();
 }
 
+function calDayKey(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function calEventDayKey(ev) {
+  if (!ev?.start) return "";
+  const d = new Date(ev.start);
+  if (Number.isNaN(d.getTime())) return String(ev.start).slice(0, 10);
+  return calDayKey(d);
+}
+
+function calMonthStart(d) {
+  return new Date(d.getFullYear(), d.getMonth(), 1);
+}
+
 function showCalCompose(open) {
   $("cal-backdrop")?.classList.toggle("hidden", !open);
   if (open) {
     setMsg($("cal-msg"), "");
+    if (calState.selectedDay && $("cal-start") && !$("cal-start").value) {
+      $("cal-start").value = calState.selectedDay + "T10:00";
+      $("cal-end").value = calState.selectedDay + "T11:00";
+    }
     $("cal-summary")?.focus();
   }
+}
+
+function shiftCalMonth(delta) {
+  const m = calMonthStart(calState.month);
+  calState.month = new Date(m.getFullYear(), m.getMonth() + delta, 1);
+  renderCalMonth();
+  renderCalEventLog();
+}
+
+function goCalToday() {
+  const now = new Date();
+  calState.month = calMonthStart(now);
+  calState.selectedDay = calDayKey(now);
+  renderCalMonth();
+  renderCalEventLog();
+}
+
+function renderCalMonth() {
+  const root = $("cal-month");
+  const label = $("cal-month-label");
+  if (!root) return;
+  const month = calMonthStart(calState.month || new Date());
+  calState.month = month;
+  if (label) {
+    label.textContent = month.toLocaleDateString(calLocale(), { month: "long", year: "numeric" });
+  }
+
+  const weekdayFmt = new Intl.DateTimeFormat(calLocale(), { weekday: "short" });
+  // Monday-first week
+  const weekdays = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(2024, 0, 1 + i); // Mon..Sun in Jan 2024
+    weekdays.push(weekdayFmt.format(d));
+  }
+
+  const byDay = new Map();
+  for (const ev of calState.events) {
+    const key = calEventDayKey(ev);
+    if (!key) continue;
+    if (!byDay.has(key)) byDay.set(key, []);
+    byDay.get(key).push(ev);
+  }
+
+  const firstDow = (month.getDay() + 6) % 7; // 0=Mon
+  const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
+  const todayKey = calDayKey(new Date());
+  const cells = [];
+  for (let i = 0; i < firstDow; i++) cells.push({ empty: true });
+  for (let day = 1; day <= daysInMonth; day++) {
+    const date = new Date(month.getFullYear(), month.getMonth(), day);
+    const key = calDayKey(date);
+    cells.push({ empty: false, day, key, events: byDay.get(key) || [] });
+  }
+  while (cells.length % 7) cells.push({ empty: true });
+
+  let html = `<div class="cal-weekdays">${weekdays.map((w) => `<span>${escapeHtml(w)}</span>`).join("")}</div><div class="cal-grid">`;
+  for (const cell of cells) {
+    if (cell.empty) {
+      html += `<div class="cal-day is-outside"></div>`;
+      continue;
+    }
+    const dots = cell.events.slice(0, 3).map((ev) =>
+      `<span class="cal-pill" data-ev="${escapeHtml(ev.id)}" title="${escapeHtml(ev.summary || "")}">${escapeHtml(ev.summary || "•")}</span>`
+    ).join("");
+    const more = cell.events.length > 3
+      ? `<span class="cal-more">+${cell.events.length - 3}</span>`
+      : "";
+    const cls = [
+      "cal-day",
+      cell.key === todayKey ? "is-today" : "",
+      cell.key === calState.selectedDay ? "is-selected" : "",
+      cell.events.length ? "has-events" : "",
+    ].filter(Boolean).join(" ");
+    html += `<div class="${cls}" data-day="${cell.key}" role="button" tabindex="0">
+      <span class="cal-day-num">${cell.day}</span>
+      <span class="cal-day-events">${dots}${more}</span>
+    </div>`;
+  }
+  html += `</div>`;
+  root.innerHTML = html;
+
+  root.querySelectorAll("[data-day]").forEach((cell) => {
+    const activate = (e) => {
+      const pill = e.target.closest("[data-ev]");
+      if (pill) {
+        e.stopPropagation();
+        calState.selectedDay = cell.dataset.day;
+        openCalEvent(pill.dataset.ev);
+        renderCalMonth();
+        renderCalEventLog();
+        return;
+      }
+      calState.selectedDay = cell.dataset.day === calState.selectedDay ? "" : cell.dataset.day;
+      renderCalMonth();
+      renderCalEventLog();
+    };
+    cell.addEventListener("click", activate);
+    cell.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        activate(e);
+      }
+    });
+  });
+}
+
+function renderCalEventLog() {
+  const list = $("cal-event-list");
+  const logTitle = $("cal-log-title");
+  if (!list) return;
+  let events = calState.events.slice();
+  if (calState.selectedDay) {
+    events = events.filter((e) => calEventDayKey(e) === calState.selectedDay);
+    if (logTitle) {
+      const d = new Date(calState.selectedDay + "T12:00:00");
+      const dayLabel = Number.isNaN(d.getTime())
+        ? calState.selectedDay
+        : d.toLocaleDateString(calLocale(), { day: "numeric", month: "long" });
+      logTitle.textContent = `${t("cal_day_events")} · ${dayLabel}`;
+    }
+  } else if (logTitle) {
+    logTitle.textContent = t("cal_event_log");
+  }
+
+  list.innerHTML = events.map((e) => `
+    <li>
+      <button type="button" class="msg-item cal-item${e.id === calState.eventID ? " is-active" : ""}" data-ev="${escapeHtml(e.id)}">
+        <span class="msg-subject">${escapeHtml(e.summary || "—")}</span>
+        <span class="msg-date cal-start">${escapeHtml(fmtCalShort(e.start))}</span>
+        <span class="msg-date cal-end">${escapeHtml(fmtCalTime(e.end) || fmtCalShort(e.end))}</span>
+      </button>
+    </li>`).join("") || `<li class="meta msg-empty">${escapeHtml(t("empty_calendar"))}</li>`;
+  list.querySelectorAll("[data-ev]").forEach((btn) => {
+    btn.addEventListener("click", () => openCalEvent(btn.dataset.ev));
+  });
 }
 
 async function refreshCalendar() {
@@ -2209,6 +3208,8 @@ async function loadCalEvents() {
   const list = $("cal-event-list");
   const title = $("cal-folder-title");
   if (!list || !calState.calendarID) {
+    calState.events = [];
+    renderCalMonth();
     if (list) list.innerHTML = `<li class="meta msg-empty">${escapeHtml(t("empty_calendar"))}</li>`;
     showCalReader(null);
     return;
@@ -2218,17 +3219,8 @@ async function loadCalEvents() {
   try {
     const ev = await api("/api/v1/calendar/calendars/" + encodeURIComponent(calState.calendarID) + "/events");
     calState.events = (ev.events || []).slice().sort((a, b) => String(a.start || "").localeCompare(String(b.start || "")));
-    list.innerHTML = calState.events.map((e) => `
-      <li>
-        <button type="button" class="msg-item cal-item${e.id === calState.eventID ? " is-active" : ""}" data-ev="${escapeHtml(e.id)}">
-          <span class="msg-subject">${escapeHtml(e.summary || "—")}</span>
-          <span class="msg-date cal-start">${escapeHtml(fmtCalShort(e.start))}</span>
-          <span class="msg-date cal-end">${escapeHtml(fmtCalShort(e.end))}</span>
-        </button>
-      </li>`).join("") || `<li class="meta msg-empty">${escapeHtml(t("empty_calendar"))}</li>`;
-    list.querySelectorAll("[data-ev]").forEach((btn) => {
-      btn.addEventListener("click", () => openCalEvent(btn.dataset.ev));
-    });
+    renderCalMonth();
+    renderCalEventLog();
     if (calState.eventID) openCalEvent(calState.eventID);
     else showCalReader(null);
   } catch (err) {
@@ -2258,11 +3250,18 @@ function showCalReader(ev) {
 
 async function openCalEvent(id) {
   calState.eventID = id;
+  const cached = calState.events.find((e) => e.id === id);
+  if (cached) {
+    const day = calEventDayKey(cached);
+    if (day) calState.selectedDay = day;
+    showCalReader(cached);
+  }
   document.querySelectorAll(".cal-item").forEach((el) => {
     el.classList.toggle("is-active", el.dataset.ev === id);
   });
-  const cached = calState.events.find((e) => e.id === id);
-  if (cached) showCalReader(cached);
+  document.querySelectorAll(".cal-day[data-day]").forEach((el) => {
+    el.classList.toggle("is-selected", el.dataset.day === calState.selectedDay);
+  });
   try {
     const d = await api("/api/v1/calendar/events/" + encodeURIComponent(id));
     showCalReader(d);
@@ -2272,13 +3271,16 @@ async function openCalEvent(id) {
 }
 
 $("btn-cal-refresh")?.addEventListener("click", () => refreshCalendar());
+$("btn-cal-prev")?.addEventListener("click", () => shiftCalMonth(-1));
+$("btn-cal-next")?.addEventListener("click", () => shiftCalMonth(1));
+$("btn-cal-today")?.addEventListener("click", () => goCalToday());
 $("btn-cal-new")?.addEventListener("click", () => showCalCompose(true));
 $("btn-cal-close")?.addEventListener("click", () => showCalCompose(false));
 $("cal-backdrop")?.addEventListener("click", (e) => {
   if (e.target === $("cal-backdrop")) showCalCompose(false);
 });
 $("btn-cal-delete")?.addEventListener("click", async () => {
-  if (!calState.eventID || !confirm(t("delete") + "?")) return;
+  if (!calState.eventID || !await askConfirm(t("delete_confirm"), { danger: true })) return;
   try {
     await api("/api/v1/calendar/events/" + encodeURIComponent(calState.eventID), { method: "DELETE" });
     calState.eventID = "";
@@ -2434,7 +3436,7 @@ $("contact-backdrop")?.addEventListener("click", (e) => {
   if (e.target === $("contact-backdrop")) showContactCompose(false);
 });
 $("btn-contact-delete")?.addEventListener("click", async () => {
-  if (!contactState.cardID || !confirm(t("delete") + "?")) return;
+  if (!contactState.cardID || !await askConfirm(t("delete_confirm"), { danger: true })) return;
   try {
     await api("/api/v1/contacts/cards/" + encodeURIComponent(contactState.cardID), { method: "DELETE" });
     contactState.cardID = "";
@@ -2671,10 +3673,20 @@ $("form-chat-send")?.addEventListener("submit", async (e) => {
   }
 });
 
+function filesGoUp() {
+  if (!filesState.path) return;
+  const parts = filesState.path.split("/").filter(Boolean);
+  parts.pop();
+  filesState.path = parts.join("/");
+  filesState.selected = null;
+  refreshFiles();
+}
+
 async function refreshFiles() {
   const list = $("files-list");
   if (!list) return;
   if ($("files-path")) $("files-path").textContent = "/" + (filesState.path || "");
+  $("btn-files-up")?.classList.toggle("hidden", !filesState.path);
   try {
     const q = filesState.path ? "?path=" + encodeURIComponent(filesState.path) : "";
     const data = await api("/api/v1/files" + q);
@@ -2682,29 +3694,23 @@ async function refreshFiles() {
     let html = "";
     if (filesState.path) {
       html += `<li>
-        <button type="button" class="msg-item file-item is-dir" id="files-up">
-          <span class="msg-subject">..</span>
-          <span class="msg-date">—</span>
-          <span class="msg-date file-type">${escapeHtml(t("type_folder"))}</span>
+        <button type="button" class="file-item is-dir" id="files-up">
+          <span class="file-name">..</span>
+          <span class="file-size">—</span>
+          <span class="file-kind">${escapeHtml(t("type_folder"))}</span>
         </button>
       </li>`;
     }
     html += filesState.entries.map((e) => `
       <li>
-        <button type="button" class="msg-item file-item${e.is_dir ? " is-dir" : ""}${filesState.selected?.name === e.name ? " is-active" : ""}" data-name="${escapeHtml(e.name)}">
-          <span class="msg-subject">${escapeHtml(e.name)}</span>
-          <span class="msg-date">${e.is_dir ? "—" : escapeHtml(fmtBytes(e.size || 0))}</span>
-          <span class="msg-date file-type">${escapeHtml(e.is_dir ? t("type_folder") : t("type_file"))}</span>
+        <button type="button" class="file-item${e.is_dir ? " is-dir" : ""}${filesState.selected?.name === e.name ? " is-active" : ""}" data-name="${escapeHtml(e.name)}">
+          <span class="file-name">${escapeHtml(e.name)}</span>
+          <span class="file-size">${e.is_dir ? "—" : escapeHtml(fmtBytes(e.size || 0))}</span>
+          <span class="file-kind">${escapeHtml(e.is_dir ? t("type_folder") : t("type_file"))}</span>
         </button>
       </li>`).join("") || (!filesState.path ? `<li class="meta msg-empty">${escapeHtml(t("empty_files"))}</li>` : "");
     list.innerHTML = html;
-    $("files-up")?.addEventListener("click", () => {
-      const parts = filesState.path.split("/").filter(Boolean);
-      parts.pop();
-      filesState.path = parts.join("/");
-      filesState.selected = null;
-      refreshFiles();
-    });
+    $("files-up")?.addEventListener("click", () => filesGoUp());
     list.querySelectorAll("[data-name]").forEach((btn) => {
       btn.addEventListener("click", () => selectFileEntry(btn.dataset.name));
       btn.addEventListener("dblclick", () => {
@@ -2729,9 +3735,10 @@ async function refreshFiles() {
     setMsg($("files-msg"), err.message, "err");
   }
 }
+$("btn-files-up")?.addEventListener("click", () => filesGoUp());
 $("btn-files-refresh")?.addEventListener("click", () => refreshFiles());
 $("btn-files-mkdir")?.addEventListener("click", async () => {
-  const name = prompt(t("mkdir"));
+  const name = await askPrompt(t("mkdir"), { title: t("mkdir") });
   if (!name || !name.trim()) return;
   try {
     await api("/api/v1/files/mkdir", {
@@ -2752,7 +3759,7 @@ $("btn-files-open")?.addEventListener("click", () => {
 });
 $("btn-files-delete")?.addEventListener("click", async () => {
   if (!filesState.selected) return;
-  if (!confirm(t("delete") + " " + filesState.selected.name + "?")) return;
+  if (!await askConfirm(t("delete") + " " + filesState.selected.name + "?", { danger: true })) return;
   try {
     await api("/api/v1/files?path=" + encodeURIComponent(joinPath(filesState.path, filesState.selected.name)), {
       method: "DELETE",
@@ -2761,23 +3768,143 @@ $("btn-files-delete")?.addEventListener("click", async () => {
     refreshFiles();
   } catch (err) { setMsg($("files-msg"), err.message, "err"); }
 });
-$("files-upload")?.addEventListener("change", async (e) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-  try {
-    const path = joinPath(filesState.path, file.name);
-    const headers = { "Content-Type": "application/octet-stream" };
-    if (state.tokens?.access_token) headers.Authorization = "Bearer " + state.tokens.access_token;
-    const res = await fetch("/api/v1/files/content?path=" + encodeURIComponent(path), {
-      method: "PUT", headers, body: file,
-    });
-    if (!res.ok) throw new Error(await res.text());
-    setMsg($("files-msg"), "uploaded", "ok");
-    refreshFiles();
-  } catch (err) {
-    setMsg($("files-msg"), err.message, "err");
+function tFmt(key, vars) {
+  let s = t(key);
+  for (const [k, v] of Object.entries(vars || {})) {
+    s = s.replaceAll("{" + k + "}", String(v));
   }
+  return s;
+}
+
+function putFileWithProgress(file, path, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", "/api/v1/files/content?path=" + encodeURIComponent(path));
+    xhr.setRequestHeader("Content-Type", "application/octet-stream");
+    if (state.tokens?.access_token) {
+      xhr.setRequestHeader("Authorization", "Bearer " + state.tokens.access_token);
+    }
+    xhr.upload.onprogress = (ev) => {
+      if (!ev.lengthComputable) return;
+      onProgress?.(ev.loaded, ev.total || file.size);
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        onProgress?.(file.size, file.size);
+        resolve();
+        return;
+      }
+      let msg = xhr.responseText || ("HTTP " + xhr.status);
+      try {
+        const j = JSON.parse(xhr.responseText);
+        if (j?.error) msg = j.error;
+      } catch {}
+      reject(new Error(msg));
+    };
+    xhr.onerror = () => reject(new Error("network error"));
+    xhr.onabort = () => reject(new Error("aborted"));
+    xhr.send(file);
+  });
+}
+
+function renderUploadPanel(jobs) {
+  const panel = $("files-upload-panel");
+  const list = $("files-upload-list");
+  const summary = $("files-upload-summary");
+  const title = $("files-upload-title");
+  if (!panel || !list) return;
+  const total = jobs.length;
+  const done = jobs.filter((j) => j.status === "done" || j.status === "err").length;
+  const busy = jobs.some((j) => j.status === "uploading" || j.status === "waiting");
+  panel.classList.toggle("hidden", total === 0);
+  if (title) title.textContent = busy ? t("upload_progress") : t("upload_done");
+  if (summary) summary.textContent = total ? tFmt("upload_summary", { done, total }) : "";
+  list.innerHTML = jobs.map((j) => {
+    const pct = j.total ? Math.min(100, Math.round((100 * j.loaded) / j.total)) : (j.status === "done" ? 100 : 0);
+    const meta = fmtBytes(j.file.size) + (j.status === "uploading" || j.status === "done" ? ` · ${pct}%` : "");
+    let status = t("upload_waiting");
+    if (j.status === "uploading") status = t("upload_uploading") + ` ${fmtBytes(j.loaded)} / ${fmtBytes(j.total || j.file.size)}`;
+    if (j.status === "done") status = t("upload_done");
+    if (j.status === "err") status = t("upload_failed") + (j.error ? ": " + j.error : "");
+    const cls = j.status === "done" ? " is-done" : (j.status === "err" ? " is-err" : "");
+    return `<li class="files-upload-item${cls}" data-id="${escapeHtml(j.id)}">
+      <span class="fu-name" title="${escapeHtml(j.file.name)}">${escapeHtml(j.file.name)}</span>
+      <span class="fu-meta">${escapeHtml(meta)}</span>
+      <div class="fu-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><span style="width:${pct}%"></span></div>
+      <span class="fu-status">${escapeHtml(status)}</span>
+    </li>`;
+  }).join("");
+}
+
+$("files-upload")?.addEventListener("change", async (e) => {
+  const files = Array.from(e.target.files || []);
   e.target.value = "";
+  if (!files.length) return;
+
+  const jobs = files.map((file, i) => ({
+    id: "u" + i,
+    file,
+    loaded: 0,
+    total: file.size || 0,
+    status: "waiting",
+    error: "",
+  }));
+  const uploadBtn = $("btn-files-upload");
+  uploadBtn?.classList.add("is-busy");
+  renderUploadPanel(jobs);
+  setMsg($("files-msg"), "");
+
+  let ok = 0;
+  let err = 0;
+  for (const job of jobs) {
+    job.status = "uploading";
+    renderUploadPanel(jobs);
+    try {
+      const path = joinPath(filesState.path, job.file.name);
+      await putFileWithProgress(job.file, path, (loaded, total) => {
+        job.loaded = loaded;
+        job.total = total || job.file.size;
+        // Avoid full re-render thrash: update bar in place when possible.
+        const row = document.querySelector(`.files-upload-item[data-id="${CSS.escape(job.id)}"]`);
+        if (row) {
+          const pct = job.total ? Math.min(100, Math.round((100 * job.loaded) / job.total)) : 0;
+          const bar = row.querySelector(".fu-bar > span");
+          const meta = row.querySelector(".fu-meta");
+          const st = row.querySelector(".fu-status");
+          const pb = row.querySelector(".fu-bar");
+          if (bar) bar.style.width = pct + "%";
+          if (pb) pb.setAttribute("aria-valuenow", String(pct));
+          if (meta) meta.textContent = fmtBytes(job.file.size) + ` · ${pct}%`;
+          if (st) st.textContent = t("upload_uploading") + ` ${fmtBytes(job.loaded)} / ${fmtBytes(job.total || job.file.size)}`;
+        } else {
+          renderUploadPanel(jobs);
+        }
+      });
+      job.status = "done";
+      job.loaded = job.total || job.file.size;
+      ok += 1;
+    } catch (ex) {
+      job.status = "err";
+      job.error = ex.message || String(ex);
+      err += 1;
+    }
+    renderUploadPanel(jobs);
+  }
+
+  uploadBtn?.classList.remove("is-busy");
+  if (err === 0) {
+    setMsg($("files-msg"), tFmt("upload_ok", { n: ok }), "ok");
+  } else {
+    setMsg($("files-msg"), tFmt("upload_partial", { ok, err }), "err");
+  }
+  await refreshFiles();
+  // Keep the panel visible briefly so the user sees completion, then hide on success-only.
+  if (err === 0) {
+    setTimeout(() => {
+      const panel = $("files-upload-panel");
+      if (panel && !uploadBtn?.classList.contains("is-busy")) panel.classList.add("hidden");
+    }, 2200);
+  }
 });
 
 /* —— Nav / i18n —— */

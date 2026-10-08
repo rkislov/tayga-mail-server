@@ -37,13 +37,14 @@ const (
 // Config is loaded from YAML (see config.ScanConfig).
 type Config struct {
 	Enabled          bool
-	Backend          string // none | clamav | exec
+	Backend          string // none | clamav | exec | icap
 	Action           Action
 	QuarantineFolder string
 	Timeout          time.Duration
 	FailOpen         bool // if true, scanner errors do not block delivery
 	ClamAVAddress    string
 	ExecCommand      []string
+	ICAPURL          string
 }
 
 func (c Config) Normalized() Config {
@@ -61,6 +62,9 @@ func (c Config) Normalized() Config {
 	}
 	if c.ClamAVAddress == "" {
 		c.ClamAVAddress = "127.0.0.1:3310"
+	}
+	if c.ICAPURL == "" {
+		c.ICAPURL = "icap://127.0.0.1:1344/reqmod"
 	}
 	return c
 }
@@ -81,6 +85,8 @@ func New(cfg Config) (Scanner, error) {
 			return nil, fmt.Errorf("scan.exec.command is required for backend exec")
 		}
 		return NewExec(cfg.ExecCommand, cfg.Timeout), nil
+	case "icap":
+		return NewICAP(cfg.ICAPURL, cfg.Timeout)
 	default:
 		return nil, fmt.Errorf("unknown scan backend %q", cfg.Backend)
 	}

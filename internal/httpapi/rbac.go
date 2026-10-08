@@ -75,11 +75,11 @@ func (s *Server) adminCanManageDomain(r *http.Request, admin *storage.User, doma
 }
 
 func (s *Server) adminCanManageUser(r *http.Request, admin, target *storage.User) bool {
-	if target.TenantID != admin.TenantID {
-		return false
-	}
 	if s.isGlobalAdminUser(admin) {
 		return true
+	}
+	if target.TenantID != admin.TenantID {
+		return false
 	}
 	return s.adminCanManageDomain(r, admin, target.DomainID)
 }

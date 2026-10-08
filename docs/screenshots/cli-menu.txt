@@ -1,4 +1,4 @@
-Tayga Mail console · tayga-mail v0.7.3 (none) built unknown
+Tayga Mail console · tayga-mail v0.8.1 (f9bba07) built 2026-10-08T02:28:27Z
 config: configs/tayga.example.yaml
 
 === Главное меню ===
@@ -8,10 +8,10 @@ config: configs/tayga.example.yaml
   4) Backup (.tar.gz)
   5) Restore из .tar.gz
   6) Перенос БД / хранилища (sqlite ↔ postgres)
-  7) Настройки сервера (секции DB)
+  7) Настройки сервера (SMTP / spam / AV / SIEM / log / CoS)
   8) О версии
   0) Назад / выход
-Выбор: tayga-mail v0.7.3 (none) built unknown
+Выбор: tayga-mail v0.8.1 (f9bba07) built 2026-10-08T02:28:27Z
 
 === Главное меню ===
   1) Первичная настройка (wizard → YAML)
@@ -20,25 +20,7 @@ config: configs/tayga.example.yaml
   4) Backup (.tar.gz)
   5) Restore из .tar.gz
   6) Перенос БД / хранилища (sqlite ↔ postgres)
-  7) Настройки сервера (секции DB)
-  8) О версии
-  0) Назад / выход
-Выбор: config:    configs/tayga.example.yaml
-hostname:  mail.example.com
-storage:   sqlite
-sqlite:    ./data/tayga.db
-maildir:   ./data/maildir
-public:    https://127.0.0.1
-admins:    [admin@example.com]
-
-=== Главное меню ===
-  1) Первичная настройка (wizard → YAML)
-  2) Показать текущий bootstrap
-  3) Сменить путь к config
-  4) Backup (.tar.gz)
-  5) Restore из .tar.gz
-  6) Перенос БД / хранилища (sqlite ↔ postgres)
-  7) Настройки сервера (секции DB)
+  7) Настройки сервера (SMTP / spam / AV / SIEM / log / CoS)
   8) О версии
   0) Назад / выход
 Выбор: Выход.

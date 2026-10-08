@@ -19,6 +19,7 @@ import (
 	"github.com/tayga/tms/internal/mailsearch"
 	"github.com/tayga/tms/internal/mailstore"
 	"github.com/tayga/tms/internal/scan"
+	"github.com/tayga/tms/internal/siem"
 	"github.com/tayga/tms/internal/sieve"
 	"github.com/tayga/tms/internal/spam"
 	"github.com/tayga/tms/internal/storage"
@@ -49,7 +50,15 @@ type Server struct {
 	arc          *arcPolicy
 	tlsrpt       *tlsReporter
 	queue        *OutboundQueue
+	siem         *siem.Exporter
 	servers      []*gosmtp.Server
+}
+
+// SetSIEM attaches a CEF syslog exporter (optional; call before Start).
+func (s *Server) SetSIEM(e *siem.Exporter) {
+	if s != nil {
+		s.siem = e
+	}
 }
 
 func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth.Layer, ms *mailstore.Store, eng *sieve.Engine, tlsMgr *tlsutil.Manager, gate ha.Gate, writers ha.WriterGate) *Server {
@@ -70,6 +79,7 @@ func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth
 		FailOpen:         cfg.Scan.FailOpen,
 		ClamAVAddress:    cfg.Scan.ClamAV.Address,
 		ExecCommand:      cfg.Scan.Exec.Command,
+		ICAPURL:          cfg.Scan.ICAP.URL,
 	})
 	if err != nil {
 		log.Error("scan config invalid; scanning disabled", "err", err)
@@ -285,6 +295,7 @@ func (s *Server) Start(ctx context.Context) error {
 		}, s.log)
 		oq.SetHA(s.ha, s.fenceWriters)
 		oq.SetWriters(s.writers)
+		oq.SetSIEM(s.siem)
 		s.queue = oq
 		oq.Start(ctx)
 	}
@@ -328,6 +339,7 @@ func (s *Server) Start(ctx context.Context) error {
 			out:          out,
 			dkim:         dkimSig,
 			queue:        oq,
+			siem:         s.siem,
 			ipLimit:      ipLim,
 			userLimit:    userLim,
 		}
@@ -417,6 +429,7 @@ type backend struct {
 	out          outboundSender
 	dkim         *dkimSigner
 	queue        *OutboundQueue
+	siem         *siem.Exporter
 	ipLimit      *rateLimiter
 	userLimit    *rateLimiter
 }
@@ -432,6 +445,9 @@ func (b *backend) NewSession(c *gosmtp.Conn) (gosmtp.Session, error) {
 func (b *backend) writeMailLog(e *storage.MailLogEntry) {
 	if b == nil || b.store == nil || e == nil {
 		return
+	}
+	if b.siem != nil {
+		b.siem.EmitMail(e.Event, e.Direction, e.Peer, e.MailFrom, e.RcptTo, e.MessageID, e.Detail, e.Size)
 	}
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -463,6 +479,7 @@ func (s *session) Auth(mech string) (sasl.Server, error) {
 	case sasl.Plain:
 		return sasl.NewPlainServer(func(identity, username, password string) error {
 			u, err := s.backend.authn.Authenticate(context.Background(), username, password)
+			s.emitAuth(err == nil, username, err)
 			if err != nil {
 				return authFailed
 			}
@@ -472,6 +489,7 @@ func (s *session) Auth(mech string) (sasl.Server, error) {
 	case sasl.Login:
 		return newLoginServer(func(username, password string) error {
 			u, err := s.backend.authn.Authenticate(context.Background(), username, password)
+			s.emitAuth(err == nil, username, err)
 			if err != nil {
 				return authFailed
 			}
@@ -481,6 +499,7 @@ func (s *session) Auth(mech string) (sasl.Server, error) {
 	case sasl.OAuthBearer:
 		return sasl.NewOAuthBearerServer(func(opts sasl.OAuthBearerOptions) *sasl.OAuthBearerError {
 			u, err := s.backend.authn.AuthenticateToken(context.Background(), opts.Username, opts.Token)
+			s.emitAuth(err == nil, opts.Username, err)
 			if err != nil {
 				return &sasl.OAuthBearerError{Status: "invalid_token", Schemes: "bearer"}
 			}
@@ -490,6 +509,7 @@ func (s *session) Auth(mech string) (sasl.Server, error) {
 	case auth.XOAuth2:
 		return auth.NewXOAuth2Server(func(username, token string) error {
 			u, err := s.backend.authn.AuthenticateToken(context.Background(), username, token)
+			s.emitAuth(err == nil, username, err)
 			if err != nil {
 				return authFailed
 			}
@@ -499,6 +519,17 @@ func (s *session) Auth(mech string) (sasl.Server, error) {
 	default:
 		return nil, gosmtp.ErrAuthUnsupported
 	}
+}
+
+func (s *session) emitAuth(ok bool, username string, err error) {
+	if s == nil || s.backend == nil || s.backend.siem == nil {
+		return
+	}
+	detail := "smtp"
+	if err != nil {
+		detail = err.Error()
+	}
+	s.backend.siem.EmitAuth(ok, username, stripPort(s.remote), detail)
 }
 
 func (s *session) Mail(from string, opts *gosmtp.MailOptions) error {

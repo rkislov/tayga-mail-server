@@ -16,6 +16,7 @@ var EditableSections = []string{
 	"http",
 	"spam",
 	"scan",
+	"siem",
 	"dkim_verify",
 	"spf",
 	"iprev",
@@ -40,7 +41,7 @@ var EditableSections = []string{
 func RequiresRestart(section string) bool {
 	switch section {
 	case "server", "smtp", "imap", "pop3", "managesieve", "http",
-		"spam", "scan", "dkim_verify", "spf", "iprev", "helo", "greylist", "dmarc", "arc",
+		"spam", "scan", "siem", "dkim_verify", "spf", "iprev", "helo", "greylist", "dmarc", "arc",
 		"ldap", "oidc", "mfa", "flowsync", "ha", "log", "seed", "mailstore", "tls", "xmpp":
 		return true
 	default:
@@ -78,6 +79,8 @@ func getSectionPtr(cfg *config.Config, section string) (any, error) {
 		return &cfg.Spam, nil
 	case "scan":
 		return &cfg.Scan, nil
+	case "siem":
+		return &cfg.SIEM, nil
 	case "dkim_verify":
 		return &cfg.DKIMVerify, nil
 	case "spf":
