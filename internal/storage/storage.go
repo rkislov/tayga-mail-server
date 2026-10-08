@@ -45,8 +45,21 @@ type Driver interface {
 	UpdateUserProfile(ctx context.Context, userID, displayName string) error
 	UpdateUserQuota(ctx context.Context, userID string, quotaBytes int64) error
 	UpdateUserEnabled(ctx context.Context, userID string, enabled bool) error
+	DeleteUser(ctx context.Context, userID string) error
 	ListUsersByTenant(ctx context.Context, tenantID string) ([]*User, error)
 	ListUsersByDomain(ctx context.Context, domainID string) ([]*User, error)
+	CreateCalendarResource(ctx context.Context, res *CalendarResource) (*CalendarResource, error)
+	UpdateCalendarResource(ctx context.Context, res *CalendarResource) error
+	DeleteCalendarResource(ctx context.Context, id string) error
+	GetCalendarResource(ctx context.Context, id string) (*CalendarResource, error)
+	GetCalendarResourceByEmail(ctx context.Context, email string) (*CalendarResource, error)
+	GetCalendarResourceByUserID(ctx context.Context, userID string) (*CalendarResource, error)
+	ListCalendarResourcesByDomain(ctx context.Context, domainID string, enabledOnly bool) ([]*CalendarResource, error)
+	ListCalendarResourcesByTenant(ctx context.Context, tenantID string, enabledOnly bool) ([]*CalendarResource, error)
+	CreateCalendarAttachment(ctx context.Context, a *CalendarAttachment) (*CalendarAttachment, error)
+	GetCalendarAttachment(ctx context.Context, id string) (*CalendarAttachment, error)
+	ListCalendarAttachments(ctx context.Context, calendarObjectID string) ([]*CalendarAttachment, error)
+	DeleteCalendarAttachment(ctx context.Context, id string) error
 	SumMailboxBytes(ctx context.Context, userID string) (int64, error)
 	MessageExistsByMessageID(ctx context.Context, mailboxID, messageID string, size int64) (bool, error)
 	CalendarObjectExistsByUID(ctx context.Context, calendarID, uid string) (bool, error)
@@ -142,6 +155,12 @@ type Driver interface {
 	GetCalendarObjectByID(ctx context.Context, id string) (*CalendarObject, error)
 	UpsertCalendarObject(ctx context.Context, o *CalendarObject) (*CalendarObject, error)
 	DeleteCalendarObject(ctx context.Context, calendarID, hrefName string) error
+	UpsertCalendarInvite(ctx context.Context, inv *CalendarInvite) (*CalendarInvite, error)
+	GetCalendarInvite(ctx context.Context, id string) (*CalendarInvite, error)
+	ListCalendarInvitesForUser(ctx context.Context, userID string, pendingOnly bool) ([]*CalendarInvite, error)
+	ListCalendarInvitesByEventUID(ctx context.Context, eventUID string) ([]*CalendarInvite, error)
+	UpdateCalendarInvitePartStat(ctx context.Context, id, partstat string, proposedStart, proposedEnd *time.Time) error
+	FreeBusyForUser(ctx context.Context, userID string, from, to time.Time) ([]BusyInterval, error)
 
 	EnsureAddressBook(ctx context.Context, userID, name, displayName string) (*AddressBook, error)
 	CreateAddressBook(ctx context.Context, ab *AddressBook) (*AddressBook, error)
@@ -155,6 +174,39 @@ type Driver interface {
 	UpsertAddressObject(ctx context.Context, o *AddressObject) (*AddressObject, error)
 	DeleteAddressObject(ctx context.Context, addressBookID, hrefName string) error
 	EnsureDAVDefaults(ctx context.Context, userID string) error
+
+	EnsureNoteDefaults(ctx context.Context, userID string) error
+	EnsureNoteFolder(ctx context.Context, userID, name, displayName string) (*NoteFolder, error)
+	CreateNoteFolder(ctx context.Context, f *NoteFolder) (*NoteFolder, error)
+	ListNoteFolders(ctx context.Context, userID string) ([]*NoteFolder, error)
+	ListNoteFoldersForUser(ctx context.Context, userID string) ([]*NoteFolder, error)
+	ListSharedNoteFolders(ctx context.Context, userID string) ([]*NoteFolder, error)
+	GetNoteFolderByName(ctx context.Context, userID, name string) (*NoteFolder, error)
+	GetNoteFolderByID(ctx context.Context, userID, id string) (*NoteFolder, error)
+	GetNoteFolder(ctx context.Context, id string) (*NoteFolder, error)
+	UpdateNoteFolder(ctx context.Context, f *NoteFolder) error
+	DeleteNoteFolder(ctx context.Context, userID, id string) error
+	CreateNoteItem(ctx context.Context, n *NoteItem) (*NoteItem, error)
+	UpdateNoteItem(ctx context.Context, n *NoteItem) error
+	GetNoteItem(ctx context.Context, userID, id string) (*NoteItem, error)
+	GetNoteItemByID(ctx context.Context, id string) (*NoteItem, error)
+	ListNoteItems(ctx context.Context, userID, folderID string, includeArchived bool) ([]*NoteItem, error)
+	ListNoteItemsInFolder(ctx context.Context, folderID string, includeArchived bool) ([]*NoteItem, error)
+	ListSharedNoteItems(ctx context.Context, userID string) ([]*NoteItem, error)
+	DeleteNoteItem(ctx context.Context, userID, id string) error
+	DeleteNoteItemByID(ctx context.Context, id string) error
+	CreateNoteAttachment(ctx context.Context, a *NoteAttachment) (*NoteAttachment, error)
+	GetNoteAttachment(ctx context.Context, id string) (*NoteAttachment, error)
+	ListNoteAttachments(ctx context.Context, noteID string) ([]*NoteAttachment, error)
+	DeleteNoteAttachment(ctx context.Context, id string) error
+	SetNoteFolderACL(ctx context.Context, folderID, granteeUserID, rights string) error
+	DeleteNoteFolderACL(ctx context.Context, folderID, granteeUserID string) error
+	ListNoteFolderACL(ctx context.Context, folderID string) ([]*NoteFolderACLEntry, error)
+	SetNoteACL(ctx context.Context, noteID, granteeUserID, rights string) error
+	DeleteNoteACL(ctx context.Context, noteID, granteeUserID string) error
+	ListNoteACL(ctx context.Context, noteID string) ([]*NoteACLEntry, error)
+	NoteFolderRightsForUser(ctx context.Context, folderID, userID string) (string, error)
+	NoteRightsForUser(ctx context.Context, noteID, userID string) (string, error)
 
 	EnsureFlowSyncDevice(ctx context.Context, userID, deviceID, deviceType string) (*FlowSyncDevice, error)
 	SetFlowSyncPolicyKey(ctx context.Context, deviceRowID, policyKey string) error

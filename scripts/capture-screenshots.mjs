@@ -28,7 +28,7 @@ async function login(page) {
   await page.goto(base + "/", { waitUntil: "domcontentloaded" });
   await page.evaluate(() => {
     localStorage.clear();
-    localStorage.setItem("tayga.theme", "taiga");
+    localStorage.setItem("tayga.theme", "tayga");
     localStorage.setItem("tayga.lang", "ru");
   });
   await page.reload({ waitUntil: "networkidle" });
@@ -70,27 +70,28 @@ async function main() {
   await page.goto(base + "/", { waitUntil: "networkidle" });
   await page.evaluate(() => {
     localStorage.clear();
-    localStorage.setItem("tayga.theme", "taiga");
+    localStorage.setItem("tayga.theme", "tayga");
     localStorage.setItem("tayga.lang", "ru");
   });
   await page.reload({ waitUntil: "networkidle" });
   await page.waitForTimeout(700);
-  await shot(page, "ui-login-taiga.png");
+  await shot(page, "ui-login-tayga.png");
 
   await login(page);
-  await theme(page, "taiga");
+  await theme(page, "tayga");
 
   for (const [app, file] of [
-    ["mail", "ui-mail-taiga.png"],
-    ["calendar", "ui-calendar-taiga.png"],
-    ["contacts", "ui-contacts-taiga.png"],
-    ["files", "ui-files-taiga.png"],
-    ["chat", "ui-chat-taiga.png"],
-    ["tls", "ui-ca-taiga.png"],
-    ["xmpp", "ui-xmpp-taiga.png"],
-    ["server", "ui-server-taiga.png"],
-    ["cos", "ui-cos-taiga.png"],
-    ["monitor", "ui-admin-taiga.png"],
+    ["mail", "ui-mail-tayga.png"],
+    ["calendar", "ui-calendar-tayga.png"],
+    ["contacts", "ui-contacts-tayga.png"],
+    ["notes", "ui-notes-tayga.png"],
+    ["files", "ui-files-tayga.png"],
+    ["chat", "ui-chat-tayga.png"],
+    ["tls", "ui-ca-tayga.png"],
+    ["xmpp", "ui-xmpp-tayga.png"],
+    ["server", "ui-server-tayga.png"],
+    ["cos", "ui-cos-tayga.png"],
+    ["monitor", "ui-admin-tayga.png"],
   ]) {
     await goApp(page, app);
     await shot(page, file);

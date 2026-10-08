@@ -208,7 +208,7 @@ func (l *Layer) verifyPassword(ctx context.Context, username, password string) (
 		return u, nil
 	case "ldap":
 		return l.LDAP.Authenticate(ctx, domain, username, password)
-	case "oidc":
+	case "oidc", "resource":
 		return nil, ErrInvalidCredentials
 	default:
 		return nil, ErrUnsupportedSource

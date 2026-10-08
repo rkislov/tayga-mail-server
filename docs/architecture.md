@@ -65,9 +65,24 @@ Original sync engine by Кислов Роман Сергеевич (Apache-2.0).
 
 Collection/item IDs exposed to clients are **UUIDs** (mailbox / message / calendar / address book / event / contact / device / policy).
 
-FolderSync advertises mailboxes plus CalDAV calendars (type 8) and CardDAV address books (type 9). Sync write-back (XML and WBXML): calendar/contact Add·Change·Delete; mail Change (`Read`) and Delete; FolderCreate/MoveItems for mailboxes. EWS CreateItem/UpdateItem/DeleteItem for the same. Provision returns a richer device policy with a UUID `PolicyKey`.
+FolderSync advertises mailboxes plus CalDAV calendars (type 8), CardDAV address books (type 9), and Notes folders (type 10, `IPF.StickyNote`). Sync write-back (XML and WBXML): calendar/contact/notes Add·Change·Delete; mail Change (`Read`) and Delete; FolderCreate/MoveItems for mailboxes. EWS CreateItem/UpdateItem/DeleteItem for the same (including `IPM.StickyNote`). Provision returns a richer device policy with a UUID `PolicyKey`.
 
 Enable: `flowsync.enabled: true` (default).
+
+## Notes (collaborative)
+
+Web + FlowSync sticky notes live in `note_folders` / `note_items` / `note_attachments`. Document body is TipTap-compatible JSON with derived HTML/text for AS/EWS clients.
+
+| API | Purpose |
+|-----|---------|
+| `GET/POST /api/v1/notes/folders` | list (owned + shared) / create folder |
+| `PUT/GET/DELETE …/folders/{id}/acl` | share a whole notebook (`read` \| `write`) |
+| `GET/POST /api/v1/notes` | list / create notes (`?folder_id=` or `?shared=1`) |
+| `GET/PATCH/DELETE /api/v1/notes/{id}` | read / update (If-Match etag) / delete |
+| `PUT/GET/DELETE …/notes/{id}/acl` | share one note with 2+ users |
+| `…/attachments`, `…/drawing` | files and canvas strokes |
+
+Collaboration is ACL-based (last-write-wins with etag conflict), not iCloud CRDT. Folder ACL grants access to every note in that folder; note ACL shares a single document with multiple editors.
 
 ## Protocols (standard ports)
 
@@ -98,7 +113,7 @@ XMPP + OMEMO: [docs/xmpp.md](./xmpp.md), TZ [docs/tms-xmpp-001.md](./tms-xmpp-00
 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o tayga-mail ./cmd/tayga
 ./tayga-mail version
 ./tayga-mail -config configs/tayga.example.yaml
-# Cross builds: VERSION=v0.8.0 ./scripts/crossbuild.sh
+# Cross builds: VERSION=v0.9.0 ./scripts/crossbuild.sh
 # Ops console: ./tayga-mail menu -config configs/tayga.example.yaml
 ```
 
@@ -196,7 +211,7 @@ Admins: `http.admins` email list (default `admin@example.com`).
 
 - **License:** Apache License 2.0 (`LICENSE`, `NOTICE`)
 - **Author:** Кислов Роман Сергеевич (Roman Sergeyevich Kislov)
-- **UI:** Tailwind SPA shell (mail / calendar / contacts / files + settings/admin); i18n ru/en; themes (localStorage): taiga (default), cosmos, city, kalyazin, temple, moscow — picker in **Внешний вид** (backdrop art © Алиса Кислова except moscow; assets under `internal/frontend/dist/assets/`)
+- **UI:** Tailwind SPA shell (mail / calendar / contacts / files + settings/admin); i18n ru/en; themes (localStorage): tayga (default), cosmos, city, kalyazin, temple, moscow — picker in **Внешний вид** (backdrop art © Алиса Кислова except moscow; assets under `internal/frontend/dist/assets/`)
 
 ## Mailstore
 
