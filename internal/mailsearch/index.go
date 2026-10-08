@@ -17,6 +17,7 @@ func ApplyHeaders(msg *storage.Message, raw []byte) {
 		return
 	}
 	doc := ParseDocument(raw)
+	msg.MessageID = doc.MessageID
 	if doc.Subject != "" {
 		msg.Subject = doc.Subject
 	}
