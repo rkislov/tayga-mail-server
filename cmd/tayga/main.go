@@ -27,6 +27,7 @@ import (
 	"github.com/tayga/tms/internal/pop3"
 	"github.com/tayga/tms/internal/seed"
 	"github.com/tayga/tms/internal/settings"
+	"github.com/tayga/tms/internal/siem"
 	"github.com/tayga/tms/internal/sieve"
 	"github.com/tayga/tms/internal/smtp"
 	"github.com/tayga/tms/internal/storage"
@@ -190,7 +191,11 @@ func runSyncObjects(args []string) error {
 	if !cfg.Mailstore.ObjectStore.Enabled {
 		return fmt.Errorf("mailstore.object_store.enabled must be true")
 	}
-	log := logging.New(cfg.Log.Level, cfg.Log.Format)
+	log, closeLog, err := logging.New(cfg.Log.Level, cfg.Log.Format, cfg.Log.File)
+	if err != nil {
+		return err
+	}
+	defer closeLog()
 	ctx := context.Background()
 	store, err := storage.Open(ctx, cfg.Storage)
 	if err != nil {
@@ -293,8 +298,6 @@ func run(cfgPath string) error {
 		return err
 	}
 
-	log := logging.New(cfg.Log.Level, cfg.Log.Format)
-
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
@@ -318,6 +321,34 @@ func run(cfgPath string) error {
 		return fmt.Errorf("settings: %w", err)
 	}
 	cfg = hub.Config()
+
+	log, closeLog, err := logging.New(cfg.Log.Level, cfg.Log.Format, cfg.Log.File)
+	if err != nil {
+		return fmt.Errorf("log: %w", err)
+	}
+	defer closeLog()
+	log.Info("file logging enabled", "file", cfg.Log.File, "level", cfg.Log.Level, "format", cfg.Log.Format)
+
+	siemExp, err := siem.New(siem.Config{
+		Enabled:       cfg.SIEM.Enabled,
+		Protocol:      cfg.SIEM.Protocol,
+		Address:       cfg.SIEM.Address,
+		Facility:      cfg.SIEM.Facility,
+		Format:        cfg.SIEM.Format,
+		Vendor:        cfg.SIEM.Vendor,
+		Product:       cfg.SIEM.Product,
+		Version:       firstNonEmpty(cfg.SIEM.Version, version.Version),
+		Hostname:      firstNonEmpty(cfg.SIEM.Hostname, cfg.Server.Hostname),
+		TLSSkipVerify: cfg.SIEM.TLSSkipVerify,
+		QueueSize:     cfg.SIEM.QueueSize,
+	}, log)
+	if err != nil {
+		return fmt.Errorf("siem: %w", err)
+	}
+	if siemExp != nil {
+		defer siemExp.Close()
+		log.Info("siem syslog CEF enabled", "protocol", cfg.SIEM.Protocol, "address", cfg.SIEM.Address)
+	}
 
 	metrics.Register(store)
 
@@ -424,6 +455,7 @@ func run(cfgPath string) error {
 	}
 
 	smtpSrv := smtp.New(cfg, log, store, authn, ms, sieveEng, tlsMgr, gate, writers)
+	smtpSrv.SetSIEM(siemExp)
 	if err := smtpSrv.Start(ctx); err != nil {
 		return fmt.Errorf("smtp: %w", err)
 	}
@@ -460,6 +492,7 @@ func run(cfgPath string) error {
 	httpSrv.SetXMPP(xmppSrv)
 	httpSrv.SetMigrate(migSvc)
 	httpSrv.SetNotify(notifyHub)
+	httpSrv.SetSIEM(siemExp)
 	if err := httpSrv.Start(ctx); err != nil {
 		return fmt.Errorf("http: %w", err)
 	}
@@ -482,4 +515,13 @@ func run(cfgPath string) error {
 	_ = imapSrv.Shutdown(shutdownCtx)
 	_ = smtpSrv.Shutdown(shutdownCtx)
 	return nil
+}
+
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }

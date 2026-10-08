@@ -440,17 +440,18 @@ func (s *Server) mailSearch(w http.ResponseWriter, r *http.Request, au *authUser
 		}
 		out = append(out, map[string]any{
 			"id": m.ID, "uid": m.UID, "mailbox_id": m.MailboxID,
-			"size": m.Size, "flags": m.Flags,
+			"mailbox_name": h.MailboxName,
+			"size":         m.Size, "flags": m.Flags,
 			"internal_date": m.InternalDate.UTC().Format(time.RFC3339),
-			"message_id":   m.MessageID,
-			"subject":      subj,
-			"from":         m.FromAddr,
-			"to":           m.ToAddr,
-			"date":         m.DateHdr,
-			"archived":     m.Archived,
-			"snippet":      h.Snippet,
-			"rank":         h.Rank,
-			"seen":         strings.Contains(strings.ToUpper(m.Flags), `\SEEN`),
+			"message_id":    m.MessageID,
+			"subject":       subj,
+			"from":          m.FromAddr,
+			"to":            m.ToAddr,
+			"date":          m.DateHdr,
+			"archived":      m.Archived,
+			"snippet":       h.Snippet,
+			"rank":          h.Rank,
+			"seen":          strings.Contains(strings.ToUpper(m.Flags), `\SEEN`),
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"messages": out, "q": q, "total": len(out)})
@@ -542,11 +543,13 @@ func (s *Server) mailSend(w http.ResponseWriter, r *http.Request, au *authUser) 
 	for _, rcpt := range local {
 		ru, err := s.store.ResolveRecipient(r.Context(), rcpt)
 		if err != nil {
+			s.writeMailLog(r.Context(), user, "failed", "inbound", rcpt, msgid, int64(len(raw)), err.Error())
 			continue
 		}
 		root := s.ms.UserRoot(ru.Email)
 		mb, err := s.store.EnsureMailbox(r.Context(), ru.ID, "INBOX", root)
 		if err != nil {
+			s.writeMailLog(r.Context(), user, "failed", "inbound", rcpt, msgid, int64(len(raw)), err.Error())
 			continue
 		}
 		if rel, size, derr := s.ms.Deliver(ru.Email, "INBOX", raw); derr == nil {
@@ -558,21 +561,76 @@ func (s *Server) mailSend(w http.ResponseWriter, r *http.Request, au *authUser) 
 			if inserted, ierr := s.store.InsertMessage(r.Context(), im); ierr == nil {
 				_ = mailsearch.Index(r.Context(), s.store, inserted.ID, raw)
 			}
+			s.writeMailLog(r.Context(), user, "delivered", "inbound", rcpt, msgid, size, "web")
+		} else {
+			s.writeMailLog(r.Context(), user, "failed", "inbound", rcpt, msgid, int64(len(raw)), derr.Error())
 		}
 	}
 	for _, rcpt := range remote {
-		_, _ = s.store.EnqueueOutbound(r.Context(), &storage.OutboundItem{
+		_, err := s.store.EnqueueOutbound(r.Context(), &storage.OutboundItem{
 			EnvelopeFrom: user.Email,
 			EnvelopeTo:   rcpt,
 			MessageID:    msgid,
 			Data:         raw,
 			MaxAttempts:  8,
 		})
+		if err != nil {
+			s.writeMailLog(r.Context(), user, "failed", "outbound", rcpt, msgid, int64(len(raw)), err.Error())
+			continue
+		}
+		s.writeMailLog(r.Context(), user, "queued", "outbound", rcpt, msgid, int64(len(raw)), "web")
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status": "accepted", "message_id": msgid,
 		"local": len(local), "remote": len(remote),
 	})
+}
+
+// writeMailLog records a searchable admin mail-log line (best-effort).
+func (s *Server) writeMailLog(ctx context.Context, user *storage.User, event, direction, rcpt, msgid string, size int64, detail string) {
+	if s == nil || s.store == nil {
+		return
+	}
+	from := ""
+	tenantID := ""
+	if user != nil {
+		from = strings.ToLower(strings.TrimSpace(user.Email))
+		tenantID = user.TenantID
+	}
+	domain := storage.DomainOfEmail(rcpt)
+	if direction == "outbound" {
+		domain = storage.DomainOfEmail(from)
+	}
+	if tenantID == "" && domain != "" {
+		if d, err := s.store.GetDomainByName(ctx, domain); err == nil && d != nil {
+			tenantID = d.TenantID
+		}
+	}
+	if len(detail) > 500 {
+		detail = detail[:500]
+	}
+	e := &storage.MailLogEntry{
+		TenantID:  tenantID,
+		Domain:    domain,
+		Event:     event,
+		Direction: direction,
+		Peer:      "web",
+		MailFrom:  from,
+		RcptTo:    strings.ToLower(strings.TrimSpace(rcpt)),
+		MessageID: msgid,
+		Size:      size,
+		Detail:    detail,
+	}
+	if s.siem != nil {
+		s.siem.EmitMail(e.Event, e.Direction, e.Peer, e.MailFrom, e.RcptTo, e.MessageID, e.Detail, e.Size)
+	}
+	go func() {
+		c, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		if err := s.store.InsertMailLog(c, e); err != nil && s.log != nil {
+			s.log.Warn("mail log write failed", "err", err)
+		}
+	}()
 }
 
 type msgHdr struct {

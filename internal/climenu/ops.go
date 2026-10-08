@@ -10,7 +10,6 @@ import (
 
 	"github.com/tayga/tms/internal/backup"
 	"github.com/tayga/tms/internal/config"
-	"github.com/tayga/tms/internal/settings"
 	"github.com/tayga/tms/internal/storage"
 )
 
@@ -94,43 +93,6 @@ func (m *Menu) doRestore() error {
 	}
 	m.ui.Printf("restore ok: tenants=%d domains=%d users=%d skipped=%d scripts=%d mail=%d\n",
 		rep.TenantsCreated, rep.DomainsCreated, rep.UsersCreated, rep.UsersSkipped, rep.ScriptsRestored, rep.MailFiles)
-	return nil
-}
-
-func (m *Menu) editSettingsSection() error {
-	ctx := context.Background()
-	store, cfg, err := m.openStore(ctx)
-	if err != nil {
-		return err
-	}
-	defer store.Close()
-	hub := settings.NewHub(store, cfg)
-	if err := hub.Load(ctx); err != nil {
-		return err
-	}
-	sections := settings.EditableSections
-	labels := make([]string, len(sections))
-	copy(labels, sections)
-	n := m.ui.Menu("Секция настроек (DB)", labels)
-	if n == 0 {
-		return nil
-	}
-	name := sections[n-1]
-	raw, err := hub.GetSection(name)
-	if err != nil {
-		return err
-	}
-	m.ui.Println("--- текущее JSON (редактирование: вставьте новое JSON одной строкой или оставьте пустым) ---")
-	m.ui.Println(string(raw))
-	next := m.ui.Prompt("Новое JSON (пусто = без изменений)", "")
-	if strings.TrimSpace(next) == "" {
-		m.ui.Println("Без изменений.")
-		return nil
-	}
-	if err := hub.PutSection(ctx, name, []byte(next)); err != nil {
-		return err
-	}
-	m.ui.Printf("Секция %s сохранена. restart_required=%v\n", name, hub.RestartRequired())
 	return nil
 }
 

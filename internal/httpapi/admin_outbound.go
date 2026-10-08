@@ -93,5 +93,10 @@ func (s *Server) retryOutbound(w http.ResponseWriter, r *http.Request, id string
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+	detail := "admin retry"
+	if it.LastError != "" {
+		detail = "admin retry: " + it.LastError
+	}
+	s.writeMailLog(r.Context(), &storage.User{Email: it.EnvelopeFrom, TenantID: ""}, "queued", "outbound", it.EnvelopeTo, it.MessageID, int64(len(it.Data)), detail)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "queued"})
 }

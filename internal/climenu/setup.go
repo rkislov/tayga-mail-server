@@ -42,6 +42,11 @@ type bootstrapYAML struct {
 		CertsDir     string `yaml:"certs_dir"`
 		AutoGenerate bool   `yaml:"auto_generate"`
 	} `yaml:"tls"`
+	Log struct {
+		Level  string `yaml:"level"`
+		Format string `yaml:"format"`
+		File   string `yaml:"file"`
+	} `yaml:"log"`
 }
 
 func (m *Menu) wizardSetup() error {
@@ -81,11 +86,15 @@ func (m *Menu) wizardSetup() error {
 	cfg.Seed.Name = "Administrator"
 	cfg.HTTP.PublicURL = u.Prompt("Public URL", "https://"+hostname)
 	cfg.HTTP.Admins = []string{email}
+	cfg.Log.Level = "info"
+	cfg.Log.Format = "json"
+	cfg.Log.File = u.Prompt("Файл логов (обязательно)", filepath.Join(dataRoot, "tayga.log"))
 
 	for _, dir := range []string{
 		filepath.Dir(outPath),
 		cfg.Mailstore.Root,
 		cfg.TLS.CertsDir,
+		filepath.Dir(cfg.Log.File),
 	} {
 		if dir == "" || dir == "." {
 			continue
@@ -130,6 +139,8 @@ func (m *Menu) showConfigSummary() error {
 	m.ui.Printf("maildir:   %s\n", cfg.Mailstore.Root)
 	m.ui.Printf("public:    %s\n", cfg.HTTP.PublicURL)
 	m.ui.Printf("admins:    %v\n", cfg.HTTP.Admins)
+	m.ui.Printf("log.file:  %s\n", cfg.Log.File)
+	m.ui.Printf("siem:      enabled=%v %s %s\n", cfg.SIEM.Enabled, cfg.SIEM.Protocol, cfg.SIEM.Address)
 	return nil
 }
 
