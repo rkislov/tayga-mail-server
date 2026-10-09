@@ -291,7 +291,7 @@ func (s *Service) bumpProgress(ctx context.Context, id string, copied, skipped, 
 func (s *Service) finishJob(ctx context.Context, id, status, lastErr string) error {
 	now := time.Now().UTC()
 	_, err := s.db.ExecContext(ctx, s.rebind(`
-		UPDATE migration_jobs SET status = ?, last_error = ?, updated_at = ?, finished_at = ?, password_ciphertext = NULL
+		UPDATE migration_jobs SET status = ?, last_error = ?, updated_at = ?, finished_at = ?
 		WHERE id = ?`), status, lastErr, now, now, id)
 	return err
 }
@@ -379,4 +379,23 @@ func asBool(v any) bool {
 	default:
 		return false
 	}
+}
+
+// RetryJob creates a fresh history entry; source identities prevent duplicates.
+func (s *Service) RetryJob(ctx context.Context, userID, id, password string) (*Job, error) {
+	old, err := s.getJobInternal(ctx, id)
+	if err != nil || old.UserID != userID {
+		return nil, storage.ErrNotFound
+	}
+	if old.Status == StatusPending || old.Status == StatusRunning || old.Status == StatusPaused {
+		return nil, fmt.Errorf("migration is still active")
+	}
+	if password == "" {
+		password, err = decryptPassword(s.key, old.PasswordCiphertext)
+		if err != nil {
+			return nil, fmt.Errorf("source password required for this older migration")
+		}
+	}
+	tls := old.TLS
+	return s.CreateJob(ctx, userID, CreateRequest{Kind: old.Kind, Host: old.Host, URL: old.URL, Port: old.Port, TLS: &tls, Username: old.Username, Password: password, Options: json.RawMessage(old.Options)})
 }

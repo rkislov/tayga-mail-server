@@ -3,6 +3,7 @@ package migrate
 import (
 	"context"
 	"fmt"
+	"github.com/emersion/go-ical"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -75,5 +76,33 @@ END:VCALENDAR
 	objects, _ := st.ListCalendarObjects(ctx, cal.ID)
 	if len(objects) != 1 || !strings.Contains(objects[0].Data, "SUMMARY:Imported") {
 		t.Fatal("event missing")
+	}
+}
+
+func TestImportedCalendarTimezoneAndSchedulingMethod(t *testing.T) {
+	cal, err := ical.NewDecoder(strings.NewReader("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nMETHOD:PUBLISH\r\nBEGIN:VTIMEZONE\r\nTZID:Europe/Moscow\r\nEND:VTIMEZONE\r\nBEGIN:VEVENT\r\nUID:event-id\r\nDTSTART:20261009T100000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n")).Decode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	kind, uid, err := validateImportedCalendar(cal)
+	if err != nil || kind != "VEVENT" || uid != "event-id" || len(cal.Children) != 2 || cal.Props.Get("METHOD") != nil {
+		t.Fatalf("%s %s %v", kind, uid, err)
+	}
+}
+
+func TestImportedLegacyTaskWithoutStampCanEncode(t *testing.T) {
+	cal, err := ical.NewDecoder(strings.NewReader("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//SOGo//EN\r\nBEGIN:VTODO\r\nUID:legacy-task\r\nCREATED:20220101T100000Z\r\nSUMMARY:Task\r\nEND:VTODO\r\nEND:VCALENDAR\r\n")).Decode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err = validateImportedCalendar(cal); err != nil {
+		t.Fatal(err)
+	}
+	var out strings.Builder
+	if err = ical.NewEncoder(&out).Encode(cal); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "DTSTAMP:20220101T100000Z") {
+		t.Fatal(out.String())
 	}
 }

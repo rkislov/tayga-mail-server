@@ -89,3 +89,51 @@ func (s *Server) isAdmin(email string) bool {
 	}
 	return false
 }
+
+func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+		return
+	}
+	au, err := s.userFromBearer(r)
+	if err != nil {
+		writeJSON(w, 401, map[string]string{"error": "unauthorized"})
+		return
+	}
+	user, err := s.store.GetUserByID(r.Context(), au.ID)
+	if err != nil {
+		writeJSON(w, 404, map[string]string{"error": "user not found"})
+		return
+	}
+	if user.AuthSource != "" && user.AuthSource != "local" {
+		writeJSON(w, 409, map[string]string{"error": "password is managed by external identity provider"})
+		return
+	}
+	var req struct {
+		Current string `json:"current_password"`
+		New     string `json:"new_password"`
+	}
+	if json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&req) != nil || len(req.New) < 8 || len(req.New) > 256 || len(req.Current) > 256 {
+		writeJSON(w, 400, map[string]string{"error": "password must contain 8 to 256 characters"})
+		return
+	}
+	valid, err := s.authn.Hasher.Verify(user.PasswordHash, req.Current)
+	if err != nil || !valid {
+		writeJSON(w, 403, map[string]string{"error": "current password is incorrect"})
+		return
+	}
+	hash, err := s.authn.Hasher.Hash(req.New)
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": "cannot hash password"})
+		return
+	}
+	if err = s.store.UpdateUserPassword(r.Context(), user.ID, hash); err != nil {
+		writeJSON(w, 500, map[string]string{"error": "cannot change password"})
+		return
+	}
+	if err = s.store.DeleteOAuthTokensByUser(r.Context(), user.ID); err != nil {
+		writeJSON(w, 500, map[string]string{"error": "password changed but token revocation failed"})
+		return
+	}
+	writeJSON(w, 200, map[string]string{"status": "changed", "action": "login_required"})
+}

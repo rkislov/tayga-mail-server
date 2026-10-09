@@ -230,6 +230,7 @@ func (s *Server) userFromBearer(r *http.Request) (*authUser, error) {
 	if err != nil {
 		return nil, err
 	}
+	s.authn.TrackToken(u, token, r.RemoteAddr, r.UserAgent())
 	return &authUser{ID: u.ID, Email: u.Email}, nil
 }
 

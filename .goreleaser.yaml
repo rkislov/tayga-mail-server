@@ -46,7 +46,9 @@ archives:
       - deploy/systemd/tayga.service
       - docs/setup.md
       - docs/setup-filters.md
-      - docs/release-0.9.4.md
+      - docs/release-*.md
+      - internal/flowsync/LICENSE
+      - internal/flowsync/NOTICE
 
 checksum:
   name_template: checksums.txt

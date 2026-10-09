@@ -69,6 +69,9 @@ type Driver interface {
 	ListDomainAdminDomains(ctx context.Context, userID string) ([]string, error)
 	UserAdministersDomain(ctx context.Context, userID, domainID string) (bool, error)
 
+	SetFileAccess(ctx context.Context, ownerID, path, granteeID, rights string) error
+	DeleteFileAccess(ctx context.Context, ownerID, path, granteeID string) error
+	ListFileAccess(ctx context.Context, ownerID, granteeID string) ([]FileAccess, error)
 	CreateFileShare(ctx context.Context, sh *FileShare) (*FileShare, error)
 	GetFileShareByToken(ctx context.Context, token string) (*FileShare, error)
 	GetFileShareByID(ctx context.Context, id string) (*FileShare, error)
@@ -210,6 +213,9 @@ type Driver interface {
 	NoteFolderRightsForUser(ctx context.Context, folderID, userID string) (string, error)
 	NoteRightsForUser(ctx context.Context, noteID, userID string) (string, error)
 
+	ListFlowSyncDevices(ctx context.Context) ([]*FlowSyncDevice, error)
+	TouchFlowSyncDevice(ctx context.Context, id, address, agent, version string, provisioned bool) error
+	SetFlowSyncDeviceControl(ctx context.Context, id string, blocked bool, wipe string) error
 	EnsureFlowSyncDevice(ctx context.Context, userID, deviceID, deviceType string) (*FlowSyncDevice, error)
 	SetFlowSyncPolicyKey(ctx context.Context, deviceRowID, policyKey string) error
 	GetFlowSyncSyncKey(ctx context.Context, deviceRowID, collectionID string) (string, error)
@@ -298,6 +304,8 @@ type DomainAdminBinding struct {
 }
 
 type FileShare struct {
+	PasswordHash  string
+	Rights        string
 	ID            string
 	UserID        string
 	Path          string
@@ -411,4 +419,11 @@ type DMARCAggRow struct {
 	Count          int
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
+}
+
+type FileAccess struct {
+	OwnerID   string `json:"owner_id"`
+	Path      string `json:"path"`
+	GranteeID string `json:"grantee_id"`
+	Rights    string `json:"rights"`
 }

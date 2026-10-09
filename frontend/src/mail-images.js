@@ -71,6 +71,8 @@ function renderMailPagination(data, busy = false) {
   next.addEventListener("click", () => change(offset+size));
   select.addEventListener("change", () => {mailState.pageSize = Number(select.value);change(0);});
   bar.append(previous,label,next,select);
+  const filters=$("mail-quick-filters");
+  if(filters){let toolbar=$("mail-toolbar");if(!toolbar){toolbar=document.createElement("div");toolbar.id="mail-toolbar";bar.before(toolbar)}toolbar.append(filters,bar)}
 }
 
 async function openMailModal(id) {

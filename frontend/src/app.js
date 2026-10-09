@@ -300,6 +300,7 @@ const APPS = [
 
 const mailState = { mailboxID: "", messageID: "", mailboxes: [], order: [], searchQ: "", offset: 0, pageSize: 50, request: 0, sort: "date", sortOrder: "desc", filter: "all" };
 const calState = {
+  showPast: false,
   calendarID: "",
   eventID: "",
   calendars: [],
@@ -313,12 +314,12 @@ const calState = {
   highlightInvite: "",
   resources: [],
 };
-const contactState = { bookID: "", cardID: "", books: [], cards: [] };
+const contactState = { page:0,pageSize:50,selected:new Set(), bookID: "", cardID: "", books: [], cards: [] };
 const notesState = {
   folderID: "", noteID: "", folders: [], notes: [], etag: "", rights: "write",
   shareTarget: null, saveTimer: null, drawing: false, dirty:false, revision:0, attachments:[], etags:{},
 };
-const filesState = { path: "", selected: null, entries: [] };
+const filesState = { sharedRights:"write",listTarget:"",ownerID:"",sharedRoot:"", path: "", selected: null, entries: [] };
 const chatState = { peer: "", roster: [], messages: [], es: null, me: "" };
 
 function show(id) {
@@ -370,6 +371,7 @@ function setNavOpen(open) {
 function showApp(name) {
   clearTimeout(calState.dayClickTimer);
   const app = APPS.includes(name) ? name : "mail";
+  updateCreateButton(app);
   APPS.forEach((a) => $(`app-${a}`)?.classList.toggle("hidden", a !== app));
   document.querySelectorAll(".nav-btn").forEach((btn) => {
     btn.classList.toggle("is-active", btn.dataset.app === app);
@@ -383,6 +385,15 @@ function showApp(name) {
   $("compose-backdrop")?.classList.add("hidden");
   setNavOpen(false);
   if (app === "profile") {loadMe();refreshSignature();refreshPasskeys();}
+  const migrationPane=$("app-migration");
+  if (migrationPane) {
+    if (!migrationPane._originalParent) migrationPane._originalParent=migrationPane.parentElement;
+    (app === "profile" ? $("app-profile") : migrationPane._originalParent).append(migrationPane);
+    migrationPane.classList.toggle("hidden", !["profile","migration"].includes(app));
+    migrationPersonal = app === "profile";
+    if (migrationPersonal) { migrationTargetID=""; refreshMigration(); }
+    $("migration-target-row")?.classList.toggle("hidden",migrationPersonal || !state.me?.is_admin);
+  }
   if (app === "mail") refreshMail();
   if (app === "calendar") refreshCalendar();
   if (app === "contacts") refreshContacts();
@@ -493,6 +504,7 @@ async function refreshAccessToken() {
 }
 
 async function api(path, opts = {}) {
+  if(filesState.ownerID&&/^\/api\/v1\/files(?:[/?]|$)/.test(path)&&!/^\/api\/v1\/files\/(?:access|shares)/.test(path))path+=(path.includes('?')?'&':'?')+'owner_id='+encodeURIComponent(filesState.ownerID);
   const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
   if (state.tokens?.access_token) {
     headers.Authorization = "Bearer " + state.tokens.access_token;
@@ -603,7 +615,7 @@ async function loadMe() {
     refreshSignature();
     $("nav-admin")?.classList.toggle("hidden", !me.is_admin);
     // Migration is always listed; forms unlock when features.migration is true.
-    $("nav-migration")?.classList.remove("hidden");
+    $("nav-migration")?.classList.toggle("hidden", !state.me?.is_admin);
     updateNavUser(me.email, !!me.is_admin);
   } catch (err) {
     if (err.status === 401) return;
@@ -1272,10 +1284,11 @@ async function refreshAdminUsers() {
               <option value="off" ${u.migration_enabled === "off" ? "selected" : ""}>${escapeHtml(t("mig_off"))}</option>
             </select>
           </label>
-</td><td><div class="actions">          <button type="button" class="btn-secondary" data-quota="${escapeHtml(u.id)}">${escapeHtml(t("users_quota_action"))}</button>
+</td><td><details class="user-action-menu"><summary>${escapeHtml(t("users_actions"))}</summary><div class="actions">          <button type="button" class="btn-secondary" data-quota="${escapeHtml(u.id)}">${escapeHtml(t("users_quota_action"))}</button>
           <button type="button" class="btn-secondary" data-toggle="${escapeHtml(u.id)}" data-enabled="${u.enabled ? "1" : "0"}">${escapeHtml(u.enabled ? t("users_disable") : t("users_enable"))}</button>
           <button type="button" class="btn-secondary" data-pass="${escapeHtml(u.id)}">${escapeHtml(t("users_reset_pw"))}</button>
-</div></td></tr>`).join("") || `<tr><td colspan="7" class="meta">${t("users_empty")}</td></tr>`;
+${state.me?.is_global_admin?`<button type="button" class="btn-secondary" data-user-role="${escapeHtml(u.id)}">${mailImageText("Роль пользователя","User role")}</button>`:""}<button type="button" class="btn-secondary" data-mail-access="${escapeHtml(u.id)}">${mailImageText("Доступ к ящику","Mailbox access")}</button></div></details></td></tr>`).join("") || `<tr><td colspan="7" class="meta">${t("users_empty")}</td></tr>`;
+    list.querySelectorAll("[data-mail-access]").forEach(button=>button.onclick=()=>openMailboxAccess(button.dataset.mailAccess));list.querySelectorAll("[data-user-role]").forEach(button=>button.onclick=()=>openUserRole(users.find(u=>u.id===button.dataset.userRole)));
     list.querySelectorAll("[data-user-mig]").forEach((sel) => {
       sel.addEventListener("change", async () => {
         try {
@@ -1644,6 +1657,10 @@ $("xmpp-bot-form")?.addEventListener("submit",async event=>{
  finally{xmppBotBusy=false;$("btn-xmpp-bot-create").disabled=false;$("xmpp-bot-close").disabled=false;}
 });
 
+let migrationPersonal = false;
+let migrationTargetID = "";
+let migrationTargets = [];
+function migrationURL(path="") { return "/api/v1/migration"+path+(migrationTargetID ? "?target_user_id="+encodeURIComponent(migrationTargetID) : ""); }
 const migrationPages = new Map();
 function renderMigJobs(listEl, jobs) {
   if (!listEl) return;
@@ -1694,21 +1711,23 @@ function renderMigJobs(listEl, jobs) {
   listEl.innerHTML = visibleJobs.map((j) => `
     <li class="ca-cert-item">
       <div>
-        <strong>${escapeHtml(j.kind)}</strong> · ${escapeHtml(t("mig_status_"+j.status))}
+        <strong>${escapeHtml(j.kind)}</strong> · ${escapeHtml(j.status==="done"&&j.errors>0?mailImageText("Завершено с ошибками","Completed with errors"):t("mig_status_"+j.status))}
         ${j.user_email ? `<div class="meta">${escapeHtml(j.user_email)}</div>` : ""}
         <div class="meta">${j.copied || 0} ${t("mig_copied")} · ${j.skipped || 0} ${t("mig_skipped")} · ${j.errors || 0} ${t("mig_errors")}</div>
         ${j.last_error ? `<div class="meta">${escapeHtml(j.last_error)}</div>` : ""}
       </div>
       <div class="actions">
-        ${["pending","running","paused"].includes(j.status) && (!j.user_id || j.user_id === state.me?.id)
+        ${["done","failed","cancelled"].includes(j.status)&&(!j.user_id||j.user_id===(migrationTargetID || state.me?.id))?`<button type="button" class="btn-secondary btn-sm" data-mig-retry="${escapeHtml(j.id)}">${mailImageText("Повторить","Retry")}</button>`:""}
+        ${["pending","running","paused"].includes(j.status) && (!j.user_id || j.user_id === (migrationTargetID || state.me?.id))
           ? `<button type="button" class="btn-secondary btn-sm" data-mig-cancel="${escapeHtml(j.id)}">${t("mig_cancel")}</button>`
           : ""}
       </div>
     </li>`).join("");
+  listEl.querySelectorAll("[data-mig-retry]").forEach(button=>button.onclick=async()=>{button.disabled=true;try{try{await api(migrationURL("/jobs/"+encodeURIComponent(button.dataset.migRetry)+"/retry"),{method:"POST",body:"{}"})}catch(error){if(!error.message.includes("source password required"))throw error;const password=await askPrompt(mailImageText("Пароль старого сервера (у старого задания он уже удалён)","Source password (older jobs no longer retain it)"),{password:true});if(!password)return;await api(migrationURL("/jobs/"+encodeURIComponent(button.dataset.migRetry)+"/retry"),{method:"POST",body:JSON.stringify({password})})}migrationPages.clear();await refreshMigration()}catch(error){setMsg($("mig-msg"),error.message,"err")}finally{button.disabled=false}});
   listEl.querySelectorAll("[data-mig-cancel]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       try {
-        await api("/api/v1/migration/jobs/" + encodeURIComponent(btn.dataset.migCancel) + "/cancel", { method: "POST" });
+        await api(migrationURL("/jobs/" + encodeURIComponent(btn.dataset.migCancel) + "/cancel"), { method: "POST" });
         refreshMigration();
       } catch (err) { setMsg($("mig-msg"), err.message, "err"); }
     });
@@ -1724,24 +1743,33 @@ async function refreshMigration() {
   if (!list) return;
 
   const me = state.me || {};
-  const allowed = !!(me.features && me.features.migration);
+  const allowed = migrationTargetID ? !!migrationTargets.find(target=>target.id===migrationTargetID)?.allowed : !!me.features?.migration;
   locked?.classList.toggle("hidden", allowed);
   forms?.classList.toggle("hidden", !allowed);
   forms?.querySelectorAll("input,button").forEach((el) => {
     el.disabled = !allowed;
   });
-  const canAdmin = !!me.is_admin;
-  $("btn-mig-enable-me")?.classList.toggle("hidden", allowed || !canAdmin || !me.id);
-  $("btn-mig-enable-domain")?.classList.toggle("hidden", allowed || !canAdmin || !me.domain_id);
+  const canAdmin = !!me.is_admin && !migrationPersonal;
+  $("btn-mig-enable-me")?.classList.toggle("hidden", allowed || !canAdmin || !me.id || !!migrationTargetID);
+  $("btn-mig-enable-domain")?.classList.toggle("hidden", allowed || !canAdmin || !me.domain_id || !!migrationTargetID);
   $("btn-mig-goto-tenants")?.classList.toggle("hidden", !canAdmin);
 
   try {
-    const data = await api("/api/v1/migration");
+    const data = await api(migrationURL());
     renderMigJobs(list, data.allowed ? (data.jobs || []) : []);
   } catch (err) {
     list.innerHTML = `<li class="meta">${escapeHtml(err.message)}</li>`;
   }
 
+  if (canAdmin) {
+    try {
+      migrationTargets=(await api("/api/v1/admin/migration?targets=1")).targets||[];
+      const select=$("migration-target");
+      select.replaceChildren();
+      for (const target of migrationTargets) { const option=document.createElement("option");option.value=target.id===me.id?"":target.id;option.textContent=target.email;select.append(option); }
+      select.value=migrationTargetID;
+    } catch(error) { setMsg($("mig-msg"),error.message,"err"); }
+  }
   if (canAdmin && adminBox) {
     adminBox.classList.remove("hidden");
     try {
@@ -1787,9 +1815,14 @@ $("btn-mig-enable-domain")?.addEventListener("click", async () => {
   } catch (err) { setMsg($("mig-msg"), err.message, "err"); }
 });
 const migrationDialog = $("mig-dialog");
+const migrationTargetRow=document.createElement("label");migrationTargetRow.id="migration-target-row";migrationTargetRow.className="hidden";
+migrationTargetRow.textContent=mailImageText("Целевая учётная запись","Target account");
+const migrationTargetSelect=document.createElement("select");migrationTargetSelect.id="migration-target";migrationTargetRow.append(migrationTargetSelect);
+$("mig-forms")?.before(migrationTargetRow);
+migrationTargetSelect.addEventListener("change",()=>{migrationTargetID=migrationTargetSelect.value;migrationPages.clear();refreshMigration();});
 let migrationStarting = false;
 document.querySelectorAll("[data-mig-open]").forEach(btn => btn.addEventListener("click", () => {
-  if (!state.me?.features?.migration) return;
+  if (!(migrationTargetID ? migrationTargets.find(target=>target.id===migrationTargetID)?.allowed : state.me?.features?.migration)) return;
   const kind = btn.dataset.migOpen;
   document.querySelectorAll("[data-mig-kind]").forEach(form => form.classList.toggle("hidden", form.dataset.migKind !== kind));
   $("mig-dialog-title").textContent = t({imap:"nav_mail",cal:"nav_calendar",card:"nav_contacts"}[kind]) + " · " + t("mig_title");
@@ -1816,7 +1849,7 @@ document.querySelectorAll("[data-mig-kind]").forEach(form => form.addEventListen
   $("mig-dialog-close").disabled=true;
   setMsg($("mig-dialog-msg"),t("mig_starting"));
   try {
-    await api("/api/v1/migration/jobs", {method:"POST",body:JSON.stringify({kind:{imap:"imap",cal:"caldav",card:"carddav"}[kind],...body})});
+    await api(migrationURL("/jobs"), {method:"POST",body:JSON.stringify({kind:{imap:"imap",cal:"caldav",card:"carddav"}[kind],...body})});
     migrationPages.clear();
     migrationDialog.close();
     await refreshMigration();
@@ -2694,6 +2727,7 @@ function showMailReader(msg) {
   setMobilePane("read");
   $("mail-subject").textContent = msg.subject || "(no subject)";
   if ($("mail-from")) $("mail-from").textContent = msg.from || "—";
+  renderSenderAvatar(msg.from);
   if ($("mail-to")) $("mail-to").textContent = msg.to || "—";
   if ($("mail-date")) $("mail-date").textContent = mailDateFull(msg.date || msg.internal_date);
   renderMailActions(msg);
@@ -2973,7 +3007,7 @@ function fmtCalShort(v) {
   const d = new Date(v);
   if (Number.isNaN(d.getTime())) return String(v).slice(5, 16);
   return d.toLocaleString(calLocale(), {
-    day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+    day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
   });
 }
 
@@ -3428,6 +3462,7 @@ function renderCalDay() {
 }
 
 function startNewCalEvent(day = calState.selectedDay || calDayKey(new Date()), hour = 10) {
+  if(calState.defaultCalendarID)calState.calendarID=calState.defaultCalendarID;
   if (calState.calendars.find(c=>c.id===calState.calendarID)?.writable===false) {setMsg($("cal-msg"),t("cal_readonly"),"err");return;}
   clearTimeout(calState.dayClickTimer);
   calState.selectedDay = day;
@@ -3481,14 +3516,18 @@ function renderCalEventLog() {
   const list = $("cal-event-list");
   const logTitle = $("cal-log-title");
   if (!list) return;
-  let events = calState.events.slice();
+  let toggle=$('cal-show-past');
+  if(!toggle){const label=document.createElement('label');label.className='calendar-past-toggle';toggle=document.createElement('input');toggle.type='checkbox';toggle.id='cal-show-past';toggle.setAttribute('role','switch');label.append(toggle,document.createTextNode(mailImageText('Показывать прошедшие','Show past events')));list.before(label);toggle.onchange=()=>{calState.showPast=toggle.checked;renderCalEventLog()};}
+  toggle.checked=calState.showPast;
+  const isPast=e=>{const end=new Date(e.end||e.start);return !Number.isNaN(end.getTime())&&end.getTime()<Date.now()};
+  let events = calState.events.filter(e=>calState.showPast||!isPast(e));
   if (calState.selectedDay) {
     events = events.filter((e) => calEventDayKey(e) === calState.selectedDay);
     if (logTitle) {
       const d = new Date(calState.selectedDay + "T12:00:00");
       const dayLabel = Number.isNaN(d.getTime())
         ? calState.selectedDay
-        : d.toLocaleDateString(calLocale(), { day: "numeric", month: "long" });
+        : d.toLocaleDateString(calLocale(), { day: "numeric", month: "long", year: "numeric" });
       logTitle.textContent = `${t("cal_day_events")} · ${dayLabel}`;
     }
   } else if (logTitle) {
@@ -3497,7 +3536,7 @@ function renderCalEventLog() {
 
   list.innerHTML = events.map((e) => `
     <li>
-      <button type="button" class="msg-item cal-item${e.id === calState.eventID ? " is-active" : ""}" data-ev="${escapeHtml(e.id)}">
+      <button type="button" class="msg-item cal-item${isPast(e) ? " is-past" : ""}${e.id === calState.eventID ? " is-active" : ""}" data-ev="${escapeHtml(e.id)}">
         <span class="msg-subject">${escapeHtml(calendarEventLabel(e))}</span>
         <span class="msg-date cal-start">${escapeHtml(fmtCalShort(e.start))}</span>
         <span class="msg-date cal-end">${escapeHtml(fmtCalTime(e.end) || fmtCalShort(e.end))}</span>
@@ -3515,14 +3554,15 @@ async function refreshCalendar() {
   try {
     const data = await api("/api/v1/calendar/calendars");
     calState.calendars = data.calendars || [];
+    calState.defaultCalendarID=data.default_calendar_id||"";
     if (calState.calendarID && !calState.calendars.some((c) => c.id === calState.calendarID)) {
       calState.calendarID = "";
     }
     if (!calState.calendarID && calState.calendars.length) {
-      calState.calendarID = calState.calendars[0].id;
+      calState.calendarID = calState.defaultCalendarID || calState.calendars[0].id;
     }
     folders.innerHTML = calState.calendars.map((c) => {
-      const label = calendarDisplayLabel(c) + (c.shared ? " · " + t("cal_shared") : "");
+      const label = calendarDisplayLabel(c) + (c.is_default ? " ★" : "") + (c.shared ? " · " + t("cal_shared") : "");
       const del = `<button type="button" class="btn-secondary btn-sm btn-ico" data-cal-properties="${escapeHtml(c.id)}" title="${escapeHtml(t("cal_properties"))}" aria-label="${escapeHtml(t("cal_properties"))}">⋯</button>`;
       return `<li class="folder-row">
         <button type="button" class="folder-btn${c.id === calState.calendarID ? " is-active" : ""}" data-cal="${escapeHtml(c.id)}">
@@ -3605,6 +3645,7 @@ function showCalReader(ev) {
   $("cal-read-start").textContent = fmtCalWhen(ev.start);
   $("cal-read-end").textContent = fmtCalWhen(ev.end);
   $("cal-read-location").textContent = ev.location || "—";
+  renderCalendarMap(ev.geo);
   $("cal-read-body").textContent = ev.description || "";
   const row = $("cal-read-attendees-row");
   const dd = $("cal-read-attendees");
@@ -3817,7 +3858,7 @@ async function refreshContacts() {
     }).join("") || `<li class="meta msg-empty">${escapeHtml(t("empty_contacts"))}</li>`;
     folders.querySelectorAll("[data-book]").forEach((btn) => {
       btn.addEventListener("click", () => {
-        contactState.bookID = btn.dataset.book;
+        contactState.bookID = btn.dataset.book;contactState.page=0;contactState.selected.clear();
         contactState.cardID = "";
         folders.querySelectorAll(".folder-btn").forEach((b) => b.classList.toggle("is-active", b.dataset.book === contactState.bookID));
         loadContactCards();
@@ -3842,22 +3883,31 @@ async function loadContactCards() {
   try {
     const cards = await api("/api/v1/contacts/books/" + encodeURIComponent(contactState.bookID) + "/cards");
     contactState.cards = (cards.cards || []).slice().sort((a, b) => String(a.fn || "").localeCompare(String(b.fn || ""), lang));
-    list.innerHTML = contactState.cards.map((c) => `
-      <li>
-        <button type="button" class="msg-item contact-item${c.id === contactState.cardID ? " is-active" : ""}" data-card="${escapeHtml(c.id)}">
-          <span class="msg-from">${escapeHtml(c.fn || "—")}</span>
-          <span class="msg-subject">${escapeHtml(c.email || "—")}</span>
-          <span class="msg-date">${escapeHtml(c.tel || "—")}</span>
-        </button>
-      </li>`).join("") || `<li class="meta msg-empty">${escapeHtml(t("empty_contacts"))}</li>`;
-    list.querySelectorAll("[data-card]").forEach((btn) => {
-      btn.addEventListener("click", () => openContactCard(btn.dataset.card));
-    });
+    contactState.selected=new Set([...contactState.selected].filter(id=>contactState.cards.some(c=>c.id===id)));
+    renderContactCards();
     if (contactState.cardID) openContactCard(contactState.cardID);
     else showContactReader(null);
   } catch (err) {
     setMsg($("contact-msg"), err.message, "err");
   }
+}
+
+function renderContactCards(){
+ const list=$('contact-list');if(!list)return;
+ const readonly=!!contactState.books.find(b=>b.id===contactState.bookID)?.readonly;
+ contactState.page=Math.max(0,Math.min(contactState.page,Math.ceil(contactState.cards.length/contactState.pageSize)-1));
+ const start=contactState.page*contactState.pageSize,visible=contactState.cards.slice(start,start+contactState.pageSize);
+ let toolbar=$('contact-list-actions');if(!toolbar){toolbar=document.createElement('div');toolbar.id='contact-list-actions';toolbar.className='contact-list-actions';list.before(toolbar)}
+ toolbar.replaceChildren();const select=document.createElement('input');select.type='checkbox';select.title=mailImageText('Выбрать все на странице','Select page');select.setAttribute('aria-label',select.title);select.checked=visible.length>0&&visible.every(c=>contactState.selected.has(c.id));select.indeterminate=visible.some(c=>contactState.selected.has(c.id))&&!select.checked;select.onchange=()=>{visible.forEach(c=>select.checked?contactState.selected.add(c.id):contactState.selected.delete(c.id));renderContactCards()};
+ const count=document.createElement('span');count.textContent=mailImageText('Выбрано: ','Selected: ')+contactState.selected.size;toolbar.append(select,count);
+ for(const [action,label] of [['export',mailImageText('Экспорт vCard','Export vCard')],['delete',t('delete')]]){const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.textContent=label;button.disabled=!contactState.selected.size||(action==='delete'&&readonly);button.onclick=()=>contactBulkAction(action);toolbar.append(button)}
+ const pages=document.createElement('div');pages.className='contact-pagination';const prev=document.createElement('button'),next=document.createElement('button'),range=document.createElement('span'),size=document.createElement('select');prev.textContent='‹';next.textContent='›';prev.title=mailImageText('Предыдущая страница','Previous page');next.title=mailImageText('Следующая страница','Next page');for(const button of [prev,next]){button.type='button';button.className='btn-secondary btn-sm';button.setAttribute('aria-label',button.title)}prev.disabled=!contactState.page;next.disabled=start+visible.length>=contactState.cards.length;prev.onclick=()=>{contactState.page--;renderContactCards()};next.onclick=()=>{contactState.page++;renderContactCards()};range.textContent=(visible.length?start+1:0)+'–'+(start+visible.length)+' / '+contactState.cards.length;size.className='field-input field-input-sm';size.setAttribute('aria-label',mailImageText('Контактов на странице','Contacts per page'));for(const n of [25,50,100]){const option=document.createElement('option');option.value=n;option.textContent=n+' '+mailImageText('на странице','per page');size.append(option)}size.value=contactState.pageSize;size.onchange=()=>{contactState.pageSize=Number(size.value);contactState.page=0;renderContactCards()};pages.append(prev,range,next,size);toolbar.append(pages);
+ list.innerHTML=visible.map(c=>`<li class="contact-select-row"><input type="checkbox" data-select-card="${escapeHtml(c.id)}" aria-label="${escapeHtml(mailImageText('Выбрать: ','Select: ')+(c.fn||c.email||''))}" ${contactState.selected.has(c.id)?'checked':''}><button type="button" class="msg-item contact-item${c.id===contactState.cardID?' is-active':''}" data-card="${escapeHtml(c.id)}"><span class="msg-from">${escapeHtml(c.fn||'—')}</span><span class="msg-subject">${escapeHtml(c.email||'—')}</span><span class="msg-date">${escapeHtml(c.tel||'—')}</span></button></li>`).join('')||`<li class="meta msg-empty">${escapeHtml(t('empty_contacts'))}</li>`;
+ list.querySelectorAll('[data-card]').forEach(button=>button.onclick=()=>openContactCard(button.dataset.card));list.querySelectorAll('[data-select-card]').forEach(input=>input.onchange=()=>{input.checked?contactState.selected.add(input.dataset.selectCard):contactState.selected.delete(input.dataset.selectCard);renderContactCards()});
+}
+async function contactBulkAction(action){
+ const ids=[...contactState.selected];if(!ids.length)return;if(action==='delete'&&!await askConfirm(mailImageText('Удалить выбранные контакты: ','Delete selected contacts: ')+ids.length+'?',{danger:true}))return;
+ try{if(action==='export'){const cards=[];for(const id of ids){const card=await api('/api/v1/contacts/cards/'+encodeURIComponent(id));if(!card.vcard)throw Error(mailImageText('Нет данных vCard','No vCard data'));cards.push(card.vcard.trim())}const url=URL.createObjectURL(new Blob([cards.join('\r\n')+'\r\n'],{type:'text/vcard;charset=utf-8'}));const link=document.createElement('a');link.href=url;link.download='contacts.vcf';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}else{let done=0;for(const id of ids){await api('/api/v1/contacts/cards/'+encodeURIComponent(id),{method:'DELETE'});contactState.selected.delete(id);done++}contactState.cardID='';await loadContactCards();setMsg($('contact-msg'),mailImageText('Удалено контактов: ','Contacts deleted: ')+done,'ok')}}catch(error){setMsg($('contact-msg'),error.message,'err');if(action==='delete')await loadContactCards()}
 }
 
 async function openContactCard(id) {
@@ -3956,7 +4006,8 @@ function showFileReader(entry) {
   let preview=$('btn-files-preview');
   if(!preview){preview=document.createElement('button');preview.id='btn-files-preview';preview.type='button';preview.className='btn-secondary btn-sm';$('btn-files-download').after(preview);}
   preview.textContent=mailImageText('Просмотр','Preview');preview.hidden=entry.is_dir||!documentPreviewType(entry.name);
-  preview.onclick=()=>openDocumentPreview({url:'/api/v1/files/content?path='+encodeURIComponent(joinPath(filesState.path,entry.name)),name:entry.name,size:entry.size});
+  let share=$('btn-files-share');if(!share){share=document.createElement('button');share.id='btn-files-share';share.type='button';share.className='btn-secondary btn-sm';$('btn-files-download').after(share);}share.hidden=!!filesState.ownerID;share.textContent=mailImageText('Доступ','Share');share.onclick=()=>openFileAccess(joinPath(filesState.path,entry.name));
+  preview.onclick=()=>openDocumentPreview({url:'/api/v1/files/content?path='+encodeURIComponent(joinPath(filesState.path,entry.name))+(filesState.ownerID?'&owner_id='+encodeURIComponent(filesState.ownerID):''),name:entry.name,size:entry.size});
 }
 
 function selectFileEntry(name) {
@@ -3973,7 +4024,7 @@ async function downloadFile(name) {
   setMsg($("files-msg"),t("files_preparing"));
   try {
     const headers={};if(state.tokens?.access_token)headers.Authorization="Bearer "+state.tokens.access_token;
-    const res=await fetch("/api/v1/files/"+(isFolder?"archive":"content")+"?path="+encodeURIComponent(path),{headers});
+    const res=await fetch("/api/v1/files/"+(isFolder?"archive":"content")+"?path="+encodeURIComponent(path)+(filesState.ownerID?"&owner_id="+encodeURIComponent(filesState.ownerID):""),{headers});
     if(!res.ok)throw new Error(t("files_download_error"));
     const blob=await res.blob(),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name+(isFolder?".zip":"");a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);setMsg($("files-msg"),"");
   }catch(err){setMsg($("files-msg"),err.message,"err");}
@@ -4122,7 +4173,7 @@ $("form-chat-send")?.addEventListener("submit", async (e) => {
 });
 
 function filesGoUp() {
-  if (!filesState.path) return;
+  if (!filesState.path||filesState.listTarget||(filesState.ownerID&&filesState.path===filesState.sharedRoot)) return;
   const parts = filesState.path.split("/").filter(Boolean);
   parts.pop();
   filesState.path = parts.join("/");
@@ -4134,13 +4185,14 @@ async function refreshFiles() {
   const list = $("files-list");
   if (!list) return;
   if ($("files-path")) $("files-path").textContent = "/" + (filesState.path || "");
-  $("btn-files-up")?.classList.toggle("hidden", !filesState.path);
+  $("btn-files-up")?.classList.toggle("hidden", !filesState.path||!!filesState.listTarget||(filesState.ownerID&&filesState.path===filesState.sharedRoot));
   try {
-    const q = filesState.path ? "?path=" + encodeURIComponent(filesState.path) : "";
+    const requested=filesState.listTarget||filesState.path;const q = requested ? "?path=" + encodeURIComponent(requested) : "";
     const data = await api("/api/v1/files" + q);
+    filesState.path=data.path??filesState.path;
     filesState.entries = data.entries || [];
     let html = "";
-    if (filesState.path) {
+    if (filesState.path&&!filesState.listTarget&&(!filesState.ownerID||filesState.path!==filesState.sharedRoot)) {
       html += `<li>
         <button type="button" class="file-item is-dir" id="files-up">
           <span class="file-name">..</span>
@@ -4294,7 +4346,7 @@ function tFmt(key, vars) {
 function putFileWithProgress(file, path, onProgress) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open("PUT", "/api/v1/files/content?path=" + encodeURIComponent(path));
+    xhr.open("PUT", "/api/v1/files/content?path=" + encodeURIComponent(path)+(filesState.ownerID?"&owner_id="+encodeURIComponent(filesState.ownerID):""));
     xhr.setRequestHeader("Content-Type", "application/octet-stream");
     if (state.tokens?.access_token) {
       xhr.setRequestHeader("Authorization", "Bearer " + state.tokens.access_token);
@@ -4925,6 +4977,7 @@ function renderCalendarProperties(props) {
  for(const [kind,url] of Object.entries(props.links||{})){const row=document.createElement('div');row.className='calendar-link-row';const label=document.createElement('label');label.textContent=({caldav:'CalDAV URL',ics:'WebDAV ICS URL',xml:'WebDAV XML URL'})[kind]||kind;const input=document.createElement('input');input.className='field-input';input.readOnly=true;input.value=url;input.setAttribute('aria-label',label.textContent);const copy=document.createElement('button');copy.className='btn-secondary btn-sm';copy.type='button';copy.textContent=t('cal_copy');copy.onclick=async()=>{try{await navigator.clipboard.writeText(url);setMsg($('calendar-properties-msg'),mailImageText('Ссылка скопирована','Link copied'),'ok')}catch{input.select();setMsg($('calendar-properties-msg'),mailImageText('Скопируйте выделенную ссылку','Copy the selected link'))}};row.append(label,input,copy);section.append(row);}
  calendarPropertiesDialog.querySelector('.calendar-properties-body').append(section);
 }
+ mountCalendarPropertyTabs(props);
 }
 function renderCalendarPublic(props) {
  const active=props.public_enabled;

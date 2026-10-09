@@ -27,6 +27,9 @@ function mountCalendarEditor() {
   const actions=form.querySelector(':scope > .actions');actions?.before(details);
   if(actions){actions.classList.add('event-editor-footer');const save=actions.querySelector('[type=submit]');if(save){save.className='btn-spray';save.removeAttribute('data-i18n-title');save.removeAttribute('data-i18n');save.textContent=mailImageText('Сохранить событие','Save event')}const cancel=$('btn-cal-close');if(cancel){cancel.className='btn-secondary';cancel.textContent=mailImageText('Отмена','Cancel')}}
   if(actions){const content=document.createElement('div');content.className='event-editor-content';for(const child of [...form.children])if(child!==actions&&child.id!=='cal-msg')content.append(child);form.prepend(content)}
+  const compactRow=(field)=>{if(!field)return;const label=field.previousElementSibling;if(label?.tagName!=='LABEL')return;const row=document.createElement('div');row.className='event-compose-row';label.before(row);row.append(label,field)};
+  compactRow($('cal-summary'));compactRow($('cal-location'));compactRow(calendar);compactRow($('cal-attendee-input')?.closest('.cal-attendee-row'));compactRow($('cal-description'));
+  const planning=document.createElement('details');planning.className='event-advanced';const planningTitle=document.createElement('summary');planningTitle.textContent=mailImageText('Ресурсы и планирование','Resources and scheduling');planning.append(planningTitle);if(resourceLabel)planning.append(resourceLabel);if(resources)planning.append(resources);if(freebusy)planning.append(freebusy);details.before(planning);
   const title=dialog.querySelector('h3');if(title){title.id='event-editor-title';dialog.setAttribute('aria-labelledby',title.id)}
   return dialog;
 }

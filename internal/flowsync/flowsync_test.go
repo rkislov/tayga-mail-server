@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2024-2026 Кислов Роман Сергеевич.
+
 package flowsync_test
 
 import (
@@ -78,7 +81,7 @@ func TestFlowSyncFolderSyncUsesUUIDs(t *testing.T) {
 	if !strings.Contains(body, "<ServerId>"+mb.ID+"</ServerId>") {
 		t.Fatalf("expected mailbox UUID in ServerId, body=%s", body)
 	}
-	if w.Header().Get("X-FlowSync") != "Tayga-Proprietary" {
+	if w.Header().Get("X-FlowSync") != "Tayga-FlowSync" {
 		t.Fatal("missing proprietary header")
 	}
 

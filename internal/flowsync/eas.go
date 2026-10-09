@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2024-2026 Кислов Роман Сергеевич.
+
 package flowsync
 
 import (
@@ -12,7 +15,7 @@ import (
 	"github.com/tayga/tms/internal/storage"
 )
 
-// ActiveSync-compatible endpoint handled by proprietary FlowSync engine.
+// ActiveSync-compatible endpoint handled by original FlowSync engine.
 type easHandler struct {
 	store storage.Driver
 	ms    *mailstore.Store
@@ -22,7 +25,7 @@ func (h *easHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("MS-Server-ActiveSync", "18.0")
 	w.Header().Set("MS-ASProtocolVersions", "14.0,14.1,16.0,16.1")
 	w.Header().Set("MS-ASProtocolCommands", "FolderSync,FolderCreate,FolderDelete,FolderUpdate,Sync,MoveItems,Ping,Provision,GetItemEstimate,Options")
-	w.Header().Set("X-FlowSync", "Tayga-Proprietary")
+	w.Header().Set("X-FlowSync", "Tayga-FlowSync")
 	w.Header().Set("X-FlowSync-Engine", "FlowSync/1.0")
 
 	if r.Method == http.MethodOptions {
@@ -46,12 +49,29 @@ func (h *easHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		deviceID = "unknown"
 	}
 	deviceType := r.URL.Query().Get("DeviceType")
+	if len(deviceID) > 256 || len(deviceType) > 100 {
+		http.Error(w, "invalid device", 400)
+		return
+	}
 	dev, err := h.store.EnsureFlowSyncDevice(r.Context(), u.ID, deviceID, deviceType)
 	if err != nil {
 		http.Error(w, "device error", http.StatusInternalServerError)
 		return
 	}
 
+	version := r.Header.Get("MS-ASProtocolVersion")
+	if err = h.store.TouchFlowSyncDevice(r.Context(), dev.ID, r.RemoteAddr, r.UserAgent(), version, strings.EqualFold(cmd, "provision")); err != nil {
+		http.Error(w, "device update failed", 500)
+		return
+	}
+	if dev.Blocked && !(strings.EqualFold(cmd, "provision") && (dev.WipeStatus == "pending" || dev.WipeStatus == "sent")) {
+		http.Error(w, "device blocked", 403)
+		return
+	}
+	if (dev.WipeStatus == "pending" || dev.WipeStatus == "sent") && !strings.EqualFold(cmd, "provision") {
+		w.WriteHeader(449)
+		return
+	}
 	body, _ := io.ReadAll(io.LimitReader(r.Body, 8<<20))
 	useWBXML := requestWantsWBXML(r.Header.Get("Content-Type"), r.Header.Get("Accept"), body)
 
@@ -73,7 +93,7 @@ func (h *easHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "moveitems":
 		xmlOut, binOut, err = h.moveItems(r.Context(), u, body, useWBXML)
 	case "provision":
-		xmlOut, binOut, err = h.provision(r.Context(), u, dev, useWBXML)
+		xmlOut, binOut, err = h.provision(r.Context(), u, dev, useWBXML, body)
 	case "ping":
 		if useWBXML {
 			binOut = encodePingWBXML()
@@ -187,8 +207,29 @@ func (h *easHandler) folderSync(ctx context.Context, u *storage.User, dev *stora
 	return b.String(), nil, nil
 }
 
-func (h *easHandler) provision(ctx context.Context, u *storage.User, dev *storage.FlowSyncDevice, wbxml bool) (string, []byte, error) {
+func (h *easHandler) provision(ctx context.Context, u *storage.User, dev *storage.FlowSyncDevice, wbxml bool, body []byte) (string, []byte, error) {
 	_ = u
+	if dev.WipeStatus == "pending" || dev.WipeStatus == "sent" {
+		if dev.Version != "16.1" {
+			return "", nil, fmt.Errorf("account wipe requires protocol 16.1")
+		}
+		acknowledged := dev.WipeStatus == "sent" && accountWipeAcknowledged(body, wbxml)
+		state := "sent"
+		if acknowledged {
+			state = "acknowledged"
+		}
+		if err := h.store.SetFlowSyncDeviceControl(ctx, dev.ID, dev.Blocked || acknowledged, state); err != nil {
+			return "", nil, err
+		}
+		if wbxml {
+			return "", encodeAccountWipeWBXML(acknowledged), nil
+		}
+		command := "<AccountOnlyRemoteWipe/>"
+		if acknowledged {
+			command = ""
+		}
+		return `<Provision xmlns="Provision:"><Status>1</Status>` + command + `</Provision>`, nil, nil
+	}
 	policy := storage.NewID() // UUID policy key
 	if err := h.store.SetFlowSyncPolicyKey(ctx, dev.ID, policy); err != nil {
 		return "", nil, err

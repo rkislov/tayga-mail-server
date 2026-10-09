@@ -83,6 +83,7 @@ func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			used, _ := s.store.SumMailboxBytes(r.Context(), u.ID)
+			domainIDs, _ := s.store.ListDomainAdminDomains(r.Context(), u.ID)
 			out = append(out, map[string]any{
 				"id":                u.ID,
 				"email":             u.Email,
@@ -92,6 +93,7 @@ func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 				"enabled":           u.Enabled,
 				"auth_source":       u.AuthSource,
 				"roles":             storage.ParseRoles(u.Roles),
+				"domain_ids":        domainIDs,
 				"domain_id":         u.DomainID,
 				"tenant_id":         u.TenantID,
 				"service_class_id":  u.ServiceClassID,

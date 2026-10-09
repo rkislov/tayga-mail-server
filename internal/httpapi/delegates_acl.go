@@ -14,14 +14,41 @@ func (s *Server) handleDelegates(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
+	ownerID := au.ID
+	if requested := r.URL.Query().Get("owner_id"); requested != "" && requested != au.ID {
+		admin, ok := s.requireAdmin(w, r)
+		if !ok {
+			return
+		}
+		owner, err := s.store.GetUserByID(r.Context(), requested)
+		if err != nil {
+			writeJSON(w, 404, map[string]string{"error": "owner not found"})
+			return
+		}
+		if !s.adminCanManageDomain(r, admin, owner.DomainID) {
+			writeJSON(w, 403, map[string]string{"error": "forbidden"})
+			return
+		}
+		ownerID = requested
+	}
 	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/v1/mail/delegates"), "/")
 
 	switch {
 	case r.Method == http.MethodGet && path == "":
-		mine, _ := s.store.ListMailboxDelegates(r.Context(), au.ID)
+		mine, err := s.store.ListMailboxDelegates(r.Context(), ownerID)
+		if err != nil {
+			writeJSON(w, 500, map[string]string{"error": "cannot list delegates"})
+			return
+		}
+		serialized := serializeDelegates(mine)
+		for i, d := range mine {
+			if user, err := s.store.GetUserByID(r.Context(), d.DelegateID); err == nil {
+				serialized[i]["email"] = user.Email
+			}
+		}
 		forMe, _ := s.store.ListDelegationsFor(r.Context(), au.ID)
 		writeJSON(w, http.StatusOK, map[string]any{
-			"delegates":  serializeDelegates(mine),
+			"delegates":  serialized,
 			"acting_for": serializeDelegates(forMe),
 		})
 
@@ -32,7 +59,7 @@ func (s *Server) handleDelegates(w http.ResponseWriter, r *http.Request) {
 			CanSendAs       bool   `json:"can_send_as"`
 			CanSendOnBehalf bool   `json:"can_send_on_behalf"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&req); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
 			return
 		}
@@ -41,7 +68,7 @@ func (s *Server) handleDelegates(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "user not found"})
 			return
 		}
-		if delegate.ID == au.ID {
+		if delegate.ID == ownerID {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "cannot delegate to self"})
 			return
 		}
@@ -50,7 +77,7 @@ func (s *Server) handleDelegates(w http.ResponseWriter, r *http.Request) {
 			canRead = *req.CanRead
 		}
 		d := &storage.MailboxDelegate{
-			OwnerID: au.ID, DelegateID: delegate.ID,
+			OwnerID: ownerID, DelegateID: delegate.ID,
 			CanRead: canRead, CanSendAs: req.CanSendAs, CanSendOnBehalf: req.CanSendOnBehalf,
 		}
 		if err := s.store.UpsertMailboxDelegate(r.Context(), d); err != nil {
@@ -60,7 +87,7 @@ func (s *Server) handleDelegates(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "delegate_id": delegate.ID})
 
 	case r.Method == http.MethodDelete && path != "":
-		if err := s.store.DeleteMailboxDelegate(r.Context(), au.ID, path); err != nil {
+		if err := s.store.DeleteMailboxDelegate(r.Context(), ownerID, path); err != nil {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 			return
 		}
