@@ -474,10 +474,10 @@
           <div id="note-editor" class="hidden note-editor">
             <div class="reader-actions note-toolbar">
               <button type="button" class="btn-secondary btn-sm btn-ico mobile-only" data-pane-back data-i18n-title="back_list" title="К списку" aria-label="К списку"><span class="ico" data-ico="back" aria-hidden="true"></span></button>
-              <button type="button" class="btn-secondary btn-sm" id="btn-note-checklist" data-i18n="note_checklist">Список</button>
+              <div class="note-format-actions"><button type="button" class="btn-secondary btn-sm" data-note-command="insertUnorderedList" data-i18n-title="note_bullets" aria-label="Маркированный список">• ≡</button><button type="button" class="btn-secondary btn-sm" data-note-command="insertOrderedList" data-i18n-title="note_numbers" aria-label="Нумерованный список">1. ≡</button><button type="button" class="btn-secondary btn-sm" id="btn-note-checklist" data-i18n="note_checklist">Чек-лист</button></div>
               <label class="btn-secondary btn-sm btn-file" data-i18n-title="note_attach" title="Файл">
                 <span data-i18n="note_attach">Файл</span>
-                <input type="file" id="note-attach-input" />
+                <input type="file" id="note-attach-input" multiple />
               </label>
               <button type="button" class="btn-secondary btn-sm" id="btn-note-draw" data-i18n="note_draw">Рисунок</button>
               <button type="button" class="btn-secondary btn-sm btn-ico" id="btn-note-share" data-i18n-title="note_share" title="Доступ" aria-label="Доступ"><span class="ico" data-ico="contact" aria-hidden="true"></span></button>
@@ -486,18 +486,20 @@
             </div>
             <input class="field-input note-title-input" id="note-title" data-i18n-placeholder="note_title_ph" placeholder="Заголовок" />
             <div class="note-meta"><span id="note-shared-badge" class="meta hidden" data-i18n="note_shared">Совместная</span><span class="meta" id="note-save-status"></span></div>
-            <div id="note-body" class="note-body" contenteditable="true" role="textbox" aria-multiline="true"></div>
-            <ul id="note-attach-list" class="note-attach-list"></ul>
-            <div id="note-draw-wrap" class="note-draw-wrap hidden">
+            <div id="note-conflict-actions" class="actions hidden"><button type="button" class="btn-secondary btn-sm" id="note-conflict-copy" data-i18n="note_copy_local">Копировать мой текст</button><button type="button" class="btn-secondary btn-sm" id="note-conflict-reload" data-i18n="note_load_server">Загрузить серверную версию</button><button type="button" class="btn-secondary btn-sm" id="note-conflict-overwrite" data-i18n="note_keep_local">Сохранить мою версию</button></div><div id="note-body" class="note-body" contenteditable="true" role="textbox" aria-multiline="true" data-i18n-title="note_body_label" aria-label="Текст заметки"></div>
+            <details id="note-attachments" class="note-attachments hidden" open><summary><span data-i18n="note_attachments">Вложения</span> <span id="note-attachment-count"></span></summary><ul id="note-attach-list" class="note-attach-list"></ul></details><p id="note-attachment-status" class="meta" role="status"></p>
+
+          </div>
+        </div>
+      </div>
+
+<dialog id="note-draw-dialog" class="migration-dialog" aria-labelledby="note-draw-title"><h3 class="heading" id="note-draw-title" data-i18n="note_draw">Рисунок</h3>            <div id="note-draw-wrap" class="note-draw-wrap hidden">
               <canvas id="note-draw-canvas" width="640" height="360"></canvas>
               <div class="actions">
                 <button type="button" class="btn-spray btn-sm" id="btn-note-draw-save" data-i18n="save">Сохранить</button>
                 <button type="button" class="btn-secondary btn-sm" id="btn-note-draw-cancel" data-i18n="cancel">Отмена</button>
               </div>
-            </div>
-          </div>
-        </div>
-      </div>
+            </div></dialog>
 
       <div id="note-share-backdrop" class="compose-backdrop hidden">
         <div class="compose-panel" role="dialog" aria-modal="true">

@@ -1,5 +1,17 @@
 const I18N = {
   ru: {
+    note_copy_local: "Копировать мой текст", note_load_server: "Загрузить серверную версию", note_keep_local: "Сохранить мою версию", note_reload_confirm: "Заменить текст в редакторе версией с сервера? Локальные изменения будут потеряны.",
+    note_bullets: "Маркированный список",
+    note_numbers: "Нумерованный список",
+    note_attachments: "Вложения",
+    note_body_label: "Текст заметки",
+    note_unsaved: "Не сохранено",
+    note_uploading: "Загрузка вложений…",
+    note_upload_done: "Вложения добавлены",
+    note_upload_limit: "Файл превышает 32 МиБ",
+    note_attachment_delete: "Удалить вложение?",
+    note_save_error: "Не удалось сохранить. Текст остаётся в редакторе.",
+
     cal_shared: "Общий календарь",
     cal_properties: "Свойства календаря",
     cal_name: "Название",
@@ -86,7 +98,7 @@ const I18N = {
     note_new: "Новая заметка",
     note_select: "Выберите заметку",
     note_title_ph: "Заголовок",
-    note_checklist: "Список",
+    note_checklist: "Чек-лист",
     note_attach: "Файл",
     note_draw: "Рисунок",
     note_share: "Доступ",
@@ -99,7 +111,7 @@ const I18N = {
     note_shared_with_me: "Доступные мне",
     note_saved: "Сохранено",
     note_saving: "Сохранение…",
-    note_conflict: "Заметку изменили. Обновите и сохраните снова.",
+    note_conflict: "На сервере другая версия. Ваш текст остаётся в редакторе. Выберите, какую версию оставить.",
     note_folder_name: "Название папки",
     note_empty_list: "Нет заметок",
     note_revoke: "Отозвать",
@@ -486,6 +498,18 @@ const I18N = {
     save: "Сохранить",
   },
   en: {
+    note_copy_local: "Copy my text", note_load_server: "Load server version", note_keep_local: "Save my version", note_reload_confirm: "Replace the editor text with the server version? Local changes will be lost.",
+    note_bullets: "Bullet list",
+    note_numbers: "Numbered list",
+    note_attachments: "Attachments",
+    note_body_label: "Note text",
+    note_unsaved: "Unsaved changes",
+    note_uploading: "Uploading attachments…",
+    note_upload_done: "Attachments added",
+    note_upload_limit: "File exceeds 32 MiB",
+    note_attachment_delete: "Delete attachment?",
+    note_save_error: "Save failed. Your text remains in the editor.",
+
     cal_shared: "Shared calendar",
     cal_properties: "Calendar properties",
     cal_name: "Name",
@@ -585,7 +609,7 @@ const I18N = {
     note_shared_with_me: "Shared with me",
     note_saved: "Saved",
     note_saving: "Saving…",
-    note_conflict: "Someone else saved this note. Reload and try again.",
+    note_conflict: "The server has another version. Your text remains in the editor. Choose which version to keep.",
     note_folder_name: "Folder name",
     note_empty_list: "No notes",
     note_revoke: "Revoke",
@@ -1325,7 +1349,7 @@ const calState = {
 const contactState = { bookID: "", cardID: "", books: [], cards: [] };
 const notesState = {
   folderID: "", noteID: "", folders: [], notes: [], etag: "", rights: "write",
-  shareTarget: null, saveTimer: null, drawing: false,
+  shareTarget: null, saveTimer: null, drawing: false, dirty:false, revision:0, attachments:[], etags:{},
 };
 const filesState = { path: "", selected: null, entries: [] };
 const chatState = { peer: "", roster: [], messages: [], es: null, me: "" };
@@ -5376,6 +5400,7 @@ function notePreview(n) {
   return body.length > 72 ? body.slice(0, 72) + "…" : body;
 }
 
+function noteFolderLabel(f) {return f?.name==='notes'&&f.display_name==='Notes'?t("nav_notes"):(f?.display_name||f?.name||t("nav_notes"));}
 async function refreshNotes() {
   const folders = $("note-folder-list");
   if (!folders) return;
@@ -5392,7 +5417,7 @@ async function refreshNotes() {
     }
     const sharedActive = notesState.folderID === "__shared__";
     folders.innerHTML = notesState.folders.map((f) => {
-      const label = (f.shared ? "↗ " : "") + (f.display_name || f.name || f.id);
+      const label = (f.shared ? "↗ " : "") + (noteFolderLabel(f) || f.id);
       return `<li>
         <button type="button" class="folder-btn${f.id === notesState.folderID ? " is-active" : ""}" data-note-folder="${escapeHtml(f.id)}">
           <span>${escapeHtml(label)}</span>
@@ -5404,9 +5429,10 @@ async function refreshNotes() {
       </button>
     </li>`;
     folders.querySelectorAll("[data-note-folder]").forEach((btn) => {
-      btn.addEventListener("click", () => {
+      btn.addEventListener("click", async () => {
+        if (!await flushNoteSave()) return;
         notesState.folderID = btn.dataset.noteFolder;
-        notesState.noteID = "";
+        notesState.noteID = "";showNoteEditor(null);
         folders.querySelectorAll(".folder-btn").forEach((b) => b.classList.toggle("is-active", b.dataset.noteFolder === notesState.folderID));
         loadNoteList();
       });
@@ -5430,7 +5456,7 @@ async function loadNoteList() {
   if (title) {
     title.textContent = notesState.folderID === "__shared__"
       ? t("note_shared_with_me")
-      : (folder?.display_name || folder?.name || t("nav_notes"));
+      : noteFolderLabel(folder);
   }
   try {
     const q = notesState.folderID === "__shared__"
@@ -5440,7 +5466,7 @@ async function loadNoteList() {
     notesState.notes = data.notes || [];
     list.innerHTML = notesState.notes.map((n) => `
       <li>
-        <button type="button" class="msg-item${n.id === notesState.noteID ? " is-active" : ""}" data-note="${escapeHtml(n.id)}">
+        <button type="button" class="msg-item note-item${n.id === notesState.noteID ? " is-active" : ""}" data-note="${escapeHtml(n.id)}">
           <span class="msg-from">${escapeHtml(notePreview(n))}</span>
           <span class="msg-subject">${escapeHtml((n.body_text || "").trim().slice(0, 80))}</span>
           <span class="msg-date">${escapeHtml(n.shared || n.user_id !== folder?.owner_id ? "↗" : "")}</span>
@@ -5457,17 +5483,20 @@ async function loadNoteList() {
 }
 
 function showNoteEditor(n) {
+  noteOpenGeneration++;notesState.conflictETag="";$("note-conflict-actions")?.classList.add("hidden");
   const empty = $("note-empty");
   const ed = $("note-editor");
   if (!empty || !ed) return;
   if (!n) {
+    clearTimeout(notesState.saveTimer);notesState.dirty=false;
     empty.classList.remove("hidden");
     ed.classList.add("hidden");
     return;
   }
   empty.classList.add("hidden");
   ed.classList.remove("hidden");
-  notesState.etag = n.etag || "";
+  notesState.dirty=false;notesState.revision=0;
+  notesState.etag = n.etag || "";notesState.etags[n.id]=notesState.etag;
   notesState.rights = n.rights || "write";
   const ro = notesState.rights !== "write";
   $("note-title").value = n.title || "";
@@ -5475,12 +5504,14 @@ function showNoteEditor(n) {
   const body = $("note-body");
   body.innerHTML = n.body_html || "";
   body.contentEditable = ro ? "false" : "true";
+  body.querySelectorAll('input[type="checkbox"]').forEach(cb=>{cb.disabled=ro;cb.setAttribute("aria-label",t("note_checklist"));});
+  document.querySelector(".note-format-actions")?.classList.toggle("hidden",ro);
   const badge = $("note-shared-badge");
   const folder = notesState.folders.find((f) => f.id === notesState.folderID);
   const isShared = notesState.folderID === "__shared__" || !!folder?.shared
     || !!(n.user_id && state.me?.id && n.user_id !== state.me.id);
   if (badge) badge.classList.toggle("hidden", !isShared);
-  $("note-save-status").textContent = "";
+  $("note-save-status").textContent = "";setMsg($("note-attachment-status"),"");
   $("btn-note-save")?.classList.toggle("hidden", ro);
   $("btn-note-delete")?.classList.toggle("hidden", ro);
   $("btn-note-checklist")?.classList.toggle("hidden", ro);
@@ -5491,66 +5522,58 @@ function showNoteEditor(n) {
 }
 
 function renderNoteAttachments(atts) {
-  const ul = $("note-attach-list");
-  if (!ul) return;
-  ul.innerHTML = (atts || []).filter((a) => a.kind !== "drawing").map((a) => `
-    <li><a href="${escapeHtml(a.url || ("/api/v1/notes/attachments/" + a.id))}" target="_blank" rel="noopener">${escapeHtml(a.filename || a.id)}</a></li>
-  `).join("");
+  notesState.attachments=atts||[];
+  const visible=notesState.attachments.filter(a=>a.kind!=='drawing');
+  $('note-attachments').classList.toggle('hidden',!visible.length);$('note-attachment-count').textContent=String(visible.length);
+  $('note-attach-list').innerHTML=visible.map(a=>`<li><button type="button" class="note-attachment-download" data-note-download="${escapeHtml(a.id)}" title="${escapeHtml(a.filename)}"><span class="note-attachment-name">${escapeHtml(a.filename)}</span><span class="meta">${fmtBytes(a.size)} · ${t('download')}</span></button>${notesState.rights==='write'?`<button type="button" class="btn-secondary btn-sm btn-ico" data-note-attachment-delete="${escapeHtml(a.id)}" aria-label="${escapeHtml(t('delete')+': '+a.filename)}">×</button>`:''}</li>`).join('');
 }
-
+let noteOpenGeneration=0,noteSaveQueue=Promise.resolve();
 async function openNote(id) {
-  notesState.noteID = id;
-  document.querySelectorAll("#note-list [data-note]").forEach((el) => {
-    el.classList.toggle("is-active", el.dataset.note === id);
-  });
-  try {
-    const n = await api("/api/v1/notes/" + encodeURIComponent(id));
-    showNoteEditor(n);
-    setMobilePane("read");
-  } catch (err) {
-    showNoteEditor(null);
-  }
+ const generation=++noteOpenGeneration;
+ if(!await flushNoteSave()||generation!==noteOpenGeneration)return;
+ const activeID=notesState.noteID,etagAtStart=notesState.etags[id];
+ try {
+  const n=await api('/api/v1/notes/'+encodeURIComponent(id));if(generation!==noteOpenGeneration)return;
+  // Keep edits made while this read request was in flight.
+  if(activeID===id&&(notesState.dirty||notesState.etags[id]!==etagAtStart))return;
+  if(!await flushNoteSave()||generation!==noteOpenGeneration)return;
+  notesState.noteID=id;
+  document.querySelectorAll('#note-list [data-note]').forEach(el=>el.classList.toggle('is-active',el.dataset.note===id));
+  showNoteEditor(n);setMobilePane('read');
+ }catch(err){if(generation===noteOpenGeneration)setMsg($('note-save-status'),err.message,'err');}
 }
 
 function scheduleNoteSave() {
-  if (notesState.rights !== "write" || !notesState.noteID) return;
-  clearTimeout(notesState.saveTimer);
-  notesState.saveTimer = setTimeout(() => saveNote(false), 700);
+ if(notesState.rights!=='write'||!notesState.noteID)return;
+ notesState.dirty=true;notesState.revision++;$('note-save-status').textContent=t('note_unsaved');clearTimeout(notesState.saveTimer);
+ notesState.saveTimer=setTimeout(()=>saveNote(false),700);
+}
+async function flushNoteSave() {clearTimeout(notesState.saveTimer);await noteSaveQueue;if(!notesState.noteID){notesState.dirty=false;return true;}while(notesState.dirty){if(!await saveNote(false))return false;}return true;}
+function saveNote(manual) {
+ if(!notesState.noteID||notesState.rights!=='write')return Promise.resolve(true);
+ clearTimeout(notesState.saveTimer);
+ const snapshot={id:notesState.noteID,revision:notesState.revision,title:$('note-title').value,body:$('note-body').innerHTML};
+ const operation=async()=>{
+  if(notesState.noteID===snapshot.id)$('note-save-status').textContent=t('note_saving');
+  try {
+   const etag=notesState.etags[snapshot.id]||'';
+   const n=await api('/api/v1/notes/'+encodeURIComponent(snapshot.id),{method:'PATCH',headers:{'If-Match':etag},body:JSON.stringify({title:snapshot.title,body_html:snapshot.body,etag})});
+   notesState.etags[snapshot.id]=n.etag;
+   if(notesState.noteID===snapshot.id){notesState.etag=n.etag;if(notesState.revision===snapshot.revision){notesState.dirty=false;$('note-save-status').textContent=t('note_saved');$('note-conflict-actions').classList.add('hidden');notesState.conflictETag='';}}
+   const idx=notesState.notes.findIndex(x=>x.id===n.id);if(idx>=0)notesState.notes[idx]=Object.assign(notesState.notes[idx],n);
+   const btn=document.querySelector(`#note-list [data-note="${CSS.escape(n.id)}"]`);if(btn){btn.querySelector('.msg-from').textContent=notePreview(n);btn.querySelector('.msg-subject').textContent=(n.body_text||'').trim().slice(0,80);}
+   return true;
+  }catch(err){if(notesState.noteID===snapshot.id){notesState.dirty=true;if(err.status===409){notesState.conflictETag=err.data?.etag||err.data?.note?.etag||'';$('note-conflict-actions').classList.remove('hidden');$('note-conflict-overwrite').disabled=!notesState.conflictETag;}$('note-save-status').textContent=err.status===409?t('note_conflict'):t('note_save_error')+' '+err.message;}return false;}
+ };
+ const result=noteSaveQueue.then(operation);noteSaveQueue=result.catch(()=>false);return result;
 }
 
-async function saveNote(manual) {
-  if (!notesState.noteID || notesState.rights !== "write") return;
-  const status = $("note-save-status");
-  if (status) status.textContent = t("note_saving");
-  try {
-    const bodyHTML = $("note-body")?.innerHTML || "";
-    const title = $("note-title")?.value || "";
-    const n = await api("/api/v1/notes/" + encodeURIComponent(notesState.noteID), {
-      method: "PATCH",
-      headers: { "If-Match": notesState.etag || "" },
-      body: JSON.stringify({ title, body_html: bodyHTML, etag: notesState.etag }),
-    });
-    notesState.etag = n.etag || "";
-    if (status) status.textContent = t("note_saved");
-    const idx = notesState.notes.findIndex((x) => x.id === n.id);
-    if (idx >= 0) notesState.notes[idx] = Object.assign(notesState.notes[idx], n);
-    else if (!manual) { /* keep list */ }
-    const btn = document.querySelector(`#note-list [data-note="${CSS.escape(n.id)}"]`);
-    if (btn) {
-      const from = btn.querySelector(".msg-from");
-      const sub = btn.querySelector(".msg-subject");
-      if (from) from.textContent = notePreview(n);
-      if (sub) sub.textContent = (n.body_text || "").trim().slice(0, 80);
-    }
-  } catch (err) {
-    if (err.status === 409) {
-      if (status) status.textContent = t("note_conflict");
-      if (err.data?.note) showNoteEditor(err.data.note);
-    } else if (status) status.textContent = err.message;
-  }
-}
+$('note-conflict-copy')?.addEventListener('click',async()=>{const text=$('note-title').value+'\n\n'+$('note-body').innerText;try{await navigator.clipboard.writeText(text);}catch{const selection=getSelection(),range=document.createRange();range.selectNodeContents($('note-body'));selection.removeAllRanges();selection.addRange(range);}});
+$('note-conflict-reload')?.addEventListener('click',async()=>{if(!await askConfirm(t('note_reload_confirm'),{danger:true}))return;const id=notesState.noteID;clearTimeout(notesState.saveTimer);await noteSaveQueue;try{const n=await api('/api/v1/notes/'+encodeURIComponent(id));if(notesState.noteID===id)showNoteEditor(n);}catch(err){setMsg($('note-save-status'),err.message,'err');}});
+$('note-conflict-overwrite')?.addEventListener('click',()=>{if(!notesState.conflictETag)return;notesState.etags[notesState.noteID]=notesState.conflictETag;saveNote(true);});
 
 $("btn-note-new")?.addEventListener("click", async () => {
+  if(!await flushNoteSave())return;
   let folderID = notesState.folderID;
   if (!folderID || folderID === "__shared__") {
     folderID = notesState.folders.find((f) => !f.shared)?.id || notesState.folders[0]?.id;
@@ -5562,7 +5585,7 @@ $("btn-note-new")?.addEventListener("click", async () => {
       body: JSON.stringify({ folder_id: folderID, title: "", body_html: "<p></p>" }),
     });
     notesState.folderID = folderID;
-    notesState.noteID = n.id;
+    notesState.noteID = n.id;showNoteEditor(n);
     await refreshNotes();
     await openNote(n.id);
   } catch (err) {
@@ -5571,6 +5594,7 @@ $("btn-note-new")?.addEventListener("click", async () => {
 });
 
 $("btn-note-folder-add")?.addEventListener("click", async () => {
+  if(!await flushNoteSave())return;
   const name = await askPrompt(t("note_folder_name"), { title: t("note_folder_new") });
   if (!name || !String(name).trim()) return;
   try {
@@ -5589,27 +5613,48 @@ $("btn-notes-refresh")?.addEventListener("click", () => refreshNotes());
 $("btn-note-save")?.addEventListener("click", () => saveNote(true));
 $("note-title")?.addEventListener("input", scheduleNoteSave);
 $("note-body")?.addEventListener("input", scheduleNoteSave);
+$("note-body")?.addEventListener("paste",event=>{if(notesState.rights!=="write")return;event.preventDefault();if(event.clipboardData.files.length){uploadNoteAttachments(Array.from(event.clipboardData.files));return;}document.execCommand("insertText",false,event.clipboardData.getData("text/plain"));scheduleNoteSave();});
 
-$("btn-note-checklist")?.addEventListener("click", () => {
-  const body = $("note-body");
-  if (!body || notesState.rights !== "write") return;
-  body.focus();
-  const ul = document.createElement("ul");
-  ul.dataset.type = "checklist";
-  const li = document.createElement("li");
-  const cb = document.createElement("input");
-  cb.type = "checkbox";
-  li.appendChild(cb);
-  li.appendChild(document.createTextNode(" "));
-  ul.appendChild(li);
-  body.appendChild(ul);
-  scheduleNoteSave();
+function makeNoteTask(content='') {
+ const li=document.createElement('li');li.dataset.type='taskItem';li.dataset.checked='false';
+ const cb=document.createElement('input');cb.type='checkbox';cb.contentEditable='false';cb.setAttribute('aria-label',t('note_checklist'));
+ const text=document.createElement('div');text.dataset.taskText='true';text.innerHTML=content||'<br>';li.append(cb,text);return li;
+}
+function focusNoteTask(li) {const text=li.querySelector('[data-task-text]'),range=document.createRange();range.selectNodeContents(text);range.collapse(true);const selection=getSelection();selection.removeAllRanges();selection.addRange(range);$('note-body').focus();}
+document.querySelector('.note-format-actions')?.addEventListener('mousedown',event=>{if(event.target.closest('button'))event.preventDefault();});
+document.querySelectorAll('[data-note-command]').forEach(button=>button.addEventListener('click',()=>{
+ if(notesState.rights!=='write')return;
+ const body=$('note-body'),selection=getSelection(),anchor=selection?.anchorNode;
+ const task=anchor&&body.contains(anchor)?(anchor.nodeType===1?anchor:anchor.parentElement).closest('li[data-type="taskItem"]'):null;
+ if(task){const old=task.parentElement,list=document.createElement(button.dataset.noteCommand==='insertOrderedList'?'ol':'ul');for(const li of [...old.children]){const text=li.querySelector('[data-task-text]');li.replaceChildren(...text.childNodes);delete li.dataset.type;delete li.dataset.checked;list.append(li);}old.replaceWith(list);const range=document.createRange();range.selectNodeContents(task);range.collapse(false);selection.removeAllRanges();selection.addRange(range);body.focus();}
+ else {body.focus();document.execCommand(button.dataset.noteCommand,false);}
+ scheduleNoteSave();
+}));
+$('btn-note-checklist')?.addEventListener('click',()=>{
+ const body=$('note-body');if(notesState.rights!=='write')return;
+ const selection=getSelection();const anchor=selection?.anchorNode;const inside=anchor&&body.contains(anchor);
+ const current=inside?(anchor.nodeType===1?anchor:anchor.parentElement).closest('li[data-type="taskItem"]'):null;
+ const li=makeNoteTask();
+ if(current)current.after(li);
+ else {const ul=document.createElement('ul');ul.dataset.type='checklist';ul.append(li);let block=inside?(anchor.nodeType===1?anchor:anchor.parentElement):null;while(block&&block.parentElement!==body)block=block.parentElement;if(block&&block!==body)block.after(ul);else body.append(ul);}
+ focusNoteTask(li);scheduleNoteSave();
+});
+$('note-body')?.addEventListener('change',event=>{if(event.target.type!=='checkbox'||notesState.rights!=='write')return;const cb=event.target;cb.toggleAttribute('checked',cb.checked);cb.closest('li').dataset.checked=String(cb.checked);scheduleNoteSave();});
+$('note-body')?.addEventListener('keydown',event=>{
+ if(event.key!=='Enter'||event.shiftKey||event.isComposing||notesState.rights!=='write')return;
+ const selection=getSelection(),anchor=selection?.anchorNode;if(!anchor||!$('note-body').contains(anchor))return;
+ const li=(anchor.nodeType===1?anchor:anchor.parentElement).closest('li[data-type="taskItem"]');if(!li)return;event.preventDefault();
+ const text=li.querySelector('[data-task-text]');
+ if(!text.textContent.trim()) {const ul=li.parentElement,p=document.createElement('p');p.innerHTML='<br>';ul.after(p);li.remove();if(!ul.children.length)ul.remove();const range=document.createRange();range.selectNodeContents(p);range.collapse(true);selection.removeAllRanges();selection.addRange(range);}
+ else {const next=makeNoteTask();const range=selection.getRangeAt(0).cloneRange();range.deleteContents();range.setEnd(text,text.childNodes.length);const tail=range.extractContents();const nextText=next.querySelector('[data-task-text]');nextText.replaceChildren(tail);if(!nextText.childNodes.length)nextText.innerHTML='<br>';li.after(next);focusNoteTask(next);}
+ scheduleNoteSave();
 });
 
 $("btn-note-delete")?.addEventListener("click", async () => {
   if (!notesState.noteID) return;
   if (!(await askConfirm(t("delete_confirm"), { danger: true }))) return;
   try {
+    clearTimeout(notesState.saveTimer);await noteSaveQueue;
     await api("/api/v1/notes/" + encodeURIComponent(notesState.noteID), { method: "DELETE" });
     notesState.noteID = "";
     await loadNoteList();
@@ -5618,23 +5663,31 @@ $("btn-note-delete")?.addEventListener("click", async () => {
   }
 });
 
-$("note-attach-input")?.addEventListener("change", async (e) => {
-  const file = e.target.files?.[0];
-  e.target.value = "";
-  if (!file || !notesState.noteID) return;
-  const fd = new FormData();
-  fd.append("file", file);
-  const headers = {};
-  if (state.tokens?.access_token) headers.Authorization = "Bearer " + state.tokens.access_token;
-  const res = await fetch("/api/v1/notes/" + encodeURIComponent(notesState.noteID) + "/attachments", {
-    method: "POST", headers, body: fd,
-  });
-  if (!res.ok) {
-    await askConfirm((await res.json().catch(() => ({}))).error || res.statusText, { title: t("note_attach") });
-    return;
-  }
-  await openNote(notesState.noteID);
+let noteUploading=false;
+async function uploadNoteAttachments(files) {
+ const id=notesState.noteID;if(!id||notesState.rights!=='write'||noteUploading)return;
+ noteUploading=true;$('note-attach-input').disabled=true;setMsg($('note-attachment-status'),t('note_uploading'));
+ try {
+  for(const file of files){if(file.size>32*1024*1024)throw new Error(file.name+': '+t('note_upload_limit'));const fd=new FormData();fd.append('file',file);const headers={};if(state.tokens?.access_token)headers.Authorization='Bearer '+state.tokens.access_token;const res=await fetch('/api/v1/notes/'+encodeURIComponent(id)+'/attachments',{method:'POST',headers,body:fd});if(!res.ok)throw new Error((await res.json().catch(()=>({}))).error||res.statusText);if(notesState.noteID===id){const data=await api('/api/v1/notes/'+encodeURIComponent(id)+'/attachments');if(notesState.noteID===id)renderNoteAttachments(data.attachments);}}
+  if(notesState.noteID===id)setMsg($('note-attachment-status'),t('note_upload_done'),'ok');
+ }catch(err){if(notesState.noteID===id)setMsg($('note-attachment-status'),err.message,'err');}
+ finally {noteUploading=false;$('note-attach-input').disabled=false;}
+}
+$('note-attach-input')?.addEventListener('change',event=>{const files=Array.from(event.target.files||[]);event.target.value='';if(files.length)uploadNoteAttachments(files);});
+$('note-attach-list')?.addEventListener('click',async event=>{
+ const button=event.target.closest('[data-note-download],[data-note-attachment-delete]');if(!button)return;
+ const id=notesState.noteID,att=notesState.attachments.find(a=>a.id===(button.dataset.noteDownload||button.dataset.noteAttachmentDelete));if(!att)return;
+ if(button.dataset.noteAttachmentDelete&&!await askConfirm(t('note_attachment_delete')+'\n'+att.filename,{danger:true}))return;
+ button.disabled=true;
+ try {
+  const path='/api/v1/notes/attachments/'+encodeURIComponent(att.id);
+  if(button.dataset.noteDownload){const headers={};if(state.tokens?.access_token)headers.Authorization='Bearer '+state.tokens.access_token;const res=await fetch(path,{headers});if(!res.ok)throw new Error(t('files_download_error'));const blob=await res.blob(),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=att.filename;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
+  else {await api(path,{method:'DELETE'});if(notesState.noteID===id){const data=await api('/api/v1/notes/'+encodeURIComponent(id)+'/attachments');if(notesState.noteID===id)renderNoteAttachments(data.attachments);}}
+ }catch(err){if(notesState.noteID===id)setMsg($('note-attachment-status'),err.message,'err');}finally{button.disabled=false;}
 });
+$('note-body')?.addEventListener('dragover',event=>{if(event.dataTransfer.types.includes('Files')&&notesState.rights==='write'){event.preventDefault();$('note-body').classList.add('is-drop-target');}});
+$('note-body')?.addEventListener('dragleave',()=>$('note-body').classList.remove('is-drop-target'));
+$('note-body')?.addEventListener('drop',event=>{if(event.dataTransfer.files.length){event.preventDefault();$('note-body').classList.remove('is-drop-target');uploadNoteAttachments(Array.from(event.dataTransfer.files));}});
 
 let noteDrawCtx = null;
 let noteDrawing = false;
@@ -5642,8 +5695,9 @@ $("btn-note-draw")?.addEventListener("click", () => {
   const wrap = $("note-draw-wrap");
   const canvas = $("note-draw-canvas");
   if (!wrap || !canvas) return;
-  wrap.classList.remove("hidden");
+  wrap.classList.remove("hidden");$("note-draw-dialog").showModal();
   noteDrawCtx = canvas.getContext("2d");
+  noteDrawCtx.clearRect(0,0,canvas.width,canvas.height);
   noteDrawCtx.strokeStyle = "#1a1a1a";
   noteDrawCtx.lineWidth = 2;
   noteDrawCtx.lineCap = "round";
@@ -5675,18 +5729,20 @@ function noteDrawPos(e, canvas) {
   $("note-draw-canvas")?.addEventListener(ev, () => { noteDrawing = false; });
 });
 $("btn-note-draw-cancel")?.addEventListener("click", () => {
+  $("note-draw-dialog").close();
   $("note-draw-wrap")?.classList.add("hidden");
 });
 $("btn-note-draw-save")?.addEventListener("click", async () => {
   if (!notesState.noteID) return;
   const canvas = $("note-draw-canvas");
   try {
-    await api("/api/v1/notes/" + encodeURIComponent(notesState.noteID) + "/drawing", {
+    if(!await flushNoteSave())return;
+    const result=await api("/api/v1/notes/" + encodeURIComponent(notesState.noteID) + "/drawing", {
       method: "POST",
       body: JSON.stringify({ strokes: "[]", preview_png: canvas.toDataURL("image/png") }),
     });
-    $("note-draw-wrap")?.classList.add("hidden");
-    await openNote(notesState.noteID);
+    $("note-draw-wrap")?.classList.add("hidden");$("note-draw-dialog").close();
+    if(result.note)showNoteEditor(result.note);
   } catch (err) {
     await askConfirm(err.message, { title: t("note_draw") });
   }

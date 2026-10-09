@@ -66,3 +66,10 @@ node scripts/capture-screenshots.mjs
 - [Свойства календаря на телефоне](ui-calendar-properties-tayga-light-mobile.png)
 - [Контекстное меню файлов и ZIP папки](ui-files-context-tayga-light.png)
 - [Настройки XMPP по разделам](ui-xmpp-tayga-light.png)
+
+## Редактор заметок
+
+- [Текст, списки и компактные вложения](ui-notes-editor-tayga-light.png)
+- [Длинная заметка и вложения на телефоне](ui-notes-editor-tayga-light-mobile.png)
+
+Эти снимки обновляет `node scripts/check-notes-editor.mjs` на временном тестовом сервере.
