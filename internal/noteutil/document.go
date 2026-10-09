@@ -73,92 +73,6 @@ func DocumentFromText(text string) Node {
 	return doc
 }
 
-// DocumentFromHTML builds a coarse document from sticky-note HTML.
-func DocumentFromHTML(h string) Node {
-	h = strings.TrimSpace(h)
-	if h == "" {
-		return EmptyDoc()
-	}
-	// Strip scripts/styles
-	reScript := regexp.MustCompile(`(?is)<script[^>]*>.*?</script>`)
-	reStyle := regexp.MustCompile(`(?is)<style[^>]*>.*?</style>`)
-	h = reScript.ReplaceAllString(h, "")
-	h = reStyle.ReplaceAllString(h, "")
-
-	doc := Node{Type: "doc"}
-	// Split on block boundaries
-	reBlock := regexp.MustCompile(`(?i)</?(p|div|br|li|ul|ol|h[1-6])[^>]*>`)
-	chunks := reBlock.Split(h, -1)
-	inList := strings.Contains(strings.ToLower(h), "<ul") || strings.Contains(strings.ToLower(h), "<ol")
-	inTask := strings.Contains(strings.ToLower(h), "checkbox") || strings.Contains(h, "☐") || strings.Contains(h, "☑")
-
-	if inTask {
-		taskList := Node{Type: "taskList"}
-		for _, c := range chunks {
-			t := strings.TrimSpace(stripTags(c))
-			if t == "" {
-				continue
-			}
-			checked := strings.HasPrefix(t, "[x]") || strings.HasPrefix(t, "[X]") || strings.HasPrefix(t, "☑")
-			t = strings.TrimPrefix(t, "[x]")
-			t = strings.TrimPrefix(t, "[X]")
-			t = strings.TrimPrefix(t, "[ ]")
-			t = strings.TrimPrefix(t, "☑")
-			t = strings.TrimPrefix(t, "☐")
-			t = strings.TrimSpace(t)
-			item := Node{
-				Type:  "taskItem",
-				Attrs: map[string]any{"checked": checked},
-				Content: []Node{{
-					Type: "paragraph",
-					Content: []Node{{Type: "text", Text: t}},
-				}},
-			}
-			taskList.Content = append(taskList.Content, item)
-		}
-		if len(taskList.Content) > 0 {
-			doc.Content = append(doc.Content, taskList)
-			return doc
-		}
-	}
-
-	if inList {
-		list := Node{Type: "bulletList"}
-		for _, c := range chunks {
-			t := strings.TrimSpace(stripTags(c))
-			if t == "" {
-				continue
-			}
-			list.Content = append(list.Content, Node{
-				Type: "listItem",
-				Content: []Node{{
-					Type: "paragraph",
-					Content: []Node{{Type: "text", Text: t}},
-				}},
-			})
-		}
-		if len(list.Content) > 0 {
-			doc.Content = append(doc.Content, list)
-			return doc
-		}
-	}
-
-	for _, c := range chunks {
-		t := strings.TrimSpace(stripTags(c))
-		if t == "" {
-			continue
-		}
-		doc.Content = append(doc.Content, Node{
-			Type: "paragraph",
-			Content: []Node{{Type: "text", Text: t}},
-		})
-	}
-	if len(doc.Content) == 0 {
-		return DocumentFromText(stripTags(h))
-	}
-	return doc
-}
-
 func stripTags(s string) string {
 	re := regexp.MustCompile(`(?s)<[^>]*>`)
 	s = re.ReplaceAllString(s, "")
@@ -222,7 +136,7 @@ func renderHTML(b *strings.Builder, n Node) {
 		}
 		b.WriteString("</li>")
 	case "taskList":
-		b.WriteString("<ul>")
+		b.WriteString(`<ul data-type="checklist">`)
 		for _, c := range n.Content {
 			renderHTML(b, c)
 		}
@@ -234,22 +148,27 @@ func renderHTML(b *strings.Builder, n Node) {
 				checked = v
 			}
 		}
-		mark := "☐ "
+		state := "false"
+		attr := ""
 		if checked {
-			mark = "☑ "
+			state = "true"
+			attr = " checked"
 		}
-		b.WriteString("<li>")
-		b.WriteString(html.EscapeString(mark))
+		b.WriteString(`<li data-type="taskItem" data-checked="` + state + `"><input type="checkbox" contenteditable="false"` + attr + `><div data-task-text="true">`)
 		for _, c := range n.Content {
-			if c.Type == "paragraph" {
-				renderInline(b, c.Content)
-			} else {
-				renderHTML(b, c)
-			}
+			renderHTML(b, c)
 		}
-		b.WriteString("</li>")
+		b.WriteString("</div></li>")
+
 	case "drawing":
-		b.WriteString("<p>[drawing]</p>")
+		id, preview := "", ""
+		if n.Attrs != nil {
+			id, _ = n.Attrs["attachment_id"].(string)
+			preview, _ = n.Attrs["preview_id"].(string)
+		}
+		b.WriteString(`<div data-type="drawing" data-attachment-id="` + html.EscapeString(id) + `" data-preview-id="` + html.EscapeString(preview) + `" contenteditable="false">✎</div>`)
+	case "hardBreak":
+		b.WriteString("<br>")
 	case "text":
 		renderInline(b, []Node{n})
 	default:
@@ -272,6 +191,8 @@ func renderInline(b *strings.Builder, nodes []Node) {
 				t = "<strong>" + t + "</strong>"
 			case "italic", "em":
 				t = "<em>" + t + "</em>"
+			case "underline":
+				t = "<u>" + t + "</u>"
 			case "link":
 				href := ""
 				if m.Attrs != nil {
@@ -279,7 +200,7 @@ func renderInline(b *strings.Builder, nodes []Node) {
 						href = v
 					}
 				}
-				if href != "" {
+				if href != "" && noteSafeURL(href) {
 					t = `<a href="` + html.EscapeString(href) + `">` + t + `</a>`
 				}
 			}
