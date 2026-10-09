@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2024-2026 Кислов Роман Сергеевич.
+
 package flowsync
 
 import (
@@ -11,7 +14,7 @@ import (
 	"github.com/tayga/tms/internal/storage"
 )
 
-// Mount registers proprietary FlowSync endpoints (ActiveSync- and EWS-compatible).
+// Mount registers original FlowSync endpoints (ActiveSync- and EWS-compatible).
 func Mount(mux *http.ServeMux, cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth.Layer, ms *mailstore.Store) {
 	if cfg == nil || !cfg.FlowSync.Enabled {
 		log.Info("flowsync disabled")
@@ -45,6 +48,6 @@ func Mount(mux *http.ServeMux, cfg *config.Config, log *slog.Logger, store stora
 		"ews", "/EWS/Exchange.asmx",
 		"autodiscover", "/Autodiscover/Autodiscover.xml",
 		"mozilla_autoconfig", "/.well-known/autoconfig/mail/config-v1.1.xml",
-		"proprietary", true,
+		"license", "Apache-2.0",
 	)
 }

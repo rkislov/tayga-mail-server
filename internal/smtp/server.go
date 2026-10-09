@@ -438,9 +438,10 @@ type backend struct {
 
 func (b *backend) NewSession(c *gosmtp.Conn) (gosmtp.Session, error) {
 	return &session{
-		backend: b,
-		remote:  c.Conn().RemoteAddr().String(),
-		helo:    c.Hostname(),
+		backend:    b,
+		connection: c.Conn(),
+		remote:     c.Conn().RemoteAddr().String(),
+		helo:       c.Hostname(),
 	}, nil
 }
 
@@ -461,14 +462,16 @@ func (b *backend) writeMailLog(e *storage.MailLogEntry) {
 }
 
 type session struct {
-	backend  *backend
-	remote   string
-	helo     string
-	user     *storage.User
-	from     string
-	toLocal  []string
-	toRemote []string
-	opts     *gosmtp.MailOptions
+	connection net.Conn
+	sessionID  string
+	backend    *backend
+	remote     string
+	helo       string
+	user       *storage.User
+	from       string
+	toLocal    []string
+	toRemote   []string
+	opts       *gosmtp.MailOptions
 }
 
 func (s *session) AuthMechanisms() []string {
@@ -486,6 +489,7 @@ func (s *session) Auth(mech string) (sasl.Server, error) {
 				return authFailed
 			}
 			s.user = u
+			s.sessionID = s.backend.authn.TrackSession(u, "SMTP", s.remote, s.helo, s.remote, true, s.connection.Close)
 			return nil
 		}), nil
 	case sasl.Login:
@@ -496,6 +500,7 @@ func (s *session) Auth(mech string) (sasl.Server, error) {
 				return authFailed
 			}
 			s.user = u
+			s.sessionID = s.backend.authn.TrackSession(u, "SMTP", s.remote, s.helo, s.remote, true, s.connection.Close)
 			return nil
 		}), nil
 	case sasl.OAuthBearer:
@@ -506,6 +511,7 @@ func (s *session) Auth(mech string) (sasl.Server, error) {
 				return &sasl.OAuthBearerError{Status: "invalid_token", Schemes: "bearer"}
 			}
 			s.user = u
+			s.sessionID = s.backend.authn.TrackSession(u, "SMTP", s.remote, s.helo, s.remote, true, s.connection.Close)
 			return nil
 		}), nil
 	case auth.XOAuth2:
@@ -516,6 +522,7 @@ func (s *session) Auth(mech string) (sasl.Server, error) {
 				return authFailed
 			}
 			s.user = u
+			s.sessionID = s.backend.authn.TrackSession(u, "SMTP", s.remote, s.helo, s.remote, true, s.connection.Close)
 			return nil
 		}), nil
 	default:
@@ -878,7 +885,7 @@ func (s *session) Reset() {
 	s.opts = nil
 }
 
-func (s *session) Logout() error { return nil }
+func (s *session) Logout() error { s.backend.authn.ForgetSession(s.sessionID); return nil }
 
 func normalizeAddr(addr string) string {
 	addr = strings.TrimSpace(addr)

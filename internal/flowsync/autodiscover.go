@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2024-2026 Кислов Роман Сергеевич.
+
 package flowsync
 
 import (
@@ -172,7 +175,7 @@ func (a *autodiscover) handlePOX(w http.ResponseWriter, r *http.Request) {
 	b.WriteString(`</Response></Autodiscover>`)
 
 	w.Header().Set("Content-Type", "text/xml; charset=utf-8")
-	w.Header().Set("X-FlowSync", "Tayga-Proprietary")
+	w.Header().Set("X-FlowSync", "Tayga-FlowSync")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(b.String()))
 }
@@ -233,7 +236,7 @@ func (a *autodiscover) handleJSON(w http.ResponseWriter, r *http.Request) {
 		"UserDisplayName": displayName(email),
 		"UserEmail":       email,
 		"ServerVersion":   "FlowSync/1.0",
-		"X-FlowSync":      "proprietary",
+		"X-FlowSync":      "Tayga-FlowSync",
 		"Settings": map[string]any{
 			"IMAP": map[string]any{
 				"Server": ep.IMAPHost,
@@ -253,7 +256,7 @@ func (a *autodiscover) handleJSON(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("X-FlowSync", "Tayga-Proprietary")
+	w.Header().Set("X-FlowSync", "Tayga-FlowSync")
 	_ = json.NewEncoder(w).Encode(out)
 }
 
@@ -325,7 +328,7 @@ func (a *autodiscover) handleMozilla(w http.ResponseWriter, r *http.Request) {
 		xmlEscape(ep.SMTPHost), smtpPort, smtpSock, xmlEscape(login),
 	)
 	w.Header().Set("Content-Type", "text/xml; charset=utf-8")
-	w.Header().Set("X-FlowSync", "Tayga-Proprietary")
+	w.Header().Set("X-FlowSync", "Tayga-FlowSync")
 	_, _ = w.Write([]byte(xmlBody))
 }
 

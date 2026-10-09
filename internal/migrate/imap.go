@@ -2,6 +2,7 @@ package migrate
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -101,7 +102,7 @@ func (s *Service) runIMAP(ctx context.Context, job *Job) error {
 		// Archive sizes in the index are compressed on disk; deduplication uses
 		// the uncompressed RFC822 size, as supplied by the source IMAP server.
 		archiveSizes := map[string]map[int64]bool{}
-		if strings.EqualFold(localName, "Archive") {
+		if true {
 			existing, e := s.store.ListMessages(ctx, mb.ID)
 			if e != nil {
 				return fmt.Errorf("archive index: %w", e)
@@ -116,7 +117,7 @@ func (s *Service) runIMAP(ctx context.Context, job *Job) error {
 					messageID = mailsearch.ParseDocument(raw).MessageID
 				}
 				if messageID == "" {
-					continue
+					messageID = fmt.Sprintf("<tayga-import-%x@local>", sha256.Sum256(raw))
 				}
 				if archiveSizes[messageID] == nil {
 					archiveSizes[messageID] = map[int64]bool{}
@@ -161,6 +162,9 @@ func (s *Service) runIMAP(ctx context.Context, job *Job) error {
 			}
 			tmp := &storage.Message{}
 			mailsearch.ApplyHeaders(tmp, raw)
+			if tmp.MessageID == "" {
+				tmp.MessageID = fmt.Sprintf("<tayga-import-%x@local>", sha256.Sum256(raw))
+			}
 			exists, err := s.store.MessageExistsByMessageID(ctx, mb.ID, tmp.MessageID, int64(len(raw)))
 			if err != nil {
 				return fmt.Errorf("duplicate lookup: %w", err)

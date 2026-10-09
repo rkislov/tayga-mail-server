@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/emersion/go-imap"
@@ -80,6 +81,7 @@ func (s *Server) Start(ctx context.Context) error {
 			srv.TLSConfig = tlsCfg
 		}
 		s.enableOAuth(srv, be)
+		srv.Enable(&sessionConnections{backend: be})
 
 		var ln net.Listener
 		var err error
@@ -139,12 +141,13 @@ func (s *Server) tlsConfig() *tls.Config {
 
 // Backend implements backend.Backend and backend.BackendUpdater.
 type Backend struct {
-	log     *slog.Logger
-	store   storage.Driver
-	authn   *auth.Layer
-	ms      *mailstore.Store
-	hub     *Hub
-	writers ha.WriterGate
+	connections sync.Map
+	log         *slog.Logger
+	store       storage.Driver
+	authn       *auth.Layer
+	ms          *mailstore.Store
+	hub         *Hub
+	writers     ha.WriterGate
 }
 
 func (b *Backend) requireWriter(userID string) error {
@@ -169,6 +172,8 @@ func (s *Server) enableOAuth(srv *imapserv.Server, be *Backend) {
 			if err != nil {
 				return &sasl.OAuthBearerError{Status: "invalid_token", Schemes: "bearer"}
 			}
+			address := conn.Info().RemoteAddr.String()
+			user.(*User).sessionID = be.authn.TrackSession(u, "IMAP", address, "OAuth", address, true, conn.Close)
 			ctx := conn.Context()
 			ctx.State = imap.AuthenticatedState
 			ctx.User = user
@@ -185,6 +190,8 @@ func (s *Server) enableOAuth(srv *imapserv.Server, be *Backend) {
 			if err != nil {
 				return err
 			}
+			address := conn.Info().RemoteAddr.String()
+			user.(*User).sessionID = be.authn.TrackSession(u, "IMAP", address, "OAuth", address, true, conn.Close)
 			ctx := conn.Context()
 			ctx.State = imap.AuthenticatedState
 			ctx.User = user
@@ -193,12 +200,23 @@ func (s *Server) enableOAuth(srv *imapserv.Server, be *Backend) {
 	})
 }
 
-func (b *Backend) Login(_ *imap.ConnInfo, username, password string) (backend.User, error) {
+func (b *Backend) Login(info *imap.ConnInfo, username, password string) (backend.User, error) {
 	u, err := b.authn.Authenticate(context.Background(), username, password)
 	if err != nil {
 		return nil, backend.ErrInvalidCredentials
 	}
-	return b.userFromStorage(u)
+	user, err := b.userFromStorage(u)
+	if err != nil {
+		return nil, err
+	}
+	if info != nil && info.RemoteAddr != nil {
+		address := info.RemoteAddr.String()
+		if value, ok := b.connections.Load(address); ok {
+			connection := value.(imapserv.Conn)
+			user.(*User).sessionID = b.authn.TrackSession(u, "IMAP", address, "", address, true, connection.Close)
+		}
+	}
+	return user, nil
 }
 
 func (b *Backend) userFromStorage(u *storage.User) (backend.User, error) {
@@ -213,8 +231,9 @@ func (b *Backend) userFromStorage(u *storage.User) (backend.User, error) {
 }
 
 type User struct {
-	backend *Backend
-	user    *storage.User
+	sessionID string
+	backend   *Backend
+	user      *storage.User
 }
 
 func (u *User) Username() string { return u.user.Email }
@@ -321,7 +340,7 @@ func (u *User) RenameMailbox(existingName, newName string) error {
 	return u.backend.store.RenameMailbox(ctx, u.user.ID, existingName, newName, path)
 }
 
-func (u *User) Logout() error { return nil }
+func (u *User) Logout() error { u.backend.authn.ForgetSession(u.sessionID); return nil }
 
 type Mailbox struct {
 	user         *User
@@ -664,4 +683,25 @@ func (m *Mailbox) Expunge() error {
 	}
 	m.notify()
 	return nil
+}
+
+type sessionConnections struct{ backend *Backend }
+
+func (e *sessionConnections) Capabilities(imapserv.Conn) []string    { return nil }
+func (e *sessionConnections) Command(string) imapserv.HandlerFactory { return nil }
+func (e *sessionConnections) NewConn(c imapserv.Conn) imapserv.Conn {
+	address := c.Info().RemoteAddr.String()
+	e.backend.connections.Store(address, c)
+	return &trackedConnection{Conn: c, backend: e.backend, address: address}
+}
+
+type trackedConnection struct {
+	imapserv.Conn
+	backend *Backend
+	address string
+}
+
+func (c *trackedConnection) Close() error {
+	c.backend.connections.Delete(c.address)
+	return c.Conn.Close()
 }

@@ -3389,3 +3389,52 @@ html[data-color-mode="light"] {
 .dkim-generator .heading {margin-bottom:.6rem;}
 .dkim-generator section {margin-top:1rem;}
 .dkim-generator > .btn-secondary {margin-top:1rem;}
+
+#mail-toolbar {display:flex;align-items:center;justify-content:space-between;gap:.5rem;flex-shrink:0;border-bottom:1px solid rgba(var(--ui-ink-rgb),.12);container-type:inline-size;}
+#mail-toolbar #mail-quick-filters {border:0;flex-wrap:nowrap;padding:.4rem .5rem;gap:.25rem;min-height:2.75rem;}
+#mail-toolbar #mail-pagination {border:0;padding:.4rem .5rem;gap:.3rem;min-height:2.75rem;white-space:nowrap;}
+#mail-toolbar :is(button,select.field-input) {height:2.15rem;min-height:2.15rem;margin:0;padding:.3rem .5rem;font-size:.8rem;}
+#mail-toolbar #mail-pagination select {width:auto;max-width:9rem;}
+@container (max-width: 580px) {#mail-toolbar #mail-quick-filters button {font-size:.72rem;padding:.2rem .3rem;}#mail-toolbar #mail-pagination .meta {font-size:.7rem;}#mail-toolbar #mail-pagination select {max-width:4.4rem;font-size:.7rem;}}
+@media(max-width:480px){#mail-toolbar {flex-wrap:wrap;}#mail-toolbar #mail-pagination{margin-left:auto;}}
+.calendar-properties-dialog {width:min(48rem,calc(100vw - 2rem));max-height:min(40rem,calc(100dvh - 2rem));}
+.calendar-property-tabs {display:flex;gap:.4rem;padding:.4rem 0 .8rem;}
+.calendar-property-tabs button[aria-pressed=true]{background:var(--accent);color:var(--accent-ink,#fff);}
+.calendar-properties-body {min-height:15rem;}
+.calendar-properties-body [hidden]{display:none!important;}
+.calendar-properties-body section {border:0;margin:0;padding:.3rem 0;}
+.calendar-properties-body h3 {font-size:1rem;margin:.3rem 0;}
+.calendar-properties-body .calendar-link-row {margin:.65rem 0;}
+.calendar-properties-body .calendar-link-row label {font-size:.8rem;}
+.calendar-properties-body .field-label{margin-top:.5rem;}
+.calendar-properties-body :is(input,select).field-input{height:2.4rem;margin:.2rem 0 .5rem;}
+
+/* Contextual create action, shared across workspace sections. */
+.section-create{position:fixed;right:24px;bottom:24px;z-index:35;display:flex;flex-direction:column;align-items:flex-end;gap:12px}.section-create[hidden]{display:none}
+.create-fab{width:58px;height:58px;border-radius:50%;background:var(--accent,#36624f);color:white;border:0;box-shadow:0 6px 22px #0003;font-size:34px;line-height:1;cursor:pointer;transition:transform .18s,box-shadow .18s}.create-fab:hover{transform:translateY(-3px);box-shadow:0 9px 25px #0004}.create-fab:active{transform:scale(.94)}.create-fab:focus-visible{outline:3px solid var(--accent,#36624f);outline-offset:4px}
+.create-fab-menu{display:flex;flex-direction:column;gap:4px;padding:8px;border-radius:14px;background:var(--panel,#fff);box-shadow:0 6px 24px #0003}.create-fab-menu[hidden]{display:none}.create-fab-menu button{padding:10px 16px;text-align:left;border:0;border-radius:8px;background:transparent;color:inherit;cursor:pointer}.create-fab-menu button:hover{background:#8882}
+#btn-compose,#btn-cal-new,#btn-cal-new-mobile,#btn-contact-new,#btn-note-new,#btn-files-mkdir,#btn-files-upload,.toolbar-actions:has(#btn-files-upload)>label{display:none!important}
+@media(prefers-reduced-motion:reduce){.create-fab{transition:none}}
+@media(max-width:480px){.section-create{right:16px;bottom:calc(16px + env(safe-area-inset-bottom))}}
+
+.account-avatar{width:30px;height:30px;border-radius:50%;object-fit:cover;display:inline-block;vertical-align:middle;margin-right:8px}.account-avatar[hidden]{display:none}.profile-avatar{width:64px;height:64px}.profile-avatar-controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px}.user-action-menu summary{cursor:pointer;font-weight:600}.user-action-menu .actions{display:flex;flex-direction:column;padding:8px;gap:6px}.document-preview-content form:has(input[type=email]){display:flex;flex-direction:column;gap:10px}
+
+.event-compose-row{display:grid;grid-template-columns:90px minmax(0,1fr);align-items:center;gap:10px;padding:5px 0;border-bottom:1px solid #8882}.event-compose-row>.field-label{margin:0;font-size:.8rem;text-transform:none;letter-spacing:0}.event-compose-row>.field-input,.event-compose-row>.field-input-mono{margin:0;min-height:36px;padding:7px 10px;font-size:.85rem;border-radius:8px}.event-compose-row textarea{min-height:90px}.event-time-grid{margin:8px 0}.calendar-place-tools,.calendar-place-results{margin-left:100px}.calendar-editor-dialog .event-editor-content{gap:5px}.event-compose-row .cal-attendee-row{margin:0}.event-advanced{margin:8px 0}@media(max-width:480px){.event-compose-row{grid-template-columns:70px minmax(0,1fr);gap:6px}.calendar-place-tools,.calendar-place-results{margin-left:76px}}
+
+.calendar-editor-dialog .event-editor-footer{background:transparent;border-top:0;}
+
+/* Mail settings stay inside the folder pane, below its independently scrolling list. */
+.mail-folders{position:relative;display:flex;flex-direction:column}.mail-folders #mail-folder-list{flex:1;min-height:0;overflow:auto}.mail-settings{position:relative;align-self:flex-start;margin:12px 16px;flex:none}.mail-settings-toggle{width:42px;height:42px;border:1px solid #8884;border-radius:50%;background:var(--panel,#fff);color:var(--accent,#36624f);cursor:pointer;font-size:26px;display:grid;place-items:center}.mail-settings-toggle span{display:block;transition:transform .2s ease}.mail-settings-toggle[aria-expanded=true] span{transform:rotate(60deg)}.mail-settings-toggle:focus-visible{outline:2px solid var(--accent,#36624f);outline-offset:3px}.mail-settings .create-fab-menu{position:absolute;bottom:52px;left:0;min-width:220px;z-index:36}.mail-settings #btn-mail-folders{margin:0}.create-fab[aria-expanded=true]{transform:rotate(60deg)}
+@media(prefers-reduced-motion:reduce){.mail-settings-toggle span{transition:none}}
+
+.calendar-past-toggle{display:flex;align-items:center;gap:8px;padding:10px 16px;font-size:.85rem}.cal-item.is-past{color:var(--text-muted,#7b8380)}.cal-item.is-past .msg-subject,.cal-item.is-past .msg-date{color:inherit;opacity:.7}
+
+.document-preview{margin:auto;inset:0}.admin-sessions-dialog{height:fit-content;max-height:88dvh}.admin-sessions-dialog .document-preview-content{height:auto;max-height:calc(88dvh - 90px);display:block;overflow:auto}.admin-sessions-dialog table{width:100%;table-layout:auto}.admin-sessions-dialog td:first-child{word-break:normal;overflow-wrap:anywhere;min-width:130px}.admin-sessions-dialog td:last-child{width:52px}.admin-sessions-dialog .action-icon{width:38px;height:38px;padding:8px;flex:none}.admin-sessions-dialog .action-icon svg{width:20px;height:20px}.admin-sessions-dialog>.document-preview-content+.status,.admin-sessions-dialog>p{margin:0 16px}
+
+.mail-settings{position:fixed;left:24px;bottom:24px;margin:0;z-index:35}.mail-settings[hidden]{display:none}.mail-settings-toggle{width:58px;height:58px;border:0;background:var(--accent,#36624f);color:white;box-shadow:0 6px 22px #0003}.mail-settings .create-fab-menu{bottom:70px}.mail-settings-toggle:active{scale:.94}@media(max-width:480px){.mail-settings{left:16px;bottom:calc(16px + env(safe-area-inset-bottom))}}
+
+@keyframes create-action-turn{0%{transform:rotate(0)}55%{transform:rotate(60deg)}100%{transform:rotate(0)}}.create-fab.is-activated{animation:create-action-turn .35s ease}@media(prefers-reduced-motion:reduce){.create-fab.is-activated{animation:none}}
+
+.contact-list-actions{display:flex;align-items:center;gap:8px;padding:10px 12px;flex-wrap:wrap;border-bottom:1px solid #8883}.contact-pagination{display:flex;align-items:center;gap:8px;margin-left:auto}.contact-pagination select{width:auto;min-width:130px;margin:0;height:36px}.contact-select-row{display:flex;align-items:center;gap:8px;padding-left:12px}.contact-select-row .contact-item{flex:1;min-width:0}
+
+.user-role-dialog{height:fit-content;width:min(560px,94vw)}.user-role-dialog .document-preview-content{display:block;height:auto;max-height:70dvh}.user-role-dialog form{display:flex;flex-direction:column;gap:12px}.user-role-dialog fieldset label{display:block;margin:8px 0}.user-role-dialog .action-icon svg{width:20px;height:20px}

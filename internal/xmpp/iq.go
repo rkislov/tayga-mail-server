@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"github.com/tayga/tms/internal/avatar"
 	"regexp"
 	"strconv"
 	"strings"
@@ -12,17 +13,17 @@ import (
 )
 
 var (
-	rePubsubNode   = regexp.MustCompile(`node=['"]([^'"]+)['"]`)
-	reItemID       = regexp.MustCompile(`<item[^>]*\bid=['"]([^'"]+)['"]`)
-	reWithJID      = regexp.MustCompile(`<jid[^>]*>([^<]+)</jid>`)
-	reRosterJID    = regexp.MustCompile(`<item[^>]*\bjid=['"]([^'"]+)['"]`)
-	reRosterName   = regexp.MustCompile(`\bname=['"]([^'"]*)['"]`)
-	reRosterSub    = regexp.MustCompile(`\bsubscription=['"]([^'"]+)['"]`)
-	reRosterAsk    = regexp.MustCompile(`\bask=['"]([^'"]+)['"]`)
-	reGroup        = regexp.MustCompile(`<group[^>]*>([^<]*)</group>`)
-	reMAMWith      = regexp.MustCompile(`<field[^>]*var=['"]with['"][^>]*>\s*<value>([^<]+)</value>`)
-	reMAMMax       = regexp.MustCompile(`<max[^>]*>(\d+)</max>|<field[^>]*var=['"]max['"][^>]*>\s*<value>(\d+)</value>`)
-	reDeleteNode   = regexp.MustCompile(`node=['"]([^'"]+)['"]`)
+	rePubsubNode = regexp.MustCompile(`node=['"]([^'"]+)['"]`)
+	reItemID     = regexp.MustCompile(`<item[^>]*\bid=['"]([^'"]+)['"]`)
+	reWithJID    = regexp.MustCompile(`<jid[^>]*>([^<]+)</jid>`)
+	reRosterJID  = regexp.MustCompile(`<item[^>]*\bjid=['"]([^'"]+)['"]`)
+	reRosterName = regexp.MustCompile(`\bname=['"]([^'"]*)['"]`)
+	reRosterSub  = regexp.MustCompile(`\bsubscription=['"]([^'"]+)['"]`)
+	reRosterAsk  = regexp.MustCompile(`\bask=['"]([^'"]+)['"]`)
+	reGroup      = regexp.MustCompile(`<group[^>]*>([^<]*)</group>`)
+	reMAMWith    = regexp.MustCompile(`<field[^>]*var=['"]with['"][^>]*>\s*<value>([^<]+)</value>`)
+	reMAMMax     = regexp.MustCompile(`<max[^>]*>(\d+)</max>|<field[^>]*var=['"]max['"][^>]*>\s*<value>(\d+)</value>`)
+	reDeleteNode = regexp.MustCompile(`node=['"]([^'"]+)['"]`)
 )
 
 func (s *Session) handleIQ(se xml.StartElement) error {
@@ -36,6 +37,25 @@ func (s *Session) handleIQ(se xml.StartElement) error {
 	ctx := context.Background()
 
 	switch {
+	case typ == "get" && strings.Contains(inner, "vcard-temp"):
+		user := s.user
+		if to != "" {
+			email := strings.Split(to, "/")[0]
+			other, err := s.srv.store.GetUserByEmail(ctx, email)
+			if err != nil || other.TenantID != s.user.TenantID {
+				return s.writeString(iqForbidden(id))
+			}
+			user = other
+		}
+		value, err := avatar.Get(ctx, s.srv.store, user.ID)
+		if err != nil {
+			return s.writeString(iqInternalError(id))
+		}
+		photo := ""
+		if value.Data != "" {
+			photo = "<PHOTO><TYPE>image/png</TYPE><BINVAL>" + value.Data + "</BINVAL></PHOTO>"
+		}
+		return s.writeString(fmt.Sprintf(`<iq type='result' id='%s' from='%s' to='%s'><vCard xmlns='vcard-temp'><FN>%s</FN>%s</vCard></iq>`, xmlEscape(id), xmlEscape(user.Email), xmlEscape(s.JID.Full()), xmlEscape(user.DisplayName), photo))
 	case typ == "set" && strings.Contains(inner, "urn:ietf:params:xml:ns:xmpp-session"):
 		return s.writeString(fmt.Sprintf(`<iq type='result' id='%s'/>`, xmlEscape(id)))
 
@@ -80,6 +100,7 @@ func (s *Session) writeDiscoInfo(id, to string) error {
 			`<identity category='pubsub' type='pep'/>`+
 			`<feature var='urn:xmpp:ping'/>`+
 			`<feature var='jabber:iq:roster'/>`+
+			`<feature var='vcard-temp'/>`+
 			`<feature var='urn:xmpp:mam:2'/>`+
 			`<feature var='urn:xmpp:carbons:2'/>`+
 			`<feature var='http://jabber.org/protocol/pubsub'/>`+

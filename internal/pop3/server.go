@@ -132,20 +132,22 @@ func (s *Server) tlsConfig() *tls.Config {
 }
 
 type session struct {
-	s       *Server
-	rw      *bufio.ReadWriter
-	conn    net.Conn
-	user    *storage.User
-	msgs    []*storage.Message
-	deleted map[int]bool // 1-based index
-	authed  bool
-	tlsOn   bool
+	sessionID string
+	s         *Server
+	rw        *bufio.ReadWriter
+	conn      net.Conn
+	user      *storage.User
+	msgs      []*storage.Message
+	deleted   map[int]bool // 1-based index
+	authed    bool
+	tlsOn     bool
 }
 
 func (s *Server) handle(c net.Conn, alreadyTLS bool) {
 	defer c.Close()
 	rw := bufio.NewReadWriter(bufio.NewReader(c), bufio.NewWriter(c))
 	sess := &session{s: s, rw: rw, conn: c, deleted: map[int]bool{}, tlsOn: alreadyTLS}
+	defer func() { s.authn.ForgetSession(sess.sessionID) }()
 	_ = sess.ok("Tayga POP3 ready")
 	for {
 		line, err := sess.rw.ReadString('\n')
@@ -251,6 +253,7 @@ func (sess *session) cmdPASS(arg string) error {
 	}
 	sess.msgs = msgs
 	sess.authed = true
+	sess.sessionID = sess.s.authn.TrackSession(u, "POP3", sess.conn.RemoteAddr().String(), "", sess.conn.RemoteAddr().String(), true, sess.conn.Close)
 	return sess.ok(fmt.Sprintf("%s has %d messages", u.Email, len(msgs)))
 }
 

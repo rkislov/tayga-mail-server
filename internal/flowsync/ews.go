@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2024-2026 Кислов Роман Сергеевич.
+
 package flowsync
 
 import (
@@ -11,7 +14,7 @@ import (
 	"github.com/tayga/tms/internal/storage"
 )
 
-// EWS-compatible SOAP endpoint handled by proprietary FlowSync engine.
+// EWS-compatible SOAP endpoint handled by original FlowSync engine.
 type ewsHandler struct {
 	store     storage.Driver
 	ms        *mailstore.Store
@@ -19,7 +22,7 @@ type ewsHandler struct {
 }
 
 func (h *ewsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("X-FlowSync", "Tayga-Proprietary")
+	w.Header().Set("X-FlowSync", "Tayga-FlowSync")
 	w.Header().Set("X-FlowSync-Engine", "FlowSync/1.0")
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

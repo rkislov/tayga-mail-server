@@ -18,13 +18,14 @@ import (
 )
 
 type Session struct {
-	srv    *Server
-	log    *slog.Logger
-	conn   net.Conn
-	br     *bufio.Reader
-	bw     *bufio.Writer
-	dec    *xml.Decoder
-	tlsCfg *tls.Config
+	sessionID string
+	srv       *Server
+	log       *slog.Logger
+	conn      net.Conn
+	br        *bufio.Reader
+	bw        *bufio.Writer
+	dec       *xml.Decoder
+	tlsCfg    *tls.Config
 
 	mu       sync.Mutex
 	closed   bool
@@ -60,6 +61,7 @@ func (s *Session) Close() {
 		return
 	}
 	s.closed = true
+	s.srv.authn.ForgetSession(s.sessionID)
 	s.mu.Unlock()
 	if s.bound {
 		s.srv.hub.Unregister(s)
@@ -244,6 +246,7 @@ func (s *Session) saslAuth(mech, b64 string) error {
 		return err
 	}
 	s.user = u
+	s.sessionID = s.srv.authn.TrackSession(u, "XMPP", s.conn.RemoteAddr().String(), "", s.conn.RemoteAddr().String(), true, s.conn.Close)
 	s.JID = ParseJID(u.Email)
 	return nil
 }

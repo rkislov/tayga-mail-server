@@ -53,7 +53,7 @@ Secrets are redacted on GET (`***`); PUT with empty/`***` keeps the previous val
 
 ## FlowSync (original)
 
-Original sync engine by Кислов Роман Сергеевич (Apache-2.0). Wire-compatible with ActiveSync-class mobile clients and EWS-class desktop clients. **Not** a fork of Z-Push/SOGo/OpenChange. Responses carry `X-FlowSync: Tayga-Proprietary` (engine brand; project license remains Apache-2.0).
+Original sync engine by Кислов Роман Сергеевич (Apache-2.0). Wire-compatible with ActiveSync-class mobile clients and EWS-class desktop clients. **Not** a fork of Z-Push/SOGo/OpenChange. Responses carry `X-FlowSync: Tayga-FlowSync`; the separately licensed module includes its own Apache-2.0 LICENSE and author NOTICE.
 
 | Endpoint | Role |
 |----------|------|

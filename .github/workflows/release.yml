@@ -21,7 +21,24 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Check existing published release
+        id: existing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$RELEASE_TAG" --json isDraft --jq 'select(.isDraft == false)' >/tmp/release-state.json 2>/dev/null && test -s /tmp/release-state.json; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            gh release download "$RELEASE_TAG" --dir /tmp/tayga-release-check
+            cd /tmp/tayga-release-check
+            test "$(find . -maxdepth 1 -name 'tayga-mail_*' | wc -l)" -eq 7
+            sha256sum --check checksums.txt
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Run GoReleaser
+        if: steps.existing.outputs.published != 'true'
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser

@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"mime"
@@ -17,7 +18,49 @@ func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
-	root, err := s.filesRoot(au.ID)
+	if strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/v1/files"), "/") == "access" {
+		s.handleFileAccess(w, r, au)
+		return
+	}
+	ownerID := au.ID
+	if requested := r.URL.Query().Get("owner_id"); requested != "" && requested != au.ID {
+		rel := r.URL.Query().Get("path")
+		operation := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/v1/files"), "/")
+		if operation != "move" && operation != "mkdir" && !s.fileAccessAllowed(r, requested, au.ID, rel, r.Method != http.MethodGet && r.Method != http.MethodHead) {
+			writeJSON(w, 403, map[string]string{"error": "file access denied"})
+			return
+		}
+		// Mutating JSON operations need independent source and destination checks.
+		if operation == "move" || operation == "mkdir" {
+			raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 4096))
+			if err != nil {
+				writeJSON(w, 400, map[string]string{"error": "invalid json"})
+				return
+			}
+			var payload struct {
+				Path string `json:"path"`
+				From string `json:"from"`
+				To   string `json:"to"`
+			}
+			if json.Unmarshal(raw, &payload) != nil {
+				writeJSON(w, 400, map[string]string{"error": "invalid json"})
+				return
+			}
+			targets := []string{payload.Path}
+			if operation == "move" {
+				targets = []string{payload.From, payload.To}
+			}
+			for _, target := range targets {
+				if !s.fileAccessAllowed(r, requested, au.ID, target, true) {
+					writeJSON(w, 403, map[string]string{"error": "file access denied"})
+					return
+				}
+			}
+			r.Body = io.NopCloser(bytes.NewReader(raw))
+		}
+		ownerID = requested
+	}
+	root, err := s.filesRoot(ownerID)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -32,6 +75,11 @@ func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request) {
 		abs, err := safeJoin(root, rel)
 		if err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		if info, err := os.Stat(abs); err == nil && !info.IsDir() {
+			parent := cleanRel(filepath.Dir(rel))
+			writeJSON(w, 200, map[string]any{"path": parent, "entries": []map[string]any{{"name": filepath.Base(abs), "is_dir": false, "size": info.Size(), "mtime": info.ModTime().UTC().Format(time.RFC3339)}}})
 			return
 		}
 		entries, err := os.ReadDir(abs)

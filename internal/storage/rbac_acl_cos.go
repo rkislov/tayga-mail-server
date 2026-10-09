@@ -129,9 +129,9 @@ func (s *Store) CreateFileShare(ctx context.Context, sh *FileShare) (*FileShare,
 		sh.Token = tok
 	}
 	sh.CreatedAt = time.Now().UTC()
-	q := s.rebind(`INSERT INTO file_shares(id, user_id, path, token, expires_at, max_downloads, download_count, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, 0, ?)`)
-	if _, err := s.db.ExecContext(ctx, q, sh.ID, sh.UserID, sh.Path, sh.Token, sh.ExpiresAt, sh.MaxDownloads, sh.CreatedAt); err != nil {
+	q := s.rebind(`INSERT INTO file_shares(id, user_id, path, token, expires_at, max_downloads, download_count, created_at, password_hash, rights)
+		VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`)
+	if _, err := s.db.ExecContext(ctx, q, sh.ID, sh.UserID, sh.Path, sh.Token, sh.ExpiresAt, sh.MaxDownloads, sh.CreatedAt, sh.PasswordHash, sh.Rights); err != nil {
 		return nil, mapErr(err)
 	}
 	return sh, nil
@@ -140,7 +140,7 @@ func (s *Store) CreateFileShare(ctx context.Context, sh *FileShare) (*FileShare,
 func (s *Store) scanFileShare(row interface{ Scan(dest ...any) error }) (*FileShare, error) {
 	sh := &FileShare{}
 	var exp sql.NullTime
-	err := row.Scan(&sh.ID, &sh.UserID, &sh.Path, &sh.Token, &exp, &sh.MaxDownloads, &sh.DownloadCount, &sh.CreatedAt)
+	err := row.Scan(&sh.ID, &sh.UserID, &sh.Path, &sh.Token, &exp, &sh.MaxDownloads, &sh.DownloadCount, &sh.CreatedAt, &sh.PasswordHash, &sh.Rights)
 	if err != nil {
 		return nil, mapErr(err)
 	}
@@ -152,17 +152,17 @@ func (s *Store) scanFileShare(row interface{ Scan(dest ...any) error }) (*FileSh
 }
 
 func (s *Store) GetFileShareByToken(ctx context.Context, token string) (*FileShare, error) {
-	q := s.rebind(`SELECT id, user_id, path, token, expires_at, max_downloads, download_count, created_at FROM file_shares WHERE token = ?`)
+	q := s.rebind(`SELECT id, user_id, path, token, expires_at, max_downloads, download_count, created_at, password_hash, rights FROM file_shares WHERE token = ?`)
 	return s.scanFileShare(s.db.QueryRowContext(ctx, q, token))
 }
 
 func (s *Store) GetFileShareByID(ctx context.Context, id string) (*FileShare, error) {
-	q := s.rebind(`SELECT id, user_id, path, token, expires_at, max_downloads, download_count, created_at FROM file_shares WHERE id = ?`)
+	q := s.rebind(`SELECT id, user_id, path, token, expires_at, max_downloads, download_count, created_at, password_hash, rights FROM file_shares WHERE id = ?`)
 	return s.scanFileShare(s.db.QueryRowContext(ctx, q, id))
 }
 
 func (s *Store) ListFileShares(ctx context.Context, userID string) ([]*FileShare, error) {
-	q := s.rebind(`SELECT id, user_id, path, token, expires_at, max_downloads, download_count, created_at FROM file_shares WHERE user_id = ? ORDER BY created_at DESC`)
+	q := s.rebind(`SELECT id, user_id, path, token, expires_at, max_downloads, download_count, created_at, password_hash, rights FROM file_shares WHERE user_id = ? ORDER BY created_at DESC`)
 	rows, err := s.db.QueryContext(ctx, q, userID)
 	if err != nil {
 		return nil, err

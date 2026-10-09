@@ -116,7 +116,7 @@ func (s *Service) runJob(ctx context.Context, job *Job) {
 		_ = s.finishJob(ctx, job.ID, StatusFailed, err.Error())
 		return
 	}
-	_ = s.finishJob(ctx, job.ID, StatusDone, "")
+	_ = s.finishJob(ctx, job.ID, StatusDone, job.LastError)
 	s.log.Info("migration job done", "id", job.ID, "copied", job.Copied, "skipped", job.Skipped, "errors", job.Errors)
 }
 

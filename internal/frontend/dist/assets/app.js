@@ -140,7 +140,7 @@ const I18N = {
     mig_source_login: "Логин на старом сервере",
     mig_mail_hint: "Письма и папки с другого сервера.",
     mig_configure: "Настроить перенос →",
-    mig_credentials_hint: "Используйте реквизиты старого сервера. Импорт будет выполнен в текущую учётную запись.",
+    mig_credentials_hint: "Используйте реквизиты старого сервера. Импорт будет выполнен в вашу учётную запись или выбранную администратором целевую учётную запись.",
     mig_starting: "Создаём задание…",
     mig_started: "Перенос запущен. Прогресс обновляется автоматически.",
     mig_status_pending: "Ожидает запуска",
@@ -203,7 +203,7 @@ const I18N = {
     nav_tls: "УЦ",
     nav_xmpp: "XMPP",
     nav_server: "Сервер",
-    nav_cos: "CoS",
+    nav_cos: "Классы обслуживания",
     server_lede: "Выберите раздел настроек. Все параметры сгруппированы по назначению и открываются в отдельных окнах с пояснениями. После сохранения требуется перезапуск.",
     server_restart: "Нужен перезапуск tayga-mail.",
     server_section: "Секция",
@@ -642,7 +642,7 @@ const I18N = {
     mig_source_login: "Source server login",
     mig_mail_hint: "Messages and folders from another server.",
     mig_configure: "Configure import →",
-    mig_credentials_hint: "Use the source server credentials. Data will be imported into your current account.",
+    mig_credentials_hint: "Use the source server credentials. Data will be imported into your account or the target account selected by the administrator.",
     mig_starting: "Creating a job…",
     mig_started: "Import started. Progress updates automatically.",
     mig_status_pending: "Pending",
@@ -1341,6 +1341,7 @@ const APPS = [
 
 const mailState = { mailboxID: "", messageID: "", mailboxes: [], order: [], searchQ: "", offset: 0, pageSize: 50, request: 0, sort: "date", sortOrder: "desc", filter: "all" };
 const calState = {
+  showPast: false,
   calendarID: "",
   eventID: "",
   calendars: [],
@@ -1354,12 +1355,12 @@ const calState = {
   highlightInvite: "",
   resources: [],
 };
-const contactState = { bookID: "", cardID: "", books: [], cards: [] };
+const contactState = { page:0,pageSize:50,selected:new Set(), bookID: "", cardID: "", books: [], cards: [] };
 const notesState = {
   folderID: "", noteID: "", folders: [], notes: [], etag: "", rights: "write",
   shareTarget: null, saveTimer: null, drawing: false, dirty:false, revision:0, attachments:[], etags:{},
 };
-const filesState = { path: "", selected: null, entries: [] };
+const filesState = { sharedRights:"write",listTarget:"",ownerID:"",sharedRoot:"", path: "", selected: null, entries: [] };
 const chatState = { peer: "", roster: [], messages: [], es: null, me: "" };
 
 function show(id) {
@@ -1411,6 +1412,7 @@ function setNavOpen(open) {
 function showApp(name) {
   clearTimeout(calState.dayClickTimer);
   const app = APPS.includes(name) ? name : "mail";
+  updateCreateButton(app);
   APPS.forEach((a) => $(`app-${a}`)?.classList.toggle("hidden", a !== app));
   document.querySelectorAll(".nav-btn").forEach((btn) => {
     btn.classList.toggle("is-active", btn.dataset.app === app);
@@ -1424,6 +1426,15 @@ function showApp(name) {
   $("compose-backdrop")?.classList.add("hidden");
   setNavOpen(false);
   if (app === "profile") {loadMe();refreshSignature();refreshPasskeys();}
+  const migrationPane=$("app-migration");
+  if (migrationPane) {
+    if (!migrationPane._originalParent) migrationPane._originalParent=migrationPane.parentElement;
+    (app === "profile" ? $("app-profile") : migrationPane._originalParent).append(migrationPane);
+    migrationPane.classList.toggle("hidden", !["profile","migration"].includes(app));
+    migrationPersonal = app === "profile";
+    if (migrationPersonal) { migrationTargetID=""; refreshMigration(); }
+    $("migration-target-row")?.classList.toggle("hidden",migrationPersonal || !state.me?.is_admin);
+  }
   if (app === "mail") refreshMail();
   if (app === "calendar") refreshCalendar();
   if (app === "contacts") refreshContacts();
@@ -1534,6 +1545,7 @@ async function refreshAccessToken() {
 }
 
 async function api(path, opts = {}) {
+  if(filesState.ownerID&&/^\/api\/v1\/files(?:[/?]|$)/.test(path)&&!/^\/api\/v1\/files\/(?:access|shares)/.test(path))path+=(path.includes('?')?'&':'?')+'owner_id='+encodeURIComponent(filesState.ownerID);
   const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
   if (state.tokens?.access_token) {
     headers.Authorization = "Bearer " + state.tokens.access_token;
@@ -1644,7 +1656,7 @@ async function loadMe() {
     refreshSignature();
     $("nav-admin")?.classList.toggle("hidden", !me.is_admin);
     // Migration is always listed; forms unlock when features.migration is true.
-    $("nav-migration")?.classList.remove("hidden");
+    $("nav-migration")?.classList.toggle("hidden", !state.me?.is_admin);
     updateNavUser(me.email, !!me.is_admin);
   } catch (err) {
     if (err.status === 401) return;
@@ -2313,10 +2325,11 @@ async function refreshAdminUsers() {
               <option value="off" ${u.migration_enabled === "off" ? "selected" : ""}>${escapeHtml(t("mig_off"))}</option>
             </select>
           </label>
-</td><td><div class="actions">          <button type="button" class="btn-secondary" data-quota="${escapeHtml(u.id)}">${escapeHtml(t("users_quota_action"))}</button>
+</td><td><details class="user-action-menu"><summary>${escapeHtml(t("users_actions"))}</summary><div class="actions">          <button type="button" class="btn-secondary" data-quota="${escapeHtml(u.id)}">${escapeHtml(t("users_quota_action"))}</button>
           <button type="button" class="btn-secondary" data-toggle="${escapeHtml(u.id)}" data-enabled="${u.enabled ? "1" : "0"}">${escapeHtml(u.enabled ? t("users_disable") : t("users_enable"))}</button>
           <button type="button" class="btn-secondary" data-pass="${escapeHtml(u.id)}">${escapeHtml(t("users_reset_pw"))}</button>
-</div></td></tr>`).join("") || `<tr><td colspan="7" class="meta">${t("users_empty")}</td></tr>`;
+${state.me?.is_global_admin?`<button type="button" class="btn-secondary" data-user-role="${escapeHtml(u.id)}">${mailImageText("Роль пользователя","User role")}</button>`:""}<button type="button" class="btn-secondary" data-mail-access="${escapeHtml(u.id)}">${mailImageText("Доступ к ящику","Mailbox access")}</button></div></details></td></tr>`).join("") || `<tr><td colspan="7" class="meta">${t("users_empty")}</td></tr>`;
+    list.querySelectorAll("[data-mail-access]").forEach(button=>button.onclick=()=>openMailboxAccess(button.dataset.mailAccess));list.querySelectorAll("[data-user-role]").forEach(button=>button.onclick=()=>openUserRole(users.find(u=>u.id===button.dataset.userRole)));
     list.querySelectorAll("[data-user-mig]").forEach((sel) => {
       sel.addEventListener("change", async () => {
         try {
@@ -2685,6 +2698,10 @@ $("xmpp-bot-form")?.addEventListener("submit",async event=>{
  finally{xmppBotBusy=false;$("btn-xmpp-bot-create").disabled=false;$("xmpp-bot-close").disabled=false;}
 });
 
+let migrationPersonal = false;
+let migrationTargetID = "";
+let migrationTargets = [];
+function migrationURL(path="") { return "/api/v1/migration"+path+(migrationTargetID ? "?target_user_id="+encodeURIComponent(migrationTargetID) : ""); }
 const migrationPages = new Map();
 function renderMigJobs(listEl, jobs) {
   if (!listEl) return;
@@ -2735,21 +2752,23 @@ function renderMigJobs(listEl, jobs) {
   listEl.innerHTML = visibleJobs.map((j) => `
     <li class="ca-cert-item">
       <div>
-        <strong>${escapeHtml(j.kind)}</strong> · ${escapeHtml(t("mig_status_"+j.status))}
+        <strong>${escapeHtml(j.kind)}</strong> · ${escapeHtml(j.status==="done"&&j.errors>0?mailImageText("Завершено с ошибками","Completed with errors"):t("mig_status_"+j.status))}
         ${j.user_email ? `<div class="meta">${escapeHtml(j.user_email)}</div>` : ""}
         <div class="meta">${j.copied || 0} ${t("mig_copied")} · ${j.skipped || 0} ${t("mig_skipped")} · ${j.errors || 0} ${t("mig_errors")}</div>
         ${j.last_error ? `<div class="meta">${escapeHtml(j.last_error)}</div>` : ""}
       </div>
       <div class="actions">
-        ${["pending","running","paused"].includes(j.status) && (!j.user_id || j.user_id === state.me?.id)
+        ${["done","failed","cancelled"].includes(j.status)&&(!j.user_id||j.user_id===(migrationTargetID || state.me?.id))?`<button type="button" class="btn-secondary btn-sm" data-mig-retry="${escapeHtml(j.id)}">${mailImageText("Повторить","Retry")}</button>`:""}
+        ${["pending","running","paused"].includes(j.status) && (!j.user_id || j.user_id === (migrationTargetID || state.me?.id))
           ? `<button type="button" class="btn-secondary btn-sm" data-mig-cancel="${escapeHtml(j.id)}">${t("mig_cancel")}</button>`
           : ""}
       </div>
     </li>`).join("");
+  listEl.querySelectorAll("[data-mig-retry]").forEach(button=>button.onclick=async()=>{button.disabled=true;try{try{await api(migrationURL("/jobs/"+encodeURIComponent(button.dataset.migRetry)+"/retry"),{method:"POST",body:"{}"})}catch(error){if(!error.message.includes("source password required"))throw error;const password=await askPrompt(mailImageText("Пароль старого сервера (у старого задания он уже удалён)","Source password (older jobs no longer retain it)"),{password:true});if(!password)return;await api(migrationURL("/jobs/"+encodeURIComponent(button.dataset.migRetry)+"/retry"),{method:"POST",body:JSON.stringify({password})})}migrationPages.clear();await refreshMigration()}catch(error){setMsg($("mig-msg"),error.message,"err")}finally{button.disabled=false}});
   listEl.querySelectorAll("[data-mig-cancel]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       try {
-        await api("/api/v1/migration/jobs/" + encodeURIComponent(btn.dataset.migCancel) + "/cancel", { method: "POST" });
+        await api(migrationURL("/jobs/" + encodeURIComponent(btn.dataset.migCancel) + "/cancel"), { method: "POST" });
         refreshMigration();
       } catch (err) { setMsg($("mig-msg"), err.message, "err"); }
     });
@@ -2765,24 +2784,33 @@ async function refreshMigration() {
   if (!list) return;
 
   const me = state.me || {};
-  const allowed = !!(me.features && me.features.migration);
+  const allowed = migrationTargetID ? !!migrationTargets.find(target=>target.id===migrationTargetID)?.allowed : !!me.features?.migration;
   locked?.classList.toggle("hidden", allowed);
   forms?.classList.toggle("hidden", !allowed);
   forms?.querySelectorAll("input,button").forEach((el) => {
     el.disabled = !allowed;
   });
-  const canAdmin = !!me.is_admin;
-  $("btn-mig-enable-me")?.classList.toggle("hidden", allowed || !canAdmin || !me.id);
-  $("btn-mig-enable-domain")?.classList.toggle("hidden", allowed || !canAdmin || !me.domain_id);
+  const canAdmin = !!me.is_admin && !migrationPersonal;
+  $("btn-mig-enable-me")?.classList.toggle("hidden", allowed || !canAdmin || !me.id || !!migrationTargetID);
+  $("btn-mig-enable-domain")?.classList.toggle("hidden", allowed || !canAdmin || !me.domain_id || !!migrationTargetID);
   $("btn-mig-goto-tenants")?.classList.toggle("hidden", !canAdmin);
 
   try {
-    const data = await api("/api/v1/migration");
+    const data = await api(migrationURL());
     renderMigJobs(list, data.allowed ? (data.jobs || []) : []);
   } catch (err) {
     list.innerHTML = `<li class="meta">${escapeHtml(err.message)}</li>`;
   }
 
+  if (canAdmin) {
+    try {
+      migrationTargets=(await api("/api/v1/admin/migration?targets=1")).targets||[];
+      const select=$("migration-target");
+      select.replaceChildren();
+      for (const target of migrationTargets) { const option=document.createElement("option");option.value=target.id===me.id?"":target.id;option.textContent=target.email;select.append(option); }
+      select.value=migrationTargetID;
+    } catch(error) { setMsg($("mig-msg"),error.message,"err"); }
+  }
   if (canAdmin && adminBox) {
     adminBox.classList.remove("hidden");
     try {
@@ -2828,9 +2856,14 @@ $("btn-mig-enable-domain")?.addEventListener("click", async () => {
   } catch (err) { setMsg($("mig-msg"), err.message, "err"); }
 });
 const migrationDialog = $("mig-dialog");
+const migrationTargetRow=document.createElement("label");migrationTargetRow.id="migration-target-row";migrationTargetRow.className="hidden";
+migrationTargetRow.textContent=mailImageText("Целевая учётная запись","Target account");
+const migrationTargetSelect=document.createElement("select");migrationTargetSelect.id="migration-target";migrationTargetRow.append(migrationTargetSelect);
+$("mig-forms")?.before(migrationTargetRow);
+migrationTargetSelect.addEventListener("change",()=>{migrationTargetID=migrationTargetSelect.value;migrationPages.clear();refreshMigration();});
 let migrationStarting = false;
 document.querySelectorAll("[data-mig-open]").forEach(btn => btn.addEventListener("click", () => {
-  if (!state.me?.features?.migration) return;
+  if (!(migrationTargetID ? migrationTargets.find(target=>target.id===migrationTargetID)?.allowed : state.me?.features?.migration)) return;
   const kind = btn.dataset.migOpen;
   document.querySelectorAll("[data-mig-kind]").forEach(form => form.classList.toggle("hidden", form.dataset.migKind !== kind));
   $("mig-dialog-title").textContent = t({imap:"nav_mail",cal:"nav_calendar",card:"nav_contacts"}[kind]) + " · " + t("mig_title");
@@ -2857,7 +2890,7 @@ document.querySelectorAll("[data-mig-kind]").forEach(form => form.addEventListen
   $("mig-dialog-close").disabled=true;
   setMsg($("mig-dialog-msg"),t("mig_starting"));
   try {
-    await api("/api/v1/migration/jobs", {method:"POST",body:JSON.stringify({kind:{imap:"imap",cal:"caldav",card:"carddav"}[kind],...body})});
+    await api(migrationURL("/jobs"), {method:"POST",body:JSON.stringify({kind:{imap:"imap",cal:"caldav",card:"carddav"}[kind],...body})});
     migrationPages.clear();
     migrationDialog.close();
     await refreshMigration();
@@ -3735,6 +3768,7 @@ function showMailReader(msg) {
   setMobilePane("read");
   $("mail-subject").textContent = msg.subject || "(no subject)";
   if ($("mail-from")) $("mail-from").textContent = msg.from || "—";
+  renderSenderAvatar(msg.from);
   if ($("mail-to")) $("mail-to").textContent = msg.to || "—";
   if ($("mail-date")) $("mail-date").textContent = mailDateFull(msg.date || msg.internal_date);
   renderMailActions(msg);
@@ -4014,7 +4048,7 @@ function fmtCalShort(v) {
   const d = new Date(v);
   if (Number.isNaN(d.getTime())) return String(v).slice(5, 16);
   return d.toLocaleString(calLocale(), {
-    day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+    day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
   });
 }
 
@@ -4469,6 +4503,7 @@ function renderCalDay() {
 }
 
 function startNewCalEvent(day = calState.selectedDay || calDayKey(new Date()), hour = 10) {
+  if(calState.defaultCalendarID)calState.calendarID=calState.defaultCalendarID;
   if (calState.calendars.find(c=>c.id===calState.calendarID)?.writable===false) {setMsg($("cal-msg"),t("cal_readonly"),"err");return;}
   clearTimeout(calState.dayClickTimer);
   calState.selectedDay = day;
@@ -4522,14 +4557,18 @@ function renderCalEventLog() {
   const list = $("cal-event-list");
   const logTitle = $("cal-log-title");
   if (!list) return;
-  let events = calState.events.slice();
+  let toggle=$('cal-show-past');
+  if(!toggle){const label=document.createElement('label');label.className='calendar-past-toggle';toggle=document.createElement('input');toggle.type='checkbox';toggle.id='cal-show-past';toggle.setAttribute('role','switch');label.append(toggle,document.createTextNode(mailImageText('Показывать прошедшие','Show past events')));list.before(label);toggle.onchange=()=>{calState.showPast=toggle.checked;renderCalEventLog()};}
+  toggle.checked=calState.showPast;
+  const isPast=e=>{const end=new Date(e.end||e.start);return !Number.isNaN(end.getTime())&&end.getTime()<Date.now()};
+  let events = calState.events.filter(e=>calState.showPast||!isPast(e));
   if (calState.selectedDay) {
     events = events.filter((e) => calEventDayKey(e) === calState.selectedDay);
     if (logTitle) {
       const d = new Date(calState.selectedDay + "T12:00:00");
       const dayLabel = Number.isNaN(d.getTime())
         ? calState.selectedDay
-        : d.toLocaleDateString(calLocale(), { day: "numeric", month: "long" });
+        : d.toLocaleDateString(calLocale(), { day: "numeric", month: "long", year: "numeric" });
       logTitle.textContent = `${t("cal_day_events")} · ${dayLabel}`;
     }
   } else if (logTitle) {
@@ -4538,7 +4577,7 @@ function renderCalEventLog() {
 
   list.innerHTML = events.map((e) => `
     <li>
-      <button type="button" class="msg-item cal-item${e.id === calState.eventID ? " is-active" : ""}" data-ev="${escapeHtml(e.id)}">
+      <button type="button" class="msg-item cal-item${isPast(e) ? " is-past" : ""}${e.id === calState.eventID ? " is-active" : ""}" data-ev="${escapeHtml(e.id)}">
         <span class="msg-subject">${escapeHtml(calendarEventLabel(e))}</span>
         <span class="msg-date cal-start">${escapeHtml(fmtCalShort(e.start))}</span>
         <span class="msg-date cal-end">${escapeHtml(fmtCalTime(e.end) || fmtCalShort(e.end))}</span>
@@ -4556,14 +4595,15 @@ async function refreshCalendar() {
   try {
     const data = await api("/api/v1/calendar/calendars");
     calState.calendars = data.calendars || [];
+    calState.defaultCalendarID=data.default_calendar_id||"";
     if (calState.calendarID && !calState.calendars.some((c) => c.id === calState.calendarID)) {
       calState.calendarID = "";
     }
     if (!calState.calendarID && calState.calendars.length) {
-      calState.calendarID = calState.calendars[0].id;
+      calState.calendarID = calState.defaultCalendarID || calState.calendars[0].id;
     }
     folders.innerHTML = calState.calendars.map((c) => {
-      const label = calendarDisplayLabel(c) + (c.shared ? " · " + t("cal_shared") : "");
+      const label = calendarDisplayLabel(c) + (c.is_default ? " ★" : "") + (c.shared ? " · " + t("cal_shared") : "");
       const del = `<button type="button" class="btn-secondary btn-sm btn-ico" data-cal-properties="${escapeHtml(c.id)}" title="${escapeHtml(t("cal_properties"))}" aria-label="${escapeHtml(t("cal_properties"))}">⋯</button>`;
       return `<li class="folder-row">
         <button type="button" class="folder-btn${c.id === calState.calendarID ? " is-active" : ""}" data-cal="${escapeHtml(c.id)}">
@@ -4646,6 +4686,7 @@ function showCalReader(ev) {
   $("cal-read-start").textContent = fmtCalWhen(ev.start);
   $("cal-read-end").textContent = fmtCalWhen(ev.end);
   $("cal-read-location").textContent = ev.location || "—";
+  renderCalendarMap(ev.geo);
   $("cal-read-body").textContent = ev.description || "";
   const row = $("cal-read-attendees-row");
   const dd = $("cal-read-attendees");
@@ -4858,7 +4899,7 @@ async function refreshContacts() {
     }).join("") || `<li class="meta msg-empty">${escapeHtml(t("empty_contacts"))}</li>`;
     folders.querySelectorAll("[data-book]").forEach((btn) => {
       btn.addEventListener("click", () => {
-        contactState.bookID = btn.dataset.book;
+        contactState.bookID = btn.dataset.book;contactState.page=0;contactState.selected.clear();
         contactState.cardID = "";
         folders.querySelectorAll(".folder-btn").forEach((b) => b.classList.toggle("is-active", b.dataset.book === contactState.bookID));
         loadContactCards();
@@ -4883,22 +4924,31 @@ async function loadContactCards() {
   try {
     const cards = await api("/api/v1/contacts/books/" + encodeURIComponent(contactState.bookID) + "/cards");
     contactState.cards = (cards.cards || []).slice().sort((a, b) => String(a.fn || "").localeCompare(String(b.fn || ""), lang));
-    list.innerHTML = contactState.cards.map((c) => `
-      <li>
-        <button type="button" class="msg-item contact-item${c.id === contactState.cardID ? " is-active" : ""}" data-card="${escapeHtml(c.id)}">
-          <span class="msg-from">${escapeHtml(c.fn || "—")}</span>
-          <span class="msg-subject">${escapeHtml(c.email || "—")}</span>
-          <span class="msg-date">${escapeHtml(c.tel || "—")}</span>
-        </button>
-      </li>`).join("") || `<li class="meta msg-empty">${escapeHtml(t("empty_contacts"))}</li>`;
-    list.querySelectorAll("[data-card]").forEach((btn) => {
-      btn.addEventListener("click", () => openContactCard(btn.dataset.card));
-    });
+    contactState.selected=new Set([...contactState.selected].filter(id=>contactState.cards.some(c=>c.id===id)));
+    renderContactCards();
     if (contactState.cardID) openContactCard(contactState.cardID);
     else showContactReader(null);
   } catch (err) {
     setMsg($("contact-msg"), err.message, "err");
   }
+}
+
+function renderContactCards(){
+ const list=$('contact-list');if(!list)return;
+ const readonly=!!contactState.books.find(b=>b.id===contactState.bookID)?.readonly;
+ contactState.page=Math.max(0,Math.min(contactState.page,Math.ceil(contactState.cards.length/contactState.pageSize)-1));
+ const start=contactState.page*contactState.pageSize,visible=contactState.cards.slice(start,start+contactState.pageSize);
+ let toolbar=$('contact-list-actions');if(!toolbar){toolbar=document.createElement('div');toolbar.id='contact-list-actions';toolbar.className='contact-list-actions';list.before(toolbar)}
+ toolbar.replaceChildren();const select=document.createElement('input');select.type='checkbox';select.title=mailImageText('Выбрать все на странице','Select page');select.setAttribute('aria-label',select.title);select.checked=visible.length>0&&visible.every(c=>contactState.selected.has(c.id));select.indeterminate=visible.some(c=>contactState.selected.has(c.id))&&!select.checked;select.onchange=()=>{visible.forEach(c=>select.checked?contactState.selected.add(c.id):contactState.selected.delete(c.id));renderContactCards()};
+ const count=document.createElement('span');count.textContent=mailImageText('Выбрано: ','Selected: ')+contactState.selected.size;toolbar.append(select,count);
+ for(const [action,label] of [['export',mailImageText('Экспорт vCard','Export vCard')],['delete',t('delete')]]){const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.textContent=label;button.disabled=!contactState.selected.size||(action==='delete'&&readonly);button.onclick=()=>contactBulkAction(action);toolbar.append(button)}
+ const pages=document.createElement('div');pages.className='contact-pagination';const prev=document.createElement('button'),next=document.createElement('button'),range=document.createElement('span'),size=document.createElement('select');prev.textContent='‹';next.textContent='›';prev.title=mailImageText('Предыдущая страница','Previous page');next.title=mailImageText('Следующая страница','Next page');for(const button of [prev,next]){button.type='button';button.className='btn-secondary btn-sm';button.setAttribute('aria-label',button.title)}prev.disabled=!contactState.page;next.disabled=start+visible.length>=contactState.cards.length;prev.onclick=()=>{contactState.page--;renderContactCards()};next.onclick=()=>{contactState.page++;renderContactCards()};range.textContent=(visible.length?start+1:0)+'–'+(start+visible.length)+' / '+contactState.cards.length;size.className='field-input field-input-sm';size.setAttribute('aria-label',mailImageText('Контактов на странице','Contacts per page'));for(const n of [25,50,100]){const option=document.createElement('option');option.value=n;option.textContent=n+' '+mailImageText('на странице','per page');size.append(option)}size.value=contactState.pageSize;size.onchange=()=>{contactState.pageSize=Number(size.value);contactState.page=0;renderContactCards()};pages.append(prev,range,next,size);toolbar.append(pages);
+ list.innerHTML=visible.map(c=>`<li class="contact-select-row"><input type="checkbox" data-select-card="${escapeHtml(c.id)}" aria-label="${escapeHtml(mailImageText('Выбрать: ','Select: ')+(c.fn||c.email||''))}" ${contactState.selected.has(c.id)?'checked':''}><button type="button" class="msg-item contact-item${c.id===contactState.cardID?' is-active':''}" data-card="${escapeHtml(c.id)}"><span class="msg-from">${escapeHtml(c.fn||'—')}</span><span class="msg-subject">${escapeHtml(c.email||'—')}</span><span class="msg-date">${escapeHtml(c.tel||'—')}</span></button></li>`).join('')||`<li class="meta msg-empty">${escapeHtml(t('empty_contacts'))}</li>`;
+ list.querySelectorAll('[data-card]').forEach(button=>button.onclick=()=>openContactCard(button.dataset.card));list.querySelectorAll('[data-select-card]').forEach(input=>input.onchange=()=>{input.checked?contactState.selected.add(input.dataset.selectCard):contactState.selected.delete(input.dataset.selectCard);renderContactCards()});
+}
+async function contactBulkAction(action){
+ const ids=[...contactState.selected];if(!ids.length)return;if(action==='delete'&&!await askConfirm(mailImageText('Удалить выбранные контакты: ','Delete selected contacts: ')+ids.length+'?',{danger:true}))return;
+ try{if(action==='export'){const cards=[];for(const id of ids){const card=await api('/api/v1/contacts/cards/'+encodeURIComponent(id));if(!card.vcard)throw Error(mailImageText('Нет данных vCard','No vCard data'));cards.push(card.vcard.trim())}const url=URL.createObjectURL(new Blob([cards.join('\r\n')+'\r\n'],{type:'text/vcard;charset=utf-8'}));const link=document.createElement('a');link.href=url;link.download='contacts.vcf';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}else{let done=0;for(const id of ids){await api('/api/v1/contacts/cards/'+encodeURIComponent(id),{method:'DELETE'});contactState.selected.delete(id);done++}contactState.cardID='';await loadContactCards();setMsg($('contact-msg'),mailImageText('Удалено контактов: ','Contacts deleted: ')+done,'ok')}}catch(error){setMsg($('contact-msg'),error.message,'err');if(action==='delete')await loadContactCards()}
 }
 
 async function openContactCard(id) {
@@ -4997,7 +5047,8 @@ function showFileReader(entry) {
   let preview=$('btn-files-preview');
   if(!preview){preview=document.createElement('button');preview.id='btn-files-preview';preview.type='button';preview.className='btn-secondary btn-sm';$('btn-files-download').after(preview);}
   preview.textContent=mailImageText('Просмотр','Preview');preview.hidden=entry.is_dir||!documentPreviewType(entry.name);
-  preview.onclick=()=>openDocumentPreview({url:'/api/v1/files/content?path='+encodeURIComponent(joinPath(filesState.path,entry.name)),name:entry.name,size:entry.size});
+  let share=$('btn-files-share');if(!share){share=document.createElement('button');share.id='btn-files-share';share.type='button';share.className='btn-secondary btn-sm';$('btn-files-download').after(share);}share.hidden=!!filesState.ownerID;share.textContent=mailImageText('Доступ','Share');share.onclick=()=>openFileAccess(joinPath(filesState.path,entry.name));
+  preview.onclick=()=>openDocumentPreview({url:'/api/v1/files/content?path='+encodeURIComponent(joinPath(filesState.path,entry.name))+(filesState.ownerID?'&owner_id='+encodeURIComponent(filesState.ownerID):''),name:entry.name,size:entry.size});
 }
 
 function selectFileEntry(name) {
@@ -5014,7 +5065,7 @@ async function downloadFile(name) {
   setMsg($("files-msg"),t("files_preparing"));
   try {
     const headers={};if(state.tokens?.access_token)headers.Authorization="Bearer "+state.tokens.access_token;
-    const res=await fetch("/api/v1/files/"+(isFolder?"archive":"content")+"?path="+encodeURIComponent(path),{headers});
+    const res=await fetch("/api/v1/files/"+(isFolder?"archive":"content")+"?path="+encodeURIComponent(path)+(filesState.ownerID?"&owner_id="+encodeURIComponent(filesState.ownerID):""),{headers});
     if(!res.ok)throw new Error(t("files_download_error"));
     const blob=await res.blob(),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name+(isFolder?".zip":"");a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);setMsg($("files-msg"),"");
   }catch(err){setMsg($("files-msg"),err.message,"err");}
@@ -5163,7 +5214,7 @@ $("form-chat-send")?.addEventListener("submit", async (e) => {
 });
 
 function filesGoUp() {
-  if (!filesState.path) return;
+  if (!filesState.path||filesState.listTarget||(filesState.ownerID&&filesState.path===filesState.sharedRoot)) return;
   const parts = filesState.path.split("/").filter(Boolean);
   parts.pop();
   filesState.path = parts.join("/");
@@ -5175,13 +5226,14 @@ async function refreshFiles() {
   const list = $("files-list");
   if (!list) return;
   if ($("files-path")) $("files-path").textContent = "/" + (filesState.path || "");
-  $("btn-files-up")?.classList.toggle("hidden", !filesState.path);
+  $("btn-files-up")?.classList.toggle("hidden", !filesState.path||!!filesState.listTarget||(filesState.ownerID&&filesState.path===filesState.sharedRoot));
   try {
-    const q = filesState.path ? "?path=" + encodeURIComponent(filesState.path) : "";
+    const requested=filesState.listTarget||filesState.path;const q = requested ? "?path=" + encodeURIComponent(requested) : "";
     const data = await api("/api/v1/files" + q);
+    filesState.path=data.path??filesState.path;
     filesState.entries = data.entries || [];
     let html = "";
-    if (filesState.path) {
+    if (filesState.path&&!filesState.listTarget&&(!filesState.ownerID||filesState.path!==filesState.sharedRoot)) {
       html += `<li>
         <button type="button" class="file-item is-dir" id="files-up">
           <span class="file-name">..</span>
@@ -5335,7 +5387,7 @@ function tFmt(key, vars) {
 function putFileWithProgress(file, path, onProgress) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open("PUT", "/api/v1/files/content?path=" + encodeURIComponent(path));
+    xhr.open("PUT", "/api/v1/files/content?path=" + encodeURIComponent(path)+(filesState.ownerID?"&owner_id="+encodeURIComponent(filesState.ownerID):""));
     xhr.setRequestHeader("Content-Type", "application/octet-stream");
     if (state.tokens?.access_token) {
       xhr.setRequestHeader("Authorization", "Bearer " + state.tokens.access_token);
@@ -5966,6 +6018,7 @@ function renderCalendarProperties(props) {
  for(const [kind,url] of Object.entries(props.links||{})){const row=document.createElement('div');row.className='calendar-link-row';const label=document.createElement('label');label.textContent=({caldav:'CalDAV URL',ics:'WebDAV ICS URL',xml:'WebDAV XML URL'})[kind]||kind;const input=document.createElement('input');input.className='field-input';input.readOnly=true;input.value=url;input.setAttribute('aria-label',label.textContent);const copy=document.createElement('button');copy.className='btn-secondary btn-sm';copy.type='button';copy.textContent=t('cal_copy');copy.onclick=async()=>{try{await navigator.clipboard.writeText(url);setMsg($('calendar-properties-msg'),mailImageText('Ссылка скопирована','Link copied'),'ok')}catch{input.select();setMsg($('calendar-properties-msg'),mailImageText('Скопируйте выделенную ссылку','Copy the selected link'))}};row.append(label,input,copy);section.append(row);}
  calendarPropertiesDialog.querySelector('.calendar-properties-body').append(section);
 }
+ mountCalendarPropertyTabs(props);
 }
 function renderCalendarPublic(props) {
  const active=props.public_enabled;
@@ -6311,6 +6364,8 @@ function renderMailPagination(data, busy = false) {
   next.addEventListener("click", () => change(offset+size));
   select.addEventListener("change", () => {mailState.pageSize = Number(select.value);change(0);});
   bar.append(previous,label,next,select);
+  const filters=$("mail-quick-filters");
+  if(filters){let toolbar=$("mail-toolbar");if(!toolbar){toolbar=document.createElement("div");toolbar.id="mail-toolbar";bar.before(toolbar)}toolbar.append(filters,bar)}
 }
 
 async function openMailModal(id) {
@@ -6464,6 +6519,9 @@ function mountCalendarEditor() {
   const actions=form.querySelector(':scope > .actions');actions?.before(details);
   if(actions){actions.classList.add('event-editor-footer');const save=actions.querySelector('[type=submit]');if(save){save.className='btn-spray';save.removeAttribute('data-i18n-title');save.removeAttribute('data-i18n');save.textContent=mailImageText('Сохранить событие','Save event')}const cancel=$('btn-cal-close');if(cancel){cancel.className='btn-secondary';cancel.textContent=mailImageText('Отмена','Cancel')}}
   if(actions){const content=document.createElement('div');content.className='event-editor-content';for(const child of [...form.children])if(child!==actions&&child.id!=='cal-msg')content.append(child);form.prepend(content)}
+  const compactRow=(field)=>{if(!field)return;const label=field.previousElementSibling;if(label?.tagName!=='LABEL')return;const row=document.createElement('div');row.className='event-compose-row';label.before(row);row.append(label,field)};
+  compactRow($('cal-summary'));compactRow($('cal-location'));compactRow(calendar);compactRow($('cal-attendee-input')?.closest('.cal-attendee-row'));compactRow($('cal-description'));
+  const planning=document.createElement('details');planning.className='event-advanced';const planningTitle=document.createElement('summary');planningTitle.textContent=mailImageText('Ресурсы и планирование','Resources and scheduling');planning.append(planningTitle);if(resourceLabel)planning.append(resourceLabel);if(resources)planning.append(resources);if(freebusy)planning.append(freebusy);details.before(planning);
   const title=dialog.querySelector('h3');if(title){title.id='event-editor-title';dialog.setAttribute('aria-labelledby',title.id)}
   return dialog;
 }
@@ -6607,7 +6665,7 @@ async function openTravelDrafts(messageID) {
 }
 // Shared stroke language for reader actions and document previews.
 function designIcon(name) {
-  const paths={reply:'M9 5 3 11l6 6M3 11h9a8 8 0 0 1 8 8','reply-all':'m8 4-6 6 6 6m5-12-6 6 6 6M7 10h6a8 8 0 0 1 8 8',trip:'M8 2h8v4H8zM5 6h14v15H5zM9 10v6m6-6v6',spam:'m7 3-4 4v10l4 4h10l4-4V7l-4-4zM12 7v6m0 4h.01',archive:'M3 3h18v5H3zM5 8v13h14V8M9 12h6',delete:'M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7',download:'M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4',close:'m6 6 12 12M18 6 6 18'};
+  const paths={refresh:'M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-1l2 6M4 12l2 6a7 7 0 0 0 12-1',disconnect:'M9 5H4v14h5M12 12h9m-4-4 4 4-4 4',reply:'M9 5 3 11l6 6M3 11h9a8 8 0 0 1 8 8','reply-all':'m8 4-6 6 6 6m5-12-6 6 6 6M7 10h6a8 8 0 0 1 8 8',trip:'M8 2h8v4H8zM5 6h14v15H5zM9 10v6m6-6v6',spam:'m7 3-4 4v10l4 4h10l4-4V7l-4-4zM12 7v6m0 4h.01',archive:'M3 3h18v5H3zM5 8v13h14V8M9 12h6',delete:'M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7',download:'M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4',close:'m6 6 12 12M18 6 6 18'};
   return '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="'+(paths[name]||paths.download)+'"/></svg>';
 }
 function documentPreviewType(name) {
@@ -6699,9 +6757,9 @@ function mountComposeMentions(){
 mountComposeMentions();
 function mountCalendarPlaceSearch(){
  const location=$('cal-location');if(!location||$('cal-place-search'))return;
- const row=document.createElement('div');row.className='calendar-place-tools';const search=document.createElement('button');search.id='cal-place-search';search.className='btn-secondary btn-sm';search.type='button';search.textContent=mailImageText('Найти на карте','Find on map');const map=document.createElement('a');map.className='btn-secondary btn-sm';map.target='_blank';map.rel='noopener noreferrer';map.hidden=true;map.textContent=mailImageText('Открыть карту','Open map');const results=document.createElement('div');results.className='calendar-place-results';results.setAttribute('role','status');const hint=document.createElement('p');hint.className='meta';hint.style.fontSize='.75rem';hint.textContent=mailImageText('Поиск отправляет только введённое место в Photon. Карта: © OpenStreetMap contributors.','Search sends only the entered place to Photon. Map: © OpenStreetMap contributors.');row.append(search,map);location.after(row,results,hint);
+ const row=document.createElement('div');row.className='calendar-place-tools';const search=document.createElement('button');search.id='cal-place-search';search.className='btn-secondary btn-sm';search.type='button';search.textContent=mailImageText('Найти на карте','Find on map');const map=document.createElement('a');map.className='btn-secondary btn-sm';map.target='_blank';map.rel='noopener noreferrer';map.hidden=true;map.textContent=mailImageText('Открыть карту','Open map');const results=document.createElement('div');results.className='calendar-place-results';results.setAttribute('role','status');const hint=document.createElement('p');hint.className='meta';hint.style.fontSize='.75rem';hint.textContent=mailImageText('Поиск отправляет только введённое место в Photon. Карта: Яндекс.','Search sends only the entered place to Photon. Map: Yandex.');row.append(search,map);location.after(row,results,hint);
  location.addEventListener('input',()=>{delete location.dataset.geo;map.hidden=true;results.replaceChildren()});
- search.onclick=async()=>{const query=location.value.trim();if(query.length<3){results.textContent=mailImageText('Введите адрес или название места','Enter an address or place name');return}search.disabled=true;results.textContent=mailImageText('Поиск…','Searching…');try{const data=await api('/api/v1/calendar/places?q='+encodeURIComponent(query));results.replaceChildren();for(const place of data.places||[]){const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.textContent=place.label;button.onclick=()=>{location.value=place.label;location.dataset.geo=place.geo;const [lat,lon]=place.geo.split(';');map.href='https://www.openstreetmap.org/?mlat='+encodeURIComponent(lat)+'&mlon='+encodeURIComponent(lon)+'#map=16/'+encodeURIComponent(lat)+'/'+encodeURIComponent(lon);map.hidden=false;results.textContent=mailImageText('Точка выбрана: ','Point selected: ')+place.geo;};results.append(button)}if(!data.places?.length)results.textContent=mailImageText('Место не найдено. Уточните адрес.','Place not found. Refine the address.')}catch(error){results.textContent=error.message}finally{search.disabled=false}};
+ search.onclick=async()=>{const query=location.value.trim();if(query.length<3){results.textContent=mailImageText('Введите адрес или название места','Enter an address or place name');return}search.disabled=true;results.textContent=mailImageText('Поиск…','Searching…');try{const data=await api('/api/v1/calendar/places?q='+encodeURIComponent(query));results.replaceChildren();for(const place of data.places||[]){const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.textContent=place.label;button.onclick=()=>{location.value=place.label;location.dataset.geo=place.geo;const [lat,lon]=place.geo.split(';');map.href='https://yandex.ru/maps/?ll='+encodeURIComponent(lon+','+lat)+'&z=16&pt='+encodeURIComponent(lon+','+lat+',pm2rdm');map.hidden=false;results.textContent=mailImageText('Точка выбрана: ','Point selected: ')+place.geo;};results.append(button)}if(!data.places?.length)results.textContent=mailImageText('Место не найдено. Уточните адрес.','Place not found. Refine the address.')}catch(error){results.textContent=error.message}finally{search.disabled=false}};
 }
 mountCalendarPlaceSearch();
 function findCommonSlots(users,start,end,duration,limit=3){
@@ -6741,3 +6799,105 @@ function mountDKIMGenerator(){
  };
 }
 mountDKIMGenerator();
+
+function mountCalendarPropertyTabs(props){
+ const body=calendarPropertiesDialog.querySelector('.calendar-properties-body');if(!body)return;
+ const children=[...body.children],nav=document.createElement('nav');nav.className='calendar-property-tabs';nav.setAttribute('aria-label',mailImageText('Разделы свойств календаря','Calendar settings sections'));
+ const groups=[{name:mailImageText('Основное','General'),items:children.slice(0,1)},{name:mailImageText('Доступ','Access'),items:children.slice(1,3)},{name:mailImageText('Ссылки','Links'),items:children.slice(3)}].filter(group=>group.items.length);
+ groups.forEach((group,index)=>{const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.textContent=group.name;nav.append(button);button.onclick=()=>{groups.forEach((other,i)=>{nav.children[i].setAttribute('aria-pressed',String(i===index));other.items.forEach(item=>item.hidden=i!==index)})};});nav.firstElementChild?.click();
+ body.before(nav);groups[0]?.items.forEach(item=>item.hidden=false);groups.slice(1).forEach(group=>group.items.forEach(item=>item.hidden=true));
+ if(props.owned!==false){const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';const id=props.id||props.calendar?.id;button.textContent=mailImageText('Сделать календарём по умолчанию','Set as default calendar');button.disabled=id===calState.defaultCalendarID;button.onclick=async()=>{try{await api('/api/v1/calendar/default',{method:'PUT',body:JSON.stringify({calendar_id:id})});calState.defaultCalendarID=id;button.disabled=true;await refreshCalendar();}catch(error){setMsg($('cal-msg'),error.message,'err')}};groups[0]?.items[0].append(button);}
+ if(props.busy_only){const note=document.createElement('p');note.className='meta';note.textContent=mailImageText('Персональный календарь: другим пользователям и по публичной ссылке показывается только занятость без названий и деталей.','Personal calendar: shared and public views show busy intervals without event titles or details.');groups[0].items[0].prepend(note);const write=$('calendar-access-rights')?.querySelector('[value=write]');if(write)write.remove();}
+}
+
+function updateCreateButton(app) {
+ const settings=document.querySelector('.mail-settings');if(settings){settings.hidden=app!=='mail';settings.querySelector('.create-fab-menu').hidden=true;settings.querySelector('button.mail-settings-toggle').setAttribute('aria-expanded','false');}
+ let root=document.getElementById('section-create');
+ if(!root){root=document.createElement('div');root.id='section-create';root.className='section-create';document.getElementById('view-account').append(root);}
+ root.replaceChildren();
+ const actions={mail:['compose','btn-compose'],calendar:['new_event','btn-cal-new'],contacts:['new_contact','btn-contact-new'],notes:['note_new','btn-note-new'],files:['upload','files-upload']};
+ const action=actions[app];root.hidden=!action;if(!action)return;
+ const button=document.createElement('button');button.type='button';button.className='create-fab';button.textContent='+';button.title=t(action[0]);button.setAttribute('aria-label',t(action[0]));if(app==='files')button.disabled=!!filesState.ownerID&&filesState.sharedRights!=='write';root.append(button);
+ if(app==='files'){
+  const menu=document.createElement('div');menu.className='create-fab-menu';menu.hidden=true;menu.id='create-file-menu';
+  for(const [key,id] of [['upload','files-upload'],['mkdir','btn-files-mkdir'],['files_upload_folder','files-upload-folder']]){const item=document.createElement('button');item.type='button';item.textContent=t(key);item.onclick=()=>{menu.hidden=true;button.setAttribute('aria-expanded','false');document.getElementById(id)?.click();};menu.append(item);}
+  root.prepend(menu);button.setAttribute('aria-controls',menu.id);button.setAttribute('aria-expanded','false');button.onclick=()=>{menu.hidden=!menu.hidden;button.setAttribute('aria-expanded',String(!menu.hidden));};root.onkeydown=e=>{if(e.key==='Escape'){menu.hidden=true;button.setAttribute('aria-expanded','false');button.focus();}};
+ }else button.onclick=()=>{const target=document.getElementById(action[1]);if(target&&!target.disabled){button.classList.remove('is-activated');void button.offsetWidth;button.classList.add('is-activated');button.addEventListener('animationend',()=>button.classList.remove('is-activated'),{once:true});target.click();}};
+}
+
+async function openMailboxAccess(ownerID='') {
+ const dialog=document.createElement('dialog');dialog.className='document-preview';dialog.setAttribute('aria-label',mailImageText('Доступ к ящику','Mailbox access'));
+ const header=document.createElement('header'),title=document.createElement('strong'),close=document.createElement('button');title.textContent=mailImageText('Доступ к ящику','Mailbox access');close.type='button';close.className='btn-secondary';close.textContent='×';close.onclick=()=>dialog.close();header.append(title,close);
+ const body=document.createElement('div');body.className='document-preview-content';const form=document.createElement('form'),email=document.createElement('input');email.type='email';email.required=true;email.placeholder='user@example.com';email.className='field-input';form.append(email);
+ const checks={};for(const [key,label] of [['can_read',mailImageText('Читать письма','Read messages')],['can_send_as',mailImageText('Отправлять как владелец','Send as owner')],['can_send_on_behalf',mailImageText('Отправлять от имени владельца','Send on behalf')]]){const line=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.checked=key==='can_read';checks[key]=input;line.append(input,document.createTextNode(' '+label));form.append(line);}
+ const save=document.createElement('button');save.className='btn-spray';save.textContent=mailImageText('Предоставить доступ','Grant access');form.append(save);const status=document.createElement('p'),list=document.createElement('div');body.append(form,status,list);dialog.append(header,body);document.body.append(dialog);dialog.addEventListener('close',()=>dialog.remove(),{once:true});dialog.showModal();
+ const suffix=ownerID?'?owner_id='+encodeURIComponent(ownerID):'';
+ const refresh=async()=>{const result=await api('/api/v1/mail/delegates'+suffix);list.replaceChildren();for(const item of result.delegates||[]){const row=document.createElement('div');row.textContent=(item.email||item.delegate_id)+' · '+[item.can_read&&mailImageText('чтение','read'),item.can_send_as&&mailImageText('отправка как владелец','send as'),item.can_send_on_behalf&&mailImageText('от имени','on behalf')].filter(Boolean).join(', ');const revoke=document.createElement('button');revoke.type='button';revoke.className='btn-secondary btn-sm';revoke.textContent=mailImageText('Отозвать','Revoke');revoke.onclick=async()=>{try{await api('/api/v1/mail/delegates/'+encodeURIComponent(item.delegate_id)+suffix,{method:'DELETE'});await refresh();}catch(error){status.textContent=error.message}};row.append(revoke);list.append(row);}};
+ form.onsubmit=async event=>{event.preventDefault();save.disabled=true;try{const request={email:email.value};for(const key in checks)request[key]=checks[key].checked;await api('/api/v1/mail/delegates'+suffix,{method:'POST',body:JSON.stringify(request)});email.value='';await refresh();}catch(error){status.textContent=error.message}finally{save.disabled=false}};
+ try{await refresh();}catch(error){status.textContent=error.message}
+}
+const mailboxAccessButton=document.createElement('button');mailboxAccessButton.type='button';mailboxAccessButton.className='btn-secondary btn-sm';mailboxAccessButton.textContent=mailImageText('Доступ к ящику','Mailbox access');mailboxAccessButton.onclick=()=>openMailboxAccess();mountMailSettings();
+
+function mountMailSettings(){
+ const host=document.querySelector('.mail-folders');const folders=$('btn-mail-folders');if(!host||!folders)return;
+ const root=document.createElement('div');root.className='mail-settings';
+ const menu=document.createElement('div');menu.id='mail-settings-menu';menu.className='create-fab-menu';menu.hidden=true;
+ folders.removeAttribute('class');mailboxAccessButton.removeAttribute('class');menu.append(folders,mailboxAccessButton);
+ const button=document.createElement('button');button.type='button';button.className='mail-settings-toggle';button.innerHTML='<span aria-hidden="true">⚙</span>';button.title=mailImageText('Настройки почты','Mail settings');button.setAttribute('aria-label',button.title);button.setAttribute('aria-controls',menu.id);button.setAttribute('aria-expanded','false');
+ const close=()=>{menu.hidden=true;button.setAttribute('aria-expanded','false')};
+ button.onclick=()=>{menu.hidden=!menu.hidden;button.setAttribute('aria-expanded',String(!menu.hidden))};
+ menu.addEventListener('click',event=>{if(event.target.closest('button'))close()});
+ root.addEventListener('keydown',event=>{if(event.key==='Escape'){close();button.focus()}});
+ document.addEventListener('click',event=>{if(!root.contains(event.target))close()});
+ root.append(menu,button);$('view-account').append(root);
+}
+
+function mountProfilePassword(){
+ const host=$('profile-security');if(!host)return;const section=document.createElement('section');section.className='card';const title=document.createElement('h3');title.textContent=mailImageText('Смена пароля','Change password');const form=document.createElement('form');const fields=[];
+ for(const [text,autocomplete] of [[mailImageText('Текущий пароль','Current password'),'current-password'],[mailImageText('Новый пароль','New password'),'new-password'],[mailImageText('Повторите новый пароль','Confirm new password'),'new-password']]){const label=document.createElement('label');label.className='field';label.textContent=text;const input=document.createElement('input');input.type='password';input.required=true;input.maxLength=256;input.autocomplete=autocomplete;input.className='field-input';label.append(input);form.append(label);fields.push(input);}
+ const save=document.createElement('button');save.className='btn-spray';save.textContent=mailImageText('Сменить пароль','Change password');const status=document.createElement('p');status.setAttribute('role','status');form.append(save,status);section.append(title,form);host.prepend(section);
+ form.onsubmit=async event=>{event.preventDefault();if(fields[1].value!==fields[2].value){status.textContent=mailImageText('Пароли не совпадают','Passwords do not match');return}save.disabled=true;try{await api('/api/v1/me/password',{method:'POST',body:JSON.stringify({current_password:fields[0].value,new_password:fields[1].value})});form.reset();forceLogin();}catch(error){status.textContent=error.message}finally{save.disabled=false}};
+}
+mountProfilePassword();
+
+function renderCalendarMap(geo){
+ document.getElementById('calendar-reader-map')?.remove();
+ const parts=String(geo||'').split(';').map(Number);if(parts.length!==2||!parts.every(Number.isFinite)||Math.abs(parts[0])>90||Math.abs(parts[1])>180)return;
+ const container=document.createElement('div');container.id='calendar-reader-map';
+ const map=document.createElement('iframe');map.title=mailImageText('Место события на Яндекс Картах','Event location on Yandex Maps');map.loading='lazy';map.referrerPolicy='no-referrer';map.setAttribute('sandbox','allow-scripts allow-same-origin allow-popups');map.style.cssText='width:100%;height:240px;border:0;border-radius:12px';const point=parts[1]+','+parts[0];map.src='https://yandex.ru/map-widget/v1/?ll='+encodeURIComponent(point)+'&z=16&pt='+encodeURIComponent(point+',pm2rdm');container.append(map);$('cal-read-location')?.parentElement.after(container);
+}
+
+async function openFileAccess(path){
+ const dialog=document.createElement('dialog');dialog.className='document-preview';const header=document.createElement('header'),title=document.createElement('strong'),close=document.createElement('button');title.textContent=mailImageText('Доступ: ','Share: ')+path;close.type='button';close.className='btn-secondary';close.textContent='×';close.onclick=()=>dialog.close();header.append(title,close);const body=document.createElement('div');body.className='document-preview-content';const status=document.createElement('p');status.setAttribute('role','status');
+ const form=document.createElement('form'),email=document.createElement('input'),rights=document.createElement('select'),save=document.createElement('button');email.type='email';email.required=true;email.placeholder='user@example.com';email.className='field-input';rights.className='field-input';for(const [value,text] of [['read',mailImageText('Только чтение','Read only')],['write',mailImageText('Чтение и запись','Read and write')]]){const option=new Option(text,value);rights.add(option)}save.textContent=mailImageText('Предоставить доступ пользователю','Grant user access');save.className='btn-spray';form.append(email,rights,save);const grants=document.createElement('div');
+ const linkForm=document.createElement('form'),password=document.createElement('input'),ttl=document.createElement('input'),linkRights=rights.cloneNode(true),create=document.createElement('button'),result=document.createElement('div');password.type='password';password.maxLength=256;password.placeholder=mailImageText('Пароль (необязательно)','Password (optional)');password.autocomplete='new-password';password.className='field-input';ttl.type='number';ttl.min='1';ttl.max='8760';ttl.value='168';ttl.className='field-input';const timeLabel=document.createElement('label');timeLabel.textContent=mailImageText('Срок действия, часов','Expires after, hours');timeLabel.append(ttl);create.className='btn-spray';create.textContent=mailImageText('Создать ссылку','Create link');linkForm.append(password,timeLabel,linkRights,create,result);const links=document.createElement('div');body.append(form,grants,document.createElement('hr'),linkForm,links,status);dialog.append(header,body);document.body.append(dialog);dialog.addEventListener('close',()=>dialog.remove(),{once:true});dialog.showModal();
+ const refresh=async()=>{const [access,shared]=await Promise.all([api('/api/v1/files/access'),api('/api/v1/files/shares')]);grants.replaceChildren();links.replaceChildren();for(const item of access.access||[]){if(item.path!==path)continue;const row=document.createElement('p');row.textContent=item.email+' · '+item.rights;const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.textContent=mailImageText('Отозвать','Revoke');button.onclick=async()=>{try{await api('/api/v1/files/access',{method:'DELETE',body:JSON.stringify({path,grantee_id:item.grantee_id})});await refresh()}catch(e){status.textContent=e.message}};row.append(button);grants.append(row)}for(const item of shared.shares||[]){if(item.path!==path)continue;const row=document.createElement('p'),link=document.createElement('a');link.href=item.url;link.target='_blank';link.rel='noopener noreferrer';link.textContent=mailImageText('Ссылка','Link')+' · '+(item.rights||'read')+' · '+new Date(item.expires_at).toLocaleString();const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.textContent=mailImageText('Отозвать','Revoke');button.onclick=async()=>{try{await api('/api/v1/files/shares/'+encodeURIComponent(item.id),{method:'DELETE'});await refresh()}catch(e){status.textContent=e.message}};row.append(link,button);links.append(row)}};
+ form.onsubmit=async event=>{event.preventDefault();save.disabled=true;try{await api('/api/v1/files/access',{method:'POST',body:JSON.stringify({path,email:email.value,rights:rights.value})});email.value='';await refresh()}catch(e){status.textContent=e.message}finally{save.disabled=false}};
+ linkForm.onsubmit=async event=>{event.preventDefault();create.disabled=true;try{const value=await api('/api/v1/files/shares',{method:'POST',body:JSON.stringify({path,password:password.value,rights:linkRights.value,ttl_hours:Number(ttl.value)})});password.value='';const input=document.createElement('input');input.readOnly=true;input.className='field-input';input.value=value.url;input.onclick=()=>input.select();result.replaceChildren(input);await refresh()}catch(e){status.textContent=e.message}finally{create.disabled=false}};
+ try{await refresh()}catch(e){status.textContent=e.message}
+}
+
+async function loadAccountAvatar(image,email=''){
+ const request=(image.dataset.request||'')+'x';image.dataset.request=request;try{const response=await fetch('/api/v1/me/avatar'+(email?'?email='+encodeURIComponent(email):''),{headers:{Authorization:'Bearer '+state.tokens?.access_token}});if(!response.ok){image.hidden=true;return}const blob=await response.blob();if(image.dataset.request!==request)return;if(image.dataset.blobURL)URL.revokeObjectURL(image.dataset.blobURL);image.dataset.blobURL=URL.createObjectURL(blob);image.src=image.dataset.blobURL;image.hidden=false;}catch{image.hidden=true}
+}
+function renderSenderAvatar(from){const email=String(from||'').match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0];const host=$('mail-from');if(!host||!email)return;const image=document.createElement('img');image.className='account-avatar';image.alt='';image.hidden=true;host.prepend(image);loadAccountAvatar(image,email);}
+function mountProfileAvatar(){const host=$('profile-form');if(!host)return;const row=document.createElement('div');row.className='profile-avatar-controls';const image=document.createElement('img');image.className='account-avatar profile-avatar';image.alt=mailImageText('Аватар','Avatar');const input=document.createElement('input');input.type='file';input.accept='image/png,image/jpeg';const label=document.createElement('label');label.textContent=mailImageText('Аватар для почты и XMPP','Mail and XMPP avatar');label.append(input);const remove=document.createElement('button');remove.type='button';remove.className='btn-secondary btn-sm';remove.textContent=mailImageText('Удалить аватар','Remove avatar');const status=document.createElement('p');status.setAttribute('role','status');row.append(image,label,remove,status);host.before(row);
+ input.onchange=async()=>{const file=input.files?.[0];if(!file)return;input.disabled=true;try{const response=await fetch('/api/v1/me/avatar',{method:'PUT',headers:{Authorization:'Bearer '+state.tokens?.access_token},body:file});if(!response.ok)throw Error((await response.json()).error);await loadAccountAvatar(image);status.textContent=mailImageText('Аватар сохранён','Avatar saved');}catch(e){status.textContent=e.message}finally{input.disabled=false;input.value=''}};remove.onclick=async()=>{try{await api('/api/v1/me/avatar',{method:'DELETE'});image.hidden=true;}catch(e){status.textContent=e.message}};const observer=new MutationObserver(()=>{if(!$('app-profile').classList.contains('hidden'))loadAccountAvatar(image)});observer.observe($('app-profile'),{attributes:true,attributeFilter:['class']});}
+mountProfileAvatar();
+
+async function openAdminSessions(){const dialog=document.createElement('dialog');dialog.className='document-preview admin-sessions-dialog';dialog.style.width='min(960px,94vw)';const header=document.createElement('header'),title=document.createElement('strong'),refresh=document.createElement('button'),close=document.createElement('button');title.textContent=mailImageText('Сессии и подключения','Sessions and connections');refresh.className=close.className='btn-secondary btn-sm';refresh.innerHTML=designIcon('refresh');refresh.title=t('refresh');refresh.setAttribute('aria-label',refresh.title);close.innerHTML=designIcon('close');close.title=mailImageText('Закрыть','Close');close.setAttribute('aria-label',close.title);refresh.classList.add('action-icon');close.classList.add('action-icon');close.onclick=()=>dialog.close();header.append(title,refresh,close);const content=document.createElement('div');content.className='document-preview-content';const status=document.createElement('p');status.setAttribute('role','status');dialog.append(header,content,status);document.body.append(dialog);dialog.addEventListener('close',()=>dialog.remove(),{once:true});dialog.showModal();const load=async()=>{try{const data=await api('/api/v1/admin/sessions');content.replaceChildren();const table=document.createElement('table');table.className='admin-users-table';const head=document.createElement('tr');for(const name of [mailImageText('Пользователь','User'),mailImageText('Протокол','Protocol'),'IP',mailImageText('Устройство / клиент','Device / client'),mailImageText('Последняя активность','Last seen'),'']){const cell=document.createElement('th');cell.textContent=name;head.append(cell)}table.append(head);for(const item of data.sessions||[]){const row=document.createElement('tr');for(const value of [item.email,item.protocol,item.address,item.agent||'—',new Date(item.last_seen).toLocaleString()]){const cell=document.createElement('td');cell.textContent=value;row.append(cell)}const cell=document.createElement('td'),button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.innerHTML=designIcon('disconnect');button.title=mailImageText('Разорвать сессию','Disconnect session');button.setAttribute('aria-label',button.title);button.classList.add('action-icon');button.onclick=async()=>{button.disabled=true;try{await api('/api/v1/admin/sessions/'+encodeURIComponent(item.id),{method:'DELETE'});await load()}catch(error){status.textContent=error.message;button.disabled=false}};cell.append(button);row.append(cell);table.append(row)}content.append(table);const hint=document.createElement('p');hint.className='meta';hint.textContent=mailImageText('Почтовые соединения показаны пока подключены. Веб-сессии — при активности за последние 15 минут; разрыв отзывает токен. Повторный вход с паролем остаётся доступен.','Mail connections are listed while connected. Web sessions show activity in the last 15 minutes; disconnect revokes their token. A new password login remains possible.');content.append(hint)}catch(error){status.textContent=error.message}};refresh.onclick=load;await load();}
+const sessionsButton=document.createElement('button');sessionsButton.type='button';sessionsButton.className='btn-secondary';sessionsButton.textContent=mailImageText('Сессии и устройства','Sessions and devices');sessionsButton.onclick=openAdminSessions;$('app-monitor')?.prepend(sessionsButton);
+
+async function openAdminDevices(){const dialog=document.createElement('dialog');dialog.className='document-preview';dialog.style.width='min(960px,94vw)';const header=document.createElement('header'),title=document.createElement('strong'),close=document.createElement('button');title.textContent=mailImageText('Мобильные устройства','Mobile devices');close.textContent='×';close.className='btn-secondary';close.onclick=()=>dialog.close();header.append(title,close);const body=document.createElement('div');body.className='document-preview-content';const status=document.createElement('p');status.setAttribute('role','status');dialog.append(header,body,status);document.body.append(dialog);dialog.addEventListener('close',()=>dialog.remove(),{once:true});dialog.showModal();const load=async()=>{const data=await api('/api/v1/admin/devices');body.replaceChildren();for(const item of data.devices||[]){const row=document.createElement('section');row.className='card';const name=document.createElement('strong');name.textContent=item.email+' · '+item.type;const details=document.createElement('p');details.textContent=item.device_id+' · '+item.address+' · '+new Date(item.last_seen).toLocaleString()+' · '+(item.blocked?mailImageText('Заблокировано','Blocked'):mailImageText('Разрешено','Allowed'))+' · '+item.wipe_status;row.append(name,details);for(const [action,label] of [[item.blocked?'unblock':'block',item.blocked?mailImageText('Разрешить','Allow'):mailImageText('Заблокировать','Block')],['wipe_account',mailImageText('Удалить данные учётной записи','Erase account data')],['cancel_wipe',mailImageText('Отменить неотправленную команду','Cancel unsent command')]]){const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.textContent=label;if(action==='wipe_account')button.disabled=!item.account_wipe_supported||['pending','sent','acknowledged'].includes(item.wipe_status);if(action==='cancel_wipe')button.disabled=item.wipe_status!=='pending';button.onclick=async()=>{let confirm='';if(action==='wipe_account'){confirm=await askPrompt(mailImageText('Удаление данных этой учётной записи на устройстве. Введите ID устройства для подтверждения: ','Erase this account’s data on the device. Enter device ID to confirm: ')+item.device_id);if(confirm!==item.device_id)return}button.disabled=true;try{await api('/api/v1/admin/devices/'+encodeURIComponent(item.id),{method:'POST',body:JSON.stringify({action,confirm_device_id:confirm})});await load()}catch(error){status.textContent=error.message;button.disabled=false}};row.append(button)}body.append(row)}const hint=document.createElement('p');hint.className='meta';hint.textContent=mailImageText('Удаление доступно клиентам FlowSync / ActiveSync 16.1 после Provision. Команда затрагивает только данные учётной записи и выполняется при следующем подключении клиента. Статус acknowledged означает подтверждение клиента.','Account-only wipe is available after Provision for FlowSync / ActiveSync 16.1 clients. It is sent on the next client connection. Acknowledged means the client confirmed the command.');body.append(hint)};try{await load()}catch(error){status.textContent=error.message}}
+const devicesButton=document.createElement('button');devicesButton.type='button';devicesButton.className='btn-secondary';devicesButton.textContent=mailImageText('Мобильные устройства','Mobile devices');devicesButton.onclick=openAdminDevices;sessionsButton.after(devicesButton);
+
+async function openSharedFiles(){const dialog=document.createElement('dialog');dialog.className='document-preview';const header=document.createElement('header'),title=document.createElement('strong'),close=document.createElement('button');title.textContent=mailImageText('Доступные мне файлы','Shared with me');close.textContent='×';close.className='btn-secondary';close.onclick=()=>dialog.close();header.append(title,close);const body=document.createElement('div');body.className='document-preview-content';dialog.append(header,body);document.body.append(dialog);dialog.addEventListener('close',()=>dialog.remove(),{once:true});dialog.showModal();try{const data=await api('/api/v1/files/access?shared=1');for(const item of data.access||[]){const button=document.createElement('button');button.type='button';button.className='btn-secondary';button.textContent=item.path+' · '+item.rights;button.onclick=async()=>{filesState.ownerID=item.owner_id;filesState.sharedRoot=item.path;filesState.sharedRights=item.rights;filesState.listTarget=item.is_dir?'':item.path;filesState.path=item.path;filesState.selected=null;dialog.close();await refreshFiles();updateCreateButton('files')};body.append(button)}if(!data.access?.length)body.textContent=mailImageText('Общих файлов пока нет','No shared files yet')}catch(error){body.textContent=error.message}}
+const sharedFilesButton=document.createElement('button');sharedFilesButton.type='button';sharedFilesButton.className='btn-secondary btn-sm';sharedFilesButton.textContent=mailImageText('Доступные мне','Shared with me');sharedFilesButton.onclick=openSharedFiles;$('btn-files-refresh')?.after(sharedFilesButton);const ownFilesButton=document.createElement('button');ownFilesButton.type='button';ownFilesButton.className='btn-secondary btn-sm';ownFilesButton.textContent=mailImageText('Мои файлы','My files');ownFilesButton.onclick=()=>{filesState.ownerID='';filesState.sharedRoot='';filesState.listTarget='';filesState.sharedRights='write';filesState.path='';filesState.selected=null;refreshFiles();updateCreateButton('files')};sharedFilesButton.after(ownFilesButton);
+
+async function openUserRole(user){
+ if(!user||!state.me?.is_global_admin)return;const dialog=document.createElement('dialog');dialog.className='document-preview user-role-dialog';const head=document.createElement('header'),title=document.createElement('strong'),close=document.createElement('button');title.textContent=mailImageText('Роль пользователя: ','User role: ')+user.email;close.type='button';close.className='btn-secondary action-icon';close.innerHTML=designIcon('close');close.setAttribute('aria-label',mailImageText('Закрыть','Close'));close.onclick=()=>dialog.close();head.append(title,close);
+ const body=document.createElement('div');body.className='document-preview-content';const form=document.createElement('form'),select=document.createElement('select');select.className='field-input';select.setAttribute('aria-label',mailImageText('Роль','Role'));for(const [id,label] of [['',mailImageText('Пользователь','User')],['domain_admin',mailImageText('Администратор доменов','Domain administrator')],['global_admin',mailImageText('Глобальный администратор','Global administrator')]]){const option=document.createElement('option');option.value=id;option.textContent=label;select.append(option)}select.value=user.roles?.includes('global_admin')?'global_admin':user.roles?.includes('domain_admin')?'domain_admin':'';form.append(select);
+ const domains=document.createElement('fieldset');const legend=document.createElement('legend');legend.textContent=mailImageText('Домены, которыми можно управлять','Domains this administrator can manage');domains.append(legend);const hint=document.createElement('p');hint.className='meta';hint.textContent=mailImageText('Назначать роли может только глобальный администратор. Администратор домена управляет пользователями только отмеченных доменов.','Only a global administrator can assign roles. A domain administrator can manage users in the selected domains only.');const save=document.createElement('button');save.className='btn-spray';save.textContent=t('save');const status=document.createElement('p');status.setAttribute('role','status');form.append(domains,hint,save,status);body.append(form);dialog.append(head,body);document.body.append(dialog);dialog.onclose=()=>dialog.remove();dialog.showModal();const update=()=>domains.hidden=select.value!=='domain_admin';select.onchange=update;
+ try{const tenants=await api('/api/v1/admin/tenants');for(const tenant of tenants.tenants||[]){const result=await api('/api/v1/admin/domains?tenant_id='+encodeURIComponent(tenant.id));for(const domain of result.domains||[]){const label=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.value=domain.id;input.checked=user.domain_ids?.length?user.domain_ids.includes(domain.id):domain.id===user.domain_id;label.append(input,document.createTextNode(' '+domain.name));domains.append(label)}}update()}catch(error){status.textContent=error.message;save.disabled=true}
+ form.onsubmit=async event=>{event.preventDefault();const ids=[...domains.querySelectorAll('input:checked')].map(input=>input.value);if(select.value==='domain_admin'&&!ids.length){status.textContent=mailImageText('Выберите хотя бы один домен','Select at least one domain');return}save.disabled=true;try{await api('/api/v1/admin/users/'+encodeURIComponent(user.id),{method:'PATCH',body:JSON.stringify({roles:select.value?[select.value]:[],domain_ids:select.value==='domain_admin'?ids:[]})});dialog.close();await loadMe();await refreshAdminUsers()}catch(error){status.textContent=error.message;save.disabled=false}};
+}

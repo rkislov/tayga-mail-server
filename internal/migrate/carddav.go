@@ -3,6 +3,7 @@ package migrate
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"path"
@@ -97,7 +98,7 @@ func (s *Service) runCardDAV(ctx context.Context, job *Job) error {
 			}
 			uid := obj.Card.Value(vcard.FieldUID)
 			if uid == "" {
-				uid = storage.NewID()
+				uid = fmt.Sprintf("tayga-import-%x", sha256.Sum256([]byte(job.URL+"\n"+obj.Path)))
 				obj.Card.SetValue(vcard.FieldUID, uid)
 			}
 			exists, err := s.store.AddressObjectExistsByUID(ctx, dbBook.ID, uid)

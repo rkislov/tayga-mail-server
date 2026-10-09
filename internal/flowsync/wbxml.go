@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2024-2026 Кислов Роман Сергеевич.
+
 package flowsync
 
 import (
@@ -7,7 +10,7 @@ import (
 	"strings"
 )
 
-// ActiveSync WBXML (MS-ASWBXML) minimal codec — proprietary FlowSync encoding path.
+// ActiveSync WBXML (MS-ASWBXML) minimal codec — original FlowSync encoding path.
 // Code pages cover FolderHierarchy, AirSync, Email, Provision, Ping, GetItemEstimate.
 
 const (

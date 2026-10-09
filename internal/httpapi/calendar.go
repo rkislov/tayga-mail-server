@@ -46,6 +46,23 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 	parts := splitPath(path)
 
 	switch {
+	case r.Method == http.MethodPut && path == "default":
+		var req struct {
+			CalendarID string `json:"calendar_id"`
+		}
+		if json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&req) != nil {
+			writeJSON(w, 400, map[string]string{"error": "invalid json"})
+			return
+		}
+		if _, err := s.store.GetCalendarByID(r.Context(), au.ID, req.CalendarID); err != nil {
+			writeJSON(w, 404, map[string]string{"error": "owned calendar required"})
+			return
+		}
+		if err := s.store.PutSetting(r.Context(), "calendar.default."+au.ID, req.CalendarID); err != nil {
+			writeJSON(w, 500, map[string]string{"error": "cannot save default"})
+			return
+		}
+		writeJSON(w, 200, map[string]string{"default_calendar_id": req.CalendarID})
 	case r.Method == http.MethodGet && len(parts) == 1 && parts[0] == "calendars":
 		_ = s.store.EnsureDAVDefaults(r.Context(), au.ID)
 		cals, err := s.store.ListCalendars(r.Context(), au.ID)
@@ -53,13 +70,28 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
+		defaultID, _, _ := s.store.GetSetting(r.Context(), "calendar.default."+au.ID)
+		validDefault := false
+		for _, c := range cals {
+			if c.ID == defaultID {
+				validDefault = true
+			}
+		}
+		if !validDefault {
+			for _, c := range cals {
+				if c.Name == "default" {
+					defaultID = c.ID
+					break
+				}
+			}
+		}
 		out := make([]map[string]any, 0, len(cals))
 		seen := map[string]struct{}{}
 		for _, c := range cals {
 			seen[c.ID] = struct{}{}
 			out = append(out, map[string]any{
 				"id": c.ID, "name": c.Name, "display_name": c.DisplayName, "description": c.Description, "color": c.Color,
-				"shared": false, "owned": true, "writable": true, "deletable": !builtinCalendar(c.Name), "busy_only": c.Name == "personal",
+				"is_default": c.ID == defaultID, "shared": false, "owned": true, "writable": true, "deletable": !builtinCalendar(c.Name), "busy_only": c.Name == "personal",
 			})
 		}
 		if shared, err := s.store.ListSharedCalendars(r.Context(), au.ID); err == nil {
@@ -73,7 +105,7 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 				})
 			}
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"calendars": out})
+		writeJSON(w, http.StatusOK, map[string]any{"calendars": out, "default_calendar_id": defaultID})
 
 	case r.Method == http.MethodPost && len(parts) == 1 && parts[0] == "calendars":
 		var req struct {

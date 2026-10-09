@@ -87,6 +87,13 @@ func (s *Service) runCalDAV(ctx context.Context, job *Job) error {
 	}
 
 	copied, skipped, errs := job.Copied, job.Skipped, job.Errors
+	var lastError string
+	recordError := func(href string, err error) {
+		errs++
+		lastError = href + ": " + err.Error()
+		s.log.Warn("calendar migration object", "job", job.ID, "path", href, "err", err)
+		_ = s.bumpProgress(ctx, job.ID, copied, skipped, errs, lastError, "")
+	}
 	query := &caldav.CalendarQuery{
 		CompRequest: caldav.CalendarCompRequest{
 			Name: "VCALENDAR", AllProps: true, AllComps: true,
@@ -128,9 +135,12 @@ func (s *Service) runCalDAV(ctx context.Context, job *Job) error {
 			if obj.Data == nil {
 				continue
 			}
-			compType, uid, verr := caldav.ValidateCalendarObject(obj.Data)
+			compType, uid, verr := validateImportedCalendar(obj.Data)
 			if verr != nil || uid == "" {
-				errs++
+				if verr == nil {
+					verr = fmt.Errorf("missing UID")
+				}
+				recordError(obj.Path, verr)
 				continue
 			}
 			exists, err := s.store.CalendarObjectExistsByUID(ctx, dbCal.ID, uid)
@@ -140,7 +150,7 @@ func (s *Service) runCalDAV(ctx context.Context, job *Job) error {
 			}
 			var buf bytes.Buffer
 			if err := ical.NewEncoder(&buf).Encode(obj.Data); err != nil {
-				errs++
+				recordError(obj.Path, err)
 				continue
 			}
 			href := path.Base(strings.TrimSuffix(obj.Path, "/"))
@@ -158,18 +168,19 @@ func (s *Service) runCalDAV(ctx context.Context, job *Job) error {
 				DTEnd:      dtEnd,
 			})
 			if err != nil {
-				errs++
+				recordError(obj.Path, err)
 				continue
 			}
 			copied++
 			if (copied+skipped+errs)%20 == 0 {
-				_ = s.bumpProgress(ctx, job.ID, copied, skipped, errs, "", `{"cal":`+jsonString(cal.Path)+`}`)
+				_ = s.bumpProgress(ctx, job.ID, copied, skipped, errs, lastError, `{"cal":`+jsonString(cal.Path)+`}`)
 			}
 		}
-		_ = s.bumpProgress(ctx, job.ID, copied, skipped, errs, "", `{"cal":`+jsonString(cal.Path)+`}`)
+		_ = s.bumpProgress(ctx, job.ID, copied, skipped, errs, lastError, `{"cal":`+jsonString(cal.Path)+`}`)
 	}
 	job.Copied, job.Skipped, job.Errors = copied, skipped, errs
-	_ = s.bumpProgress(ctx, job.ID, copied, skipped, errs, "", "{}")
+	job.LastError = lastError
+	_ = s.bumpProgress(ctx, job.ID, copied, skipped, errs, lastError, "{}")
 	return nil
 }
 
@@ -196,4 +207,31 @@ func extractEventTimes(cal *ical.Calendar) (start, end *time.Time) {
 		break
 	}
 	return start, end
+}
+
+// VTIMEZONE has TZID, not UID. Validate event components while retaining timezone definitions.
+func validateImportedCalendar(cal *ical.Calendar) (string, string, error) {
+	delete(cal.Props, ical.PropMethod)
+	check := *cal
+	check.Component = &ical.Component{Name: cal.Name, Props: cal.Props}
+	for _, component := range cal.Children {
+		if component.Name == ical.CompEvent || component.Name == ical.CompToDo {
+			if component.Props.Get(ical.PropDateTimeStamp) == nil {
+				stamp := time.Now().UTC()
+				for _, name := range []string{ical.PropLastModified, ical.PropCreated} {
+					if prop := component.Props.Get(name); prop != nil {
+						if parsed, err := prop.DateTime(nil); err == nil {
+							stamp = parsed.UTC()
+							break
+						}
+					}
+				}
+				component.Props.SetDateTime(ical.PropDateTimeStamp, stamp)
+			}
+		}
+		if component.Name != ical.CompTimezone {
+			check.Children = append(check.Children, component)
+		}
+	}
+	return caldav.ValidateCalendarObject(&check)
 }

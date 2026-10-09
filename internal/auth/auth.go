@@ -33,6 +33,7 @@ type PasswordHasher interface {
 
 // Layer composes local auth with optional LDAP/OIDC providers per domain.
 type Layer struct {
+	sessions SessionRegistry
 	Store    storage.Driver
 	Hasher   PasswordHasher
 	LDAP     LDAPProvider

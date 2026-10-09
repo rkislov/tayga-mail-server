@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2024-2026 Кислов Роман Сергеевич.
+
 // Package flowsync is Tayga's FlowSync sync engine.
 //
 // FlowSync is original software by Кислов Роман Сергеевич. It provides
