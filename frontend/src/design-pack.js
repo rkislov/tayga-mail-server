@@ -146,7 +146,7 @@ function mountCalendarPropertyTabs(props){
 }
 
 function updateCreateButton(app) {
- const settings=document.querySelector('.mail-settings');if(settings){settings.hidden=app!=='mail';settings.querySelector('.create-fab-menu').hidden=true;settings.querySelector('button.mail-settings-toggle').setAttribute('aria-expanded','false');}
+ document.querySelectorAll('.mail-settings').forEach(settings=>{settings.hidden=app!==(settings.dataset.app||'mail');settings.querySelector('.create-fab-menu').hidden=true;settings.querySelector('button.mail-settings-toggle').setAttribute('aria-expanded','false');});
  let root=document.getElementById('section-create');
  if(!root){root=document.createElement('div');root.id='section-create';root.className='section-create';document.getElementById('view-account').append(root);}
  root.replaceChildren();
@@ -236,3 +236,16 @@ async function openUserRole(user){
  try{const tenants=await api('/api/v1/admin/tenants');for(const tenant of tenants.tenants||[]){const result=await api('/api/v1/admin/domains?tenant_id='+encodeURIComponent(tenant.id));for(const domain of result.domains||[]){const label=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.value=domain.id;input.checked=user.domain_ids?.length?user.domain_ids.includes(domain.id):domain.id===user.domain_id;label.append(input,document.createTextNode(' '+domain.name));domains.append(label)}}update()}catch(error){status.textContent=error.message;save.disabled=true}
  form.onsubmit=async event=>{event.preventDefault();const ids=[...domains.querySelectorAll('input:checked')].map(input=>input.value);if(select.value==='domain_admin'&&!ids.length){status.textContent=mailImageText('Выберите хотя бы один домен','Select at least one domain');return}save.disabled=true;try{await api('/api/v1/admin/users/'+encodeURIComponent(user.id),{method:'PATCH',body:JSON.stringify({roles:select.value?[select.value]:[],domain_ids:select.value==='domain_admin'?ids:[]})});dialog.close();await loadMe();await refreshAdminUsers()}catch(error){status.textContent=error.message;save.disabled=false}};
 }
+
+function mountContactSettings(){
+ const root=document.createElement('div');root.className='mail-settings';root.dataset.app='contacts';root.hidden=true;
+ const menu=document.createElement('div');menu.className='create-fab-menu';menu.id='contact-settings-menu';menu.hidden=true;
+ const button=document.createElement('button');button.type='button';button.className='mail-settings-toggle';button.innerHTML='<span aria-hidden="true">⚙</span>';button.title=mailImageText('Настройки контактов','Contact settings');button.setAttribute('aria-label',button.title);button.setAttribute('aria-controls',menu.id);button.setAttribute('aria-expanded','false');
+ const close=()=>{menu.hidden=true;button.setAttribute('aria-expanded','false')};
+ const refresh=document.createElement('button');refresh.type='button';refresh.textContent=mailImageText('Обновить адресные книги','Refresh address books');refresh.onclick=()=>{close();refreshContacts()};
+ const exportButton=document.createElement('button');exportButton.type='button';exportButton.textContent=mailImageText('Экспорт выбранных контактов','Export selected contacts');exportButton.onclick=()=>{close();contactBulkAction('export')};
+ menu.append(refresh,exportButton);button.onclick=()=>{exportButton.disabled=!contactState.selected.size;menu.hidden=!menu.hidden;button.setAttribute('aria-expanded',String(!menu.hidden))};
+ root.addEventListener('keydown',event=>{if(event.key==='Escape'){close();button.focus()}});document.addEventListener('click',event=>{if(!root.contains(event.target))close()});root.append(menu,button);$('view-account').append(root);
+}
+mountContactSettings();
+$('btn-contact-add-visible')?.remove();
