@@ -3158,3 +3158,44 @@ html[data-color-mode="light"] {
 .migration-dialog { margin:auto; }
 .calendar-properties-dialog h2 { margin:0; font-size:1.25rem; font-weight:600; }
 .calendar-properties-dialog h3 { font-size:1rem; font-weight:600; margin-bottom:.35rem; }
+
+/* Keep the note document scrollable without letting content or attachments expand the columns. */
+#app-notes { height:calc(100dvh - 7rem); min-height:30rem; grid-template-rows:minmax(0,1fr); }
+#app-notes > .panel-pane { min-width:0; min-height:0; }
+.notes-editor-pane { overflow:hidden; padding:0; }
+.note-editor { min-width:0; min-height:0; overflow:hidden; padding:1rem; }
+.note-toolbar,.note-meta,.note-title-input,.note-attachments,#note-attachment-status { flex-shrink:0; }
+.note-toolbar { gap:.4rem; padding:0 0 .65rem; border-bottom:1px solid rgba(var(--ui-ink-rgb),.12); }
+.note-format-actions { display:flex; flex-wrap:wrap; gap:.35rem; }
+.note-title-input { width:100%; min-width:0; margin:0; padding:.4rem 0; }
+.note-body { min-width:0; min-height:5rem; overflow-y:auto; overflow-x:hidden; overflow-wrap:anywhere; word-break:normal; padding:.75rem .25rem; }
+.note-body p { margin:.25rem 0 .65rem; }
+.note-body ol { list-style:decimal; padding-left:1.6rem; }
+.note-body ul:not([data-type="checklist"]) { list-style:disc; padding-left:1.6rem; }
+.note-body li { margin:.3rem 0; }
+.note-body li > p { margin:.2rem 0; }
+.note-body ul[data-type="checklist"] { list-style:none; padding-left:0; }
+.note-body ul[data-type="checklist"] > li { display:flex; gap:.65rem; align-items:flex-start; }
+.note-body input[type="checkbox"] { width:1rem; height:1rem; margin:.45rem 0 0; flex-shrink:0; accent-color:var(--accent); cursor:pointer; }
+.note-body [data-task-text] { flex:1; min-width:0; min-height:1.6rem; }
+.note-body [data-checked="true"] > [data-task-text] { opacity:.6; text-decoration:line-through; }
+.note-body [data-type="drawing"] { border:1px solid rgba(var(--ui-ink-rgb),.2); border-radius:.75rem; padding:.75rem; margin:.75rem 0; }
+.note-body img,.note-body table { max-width:100%; }
+.note-attachments { border-top:1px solid rgba(var(--ui-ink-rgb),.15); padding-top:.5rem; }
+.note-attachments summary { cursor:pointer; font-size:.85rem; color:var(--ui-text-70); }
+.note-attach-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); max-height:10rem; overflow:auto; gap:.4rem; margin:.5rem 0 0; }
+.note-attach-list li { display:flex; align-items:center; gap:.35rem; min-width:0; border:1px solid rgba(var(--ui-ink-rgb),.15); border-radius:.75rem; padding:.5rem; }
+.note-attachment-download { display:flex; flex-direction:column; align-items:flex-start; flex:1; min-width:0; text-align:left; background:transparent; border:0; color:var(--ui-text); cursor:pointer; }
+.note-attachment-name { display:block; width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.85rem; }
+#note-attachment-status:empty { display:none; }
+#note-save-status { overflow-wrap:anywhere; font-size:.8rem; }
+@media(max-width:1100px) { .note-attach-list { grid-template-columns:1fr; } }
+@media(max-width:900px) { #app-notes { height:auto; min-height:0; } #view-account.pane-mode-read .notes-editor-pane { height:calc(100dvh - 7rem); min-height:28rem; } }
+#app-notes { grid-template-columns:clamp(10rem,14%,12.5rem) minmax(14rem,.55fr) minmax(0,1.45fr); }
+#note-list .note-item { display:flex; flex-direction:column; align-items:stretch; gap:.35rem; padding:.85rem; }
+#note-list .note-item .msg-from { flex:none; width:100%; font-weight:600; }
+#note-list .note-item .msg-subject { flex:none; width:100%; opacity:.7; }
+#note-list .note-item .msg-date { flex:none; align-self:flex-end; width:auto; }
+@media(max-width:1100px) and (min-width:901px) { #app-notes { grid-template-columns:10rem 14rem minmax(0,1fr); } }
+@media(max-width:900px) { #app-notes { grid-template-columns:1fr; grid-template-rows:auto; } }
+#note-conflict-actions { flex-shrink:0; gap:.35rem; margin:0; }
