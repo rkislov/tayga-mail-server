@@ -59,7 +59,7 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 			seen[c.ID] = struct{}{}
 			out = append(out, map[string]any{
 				"id": c.ID, "name": c.Name, "display_name": c.DisplayName, "description": c.Description, "color": c.Color,
-				"shared": false, "owned": true, "writable": true, "deletable": c.Name != "default",
+				"shared": false, "owned": true, "writable": true, "deletable": !builtinCalendar(c.Name), "busy_only": c.Name == "personal",
 			})
 		}
 		if shared, err := s.store.ListSharedCalendars(r.Context(), au.ID); err == nil {
@@ -69,7 +69,7 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 				}
 				out = append(out, map[string]any{
 					"id": c.ID, "name": c.Name, "display_name": c.DisplayName, "description": c.Description, "color": c.Color,
-					"shared": true, "owned": false, "writable": calendarCanWrite(s, r, au, c.ID), "deletable": false,
+					"busy_only": c.Name == "personal", "shared": true, "owned": false, "writable": calendarCanWrite(s, r, au, c.ID), "deletable": false,
 				})
 			}
 		}
@@ -124,7 +124,7 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 			return
 		}
-		if cal.Name == "default" {
+		if builtinCalendar(cal.Name) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "default calendar cannot be deleted"})
 			return
 		}
@@ -136,6 +136,9 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 
 	case len(parts) >= 3 && parts[0] == "calendars" && parts[2] == "acl":
 		s.handleCalendarACL(w, r, au, parts[1])
+
+	case r.Method == http.MethodGet && len(parts) == 1 && parts[0] == "places":
+		s.handleCalendarPlaces(w, r)
 
 	case r.Method == http.MethodGet && len(parts) == 1 && parts[0] == "freebusy":
 		s.handleCalendarFreeBusy(w, r, au)
@@ -170,7 +173,7 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 			if to != nil && o.DTStart != nil && o.DTStart.After(*to) {
 				continue
 			}
-			item := eventToJSON(o, ev)
+			item := calendarEventJSON(o, ev, cal, au)
 			out = append(out, item)
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"events": out})
@@ -187,8 +190,13 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		ev, _ := calutil.ParseICS(o.Data)
-		item := eventToJSON(o, ev)
+		item := calendarEventJSON(o, ev, cal, au)
 		item["calendar_id"] = cal.ID
+		if cal.Name == "personal" && cal.UserID != au.ID {
+			item["ics"], _ = calutil.BusyOnlyICS(o.Data, o.ID)
+			writeJSON(w, http.StatusOK, item)
+			return
+		}
 		item["ics"] = o.Data
 		if atts := s.attachmentsForEventJSON(r, o.ID); len(atts) > 0 {
 			item["attachments"] = atts
@@ -212,6 +220,7 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 			UID         string `json:"uid"`
 			Summary     string `json:"summary"`
 			Location    string `json:"location"`
+			Geo         string `json:"geo"`
 			Description string `json:"description"`
 			Start       string `json:"start"`
 			End         string `json:"end"`
@@ -224,6 +233,10 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+			return
+		}
+		if !validEventGeo(req.Geo) {
+			writeJSON(w, 400, map[string]string{"error": "invalid geo coordinates"})
 			return
 		}
 		if req.Summary == "" {
@@ -251,7 +264,7 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		ev := calutil.Event{
-			UID: uid, Summary: req.Summary, Location: req.Location, Description: req.Description,
+			UID: uid, Summary: req.Summary, Location: req.Location, Geo: req.Geo, Description: req.Description,
 			Start: start, End: end, AllDay: req.AllDay, Sequence: 0, Status: "CONFIRMED",
 			Organizer: calutil.Attendee{Email: user.Email, Name: user.DisplayName},
 		}
@@ -346,7 +359,7 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 func eventToJSON(o *storage.CalendarObject, ev calutil.ParseResult) map[string]any {
 	item := map[string]any{
 		"id": o.ID, "calendar_id": o.CalendarID, "uid": o.UID,
-		"summary": ev.Summary, "location": ev.Location, "description": ev.Description,
+		"summary": ev.Summary, "location": ev.Location, "geo": ev.Geo, "description": ev.Description,
 		"sequence": ev.Sequence, "status": ev.Status,
 	}
 	if o.DTStart != nil {
@@ -376,13 +389,13 @@ func eventToJSON(o *storage.CalendarObject, ev calutil.ParseResult) map[string]a
 
 func (s *Server) handleCalendarFreeBusy(w http.ResponseWriter, r *http.Request, au *authUser) {
 	from, to := parseTimeRange(r)
-	if from == nil || to == nil || !to.After(*from) {
+	if from == nil || to == nil || !to.After(*from) || to.Sub(*from) > 31*24*time.Hour {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "from and to required"})
 		return
 	}
 	emailsRaw := r.URL.Query().Get("emails")
 	emails := normalizeAddrs(strings.Split(emailsRaw, ","))
-	if len(emails) == 0 {
+	if len(emails) == 0 || len(emails) > 100 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "emails required"})
 		return
 	}
@@ -935,4 +948,17 @@ func parseFlexibleTime(s string) *time.Time {
 		}
 	}
 	return nil
+}
+
+func calendarEventJSON(o *storage.CalendarObject, ev calutil.ParseResult, cal *storage.Calendar, au *authUser) map[string]any {
+	item := eventToJSON(o, ev)
+	if cal.Name == "personal" && cal.UserID != au.ID {
+		for _, key := range []string{"description", "location", "geo", "attendees", "organizer"} {
+			delete(item, key)
+		}
+		item["uid"] = o.ID
+		item["summary"] = "Busy"
+		item["busy_only"] = true
+	}
+	return item
 }

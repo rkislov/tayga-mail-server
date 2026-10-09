@@ -29,6 +29,9 @@
 - [Мобильная почта — ночной режим](ui-mail-tayga-mobile.png)
 - [Мобильное меню](ui-navigation-tayga-mobile.png)
 - [Написание письма — дневной режим](ui-compose-tayga-light.png)
+- [Компактная форма события](ui-event-editor-tayga-light.png)
+- [Компактная форма контакта](ui-contact-editor-tayga-light.png)
+- [DKIM: генератор ключей и DNS](ui-dkim-generator-tayga-light.png)
 
 ## Настройки администратора и календарь
 

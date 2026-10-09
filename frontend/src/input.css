@@ -3290,3 +3290,102 @@ html[data-color-mode="light"] {
 .protection-reader::backdrop{background:rgba(0,0,0,.65);backdrop-filter:blur(5px)}
 .protection-reader-head {display:flex;gap:1rem;align-items:flex-start;justify-content:space-between}.protection-reader-head h3 {min-width:0;overflow-wrap:anywhere}.protection-reader-head button {flex:none}
 .protection-preview {font:inherit;white-space:pre-wrap;overflow-wrap:anywhere;margin:1rem 0;max-width:100%}
+
+/* Tayga design pack: consistent controls, readable surfaces and compact actions. */
+.action-icon {width:2.75rem;height:2.75rem;display:inline-grid;place-items:center;padding:.55rem!important;border-radius:.85rem!important;flex-shrink:0;}
+.action-icon svg {width:1.3rem;height:1.3rem;}
+.action-icon[data-mail-action="reply"],.action-icon[data-mail-action="reply-all"] {background:rgba(var(--ui-ink-rgb),.08);}
+.action-icon[data-mail-action="delete"]:hover {color:#d75151;border-color:currentColor;}
+.reader-actions {gap:.5rem;flex-wrap:wrap;}
+.document-preview {width:min(1100px,94vw);height:min(850px,92dvh);padding:0;border:1px solid rgba(var(--ui-ink-rgb),.2);border-radius:1.4rem;background:var(--panel-bg);color:inherit;overflow:hidden;}
+.document-preview::backdrop {background:rgba(0,0,0,.65);backdrop-filter:blur(5px);}
+.document-preview header {display:flex;align-items:center;gap:.75rem;padding:1rem;border-bottom:1px solid rgba(var(--ui-ink-rgb),.15);}
+.document-preview header strong {flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.document-preview-content {height:calc(100% - 5rem);overflow:auto;display:grid;place-items:center;padding:1rem;}
+.document-preview-content img {max-width:100%;max-height:100%;object-fit:contain;}
+.document-preview-content iframe {width:100%;height:100%;border:0;background:white;}
+#compose-backdrop {position:fixed;z-index:70;}
+#compose-panel {width:min(860px,96vw);height:min(780px,92dvh);max-height:92dvh;display:flex;flex-direction:column;overflow:hidden;gap:.5rem;padding:1.25rem;border-radius:1.5rem;}
+#compose-panel .heading {font-size:1.5rem;margin:0 0 .5rem;}
+.compose-address-row {display:flex;align-items:center;gap:.75rem;border-bottom:1px solid rgba(var(--ui-ink-rgb),.15);flex-shrink:0;}
+#compose-panel .compose-address-row .field-label {width:4.5rem;flex-shrink:0;margin:0;font-size:.85rem;text-transform:none;}
+#compose-panel .compose-address-row .field-input {min-width:0;margin:0;height:2.7rem;padding:.4rem .6rem;flex:1;border:0;background:transparent;color:inherit;border-radius:.5rem;}
+#compose-body-label {position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);}
+#compose-rte {flex:1;min-height:120px;display:flex;flex-direction:column;margin:0;background:rgba(var(--ui-ink-rgb),.025);border-radius:1rem;overflow:hidden;}
+#compose-rte .rte-toolbar {flex-shrink:0;padding:.35rem;gap:.3rem;background:transparent;}
+#compose-rte .rte-toolbar button {height:2rem;min-width:2rem;padding:.25rem;}
+#compose-body {flex:1;min-height:0;overflow:auto;padding:1rem;background:transparent;color:inherit;}
+.compose-footer {display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.75rem;flex-shrink:0;}
+.compose-file-control {min-width:0;flex:1;}
+#compose-panel .compose-file-control .field-label {margin:0;font-size:.75rem;text-transform:none;}
+#compose-panel .compose-file-control .field-input {margin:0;padding:.3rem;font-size:.85rem;max-width:100%;height:auto;}
+#compose-panel .actions {margin:0;flex-shrink:0;}
+#compose-msg:empty {display:none;}
+@media(max-width:600px){#compose-panel{padding:.85rem;} .document-preview header{padding:.6rem;gap:.4rem;} .compose-footer .actions{width:100%;} .compose-footer .actions button{flex:1;}}
+.calendar-link-row {display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.5rem;align-items:center;margin:.75rem 0;}
+.calendar-link-row label {grid-column:1/-1;font-size:.85rem;font-weight:600;}
+.calendar-link-row input {margin:0;font-size:.85rem;min-width:0;}
+#mail-quick-filters,#mail-pagination {margin:0;min-height:3.25rem;align-items:center;padding:.5rem .75rem;}
+#mail-quick-filters {border-bottom:1px solid rgba(var(--ui-ink-rgb),.12);}
+#mail-pagination {justify-content:flex-end;gap:.5rem;}
+#mail-pagination .field-input {margin:0;width:auto;height:2.25rem;min-height:0;padding:.3rem 2rem .3rem .65rem;font-size:.875rem;border-radius:.75rem;background:rgba(var(--ui-ink-rgb),.04);color:inherit;}
+#mail-pagination button {height:2.25rem;min-width:2.25rem;margin:0;padding:.3rem .6rem;border-radius:.75rem;}
+.mail-selection {display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;padding:.5rem .75rem;border-bottom:1px solid rgba(var(--ui-ink-rgb),.12);}
+.mail-selection[hidden] {display:none;}
+.mail-selection button {font-size:.8rem;min-height:2rem;padding:.3rem .6rem;}
+.selectable-mail {position:relative;}
+.selectable-mail .mail-select {position:absolute;top:50%;left:.75rem;transform:translateY(-50%);z-index:1;accent-color:var(--color-moss);width:1rem;height:1rem;}
+.selectable-mail .msg-item {padding-left:2.25rem;}
+.pdf-preview-nav {display:flex;gap:1rem;align-items:center;justify-content:center;padding:.4rem;border-bottom:1px solid rgba(var(--ui-ink-rgb),.1);}
+.document-preview:has(.pdf-preview-nav) .document-preview-content {height:calc(100% - 8.5rem);align-items:start;}
+.document-preview-content canvas {max-width:100%;background:white;box-shadow:0 2px 10px #0002;}
+.compose-suggestions {position:fixed;z-index:110;width:min(320px,calc(100vw - 16px));max-height:260px;overflow:auto;padding:.35rem;border:1px solid rgba(var(--ui-ink-rgb),.2);border-radius:1rem;background:var(--panel-bg);backdrop-filter:blur(20px);box-shadow:0 10px 30px #0003;}
+.compose-suggestions[hidden] {display:none;}
+.compose-suggestions button {display:flex;flex-direction:column;width:100%;text-align:left;padding:.55rem .75rem;border-radius:.7rem;}
+.compose-suggestions button span {font-size:.85rem;opacity:.7;}
+.compose-suggestions button[aria-selected="true"] {background:rgba(var(--ui-ink-rgb),.12);}
+.compose-shortcut-hint {font-size:.75rem;margin:0;flex-shrink:0;}
+.calendar-place-tools {display:flex;gap:.5rem;margin:.5rem 0;}
+.calendar-place-results {display:flex;flex-direction:column;gap:.35rem;font-size:.85rem;}
+.calendar-place-results button {text-align:left;white-space:normal;}
+
+#compose-body {max-height:none;}
+.calendar-editor-dialog {width:min(900px,96vw);padding:1.2rem;border-radius:1.5rem;}
+.calendar-editor-dialog .heading {font-size:1.5rem;margin:0 0 .7rem;}
+.calendar-editor-dialog .field-input {min-height:0;height:2.6rem;padding:.4rem .7rem;margin:.3rem 0 .6rem;border-radius:.75rem;font-size:.95rem;}
+.calendar-editor-dialog .field-label {font-size:.78rem;margin:.35rem 0 0;letter-spacing:.03em;}
+.calendar-editor-dialog textarea.field-input {height:5rem;min-height:4rem;resize:vertical;}
+.calendar-editor-dialog .event-time-grid {gap:.75rem;margin:0;}
+.calendar-editor-dialog .cal-attendee-row {gap:.5rem;align-items:center;}
+.calendar-editor-dialog .cal-attendee-row .field-input {margin:0;}
+.calendar-editor-dialog .event-editor-content {padding:.15rem .3rem .5rem;}
+.calendar-editor-dialog .event-editor-footer {padding:.75rem 0 0;margin:0;}
+.calendar-editor-dialog .event-editor-footer button {min-height:2.6rem;padding:.5rem 1rem;font-size:.95rem;}
+.calendar-editor-dialog .field-hint,.calendar-editor-dialog .meta {font-size:.8rem;}
+.calendar-editor-dialog .cal-freebusy-block {padding:.6rem;border:1px solid rgba(var(--ui-ink-rgb),.12);border-radius:.85rem;margin:.6rem 0;}
+.calendar-editor-dialog .event-advanced {margin:.5rem 0;}
+.calendar-editor-dialog .event-advanced input[type=file] {height:auto;}
+@media(max-width:600px){.calendar-editor-dialog {padding:.8rem;}.calendar-editor-dialog .event-time-grid {grid-template-columns:1fr;gap:0;}}
+/* All forms share the compact spacing and control shapes of compose. */
+:is(dialog,.dialog-panel,.editor-sheet,.compose-panel) .field-label {font-size:.78rem;letter-spacing:.025em;margin:.45rem 0 .2rem;}
+:is(dialog,.dialog-panel,.editor-sheet,.compose-panel) :is(input,select).field-input {min-height:0;height:2.6rem;padding:.4rem .7rem;border-radius:.75rem;font-size:.95rem;margin:.2rem 0 .65rem;}
+:is(dialog,.dialog-panel,.editor-sheet,.compose-panel) input[type=file].field-input {height:auto;}
+:is(dialog,.dialog-panel,.editor-sheet,.compose-panel) :is(textarea.field-input,textarea.field-input-mono) {padding:.65rem;border-radius:.85rem;font-size:.95rem;}
+:is(dialog,.dialog-panel,.editor-sheet,.compose-panel) :is(.btn-secondary,.btn-spray) {border-radius:.8rem;min-height:2.4rem;font-size:.9rem;}
+.contact-editor-dialog {width:min(720px,96vw);padding:1.2rem;border-radius:1.5rem;}
+.contact-editor-dialog .heading {font-size:1.5rem;margin:0 0 .75rem;}
+.contact-editor-dialog #form-contact {display:grid;grid-template-columns:6rem minmax(0,1fr);gap:.45rem .75rem;align-items:center;}
+.contact-editor-dialog #form-contact .field-label {margin:0;text-transform:none;font-size:.85rem;}
+.contact-editor-dialog #form-contact .field-input {margin:0;background:rgba(var(--ui-ink-rgb),.04);color:inherit;}
+.contact-editor-dialog #form-contact .field-input-mono {margin:0;min-height:6rem;background:rgba(var(--ui-ink-rgb),.04);color:inherit;}
+.contact-editor-dialog #form-contact .actions,.contact-editor-dialog #contact-msg {grid-column:1/-1;}
+.contact-editor-dialog .event-editor-footer {margin:.65rem 0 0;padding:.75rem 0 0;}
+@media(max-width:600px){.contact-editor-dialog {padding:.9rem;}.contact-editor-dialog #form-contact {grid-template-columns:1fr;gap:.3rem;}}
+
+.dkim-generator {margin:auto;width:min(52rem,calc(100vw - 2rem));max-height:calc(100dvh - 2rem);overflow:auto;padding:1.4rem;border:1px solid var(--border-soft);border-radius:1.5rem;background:var(--panel-bg);color:var(--text-primary);box-shadow:0 20px 70px #0005;}
+.dkim-generator::backdrop {background:#0007;backdrop-filter:blur(5px);}
+.dkim-generator .field {display:block;margin:.8rem 0;}
+.dkim-generator .field-input {display:block;width:100%;}
+.dkim-generator .heading {margin-bottom:.6rem;}
+.dkim-generator section {margin-top:1rem;}
+.dkim-generator > .btn-secondary {margin-top:1rem;}

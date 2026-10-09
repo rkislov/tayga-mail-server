@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -130,7 +131,13 @@ type DMARCReportConfig struct {
 }
 
 // SpamConfig configures Rspamd (or similar) scoring for inbound SMTP.
+type DNSBLConfig struct {
+	Enabled bool     `yaml:"enabled"`
+	Zones   []string `yaml:"zones"`
+	Score   float64  `yaml:"score"`
+}
 type SpamConfig struct {
+	DNSBL           DNSBLConfig   `yaml:"dnsbl"`
 	Enabled         bool          `yaml:"enabled"`
 	Backend         string        `yaml:"backend"` // rspamd | none
 	URL             string        `yaml:"url"`
@@ -324,13 +331,13 @@ type ManageSieveConfig struct {
 // XMPPConfig controls the embedded XMPP module (TMS-XMPP-001).
 // Disabled by default until Stage 1 is production-ready.
 type XMPPConfig struct {
-	Enabled         bool                   `yaml:"enabled"`
-	Listen          string                 `yaml:"listen"`           // C2S STARTTLS, default :5222
-	ListenTLS       string                 `yaml:"listen_tls"`       // C2S implicit TLS, optional (:5223)
-	S2SListen       string                 `yaml:"s2s_listen"`       // S2S, default empty until federation
-	RequireTLS      bool                   `yaml:"require_tls"`
-	ComponentListen string                 `yaml:"component_listen"` // XEP-0114, default :5347 when components set
-	Components      []XMPPComponentConfig  `yaml:"components"`      // external bots/bridges
+	Enabled         bool                  `yaml:"enabled"`
+	Listen          string                `yaml:"listen"`     // C2S STARTTLS, default :5222
+	ListenTLS       string                `yaml:"listen_tls"` // C2S implicit TLS, optional (:5223)
+	S2SListen       string                `yaml:"s2s_listen"` // S2S, default empty until federation
+	RequireTLS      bool                  `yaml:"require_tls"`
+	ComponentListen string                `yaml:"component_listen"` // XEP-0114, default :5347 when components set
+	Components      []XMPPComponentConfig `yaml:"components"`       // external bots/bridges
 }
 
 // XMPPComponentConfig registers an external XMPP component (bot/bridge) by subdomain.
@@ -431,7 +438,7 @@ type TLSConfig struct {
 	// ActiveID is the catalog entry used by all TLS listeners (set via УЦ UI).
 	ActiveID string `yaml:"active_id"`
 	// AutoGenerate writes a self-signed cert when cert/key files are missing (dev only).
-	AutoGenerate bool `yaml:"auto_generate"`
+	AutoGenerate bool       `yaml:"auto_generate"`
 	ACME         ACMEConfig `yaml:"acme"`
 }
 
@@ -593,13 +600,13 @@ func Default() *Config {
 			FollowRspamd: true,
 		},
 		SIEM: SIEMConfig{
-			Enabled:  false,
-			Protocol: "udp",
-			Address:  "127.0.0.1:514",
-			Facility: "local0",
-			Format:   "cef",
-			Vendor:   "Tayga",
-			Product:  "TaygaMail",
+			Enabled:   false,
+			Protocol:  "udp",
+			Address:   "127.0.0.1:514",
+			Facility:  "local0",
+			Format:    "cef",
+			Vendor:    "Tayga",
+			Product:   "TaygaMail",
 			QueueSize: 256,
 		},
 		DKIMVerify: DKIMVerifyConfig{
@@ -953,6 +960,30 @@ func (c *Config) Validate() error {
 	}
 	if strings.TrimSpace(c.Log.File) == "" {
 		return fmt.Errorf("log.file is required (file logging is mandatory)")
+	}
+	if c.Spam.DNSBL.Enabled {
+		if !c.Spam.Enabled {
+			return fmt.Errorf("DNSBL requires spam.enabled")
+		}
+		if len(c.Spam.DNSBL.Zones) == 0 || len(c.Spam.DNSBL.Zones) > 10 {
+			return fmt.Errorf("DNSBL requires 1–10 zones")
+		}
+		if c.Spam.DNSBL.Score < 0 || c.Spam.DNSBL.Score > 100 {
+			return fmt.Errorf("DNSBL score must be between 0 and 100")
+		}
+		pattern := regexp.MustCompile(`^[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?$`)
+		seen := map[string]bool{}
+		for i, zone := range c.Spam.DNSBL.Zones {
+			zone = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(zone), "."))
+			if len(zone) > 253 || !strings.Contains(zone, ".") || !pattern.MatchString(zone) || strings.Contains(zone, "..") {
+				return fmt.Errorf("invalid DNSBL zone")
+			}
+			if seen[zone] {
+				return fmt.Errorf("duplicate DNSBL zone")
+			}
+			seen[zone] = true
+			c.Spam.DNSBL.Zones[i] = zone
+		}
 	}
 	if c.Spam.Enabled {
 		switch c.Spam.Backend {

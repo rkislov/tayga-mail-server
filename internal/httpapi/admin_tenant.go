@@ -36,7 +36,7 @@ func (s *Server) handleAdminTenant(w http.ResponseWriter, r *http.Request) {
 		n, _ := s.store.CountUsersByDomain(r.Context(), d.ID)
 		outDomains = append(outDomains, map[string]any{
 			"id": d.ID, "name": d.Name, "user_count": n,
-			"migration_enabled": d.MigrationEnabled, "created_at": d.CreatedAt,
+			"gal_enabled": s.domainGALEnabled(r, d.ID), "migration_enabled": d.MigrationEnabled, "created_at": d.CreatedAt,
 		})
 	}
 	users, _ := s.store.ListUsersByTenant(r.Context(), admin.TenantID)
@@ -190,7 +190,7 @@ func (s *Server) handleAdminDomains(w http.ResponseWriter, r *http.Request) {
 			n, _ := s.store.CountUsersByDomain(r.Context(), d.ID)
 			out = append(out, map[string]any{
 				"id": d.ID, "name": d.Name, "tenant_id": d.TenantID, "user_count": n,
-				"migration_enabled": d.MigrationEnabled, "created_at": d.CreatedAt,
+				"gal_enabled": s.domainGALEnabled(r, d.ID), "migration_enabled": d.MigrationEnabled, "created_at": d.CreatedAt,
 			})
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"domains": out, "tenant_id": tenantID})
@@ -198,6 +198,7 @@ func (s *Server) handleAdminDomains(w http.ResponseWriter, r *http.Request) {
 	case path != "" && r.Method == http.MethodPatch:
 		var req struct {
 			MigrationEnabled *string `json:"migration_enabled"`
+			GALEnabled       *bool   `json:"gal_enabled"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
@@ -211,6 +212,16 @@ func (s *Server) handleAdminDomains(w http.ResponseWriter, r *http.Request) {
 		if !s.adminCanManageDomain(r, admin, target.ID) {
 			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 			return
+		}
+		if req.GALEnabled != nil {
+			value := "false"
+			if *req.GALEnabled {
+				value = "true"
+			}
+			if err := s.store.PutSetting(r.Context(), "domain.gal."+target.ID, value); err != nil {
+				writeJSON(w, 500, map[string]string{"error": err.Error()})
+				return
+			}
 		}
 		if req.MigrationEnabled != nil {
 			if err := s.store.UpdateDomainMigration(r.Context(), target.ID, *req.MigrationEnabled); err != nil {

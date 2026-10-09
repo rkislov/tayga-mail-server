@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"mime"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 
@@ -18,12 +19,23 @@ import (
 var calendarColorPattern = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 
 func calendarCanWrite(s *Server, r *http.Request, au *authUser, id string) bool {
+	cal, e := s.store.GetCalendarByID(r.Context(), au.ID, id)
+	if e != nil {
+		accessible, err := s.calendarAccessible(r, au, id)
+		if err != nil || accessible.Name == "personal" {
+			return false
+		}
+	} else {
+		_ = cal
+	}
 	rights, err := s.store.CalendarRightsForUser(r.Context(), id, au.ID)
 	return err == nil && rights == "write"
 }
-func (s *Server) calendarProperties(c *storage.Calendar, owned bool) map[string]any {
-	out := map[string]any{"id": c.ID, "display_name": c.DisplayName, "description": c.Description, "color": c.Color, "owned": owned, "deletable": owned && c.Name != "default"}
+func (s *Server) calendarProperties(c *storage.Calendar, owned bool, email string) map[string]any {
+	out := map[string]any{"id": c.ID, "display_name": c.DisplayName, "description": c.Description, "color": c.Color, "owned": owned, "name": c.Name, "busy_only": c.Name == "personal", "deletable": owned && !builtinCalendar(c.Name)}
 	if owned {
+		base := strings.TrimRight(s.publicBase(), "/") + "/dav/cal/" + url.PathEscape(email) + "/calendars/" + url.PathEscape(c.Name)
+		out["links"] = map[string]string{"caldav": base + "/", "ics": base + ".ics", "xml": base + ".xml"}
 		out["public_enabled"] = c.PublicToken != ""
 		if c.PublicToken != "" {
 			out["public_url"] = strings.TrimRight(s.publicBase(), "/") + "/calendar/public/" + c.PublicToken + ".ics"
@@ -39,7 +51,7 @@ func (s *Server) handleCalendarProperties(w http.ResponseWriter, r *http.Request
 	}
 	owned := c.UserID == au.ID
 	if r.Method == http.MethodGet {
-		writeJSON(w, 200, s.calendarProperties(c, owned))
+		writeJSON(w, 200, s.calendarProperties(c, owned, au.Email))
 		return
 	}
 	if !owned {
@@ -94,7 +106,7 @@ func (s *Server) handleCalendarProperties(w http.ResponseWriter, r *http.Request
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, 200, s.calendarProperties(c, true))
+	writeJSON(w, 200, s.calendarProperties(c, true, au.Email))
 }
 
 // The opaque link exposes a read-only subscription. Revocation immediately invalidates it.
@@ -128,7 +140,15 @@ func (s *Server) handlePublicCalendar(w http.ResponseWriter, r *http.Request) {
 	calendar.Props.SetText("X-APPLE-CALENDAR-COLOR", c.Color)
 	timezones := map[string]bool{}
 	for _, obj := range objects {
-		parsed, e := ical.NewDecoder(strings.NewReader(obj.Data)).Decode()
+		data := obj.Data
+		if c.Name == "personal" {
+			data, err = calutil.BusyOnlyICS(data, obj.ID)
+			if err != nil {
+				http.Error(w, "calendar unavailable", 500)
+				return
+			}
+		}
+		parsed, e := ical.NewDecoder(strings.NewReader(data)).Decode()
 		if e != nil {
 			http.Error(w, "calendar unavailable", 500)
 			return
@@ -156,4 +176,8 @@ func (s *Server) handlePublicCalendar(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodHead {
 		_, _ = w.Write(buf.Bytes())
 	}
+}
+
+func builtinCalendar(name string) bool {
+	return name == "default" || name == "personal" || name == "work"
 }

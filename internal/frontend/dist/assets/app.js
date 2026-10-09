@@ -1,5 +1,6 @@
 const I18N = {
   ru: {
+ mig_history: "История миграций", mig_previous: "Назад", mig_next: "Далее",
  mig_skip_tls: "Не проверять сертификат старого сервера", mig_skip_tls_hint: "Только для этой задачи. Для доверенного сервера с самоподписанным сертификатом.",
  nav_antispam: "Антиспам",
 "saved":"Сохранено","ca_self_hint":"Временный сертификат для тестовой установки. Браузер не доверяет ему автоматически.","ca_pem_hint":"Импорт готового сертификата и закрытого ключа. Ключ должен соответствовать сертификату.","ca_acme_hint":"Домен должен указывать на этот сервер в публичном DNS. Порт 80 должен быть доступен снаружи.","ca_configure":"Открыть настройки →","users_status":"Состояние","users_active":"Активен","users_disabled":"Отключён","users_storage":"Использовано / квота","users_actions":"Действия","users_quota_action":"Квота","language_topbar_hint":"Выберите язык с помощью значка глобуса справа сверху.","profile_admin":"Администратор","profile_user":"Пользователь","profile_auth":"Способ входа","profile_unlimited":"Без ограничения объёма","signature_title":"Подпись к письму","signature_hint":"Подпись сохраняется в учётной записи и доступна на других устройствах. Переносы строк сохраняются.","signature_new":"Добавлять в новые письма","signature_reply":"Добавлять в ответы","signature_preview":"Предпросмотр","signature_empty":"Подпись пока не задана","nav_mailsecurity":"Защита почты","security_filters_hint":"Антиспам, антивирус и письма, помещённые в карантин.","security_antivirus":"Антивирус ClamAV","security_antispam":"Антиспам Rspamd","monitor_messages":"Количество писем","monitor_bytes":"Объём писем","monitor_queue":"Исходящая очередь","monitor_history_hint":"Наблюдения каждые 5 секунд, пока открыта страница. Это количество сохранённых писем, а не счётчик всего принятого трафика.",
@@ -501,6 +502,7 @@ const I18N = {
     save: "Сохранить",
   },
   en: {
+ mig_history: "Migration history", mig_previous: "Previous", mig_next: "Next",
  mig_skip_tls: "Skip source server certificate verification", mig_skip_tls_hint: "This migration only. Use for a trusted server with a self-signed certificate.",
  nav_antispam: "Antispam",
 "saved":"Saved","ca_self_hint":"Temporary certificate for a test installation. Browsers do not trust it automatically.","ca_pem_hint":"Import a certificate and its matching private key.","ca_acme_hint":"Public DNS must point to this server, with port 80 accessible from outside.","ca_configure":"Open settings →","users_status":"Status","users_active":"Active","users_disabled":"Disabled","users_storage":"Used / quota","users_actions":"Actions","users_quota_action":"Quota","language_topbar_hint":"Choose your language using the globe in the upper right.","profile_admin":"Administrator","profile_user":"User","profile_auth":"Authentication","profile_unlimited":"Unlimited storage","signature_title":"Mail signature","signature_hint":"Saved to your account and available on other devices. Line breaks are preserved.","signature_new":"Add to new messages","signature_reply":"Add to replies","signature_preview":"Preview","signature_empty":"No signature yet","nav_mailsecurity":"Mail protection","security_filters_hint":"Spam and antivirus settings, and quarantined messages.","security_antivirus":"ClamAV antivirus","security_antispam":"Rspamd antispam","monitor_messages":"Message count","monitor_bytes":"Mail storage","monitor_queue":"Outbound queue","monitor_history_hint":"Samples every 5 seconds while this page is open. These are stored message counts, not total inbound traffic.",
@@ -2125,6 +2127,7 @@ async function refreshTenantDomains() {
               <option value="off" ${d.migration_enabled === "off" ? "selected" : ""}>${escapeHtml(t("mig_off"))}</option>
             </select>
           </label>
+          <label class="field-check" title="${escapeHtml(mailImageText('Общий адресный справочник пользователей этого домена','Global address list for users in this domain'))}"><input type="checkbox" data-domain-gal="${escapeHtml(d.id)}" ${d.gal_enabled?'checked':''}> GAL</label>
           <button type="button" class="btn-spray" data-open-domain="${escapeHtml(d.id)}" data-name="${escapeHtml(d.name)}">${escapeHtml(t("domains_open"))}</button>
           <button type="button" class="btn-secondary" data-del-domain="${escapeHtml(d.name)}" ${d.user_count > 0 ? "disabled" : ""}>${escapeHtml(t("domains_remove"))}</button>
         </span>
@@ -2148,6 +2151,7 @@ async function refreshTenantDomains() {
         }
       });
     });
+    list.querySelectorAll('[data-domain-gal]').forEach(input=>input.addEventListener('change',async()=>{const value=input.checked;input.disabled=true;try{await api('/api/v1/admin/domains/'+encodeURIComponent(input.dataset.domainGal),{method:'PATCH',body:JSON.stringify({gal_enabled:value})});composeContactsCache=null;}catch(error){input.checked=!value;setMsg($('admin-domains-msg'),error.message,'err')}finally{input.disabled=false}}));
     list.querySelectorAll("[data-dom-mig]").forEach((sel) => {
       sel.addEventListener("change", async () => {
         try {
@@ -2681,13 +2685,54 @@ $("xmpp-bot-form")?.addEventListener("submit",async event=>{
  finally{xmppBotBusy=false;$("btn-xmpp-bot-create").disabled=false;$("xmpp-bot-close").disabled=false;}
 });
 
+const migrationPages = new Map();
 function renderMigJobs(listEl, jobs) {
+  if (!listEl) return;
+  const key = (state.me?.id || "") + ":" + listEl.id;
+  const pagination = migrationPages.get(key) || { page: 0, firstID: "" };
+  const pageSize = 3;
+  if (pagination.page > 0 && pagination.firstID) {
+    const position = jobs.findIndex(job => job.id === pagination.firstID);
+    if (position >= 0) pagination.page = Math.floor(position / pageSize);
+  }
+  pagination.page = Math.min(pagination.page, Math.max(0, Math.ceil(jobs.length / pageSize) - 1));
+  const offset = pagination.page * pageSize;
+  const visibleJobs = jobs.slice(offset, offset + pageSize);
+  pagination.firstID = visibleJobs[0]?.id || "";
+  migrationPages.set(key, pagination);
+  let pager = $(listEl.id + "-pagination");
+  if (!pager) {
+    pager = document.createElement("nav");
+    pager.id = listEl.id + "-pagination";
+    pager.className = "mail-pagination";
+    pager.setAttribute("aria-label", t("mig_history"));
+    listEl.after(pager);
+  }
+  pager.replaceChildren();
+  pager.classList.toggle("hidden", jobs.length <= pageSize);
+  for (const [delta, label] of [[-1, t("mig_previous")], [1, t("mig_next")]]) {
+    const button = document.createElement("button");
+    button.type = "button"; button.className = "btn-secondary btn-sm";
+    button.textContent = label;
+    button.disabled = delta < 0 ? pagination.page === 0 : offset + pageSize >= jobs.length;
+    button.addEventListener("click", () => {
+      pagination.page += delta; pagination.firstID = "";
+      renderMigJobs(listEl, jobs);
+    });
+    pager.append(button);
+    if (delta < 0) {
+      const range = document.createElement("span");
+      range.className = "meta";
+      range.textContent = `${offset + 1}–${offset + visibleJobs.length} / ${jobs.length}`;
+      range.setAttribute("aria-live", "polite"); pager.append(range);
+    }
+  }
   if (!listEl) return;
   if (!jobs.length) {
     listEl.innerHTML = `<li class="meta">${t("mig_no_jobs")}</li>`;
     return;
   }
-  listEl.innerHTML = jobs.map((j) => `
+  listEl.innerHTML = visibleJobs.map((j) => `
     <li class="ca-cert-item">
       <div>
         <strong>${escapeHtml(j.kind)}</strong> · ${escapeHtml(t("mig_status_"+j.status))}
@@ -2813,6 +2858,7 @@ document.querySelectorAll("[data-mig-kind]").forEach(form => form.addEventListen
   setMsg($("mig-dialog-msg"),t("mig_starting"));
   try {
     await api("/api/v1/migration/jobs", {method:"POST",body:JSON.stringify({kind:{imap:"imap",cal:"caldav",card:"carddav"}[kind],...body})});
+    migrationPages.clear();
     migrationDialog.close();
     await refreshMigration();
     setMsg($("mig-msg"),t("mig_started"),"ok");
@@ -3629,6 +3675,7 @@ async function refreshMailMessages() {
  renderMailPagination(data);
  const msgs = data.messages || [];
     if (!msgs.length) {
+      renderMailSelection([]);
       list.innerHTML = `<li class="msg-empty meta">${t(q ? "mail_search_empty" : "empty_mailbox")}</li>`;
       showMailReader(null);
       return;
@@ -3651,6 +3698,7 @@ async function refreshMailMessages() {
         </button>
       </li>`;
     }).join("");
+    renderMailSelection(msgs);
     list.querySelectorAll("[data-msg]").forEach((btn) => {
       btn.addEventListener("click", () => {
         if (btn.dataset.mailbox) {
@@ -3700,20 +3748,10 @@ function showMailReader(msg) {
       button.type = "button";
       button.className = "btn-secondary btn-sm";
       button.textContent = attachment.filename + " · " + fmtBytes(attachment.size);
-      button.addEventListener("click", async () => {
-        button.disabled = true;
-        try {
-          const headers = {};
-          if (state.tokens?.access_token) headers.Authorization = "Bearer " + state.tokens.access_token;
-          const response = await fetch("/api/v1/mail/messages/" + encodeURIComponent(msg.id) + "/attachments/" + encodeURIComponent(attachment.id), {headers});
-          if (!response.ok) throw new Error("Не удалось скачать вложение");
-          const url = URL.createObjectURL(await response.blob());
-          const link = document.createElement("a");
-          link.href = url; link.download = attachment.filename; link.click();
-          setTimeout(() => URL.revokeObjectURL(url), 1000);
-        } catch (error) { button.title = error.message; button.textContent = attachment.filename + " · " + error.message; }
-        finally { button.disabled = false; }
-      });
+      button.addEventListener("click", () => openDocumentPreview({
+        url: "/api/v1/mail/messages/" + encodeURIComponent(msg.id) + "/attachments/" + encodeURIComponent(attachment.id),
+        name: attachment.filename, size: attachment.size
+      }));
       attachments.append(button);
     }
     body.append(attachments);
@@ -4013,6 +4051,7 @@ function calMonthStart(d) {
 }
 
 function showCalCompose(open) {
+ if(open && $("cal-location")){delete $("cal-location").dataset.geo;$("cal-location").dispatchEvent(new Event("input"));}
   const dialog=mountCalendarEditor();
  if(dialog){if(open&&!dialog.open)dialog.showModal();if(!open&&dialog.open)dialog.close()}
  syncEventCalendarChoice();
@@ -4072,6 +4111,7 @@ function renderCalReadAttachments(atts) {
     dd.querySelectorAll("[data-att-dl]").forEach((btn) => {
       btn.addEventListener("click", async () => {
         try {
+          if(documentPreviewType(btn.dataset.name)){await openDocumentPreview({url:"/api/v1/calendar/attachments/"+encodeURIComponent(btn.dataset.attDl),name:btn.dataset.name,size:atts.find(a=>a.id===btn.dataset.attDl)?.size});return;}
           const headers = {};
           if (state.tokens?.access_token) headers.Authorization = "Bearer " + state.tokens.access_token;
           const res = await fetch("/api/v1/calendar/attachments/" + encodeURIComponent(btn.dataset.attDl), { headers });
@@ -4343,7 +4383,7 @@ function renderCalMonth() {
       continue;
     }
     const dots = cell.events.slice(0, 3).map((ev) =>
-      `<span class="cal-pill" data-ev="${escapeHtml(ev.id)}" title="${escapeHtml(ev.summary || "")}">${escapeHtml(ev.summary || "•")}</span>`
+      `<span class="cal-pill" data-ev="${escapeHtml(ev.id)}" title="${escapeHtml(calendarEventLabel(ev))}">${escapeHtml(calendarEventLabel(ev))}</span>`
     ).join("");
     const more = cell.events.length > 3
       ? `<span class="cal-more">+${cell.events.length - 3}</span>`
@@ -4419,7 +4459,7 @@ function renderCalDay() {
   $("cal-day-schedule").innerHTML = Array.from({length:24}, (_, hour) => {
     const time = String(hour).padStart(2,"0") + ":00";
     const matching = events.filter(event => new Date(event.start).getHours() === hour);
-    return `<div class="cal-hour-row"><button type="button" class="cal-hour-slot" data-hour="${hour}" aria-label="${escapeHtml(t("new_event") + " · " + day + " " + time)}"><time>${time}</time><span>${escapeHtml(t("cal_hour_add"))}</span></button><div class="cal-hour-events">${matching.map(event => `<button type="button" class="cal-agenda-event" data-ev="${escapeHtml(event.id)}"><strong>${escapeHtml(event.summary || "—")}</strong><span>${escapeHtml(fmtCalTime(event.start))}–${escapeHtml(fmtCalTime(event.end))}${event.location ? " · " + escapeHtml(event.location) : ""}</span></button>`).join("")}</div></div>`;
+    return `<div class="cal-hour-row"><button type="button" class="cal-hour-slot" data-hour="${hour}" aria-label="${escapeHtml(t("new_event") + " · " + day + " " + time)}"><time>${time}</time><span>${escapeHtml(t("cal_hour_add"))}</span></button><div class="cal-hour-events">${matching.map(event => `<button type="button" class="cal-agenda-event" data-ev="${escapeHtml(event.id)}"><strong>${escapeHtml(calendarEventLabel(event))}</strong><span>${escapeHtml(fmtCalTime(event.start))}–${escapeHtml(fmtCalTime(event.end))}${event.location ? " · " + escapeHtml(event.location) : ""}</span></button>`).join("")}</div></div>`;
   }).join("");
   $("cal-day-schedule").querySelectorAll("[data-hour]").forEach(slot => {
     slot.addEventListener("dblclick", () => startNewCalEvent(day, Number(slot.dataset.hour)));
@@ -4499,7 +4539,7 @@ function renderCalEventLog() {
   list.innerHTML = events.map((e) => `
     <li>
       <button type="button" class="msg-item cal-item${e.id === calState.eventID ? " is-active" : ""}" data-ev="${escapeHtml(e.id)}">
-        <span class="msg-subject">${escapeHtml(e.summary || "—")}</span>
+        <span class="msg-subject">${escapeHtml(calendarEventLabel(e))}</span>
         <span class="msg-date cal-start">${escapeHtml(fmtCalShort(e.start))}</span>
         <span class="msg-date cal-end">${escapeHtml(fmtCalTime(e.end) || fmtCalShort(e.end))}</span>
       </button>
@@ -4523,7 +4563,7 @@ async function refreshCalendar() {
       calState.calendarID = calState.calendars[0].id;
     }
     folders.innerHTML = calState.calendars.map((c) => {
-      const label = (c.display_name || c.name || c.id) + (c.shared ? " · " + t("cal_shared") : "");
+      const label = calendarDisplayLabel(c) + (c.shared ? " · " + t("cal_shared") : "");
       const del = `<button type="button" class="btn-secondary btn-sm btn-ico" data-cal-properties="${escapeHtml(c.id)}" title="${escapeHtml(t("cal_properties"))}" aria-label="${escapeHtml(t("cal_properties"))}">⋯</button>`;
       return `<li class="folder-row">
         <button type="button" class="folder-btn${c.id === calState.calendarID ? " is-active" : ""}" data-cal="${escapeHtml(c.id)}">
@@ -4602,7 +4642,7 @@ function showCalReader(ev) {
   empty.classList.add("hidden");
   reader.classList.remove("hidden");
   setMobilePane("read");
-  $("cal-subject").textContent = ev.summary || "—";
+  $("cal-subject").textContent = calendarEventLabel(ev);
   $("cal-read-start").textContent = fmtCalWhen(ev.start);
   $("cal-read-end").textContent = fmtCalWhen(ev.end);
   $("cal-read-location").textContent = ev.location || "—";
@@ -4733,6 +4773,7 @@ $("form-cal-event")?.addEventListener("submit", async (e) => {
       body: JSON.stringify({
         summary: $("cal-summary").value,
         location: $("cal-location")?.value || "",
+ geo: $("cal-location")?.dataset.geo || "",
         description: $("cal-description")?.value || "",
         start: localInputToISO($("cal-start").value),
         end: localInputToISO($("cal-end").value),
@@ -4789,6 +4830,7 @@ function showContactReader(c) {
   empty.classList.add("hidden");
   reader.classList.remove("hidden");
   setMobilePane("read");
+  $("btn-contact-delete").disabled=!!c.readonly;
   $("contact-subject").textContent = c.fn || "—";
   $("contact-read-email").textContent = c.email || "—";
   $("contact-read-tel").textContent = c.tel || "—";
@@ -4867,6 +4909,7 @@ async function openContactCard(id) {
   const cached = contactState.cards.find((c) => c.id === id);
   if (cached) showContactReader(cached);
   try {
+    if(cached?.readonly){showContactReader(cached);return;}
     const d = await api("/api/v1/contacts/cards/" + encodeURIComponent(id));
     showContactReader(d);
   } catch (err) {
@@ -4875,7 +4918,7 @@ async function openContactCard(id) {
 }
 
 $("btn-contacts-refresh")?.addEventListener("click", () => refreshContacts());
-$("btn-contact-new")?.addEventListener("click", () => {contactState.editing=null;$("form-contact")?.reset();showContactCompose(true)});
+$("btn-contact-new")?.addEventListener("click", () => {contactState.editing=null;if(contactState.books.find(b=>b.id===contactState.bookID)?.readonly)contactState.bookID=contactState.books.find(b=>!b.readonly)?.id||"";$("form-contact")?.reset();showContactCompose(true)});
 $("btn-contact-close")?.addEventListener("click", () => showContactCompose(false));
 $("contact-backdrop")?.addEventListener("click", (e) => {
   if (e.target === $("contact-backdrop")) showContactCompose(false);
@@ -4951,6 +4994,10 @@ function showFileReader(entry) {
   $("files-read-type").textContent = entry.is_dir ? t("type_folder") : t("type_file");
   $("btn-files-download")?.classList.remove("hidden");
   $("btn-files-open")?.classList.toggle("hidden", !entry.is_dir);
+  let preview=$('btn-files-preview');
+  if(!preview){preview=document.createElement('button');preview.id='btn-files-preview';preview.type='button';preview.className='btn-secondary btn-sm';$('btn-files-download').after(preview);}
+  preview.textContent=mailImageText('Просмотр','Preview');preview.hidden=entry.is_dir||!documentPreviewType(entry.name);
+  preview.onclick=()=>openDocumentPreview({url:'/api/v1/files/content?path='+encodeURIComponent(joinPath(filesState.path,entry.name)),name:entry.name,size:entry.size});
 }
 
 function selectFileEntry(name) {
@@ -5713,7 +5760,8 @@ $('note-attach-list')?.addEventListener('click',async event=>{
  button.disabled=true;
  try {
   const path='/api/v1/notes/attachments/'+encodeURIComponent(att.id);
-  if(button.dataset.noteDownload){const headers={};if(state.tokens?.access_token)headers.Authorization='Bearer '+state.tokens.access_token;const res=await fetch(path,{headers});if(!res.ok)throw new Error(t('files_download_error'));const blob=await res.blob(),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=att.filename;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
+  if(button.dataset.noteDownload&&documentPreviewType(att.filename)){await openDocumentPreview({url:path,name:att.filename,size:att.size});}
+  else if(button.dataset.noteDownload){const headers={};if(state.tokens?.access_token)headers.Authorization='Bearer '+state.tokens.access_token;const res=await fetch(path,{headers});if(!res.ok)throw new Error(t('files_download_error'));const blob=await res.blob(),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=att.filename;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
   else {await api(path,{method:'DELETE'});if(notesState.noteID===id){const data=await api('/api/v1/notes/'+encodeURIComponent(id)+'/attachments');if(notesState.noteID===id)renderNoteAttachments(data.attachments);}}
  }catch(err){if(notesState.noteID===id)setMsg($('note-attachment-status'),err.message,'err');}finally{button.disabled=false;}
 });
@@ -5912,7 +5960,12 @@ function renderCalendarProperties(props) {
  ${owned?`<section><h3>${t('cal_access')}</h3><p class="meta">${t('cal_access_hint')}</p><ul id="calendar-access-list"></ul><form id="calendar-access-form" class="calendar-access-form"><input class="field-input" id="calendar-access-email" type="email" required placeholder="user@example.com" aria-label="Email"><select class="field-input" id="calendar-access-rights" aria-label="${t('cal_access')}"><option value="read">${t('cal_read')}</option><option value="write">${t('cal_write')}</option></select><button class="btn-secondary" type="submit">${t('cal_grant')}</button></form></section>
  <section><h3>${t('cal_public')}</h3><p class="meta">${t('cal_public_hint')}</p><div id="calendar-public-controls"></div></section>`:''}</div>
  <p id="calendar-properties-msg" class="msg" role="status"></p><footer class="actions">${props.deletable?`<button class="btn-secondary" data-cal-action="delete" type="button">${t('cal_delete')}</button>`:''}<button class="btn-secondary" type="button" data-cal-action="close">${t('close')}</button></footer>`;
- if(owned)renderCalendarPublic(props);
+ if(owned){renderCalendarPublic(props);
+ const section=document.createElement('section'),heading=document.createElement('h3');heading.textContent=mailImageText('Ссылки на календарь','Calendar links');section.append(heading);
+ const hint=document.createElement('p');hint.className='meta';hint.textContent=mailImageText('Доступ с авторизацией: CalDAV — синхронизация, ICS — подписка, XML — данные WebDAV.','Authenticated access: CalDAV synchronization, ICS subscription, WebDAV XML data.');section.append(hint);
+ for(const [kind,url] of Object.entries(props.links||{})){const row=document.createElement('div');row.className='calendar-link-row';const label=document.createElement('label');label.textContent=({caldav:'CalDAV URL',ics:'WebDAV ICS URL',xml:'WebDAV XML URL'})[kind]||kind;const input=document.createElement('input');input.className='field-input';input.readOnly=true;input.value=url;input.setAttribute('aria-label',label.textContent);const copy=document.createElement('button');copy.className='btn-secondary btn-sm';copy.type='button';copy.textContent=t('cal_copy');copy.onclick=async()=>{try{await navigator.clipboard.writeText(url);setMsg($('calendar-properties-msg'),mailImageText('Ссылка скопирована','Link copied'),'ok')}catch{input.select();setMsg($('calendar-properties-msg'),mailImageText('Скопируйте выделенную ссылку','Copy the selected link'))}};row.append(label,input,copy);section.append(row);}
+ calendarPropertiesDialog.querySelector('.calendar-properties-body').append(section);
+}
 }
 function renderCalendarPublic(props) {
  const active=props.public_enabled;
@@ -6348,7 +6401,7 @@ function replyToMessage(message, all=false, dialog=null) {
 function createMailActionBar(message, dialog=null) {
   const bar=document.createElement('div');bar.className='reader-actions';
   for (const [action,label] of [['trip',mailImageText('Поездка в календарь','Trip to calendar')],['reply',mailImageText('Ответить','Reply')],['reply-all',mailImageText('Ответить всем','Reply all')],['spam',mailImageText('В спам','Mark as spam')],['archive',mailImageText('В архив','Archive')],['delete',mailImageText('Удалить','Delete')]]) {
-    const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.textContent=label;button.dataset.mailAction=action;if(!dialog)button.id='btn-mail-'+action;
+    const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.title=label;button.setAttribute('aria-label',label);button.classList.add('action-icon');button.innerHTML=designIcon(action);button.dataset.mailAction=action;if(!dialog)button.id='btn-mail-'+action;
     if(action==='spam' && (mailState.mailboxes || []).some(folder=>folder.id===message.mailbox_id&&folder.name==='Junk'))button.disabled=true;
     button.addEventListener('click',async()=>{
       if(action==='trip'){if(dialog?.open)dialog.close();await openTravelDrafts(message.id);return;}
@@ -6404,11 +6457,11 @@ function mountCalendarEditor() {
   $('cal-start').required=true;$('cal-end').required=true;
   const calendarLabel=document.createElement('label');calendarLabel.className='field-label';calendarLabel.htmlFor='event-calendar-choice';calendarLabel.textContent=mailImageText('Календарь','Calendar');
   const calendar=document.createElement('select');calendar.id='event-calendar-choice';calendar.className='field-input';times.after(calendarLabel,calendar);
-  const details=document.createElement('details');details.className='event-advanced';const heading=document.createElement('summary');heading.textContent=mailImageText('Ресурсы, занятость и вложения','Resources, availability and attachments');details.append(heading);
-  const resources=$('cal-resource-select')?.closest('.cal-attendee-row');const resourceLabel=resources?.previousElementSibling;if(resourceLabel)details.append(resourceLabel);if(resources)details.append(resources);
-  const freebusy=$('cal-freebusy')?.closest('.cal-freebusy-block');if(freebusy)details.append(freebusy);
+  const details=document.createElement('details');details.className='event-advanced';const heading=document.createElement('summary');heading.textContent=mailImageText('Вложения','Attachments');details.append(heading);
+  const resources=$('cal-resource-select')?.closest('.cal-attendee-row');const resourceLabel=resources?.previousElementSibling;if(resourceLabel)form.insertBefore(resourceLabel,form.querySelector(':scope > .actions'));if(resources)form.insertBefore(resources,form.querySelector(':scope > .actions'));
+  const freebusy=$('cal-freebusy')?.closest('.cal-freebusy-block');if(freebusy)form.insertBefore(freebusy,form.querySelector(':scope > .actions'));
   moveField('cal-files',details);if($('cal-file-list'))details.append($('cal-file-list'));
-  const actions=form.querySelector('.actions');actions?.before(details);
+  const actions=form.querySelector(':scope > .actions');actions?.before(details);
   if(actions){actions.classList.add('event-editor-footer');const save=actions.querySelector('[type=submit]');if(save){save.className='btn-spray';save.removeAttribute('data-i18n-title');save.removeAttribute('data-i18n');save.textContent=mailImageText('Сохранить событие','Save event')}const cancel=$('btn-cal-close');if(cancel){cancel.className='btn-secondary';cancel.textContent=mailImageText('Отмена','Cancel')}}
   if(actions){const content=document.createElement('div');content.className='event-editor-content';for(const child of [...form.children])if(child!==actions&&child.id!=='cal-msg')content.append(child);form.prepend(content)}
   const title=dialog.querySelector('h3');if(title){title.id='event-editor-title';dialog.setAttribute('aria-labelledby',title.id)}
@@ -6416,7 +6469,7 @@ function mountCalendarEditor() {
 }
 function syncEventCalendarChoice() {
   const select=$('event-calendar-choice');if(!select)return;
-  select.replaceChildren();for(const calendar of calState.calendars.filter(calendar=>calendar.writable!==false)){const option=document.createElement('option');option.value=calendar.id;option.textContent=calendar.display_name||calendar.name;select.append(option)}
+  select.replaceChildren();for(const calendar of calState.calendars.filter(calendar=>calendar.writable!==false)){const option=document.createElement('option');option.value=calendar.id;option.textContent=calendarDisplayLabel(calendar);select.append(option)}
   select.value=calState.calendarID;
 }
 
@@ -6434,7 +6487,7 @@ async function openEntityModal(kind,id) {
     const addButton=(label,callback)=>{const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.textContent=label;button.addEventListener('click',callback);actions.append(button);return button};
     if(kind==='contact'){
       addButton(mailImageText('Написать письмо','Write email'),()=>{dialog.close();showApp('mail');openCompose({to:record.email||''})});
-      addButton(mailImageText('Редактировать','Edit'),()=>{dialog.close();editContactRecord(record)});
+      const edit=addButton(mailImageText('Редактировать','Edit'),()=>{dialog.close();editContactRecord(record)});edit.disabled=!!record.readonly;
     }else{
       addButton(mailImageText('Создать похожее событие','Create similar event'),()=>{dialog.close();startNewCalEvent(calEventDayKey(record));$('cal-summary').value=record.summary||'';$('cal-location').value=record.location||'';$('cal-description').value=record.description||''});
     }
@@ -6442,6 +6495,7 @@ async function openEntityModal(kind,id) {
       dialog.close();if(!await askConfirm(t('delete_confirm'),{danger:true})){dialog.showModal();return}
       try{await api((kind==='calendar'?'/api/v1/calendar/events/':'/api/v1/contacts/cards/')+encodeURIComponent(id),{method:'DELETE'});if(kind==='calendar'){calState.eventID='';await loadCalEvents()}else{contactState.cardID='';await loadContactCards()}}catch(error){content.textContent=error.message;dialog.showModal()}
     });
+    if(kind==='contact')remove.disabled=!!record.readonly;
     if(kind==='calendar')remove.disabled=calState.calendars.find(calendar=>calendar.id===record.calendar_id)?.writable===false;
     const body=document.createElement('div');
     for(const element of [...reader.children]) {if(element.classList.contains('reader-actions')||element.id==='cal-attach-upload')continue;const copy=element.cloneNode(true);const attachmentTarget=copy.querySelector('#cal-read-attachments');if(attachmentTarget)attachmentTarget.dataset.entityAttachments='true';copy.removeAttribute('id');copy.querySelectorAll('[id]').forEach(child=>child.removeAttribute('id'));body.append(copy)}
@@ -6551,3 +6605,139 @@ async function openTravelDrafts(messageID) {
     const close=document.createElement('button');close.type='button';close.className='btn-secondary';close.textContent=t('close');close.addEventListener('click',()=>dialog.close());dialog.append(close);dialog.addEventListener('close',()=>dialog.remove());document.body.append(dialog);dialog.showModal();
   }catch(error){await askAlert(error.message);}
 }
+// Shared stroke language for reader actions and document previews.
+function designIcon(name) {
+  const paths={reply:'M9 5 3 11l6 6M3 11h9a8 8 0 0 1 8 8','reply-all':'m8 4-6 6 6 6m5-12-6 6 6 6M7 10h6a8 8 0 0 1 8 8',trip:'M8 2h8v4H8zM5 6h14v15H5zM9 10v6m6-6v6',spam:'m7 3-4 4v10l4 4h10l4-4V7l-4-4zM12 7v6m0 4h.01',archive:'M3 3h18v5H3zM5 8v13h14V8M9 12h6',delete:'M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7',download:'M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4',close:'m6 6 12 12M18 6 6 18'};
+  return '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="'+(paths[name]||paths.download)+'"/></svg>';
+}
+function documentPreviewType(name) {
+  const ext=String(name||'').split('.').pop().toLowerCase();
+  return ({png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',gif:'image/gif',webp:'image/webp',avif:'image/avif',pdf:'application/pdf'})[ext]||'';
+}
+async function openDocumentPreview({url,name,size}) {
+  const focus=document.activeElement,dialog=document.createElement('dialog');dialog.className='document-preview';dialog.setAttribute('aria-label',name);
+  const header=document.createElement('header'),title=document.createElement('strong');title.textContent=name;
+  const download=document.createElement('button');download.type='button';download.className='btn-secondary btn-sm';download.textContent=t('download');download.disabled=true;
+  const close=document.createElement('button');close.type='button';close.className='btn-secondary action-icon';close.title=mailImageText('Закрыть','Close');close.setAttribute('aria-label',close.title);close.innerHTML=designIcon('close');close.onclick=()=>dialog.close();header.append(title,download,close);
+  const content=document.createElement('div');content.className='document-preview-content';content.setAttribute('role','status');content.textContent=mailImageText('Загрузка…','Loading…');dialog.append(header,content);document.body.append(dialog);dialog.showModal();
+  const controller=new AbortController();let objectURL='',pdfDocument=null,renderTask=null;dialog.addEventListener('close',()=>{dialog.remove();controller.abort();if(objectURL)URL.revokeObjectURL(objectURL);try{renderTask?.cancel();pdfDocument?.destroy()?.catch(()=>{})}catch{}if(focus?.isConnected)focus.focus()},{once:true});
+  try {
+    if(size>64*1024*1024)throw new Error(mailImageText('Файл больше 64 МиБ. Используйте скачивание.','File exceeds 64 MiB. Use download.'));
+    const headers={};if(state.tokens?.access_token)headers.Authorization='Bearer '+state.tokens.access_token;
+    const response=await fetch(url,{headers,signal:controller.signal});if(!response.ok)throw new Error(mailImageText('Не удалось открыть файл','Unable to open file'));
+    const blob=await response.blob();if(!dialog.open)return;if(blob.size>64*1024*1024)throw new Error(mailImageText("Файл больше 64 МиБ","File exceeds 64 MiB"));
+    const type=documentPreviewType(name);objectURL=URL.createObjectURL(type?new Blob([blob],{type}):blob);download.disabled=false;
+    download.onclick=()=>{const link=document.createElement('a');link.href=objectURL;link.download=name;link.click()};
+    if(type.startsWith('image/')){const image=document.createElement('img');image.alt=name;image.src=objectURL;image.onerror=()=>{content.textContent=mailImageText('Изображение не удалось прочитать.','Unable to decode image.')};content.replaceChildren(image)}
+    else if(type==='application/pdf'){
+      const pdfjs=await import('/assets/pdfjs/pdf.mjs');pdfjs.GlobalWorkerOptions.workerSrc='/assets/pdfjs/pdf.worker.mjs';
+      if(!dialog.open)return;
+      pdfDocument=await pdfjs.getDocument({data:new Uint8Array(await blob.arrayBuffer()),isEvalSupported:false,cMapUrl:'/assets/pdfjs/cmaps/',cMapPacked:true,standardFontDataUrl:'/assets/pdfjs/standard_fonts/',wasmUrl:'/assets/pdfjs/wasm/'}).promise;
+      if(!dialog.open){pdfDocument.destroy();return}
+      const nav=document.createElement('div');nav.className='pdf-preview-nav';const previous=document.createElement('button'),next=document.createElement('button'),pageLabel=document.createElement('span');for(const button of [previous,next]){button.type='button';button.className='btn-secondary btn-sm'}previous.textContent='‹';next.textContent='›';previous.setAttribute('aria-label',mailImageText('Предыдущая страница','Previous page'));next.setAttribute('aria-label',mailImageText('Следующая страница','Next page'));nav.append(previous,pageLabel,next);header.after(nav);
+      let pageNumber=1;const render=async()=>{previous.disabled=true;next.disabled=true;const page=await pdfDocument.getPage(pageNumber);if(!dialog.open)return;const viewport=page.getViewport({scale:Math.min(2,Math.max(1,content.clientWidth-32)/page.getViewport({scale:1}).width,4096/page.getViewport({scale:1}).height)}),canvas=document.createElement('canvas');canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);canvas.setAttribute('aria-label',mailImageText('Страница PDF ','PDF page ')+pageNumber);content.replaceChildren(canvas);renderTask=page.render({canvasContext:canvas.getContext('2d'),viewport});await renderTask.promise;pageLabel.textContent=pageNumber+' / '+pdfDocument.numPages;previous.disabled=pageNumber===1;next.disabled=pageNumber===pdfDocument.numPages;};
+      const change=async(delta)=>{pageNumber+=delta;try{await render()}catch(error){if(dialog.open)content.textContent=error.message}};previous.onclick=()=>change(-1);next.onclick=()=>change(1);await render();
+    }
+    else content.textContent=mailImageText('Для этого формата доступно скачивание.','Download is available for this format.');
+  }catch(error){if(error.name!=='AbortError'&&dialog.open)content.textContent=error.message}
+}
+function mountComposeDesign() {
+  const panel=$('compose-panel');if(!panel||panel.dataset.designMounted)return;panel.dataset.designMounted='true';ensureComposeCC();
+  for(const id of ['compose-to','compose-cc','compose-subject']){const input=$(id);if(!input)continue;const label=input.previousElementSibling;const row=document.createElement('div');row.className='compose-address-row';input.before(row);if(label?.tagName==='LABEL')row.append(label);row.append(input);}
+  const footer=document.createElement('div');footer.className='compose-footer';const attachment=$('compose-attach');const label=attachment.previousElementSibling;const group=document.createElement('div');group.className='compose-file-control';if(label?.tagName==='LABEL')group.append(label);group.append(attachment);footer.append(group,panel.querySelector('.actions'));panel.append(footer,$('compose-msg'));
+}
+mountComposeDesign();
+const selectedMailIDs=new Set();
+function renderMailSelection(messages) {
+ selectedMailIDs.clear();let bar=$('mail-selection');if(!bar){bar=document.createElement('div');bar.id='mail-selection';bar.className='mail-selection';$('mail-msg-list').before(bar)}bar.replaceChildren();bar.hidden=!messages.length;
+ const all=document.createElement('input');all.type='checkbox';all.setAttribute('aria-label',mailImageText('Выбрать письма на этой странице','Select messages on this page'));bar.append(all);
+ const count=document.createElement('span');count.className='meta';bar.append(count);const buttons=[];
+ const update=()=>{count.textContent=mailImageText('Выбрано: ','Selected: ')+selectedMailIDs.size;all.checked=messages.length>0&&selectedMailIDs.size===messages.length;all.indeterminate=selectedMailIDs.size>0&&!all.checked;buttons.forEach(b=>b.disabled=!selectedMailIDs.size);};
+ all.onchange=()=>{$('mail-msg-list').querySelectorAll('.mail-select').forEach(input=>{input.checked=all.checked;if(all.checked)selectedMailIDs.add(input.value);else selectedMailIDs.delete(input.value)});update()};
+ for(const message of messages){const row=$('mail-msg-list').querySelector('[data-msg="'+CSS.escape(message.id)+'"]')?.parentElement;if(!row)continue;row.classList.add('selectable-mail');const input=document.createElement('input');input.className='mail-select';input.type='checkbox';input.value=message.id;input.setAttribute('aria-label',mailImageText('Выбрать письмо: ','Select message: ')+(message.subject||''));input.onchange=()=>{if(input.checked)selectedMailIDs.add(message.id);else selectedMailIDs.delete(message.id);update()};row.prepend(input);}
+ for(const [action,label] of [['read',mailImageText('Прочитано','Mark read')],['unread',mailImageText('Не прочитано','Mark unread')],['archive',mailImageText('В архив','Archive')],['spam',mailImageText('В спам','Spam')],['delete',t('delete')]]) {const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.textContent=label;buttons.push(button);bar.append(button);button.onclick=async()=>{
+  const ids=[...selectedMailIDs];if(action==='delete'&&!await askConfirm(mailImageText('Удалить выбранные письма: ','Delete selected messages: ')+ids.length+'?',{danger:true}))return;
+  bar.querySelectorAll('button,input').forEach(e=>e.disabled=true);let completed=0;
+  try{let spam;if(action==='spam'){spam=(mailState.mailboxes||[]).find(m=>m.name==='Junk');if(!spam)throw Error(mailImageText('Папка спама недоступна','Spam folder unavailable'));}
+   for(const id of ids){const path='/api/v1/mail/messages/'+encodeURIComponent(id);if(action==='read'||action==='unread')await api(path,{method:'PATCH',body:JSON.stringify({seen:action==='read'})});else if(action==='spam')await api(path+'/move',{method:'POST',body:JSON.stringify({mailbox_id:spam.id})});else await api(path+(action==='archive'?'/archive':''),{method:action==='archive'?'POST':'DELETE'});completed++;selectedMailIDs.delete(id);}
+   mailState.messageID='';await refreshMail();
+  }catch(error){await askAlert(mailImageText('Обработано ','Processed ')+completed+'/'+ids.length+'. '+error.message);await refreshMailMessages();}
+ };}
+ update();
+}
+
+function calendarDisplayLabel(calendar){
+ const defaults={default:['Календарь','Main calendar'],personal:['Личный календарь','Personal calendar'],work:['Рабочий календарь','Work calendar']};const names=defaults[calendar.name];
+ if(names&&(!calendar.display_name||[...names,'default','Calendar'].includes(calendar.display_name)))return mailImageText(...names);
+ return calendar.display_name||calendar.name||calendar.id;
+}
+function calendarEventLabel(event){return event.busy_only?mailImageText('Занято','Busy'):(event.summary||'—')}
+let composeContactsCache=null,composeContactsLoading=null,composeContactsIdentity="";
+async function composeContacts(){
+ const identity=state.tokens?.access_token||"";if(identity!==composeContactsIdentity){composeContactsCache=null;composeContactsLoading=null;composeContactsIdentity=identity;}
+ if(composeContactsCache)return composeContactsCache;if(composeContactsLoading)return composeContactsLoading;
+ composeContactsLoading=(async()=>{const books=await api('/api/v1/contacts/books'),contacts=[];for(const book of books.books||[]){const result=await api('/api/v1/contacts/books/'+encodeURIComponent(book.id)+'/cards');for(const card of result.cards||[])if(card.email)contacts.push({name:card.fn||card.email,email:card.email})}const seen=new Set();return contacts.filter(c=>{const key=c.email.toLowerCase();if(seen.has(key))return false;seen.add(key);return true})})();
+ try{const result=await composeContactsLoading;if(identity!==composeContactsIdentity)throw Error("Session changed");composeContactsCache=result;return result}finally{composeContactsLoading=null}
+}
+function mountComposeMentions(){
+ const body=$('compose-body');if(!body)return;
+ const popup=document.createElement('div');popup.className='compose-suggestions';popup.hidden=true;popup.id='compose-suggestions';popup.setAttribute('role','listbox');document.body.append(popup);let options=[],index=0,context=null,revision=0;
+ const dismiss=()=>{revision++;popup.hidden=true;context=null;for(const id of ['compose-to','compose-cc','compose-body']){$(id)?.removeAttribute('aria-activedescendant');$(id)?.setAttribute('aria-expanded','false')}};
+ const active=()=>{[...popup.children].forEach((button,i)=>button.setAttribute('aria-selected',String(i===index)));context?.field.setAttribute('aria-activedescendant','compose-option-'+index)};
+ const choose=()=>{const contact=options[index],saved=context;if(!contact||!saved)return;dismiss();if(saved.range){const range=saved.range;range.deleteContents();const text=document.createTextNode('@'+contact.name+' ');range.insertNode(text);range.setStartAfter(text);range.collapse(true);const selection=window.getSelection();selection.removeAllRanges();selection.addRange(range);saved.field.focus();const cc=$('compose-cc');if(cc){const existing=cc.value.split(/[,;]/).map(s=>s.trim()).filter(Boolean);if(!existing.some(s=>s.toLowerCase()===contact.email.toLowerCase()))existing.push(contact.email);cc.value=existing.join(', ');}}else{const input=saved.field;input.value=saved.prefix+contact.email+', ';input.focus();input.setSelectionRange(input.value.length,input.value.length)} };
+ const suggest=async field=>{
+  const stamp=++revision;let query='',prefix='',range=null;
+  if(field===body){const selection=window.getSelection();if(!selection?.rangeCount||!selection.isCollapsed){dismiss();return}const cursor=selection.getRangeAt(0);if(cursor.startContainer.nodeType!==Node.TEXT_NODE||!body.contains(cursor.startContainer)){dismiss();return}const text=cursor.startContainer.textContent.slice(0,cursor.startOffset),match=text.match(/(?:^|\s)@([^@\s]*)$/);if(!match){dismiss();return}query=match[1];range=cursor.cloneRange();range.setStart(cursor.startContainer,cursor.startOffset-query.length-1);}
+  else{if(field.selectionStart!==field.value.length){dismiss();return}const before=field.value.slice(0,field.selectionStart),last=Math.max(before.lastIndexOf(','),before.lastIndexOf(';'));prefix=field.value.slice(0,last+1);query=before.slice(last+1).trim().replace(/^@/,'');if(!query){dismiss();return}}
+  try{const contacts=await composeContacts();if(stamp!==revision||!field.isConnected)return;options=contacts.filter(c=>(c.name+' '+c.email).toLowerCase().includes(query.toLowerCase())).slice(0,8);if(!options.length){dismiss();return}context={field,prefix,range};index=0;popup.replaceChildren();options.forEach((contact,i)=>{const button=document.createElement('button');button.type='button';button.id='compose-option-'+i;button.setAttribute('role','option');const name=document.createElement('strong'),email=document.createElement('span');name.textContent=contact.name;email.textContent=contact.email;button.append(name,email);button.onmousedown=e=>e.preventDefault();button.onclick=()=>{index=i;choose()};popup.append(button)});const rect=field.getBoundingClientRect();popup.style.left=Math.max(8,Math.min(rect.left,window.innerWidth-320))+'px';popup.style.top=Math.min(rect.bottom,window.innerHeight-280)+'px';popup.hidden=false;field.setAttribute('aria-expanded','true');active();}catch{dismiss()}
+ };
+ for(const id of ['compose-to','compose-cc','compose-body']){const field=$(id);if(!field)continue;field.setAttribute('aria-controls',popup.id);field.setAttribute('aria-autocomplete','list');field.addEventListener('input',()=>suggest(field));field.addEventListener('keydown',event=>{if(popup.hidden||context?.field!==field)return;if(['ArrowDown','ArrowUp','Enter','Escape','Tab'].includes(event.key)){if(event.key==='Escape'||event.key==='Tab'){dismiss();if(event.key==='Escape')event.preventDefault();return}event.preventDefault();if(event.key==='Enter')choose();else{index=(index+(event.key==='ArrowDown'?1:-1)+options.length)%options.length;active()}}});field.addEventListener('blur',()=>setTimeout(()=>{if(document.activeElement!==field&&!popup.contains(document.activeElement))dismiss()},100));}
+ document.addEventListener('click',event=>{if(!popup.contains(event.target)&&!['compose-to','compose-cc','compose-body'].includes(event.target.id))dismiss()});
+ $('btn-compose-close')?.addEventListener('click',dismiss);$('btn-compose-send')?.addEventListener('click',dismiss);
+ const hint=document.createElement('p');hint.className='compose-shortcut-hint meta';hint.textContent=mailImageText('@ — контакт и копия · Ctrl/⌘ B, I, U — форматирование','@ — mention and CC · Ctrl/⌘ B, I, U — formatting');$('compose-rte').after(hint);
+}
+mountComposeMentions();
+function mountCalendarPlaceSearch(){
+ const location=$('cal-location');if(!location||$('cal-place-search'))return;
+ const row=document.createElement('div');row.className='calendar-place-tools';const search=document.createElement('button');search.id='cal-place-search';search.className='btn-secondary btn-sm';search.type='button';search.textContent=mailImageText('Найти на карте','Find on map');const map=document.createElement('a');map.className='btn-secondary btn-sm';map.target='_blank';map.rel='noopener noreferrer';map.hidden=true;map.textContent=mailImageText('Открыть карту','Open map');const results=document.createElement('div');results.className='calendar-place-results';results.setAttribute('role','status');const hint=document.createElement('p');hint.className='meta';hint.style.fontSize='.75rem';hint.textContent=mailImageText('Поиск отправляет только введённое место в Photon. Карта: © OpenStreetMap contributors.','Search sends only the entered place to Photon. Map: © OpenStreetMap contributors.');row.append(search,map);location.after(row,results,hint);
+ location.addEventListener('input',()=>{delete location.dataset.geo;map.hidden=true;results.replaceChildren()});
+ search.onclick=async()=>{const query=location.value.trim();if(query.length<3){results.textContent=mailImageText('Введите адрес или название места','Enter an address or place name');return}search.disabled=true;results.textContent=mailImageText('Поиск…','Searching…');try{const data=await api('/api/v1/calendar/places?q='+encodeURIComponent(query));results.replaceChildren();for(const place of data.places||[]){const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.textContent=place.label;button.onclick=()=>{location.value=place.label;location.dataset.geo=place.geo;const [lat,lon]=place.geo.split(';');map.href='https://www.openstreetmap.org/?mlat='+encodeURIComponent(lat)+'&mlon='+encodeURIComponent(lon)+'#map=16/'+encodeURIComponent(lat)+'/'+encodeURIComponent(lon);map.hidden=false;results.textContent=mailImageText('Точка выбрана: ','Point selected: ')+place.geo;};results.append(button)}if(!data.places?.length)results.textContent=mailImageText('Место не найдено. Уточните адрес.','Place not found. Refine the address.')}catch(error){results.textContent=error.message}finally{search.disabled=false}};
+}
+mountCalendarPlaceSearch();
+function findCommonSlots(users,start,end,duration,limit=3){
+ const intervals=users.filter(u=>u.available==='local').flatMap(u=>u.busy||[]).map(b=>[Date.parse(b.start),Date.parse(b.end)]);const slots=[];
+ for(let time=Math.ceil(start/1800000)*1800000;time+duration<=end&&slots.length<limit;time+=1800000){const local=new Date(time),finish=new Date(time+duration);if([0,6].includes(local.getDay())||local.getHours()<9||finish.getHours()*60+finish.getMinutes()>18*60||finish.getDate()!==local.getDate())continue;if(!intervals.some(([a,b])=>a<time+duration&&b>time)){slots.push(time);time+=Math.max(0,duration-1800000)}}return slots;
+}
+function mountCalendarPlanning(){
+ const block=$('cal-freebusy')?.closest('.cal-freebusy-block');if(!block||$('cal-find-time'))return;const button=document.createElement('button');button.type='button';button.id='cal-find-time';button.className='btn-secondary btn-sm';button.textContent=mailImageText('Подобрать время','Find a time');block.querySelector('.actions').append(button);
+ button.onclick=async()=>{addCalAttendeesFromInput();const start=Date.parse(localInputToISO($('cal-start').value)),finish=Date.parse(localInputToISO($('cal-end').value)),duration=finish-start,host=$('cal-freebusy');if(!Number.isFinite(duration)||duration<=0){host.textContent=mailImageText('Укажите начало и конец события','Set the event start and end');return}button.disabled=true;try{const emails=[...new Set([state.me?.email||state.email,...calState.attendees.map(a=>a.email)].filter(Boolean))];if(!emails.length)throw Error(mailImageText('Добавьте участников','Add attendees'));const horizon=start+7*86400000,result=await api('/api/v1/calendar/freebusy?'+new URLSearchParams({emails:emails.join(','),from:new Date(start).toISOString(),to:new Date(horizon).toISOString()}));host.replaceChildren();const users=result.users||[],unknown=users.filter(u=>u.available!=='local'),hint=document.createElement('p');hint.className='meta';hint.textContent=mailImageText('Следующие 7 дней, пн–пт 09:00–18:00 по вашему времени.','Next 7 days, Mon–Fri 09:00–18:00 in your timezone.')+(unknown.length?mailImageText(' Занятость неизвестна: ',' Availability unknown: ')+unknown.map(u=>u.email).join(', '):'');host.append(hint);if(!users.some(u=>u.available==='local'))return;const slots=findCommonSlots(users,start,horizon,duration);for(const slot of slots){const choose=document.createElement('button');choose.type='button';choose.className='btn-secondary btn-sm';choose.textContent=new Date(slot).toLocaleString(lang==='en'?'en-GB':'ru-RU');choose.onclick=()=>{const local=value=>new Date(value-new Date(value).getTimezoneOffset()*60000).toISOString().slice(0,16);$('cal-start').value=local(slot);$('cal-end').value=local(slot+duration);loadCalFreeBusy()};host.append(choose)}if(!slots.length){const message=document.createElement('p');message.textContent=mailImageText('Общего свободного времени не найдено','No common available time found');host.append(message)}}catch(error){host.textContent=error.message}finally{button.disabled=false}};
+}
+mountCalendarPlanning();
+
+function mountContactDesign(){
+ const original=$('btn-contact-new'),head=$('contact-book-title')?.parentElement;if(original&&head&&!$('btn-contact-add-visible')){const button=document.createElement('button');button.type='button';button.id='btn-contact-add-visible';button.className='btn-spray btn-sm';button.textContent=mailImageText('+ Добавить контакт','+ Add contact');button.onclick=()=>original.click();head.insertBefore(button,$('btn-contacts-refresh'));}
+}
+mountContactDesign();
+
+function mountDKIMGenerator(){
+ const actions=$('settings-home')?.querySelector('.actions');if(!actions)return;
+ const entry=document.createElement('button');entry.type='button';entry.className='btn-secondary';entry.textContent=mailImageText('DKIM: ключи и DNS','DKIM: keys and DNS');actions.prepend(entry);
+ entry.onclick=()=>{
+ const dialog=document.createElement('dialog');dialog.className='dkim-generator';
+ const heading=document.createElement('h3');heading.className='heading';heading.textContent=entry.textContent;
+ const intro=document.createElement('p');intro.className='meta';intro.textContent=mailImageText('Создайте RSA-ключ 2048 бит, скачайте закрытый ключ и опубликуйте TXT-запись. Новый ключ не заменяет действующий автоматически.','Generate a 2048-bit RSA key, download the private key and publish the TXT record. Existing signing keys are not replaced automatically.');
+ const form=document.createElement('form'),domain=document.createElement('input'),selector=document.createElement('input');
+ domain.className=selector.className='field-input';domain.required=selector.required=true;domain.placeholder='example.com';selector.value='tayga';selector.pattern='[a-zA-Z0-9][a-zA-Z0-9_-]{0,62}';
+ for(const [label,input] of [[mailImageText('Домен отправителя','Sending domain'),domain],[mailImageText('Селектор (имя ключа)','Selector (key name)'),selector]]){const field=document.createElement('label');field.className='field';field.textContent=label;field.append(input);form.append(field)}
+ const generate=document.createElement('button');generate.type='submit';generate.className='btn-spray';generate.textContent=mailImageText('Сгенерировать ключ','Generate key');form.append(generate);
+ const result=document.createElement('section'),status=document.createElement('p');status.className='msg';status.setAttribute('role','status');
+ const close=document.createElement('button');close.type='button';close.className='btn-secondary';close.textContent=t('close');close.onclick=()=>dialog.close();dialog.append(heading,intro,form,status,result,close);document.body.append(dialog);dialog.showModal();domain.focus();dialog.addEventListener('close',()=>{result.replaceChildren();dialog.remove()},{once:true});
+ form.onsubmit=async event=>{event.preventDefault();generate.disabled=true;status.textContent='';result.replaceChildren();try{let key=await api('/api/v1/admin/dkim/generate',{method:'POST',body:JSON.stringify({domain:domain.value,selector:selector.value})});if(!dialog.open)return;
+ for(const [label,value] of [[mailImageText('TXT — полное имя записи','TXT — full record name'),key.dns_name],[mailImageText('TXT — значение записи','TXT — record value'),key.dns_value]]){const field=document.createElement('label');field.className='field';field.textContent=label;const input=document.createElement('textarea');input.className='field-input';input.readOnly=true;input.rows=value.length>100?4:1;input.value=value;const copy=document.createElement('button');copy.type='button';copy.className='btn-secondary btn-sm';copy.textContent=mailImageText('Копировать','Copy');copy.onclick=async()=>{try{await navigator.clipboard.writeText(value)}catch{input.select()}};field.append(input,copy);result.append(field)}
+ const hint=document.createElement('p');hint.className='meta';hint.textContent=mailImageText('Тип DNS: TXT, TTL: 3600. Если панель DNS добавляет домен сама, укажите только '+key.selector+'._domainkey. Значение вставьте одной строкой: DNS-провайдер должен разбить длинную TXT-запись на части до 255 байт. Закрытый ключ в DNS не публикуется.','DNS type: TXT, TTL: 3600. If your DNS panel appends the domain, enter only '+key.selector+'._domainkey. Paste the value as one line; your DNS provider must split long TXT records into chunks of at most 255 bytes. Never publish the private key.');
+ const download=document.createElement('button');download.type='button';download.className='btn-spray';download.textContent=mailImageText('Скачать закрытый ключ (.pem)','Download private key (.pem)');download.onclick=()=>{const url=URL.createObjectURL(new Blob([key.private_key],{type:'application/x-pem-file'}));const link=document.createElement('a');link.href=url;link.download=key.domain+'-'+key.selector+'.pem';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
+ const setup=document.createElement('p');setup.className='meta';setup.textContent=mailImageText('Установите PEM на сервере с правами 0600 для пользователя службы. В «Сервер → SMTP → DKIM» задайте domain='+key.domain+', selector='+key.selector+' и private_key_file (путь к PEM). Включите enabled после публикации DNS и перезапустите службу. Скачайте ключ до закрытия окна: он не сохраняется в браузере.','Install the PEM on the server with mode 0600 for the service user. Set domain='+key.domain+', selector='+key.selector+' and private_key_file under Server → SMTP → DKIM. Enable signing after publishing DNS and restart the service. Download the key before closing: it is not persisted in the browser.');result.append(hint,download,setup);
+ }catch(error){status.textContent=error.message}finally{generate.disabled=false}};
+ };
+}
+mountDKIMGenerator();

@@ -97,6 +97,7 @@ func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth
 		log.Info("smtp virus scan enabled", "backend", sc.Name(), "action", srv.scan.action)
 	}
 	sp, err := spam.New(spam.Config{
+		DNSBLEnabled: cfg.Spam.DNSBL.Enabled, DNSBLZones: cfg.Spam.DNSBL.Zones, DNSBLScore: cfg.Spam.DNSBL.Score,
 		Enabled:         cfg.Spam.Enabled,
 		Backend:         cfg.Spam.Backend,
 		URL:             cfg.Spam.URL,
@@ -115,6 +116,7 @@ func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth
 		srv.spam = &spamPolicy{
 			checker: sp,
 			cfg: spam.Config{
+				DNSBLEnabled: cfg.Spam.DNSBL.Enabled, DNSBLZones: cfg.Spam.DNSBL.Zones, DNSBLScore: cfg.Spam.DNSBL.Score,
 				Enabled:         cfg.Spam.Enabled,
 				Backend:         cfg.Spam.Backend,
 				URL:             cfg.Spam.URL,

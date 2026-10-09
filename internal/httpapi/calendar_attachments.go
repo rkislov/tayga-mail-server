@@ -55,7 +55,7 @@ func (s *Server) eventOwnedOrAccessible(r *http.Request, au *authUser, objectID 
 	if err != nil {
 		return nil, err
 	}
-	if _, err := s.calendarAccessible(r, au, o.CalendarID); err != nil {
+	if cal, err := s.calendarAccessible(r, au, o.CalendarID); err != nil || (cal.Name == "personal" && cal.UserID != au.ID) {
 		return nil, storage.ErrNotFound
 	}
 	return o, nil

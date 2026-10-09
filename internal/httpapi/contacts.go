@@ -19,6 +19,11 @@ func (s *Server) handleContacts(w http.ResponseWriter, r *http.Request) {
 	parts := splitPath(path)
 
 	switch {
+	case r.Method == http.MethodGet && len(parts) == 3 && parts[0] == "books" && parts[1] == "gal" && parts[2] == "cards":
+		s.handleGAL(w, r, au, "")
+	case r.Method == http.MethodGet && len(parts) == 2 && parts[0] == "cards" && strings.HasPrefix(parts[1], "gal-"):
+		s.handleGAL(w, r, au, parts[1])
+
 	case r.Method == http.MethodGet && len(parts) == 1 && parts[0] == "books":
 		_ = s.store.EnsureDAVDefaults(r.Context(), au.ID)
 		books, err := s.store.ListAddressBooks(r.Context(), au.ID)
@@ -31,6 +36,10 @@ func (s *Server) handleContacts(w http.ResponseWriter, r *http.Request) {
 			out = append(out, map[string]any{
 				"id": b.ID, "name": b.Name, "display_name": b.DisplayName,
 			})
+		}
+		current, err := s.store.GetUserByID(r.Context(), au.ID)
+		if err == nil && s.domainGALEnabled(r, current.DomainID) {
+			out = append(out, map[string]any{"id": "gal", "name": "gal", "display_name": "GAL", "readonly": true})
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"books": out})
 

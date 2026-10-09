@@ -35,6 +35,7 @@ type Event struct {
 	UID         string
 	Summary     string
 	Location    string
+	Geo         string
 	Description string
 	Start       *time.Time
 	End         *time.Time
@@ -123,6 +124,9 @@ func buildCalendar(method string, ev Event) (*ical.Calendar, error) {
 	event.Props.SetDateTime(ical.PropDateTimeStamp, time.Now().UTC())
 	if ev.Summary != "" {
 		event.Props.SetText(ical.PropSummary, ev.Summary)
+	}
+	if ev.Geo != "" {
+		event.Props.Set(&ical.Prop{Name: "GEO", Value: ev.Geo})
 	}
 	if ev.Location != "" {
 		event.Props.SetText(ical.PropLocation, ev.Location)
@@ -255,6 +259,9 @@ func ParseICS(data string) (ParseResult, error) {
 	for _, event := range cal.Events() {
 		out.UID, _ = event.Props.Text(ical.PropUID)
 		out.Summary, _ = event.Props.Text(ical.PropSummary)
+		if prop := event.Props.Get("GEO"); prop != nil {
+			out.Geo = prop.Value
+		}
 		out.Location, _ = event.Props.Text(ical.PropLocation)
 		out.Description, _ = event.Props.Text(ical.PropDescription)
 		out.Comment, _ = event.Props.Text(ical.PropComment)
