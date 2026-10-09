@@ -11,6 +11,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/tayga/tms/internal/mailsearch"
 	"github.com/tayga/tms/internal/storage"
 )
 
@@ -249,8 +250,8 @@ func fillQuarantineMeta(it *quarantineItem, raw []byte) {
 	if err != nil {
 		return
 	}
-	it.From = hdr.Get("From")
-	it.Subject = hdr.Get("Subject")
+	it.From = mailsearch.DecodeHeader(hdr.Get("From"))
+	it.Subject = mailsearch.DecodeHeader(hdr.Get("Subject"))
 	it.SpamStatus = hdr.Get("X-Spam-Status")
 	it.SpamScore = hdr.Get("X-Spam-Score")
 	it.VirusStatus = hdr.Get("X-Virus-Status")
@@ -274,12 +275,10 @@ func messagePreview(raw []byte, max int) string {
 	if max <= 0 {
 		max = 4096
 	}
-	// Strip headers for body preview when possible.
-	body := raw
-	if idx := bytes.Index(raw, []byte("\r\n\r\n")); idx >= 0 {
-		body = raw[idx+4:]
-	} else if idx := bytes.Index(raw, []byte("\n\n")); idx >= 0 {
-		body = raw[idx+2:]
+	parsed := parseMIMEMessage(raw)
+	body := []byte(parsed.Text)
+	if len(body) == 0 && parsed.HTML != "" {
+		body = []byte(mailsearch.ExtractHTMLText(parsed.HTML))
 	}
 	if len(body) > max {
 		body = body[:max]

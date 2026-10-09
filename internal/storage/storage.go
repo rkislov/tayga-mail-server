@@ -121,7 +121,7 @@ type Driver interface {
 	UpdateMessageHeaders(ctx context.Context, messageID, subject, fromAddr, toAddr, dateHdr string) error
 	UpsertMessageSearch(ctx context.Context, messageID, subject, fromAddr, toAddr, body string) error
 	DeleteMessageSearch(ctx context.Context, messageID string) error
-	SearchMessages(ctx context.Context, userID, mailboxID, fromFilter, toFilter, subjectFilter, ftsQuery string, limit int) ([]SearchHit, error)
+	SearchMessages(ctx context.Context, userID, mailboxID, fromFilter, toFilter, subjectFilter, ftsQuery string, limit int, options ...MessageSearchOptions) ([]SearchHit, error)
 	MoveMessage(ctx context.Context, messageID, dstMailboxID string) (*Message, error)
 	DeleteMessage(ctx context.Context, messageID string) error
 	ExpungeMailbox(ctx context.Context, mailboxID string) ([]*Message, error)

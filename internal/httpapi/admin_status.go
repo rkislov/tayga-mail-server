@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/tayga/tms/internal/backup"
+	"github.com/tayga/tms/internal/metrics"
 	"github.com/tayga/tms/internal/version"
 )
 
@@ -49,9 +50,10 @@ func (s *Server) handleAdminStatus(w http.ResponseWriter, r *http.Request) {
 			"goroutines": runtime.NumGoroutine(),
 			"heap_alloc": ms.HeapAlloc,
 		},
-		"server": global,
-		"tenant": tenant,
-		"tls":    tls,
+		"protection": metrics.ProtectionSnapshot(),
+		"server":     global,
+		"tenant":     tenant,
+		"tls":        tls,
 		"listeners": map[string]string{
 			"smtp_mx":         s.cfg.SMTP.MX,
 			"smtp_submission": s.cfg.SMTP.Submission,

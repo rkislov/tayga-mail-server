@@ -94,11 +94,24 @@ func (s *Server) handleContacts(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "fn required"})
 			return
 		}
+		oldHref := ""
+		if req.ID != "" {
+			old, e := s.store.GetAddressObjectByID(r.Context(), req.ID)
+			if e != nil || old.AddressBookID != book.ID {
+				writeJSON(w, 403, map[string]string{"error": "forbidden"})
+				return
+			}
+			req.UID = old.UID
+			oldHref = old.HrefName
+		}
 		uid := req.UID
 		if uid == "" {
 			uid = storage.NewID()
 		}
 		href := uid + ".vcf"
+		if oldHref != "" {
+			href = oldHref
+		}
 		data := buildSimpleVCARD(uid, req.FN, req.Email, req.Tel, req.Org, req.Note)
 		obj := &storage.AddressObject{
 			AddressBookID: book.ID, UID: uid, HrefName: href,
