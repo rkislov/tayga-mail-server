@@ -165,7 +165,7 @@ func (h *easHandler) folderSync(ctx context.Context, u *storage.User, dev *stora
 			name = cal.Name
 		}
 		folders = append(folders, folderChange{
-			ServerID: cal.ID, ParentID: "0", DisplayName: name, Type: folderTypeCalendar,
+			ServerID: cal.ID, ParentID: "0", DisplayName: name, Type: defaultFolderType(cal.Name, folderTypeCalendar, 13),
 		})
 	}
 	for _, ab := range abs {
@@ -174,7 +174,7 @@ func (h *easHandler) folderSync(ctx context.Context, u *storage.User, dev *stora
 			name = ab.Name
 		}
 		folders = append(folders, folderChange{
-			ServerID: ab.ID, ParentID: "0", DisplayName: name, Type: folderTypeContacts,
+			ServerID: ab.ID, ParentID: "0", DisplayName: name, Type: defaultFolderType(ab.Name, folderTypeContacts, 14),
 		})
 	}
 	for _, nf := range nfs {
@@ -183,7 +183,7 @@ func (h *easHandler) folderSync(ctx context.Context, u *storage.User, dev *stora
 			name = nf.Name
 		}
 		folders = append(folders, folderChange{
-			ServerID: nf.ID, ParentID: "0", DisplayName: name, Type: folderTypeNotes,
+			ServerID: nf.ID, ParentID: "0", DisplayName: name, Type: defaultFolderType(nf.Name, folderTypeNotes, 17),
 		})
 	}
 	if wbxml {
@@ -256,7 +256,7 @@ func (h *easHandler) provision(ctx context.Context, u *storage.User, dev *storag
 	b.WriteString(`<Provision xmlns="Provision:"><Status>1</Status><Policies><Policy>`)
 	b.WriteString(`<PolicyType>MS-EAS-Provisioning-WBXML</PolicyType><Status>1</Status>`)
 	fmt.Fprintf(&b, `<PolicyKey>%s</PolicyKey>`, xmlEscape(policy))
-	b.WriteString(`<Data>`)
+	b.WriteString(`<Data><EASProvisionDoc>`)
 	fmt.Fprintf(&b, `<DevicePasswordEnabled>%d</DevicePasswordEnabled>`, bool01(p.DevicePasswordEnabled))
 	fmt.Fprintf(&b, `<MinDevicePasswordLength>%d</MinDevicePasswordLength>`, p.MinDevicePasswordLength)
 	fmt.Fprintf(&b, `<MaxInactivityTimeDeviceLock>%d</MaxInactivityTimeDeviceLock>`, p.MaxInactivityTimeDeviceLock)
@@ -266,7 +266,7 @@ func (h *easHandler) provision(ctx context.Context, u *storage.User, dev *storag
 	fmt.Fprintf(&b, `<RequireDeviceEncryption>%d</RequireDeviceEncryption>`, bool01(p.RequireDeviceEncryption))
 	fmt.Fprintf(&b, `<AllowStorageCard>%d</AllowStorageCard>`, bool01(p.AllowStorageCard))
 	fmt.Fprintf(&b, `<AllowCamera>%d</AllowCamera>`, bool01(p.AllowCamera))
-	b.WriteString(`</Data></Policy></Policies></Provision>`)
+	b.WriteString(`</EASProvisionDoc></Data></Policy></Policies></Provision>`)
 	return b.String(), nil, nil
 }
 
@@ -421,4 +421,11 @@ func defaultDevicePolicy() devicePolicy {
 		AllowStorageCard:                   true,
 		AllowCamera:                        true,
 	}
+}
+
+func defaultFolderType(name string, standard, custom int) int {
+	if name == "default" {
+		return standard
+	}
+	return custom
 }

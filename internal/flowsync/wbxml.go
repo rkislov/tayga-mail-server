@@ -117,16 +117,15 @@ var (
 	tagProvStatus     = wbTag{cpProvision, 0x0B}
 
 	// Provision policy data fields (same page)
-	tagProvDevicePasswordEnabled              = wbTag{cpProvision, 0x14}
-	tagProvAlphanumericDevicePasswordRequired = wbTag{cpProvision, 0x16}
-	tagProvDeviceEncryptionEnabled            = wbTag{cpProvision, 0x1A}
-	tagProvRequireDeviceEncryption            = wbTag{cpProvision, 0x20}
-	tagProvAllowSimpleDevicePassword          = wbTag{cpProvision, 0x22}
-	tagProvMaxInactivityTimeDeviceLock        = wbTag{cpProvision, 0x23}
-	tagProvMaxDevicePasswordFailedAttempts    = wbTag{cpProvision, 0x24}
-	tagProvMinDevicePasswordLength            = wbTag{cpProvision, 0x25}
-	tagProvAllowStorageCard                   = wbTag{cpProvision, 0x28}
-	tagProvAllowCamera                        = wbTag{cpProvision, 0x29}
+	tagProvDevicePasswordEnabled              = wbTag{cpProvision, 0x0E}
+	tagProvAlphanumericDevicePasswordRequired = wbTag{cpProvision, 0x0F}
+	tagProvRequireDeviceEncryption            = wbTag{cpProvision, 0x1D}
+	tagProvAllowSimpleDevicePassword          = wbTag{cpProvision, 0x18}
+	tagProvMaxInactivityTimeDeviceLock        = wbTag{cpProvision, 0x15}
+	tagProvMaxDevicePasswordFailedAttempts    = wbTag{cpProvision, 0x16}
+	tagProvMinDevicePasswordLength            = wbTag{cpProvision, 0x14}
+	tagProvAllowStorageCard                   = wbTag{cpProvision, 0x1B}
+	tagProvAllowCamera                        = wbTag{cpProvision, 0x1C}
 )
 
 type wbEncoder struct {
@@ -323,6 +322,7 @@ func encodeProvisionWBXML(policyKey string, p devicePolicy) []byte {
 	e.taggedStr(tagProvStatus, "1")
 	e.taggedStr(tagProvPolicyKey, policyKey)
 	e.start(tagProvData)
+	e.start(wbTag{cpProvision, 0x0D})
 	e.taggedStr(tagProvDevicePasswordEnabled, fmt.Sprintf("%d", bool01(p.DevicePasswordEnabled)))
 	e.taggedStr(tagProvMinDevicePasswordLength, fmt.Sprintf("%d", p.MinDevicePasswordLength))
 	e.taggedStr(tagProvMaxInactivityTimeDeviceLock, fmt.Sprintf("%d", p.MaxInactivityTimeDeviceLock))
@@ -330,9 +330,9 @@ func encodeProvisionWBXML(policyKey string, p devicePolicy) []byte {
 	e.taggedStr(tagProvAllowSimpleDevicePassword, fmt.Sprintf("%d", bool01(p.AllowSimpleDevicePassword)))
 	e.taggedStr(tagProvAlphanumericDevicePasswordRequired, fmt.Sprintf("%d", bool01(p.AlphanumericDevicePasswordRequired)))
 	e.taggedStr(tagProvRequireDeviceEncryption, fmt.Sprintf("%d", bool01(p.RequireDeviceEncryption)))
-	e.taggedStr(tagProvDeviceEncryptionEnabled, fmt.Sprintf("%d", bool01(p.RequireDeviceEncryption)))
 	e.taggedStr(tagProvAllowStorageCard, fmt.Sprintf("%d", bool01(p.AllowStorageCard)))
 	e.taggedStr(tagProvAllowCamera, fmt.Sprintf("%d", bool01(p.AllowCamera)))
+	e.end() // EASProvisionDoc
 	e.end() // Data
 	e.end()
 	e.end()

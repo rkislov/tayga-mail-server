@@ -47,3 +47,13 @@ func TestRequestWantsWBXML(t *testing.T) {
 		t.Fatal("should prefer xml")
 	}
 }
+
+// Literal protocol tokens make this independent of the encoder constants.
+func TestProvisionPolicyWireTokens(t *testing.T) {
+	data := encodeProvisionWBXML("123", defaultDevicePolicy())
+	for _, wire := range [][]byte{{0x4a, 0x4d, 0x4e, 0x03, '1', 0, 0x01}, {0x54, 0x03, '4', 0, 0x01}} {
+		if !bytes.Contains(data, wire) {
+			t.Fatalf("missing policy wire structure %x in %x", wire, data)
+		}
+	}
+}
