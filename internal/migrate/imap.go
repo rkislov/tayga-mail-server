@@ -16,7 +16,8 @@ import (
 )
 
 type imapOptions struct {
-	Folders []string `json:"folders"` // empty = all
+	SkipTLSVerify bool     `json:"skip_tls_verify"`
+	Folders       []string `json:"folders"` // empty = all
 }
 
 func (s *Service) runIMAP(ctx context.Context, job *Job) error {
@@ -32,10 +33,12 @@ func (s *Service) runIMAP(ctx context.Context, job *Job) error {
 		return err
 	}
 
+	var opts imapOptions
+	_ = json.Unmarshal([]byte(job.Options), &opts)
 	addr := fmt.Sprintf("%s:%d", job.Host, job.Port)
 	var c *client.Client
 	if job.TLS {
-		c, err = client.DialTLS(addr, &tls.Config{ServerName: job.Host, MinVersion: tls.VersionTLS12})
+		c, err = client.DialTLS(addr, &tls.Config{ServerName: job.Host, MinVersion: tls.VersionTLS12, InsecureSkipVerify: opts.SkipTLSVerify})
 	} else {
 		c, err = client.Dial(addr)
 	}
@@ -47,9 +50,6 @@ func (s *Service) runIMAP(ctx context.Context, job *Job) error {
 	if err := c.Login(job.Username, password); err != nil {
 		return fmt.Errorf("login: %w", err)
 	}
-
-	var opts imapOptions
-	_ = json.Unmarshal([]byte(job.Options), &opts)
 
 	mailboxes := make(chan *imap.MailboxInfo, 32)
 	done := make(chan error, 1)

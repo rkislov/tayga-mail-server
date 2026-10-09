@@ -23,7 +23,7 @@ func (s *Store) scanMessage(row interface{ Scan(dest ...any) error }) (*Message,
 	m := &Message{}
 	var archived int
 	err := row.Scan(
-		&m.ID, &m.MailboxID, &m.UID, &m.Size, &m.Flags, &m.InternalDate, &m.FilePath, &m.MessageID,
+		&m.ID, &m.MailboxID, &m.UID, &m.Size, &m.Flags, sqlTime{&m.InternalDate}, &m.FilePath, &m.MessageID,
 		&m.Subject, &m.FromAddr, &m.ToAddr, &m.DateHdr, &archived, &m.CreatedAt,
 	)
 	if err != nil {

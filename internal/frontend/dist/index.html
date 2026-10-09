@@ -115,6 +115,7 @@
               <label class="field-label" for="mig-imap-port" data-i18n="mig_port">Порт</label>
               <input class="field-input" id="mig-imap-port" type="number" min="1" max="65535" value="993" required />
               <label class="field-check"><input type="checkbox" id="mig-imap-tls" checked /> <span>TLS</span></label>
+              <label class="field-check"><input type="checkbox" id="mig-imap-skip-tls" /><span data-i18n="mig_skip_tls">Не проверять сертификат старого сервера</span></label><p class="field-hint" data-i18n="mig_skip_tls_hint">Только для этой задачи. Используйте для доверенного сервера с самоподписанным сертификатом.</p>
               <label class="field-label" for="mig-imap-user" data-i18n="mig_source_login">Логин на старом сервере</label>
               <input class="field-input" id="mig-imap-user" type="text" required autocomplete="username" />
               <label class="field-label" for="mig-imap-pass" data-i18n="password">Пароль</label>
@@ -127,6 +128,7 @@
               <p class="meta" data-i18n="mig_cal_hint">URL календаря на старом сервере (CalDAV).</p>
               <label class="field-label" for="mig-cal-url">URL</label>
               <input class="field-input" id="mig-cal-url" type="url" required placeholder="https://cal.example.com/dav/…" />
+              <label class="field-check"><input type="checkbox" id="mig-cal-skip-tls" /><span data-i18n="mig_skip_tls">Не проверять сертификат старого сервера</span></label><p class="field-hint" data-i18n="mig_skip_tls_hint">Только для этой задачи. Используйте для доверенного сервера с самоподписанным сертификатом.</p>
               <label class="field-label" for="mig-cal-user" data-i18n="mig_source_login">Логин на старом сервере</label>
               <input class="field-input" id="mig-cal-user" type="text" required />
               <label class="field-label" for="mig-cal-pass" data-i18n="password">Пароль</label>
@@ -139,6 +141,7 @@
               <p class="meta" data-i18n="mig_card_hint">URL адресной книги на старом сервере (CardDAV).</p>
               <label class="field-label" for="mig-card-url">URL</label>
               <input class="field-input" id="mig-card-url" type="url" required placeholder="https://…" />
+              <label class="field-check"><input type="checkbox" id="mig-card-skip-tls" /><span data-i18n="mig_skip_tls">Не проверять сертификат старого сервера</span></label><p class="field-hint" data-i18n="mig_skip_tls_hint">Только для этой задачи. Используйте для доверенного сервера с самоподписанным сертификатом.</p>
               <label class="field-label" for="mig-card-user" data-i18n="mig_source_login">Логин на старом сервере</label>
               <input class="field-input" id="mig-card-user" type="text" required />
               <label class="field-label" for="mig-card-pass" data-i18n="password">Пароль</label>
@@ -157,6 +160,10 @@
       <p class="brand-sm">Tayga <span>Mail</span></p>
       <p class="app-topbar-title" id="app-topbar-title" data-i18n="nav_mail">Почта</p>
       <div class="color-mode-switch" role="group" data-i18n-title="color_mode" aria-label="Режим интерфейса"><button type="button" data-color-mode="light" data-i18n-title="color_mode_light" aria-label="Дневной режим">☀</button><button type="button" data-color-mode="auto" data-i18n="color_mode_auto">Авто</button><button type="button" data-color-mode="dark" data-i18n-title="color_mode_dark" aria-label="Ночной режим">☾</button></div>
+      <details class="topbar-language" id="topbar-language"><summary data-i18n-title="language_title"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18M5 7h14M5 17h14"/></svg></summary><div class="language-popover"><label class="field-label" for="lang-select" data-i18n="language_title"></label><select class="field-input" id="lang-select">
+            <option value="ru">Русский</option>
+            <option value="en">English</option>
+          </select></div></details>
       <button type="button" class="btn-secondary btn-sm btn-ico topbar-notify" id="btn-notify-perm" data-i18n-title="notify_enable" title="Уведомления" aria-label="Уведомления"><span class="ico" data-ico="chat" aria-hidden="true"></span></button>
     </header>
 
@@ -179,7 +186,6 @@
         <button type="button" class="nav-btn" data-app="chat"><span class="nav-ico" data-ico="chat" aria-hidden="true"></span><span data-i18n="nav_chat">Чат</span></button>
         <p class="nav-group" data-i18n="nav_settings">Настройки</p>
         <button type="button" class="nav-btn" data-app="profile"><span class="nav-ico" data-ico="user" aria-hidden="true"></span><span data-i18n="nav_profile">Профиль</span></button>
-        <button type="button" class="nav-btn" data-app="security"><span class="nav-ico" data-ico="lock" aria-hidden="true"></span><span data-i18n="nav_security">Безопасность</span></button>
         <button type="button" class="nav-btn" data-app="appearance"><span class="nav-ico" data-ico="theme" aria-hidden="true"></span><span data-i18n="nav_appearance">Внешний вид</span></button>
         <button type="button" class="nav-btn" data-app="filters"><span class="nav-ico" data-ico="filter" aria-hidden="true"></span><span data-i18n="nav_filters">Фильтры</span></button>
         <button type="button" class="nav-btn" data-app="language"><span class="nav-ico" data-ico="lang" aria-hidden="true"></span><span data-i18n="nav_language">Язык</span></button>
@@ -187,6 +193,7 @@
         <div id="nav-admin" class="hidden">
           <p class="nav-group" data-i18n="nav_admin">Админ</p>
           <button type="button" class="nav-btn" data-app="monitor"><span class="nav-ico" data-ico="chart" aria-hidden="true"></span><span data-i18n="nav_monitor">Мониторинг</span></button>
+ <button type="button" class="nav-btn" data-app="antispam"><span class="nav-ico" data-ico="lock" aria-hidden="true"></span><span data-i18n="nav_antispam">Антиспам</span></button>
           <button type="button" class="nav-btn" data-app="maillog"><span class="nav-ico" data-ico="mail" aria-hidden="true"></span><span data-i18n="nav_maillog">Лог писем</span></button>
           <button type="button" class="nav-btn" data-app="migration"><span class="nav-ico" data-ico="filter" aria-hidden="true"></span><span data-i18n="nav_migration">Миграция IMAP/DAV</span></button>
           <button type="button" class="nav-btn" data-app="tenants"><span class="nav-ico" data-ico="domains" aria-hidden="true"></span><span data-i18n="nav_tenants">Домены и пользователи</span></button>
@@ -619,21 +626,19 @@
       </div>
 
       <!-- PROFILE -->
-      <div id="app-profile" class="app-page hidden panel-page">
+      <div id="app-profile" class="app-page hidden panel-page panel-page-wide stack-gap">
         <div class="card">
           <h2 class="heading" data-i18n="profile_title">Профиль</h2>
           <h3 class="heading heading-gap" id="acct-email">—</h3>
           <p class="meta" id="acct-meta" data-i18n="session_active">Сессия активна · IMAP XOAUTH2 / FlowSync</p>
           <p class="meta" id="acct-quota"></p>
-          <span class="chip" id="acct-role">live</span>
+          <span class="chip" id="acct-role">live</span><form id="profile-form"><label class="field-label" for="profile-name" data-i18n="users_name"></label><input class="field-input" id="profile-name" maxlength="200"/><div class="actions"><button type="submit" class="btn-spray" data-i18n="save"></button></div><p class="msg" id="profile-msg" role="status"></p></form><dl class="profile-info" id="profile-info"></dl>
           <div class="actions">
             <button type="button" class="btn-secondary" id="btn-refresh-me" data-i18n="refresh">Обновить</button>
           </div>
         </div>
-      </div>
-
-      <!-- SECURITY -->
-      <div id="app-security" class="app-page hidden panel-page stack-gap">
+<section class="card"><h3 class="heading" data-i18n="signature_title"></h3><p class="field-hint" data-i18n="signature_hint"></p><form id="signature-form"><label class="field-label" for="profile-signature" data-i18n="signature_title"></label><textarea class="field-input" id="profile-signature" rows="5" maxlength="10000"></textarea><label class="field-check"><input type="checkbox" id="signature-new"/><span data-i18n="signature_new"></span></label><label class="field-check"><input type="checkbox" id="signature-reply"/><span data-i18n="signature_reply"></span></label><p class="field-label" data-i18n="signature_preview"></p><div id="signature-preview" class="signature-preview"></div><div class="actions"><button type="submit" class="btn-spray" data-i18n="save"></button></div><p class="msg" id="signature-msg" role="status"></p></form></section><h3 class="heading" data-i18n="nav_security"></h3>      <!-- SECURITY -->
+      <div id="profile-security" class="profile-security">
         <div class="card">
           <h3 class="heading">Authenticator (TOTP)</h3>
           <div class="actions">
@@ -657,6 +662,8 @@
           <ul class="creds" id="cred-list"></ul>
           <p id="passkey-msg" class="msg"></p>
         </div>
+      </div>
+
       </div>
 
       <!-- APPEARANCE -->
@@ -692,10 +699,7 @@
           <h3 class="heading" data-i18n="language_title">Язык</h3>
           <p class="meta" data-i18n="language_hint">Язык интерфейса сохраняется в браузере.</p>
           <label class="field-label" for="lang-select" data-i18n="language_title">Язык</label>
-          <select class="field-input" id="lang-select">
-            <option value="ru">Русский</option>
-            <option value="en">English</option>
-          </select>
+          <p class="meta" data-i18n="language_topbar_hint"></p>
         </div>
       </div>
 
@@ -803,32 +807,7 @@ keep;</textarea>
           </div>
           <h3 class="heading heading-gap">Исходящая очередь</h3>
           <ul class="creds" id="outbound-list"></ul>
-          <h3 class="heading heading-gap">Карантин / Junk</h3>
-          <div class="filter-bar">
-            <div>
-              <label class="field-label" for="q-folder">Папка</label>
-              <select class="field-input" id="q-folder">
-                <option value="">Все</option>
-                <option value="Quarantine">Quarantine</option>
-                <option value="Junk">Junk</option>
-              </select>
-            </div>
-            <div>
-              <label class="field-label" for="q-kind">Тип</label>
-              <select class="field-input" id="q-kind">
-                <option value="">Все</option>
-                <option value="virus">Virus</option>
-                <option value="spam">Spam</option>
-              </select>
-            </div>
-            <div>
-              <label class="field-label" for="q-search">Поиск</label>
-              <input class="field-input" id="q-search" type="search" />
-            </div>
-            <button type="button" class="btn-secondary" id="btn-q-refresh">Фильтр</button>
-          </div>
-          <ul class="creds" id="quarantine-list"></ul>
-          <pre class="secret preview-box hidden" id="q-preview"></pre>
+          <div class="chart-card"><h4 class="chart-title">Защита от спама и рассылок</h4><p class="meta">Решения антиспама с запуска сервера, по получателям. Рассылки определяются по заголовку List-Unsubscribe.</p><div id="protection-stats" class="chart-host"></div><button type="button" class="btn-secondary" data-app="antispam" id="monitor-open-antispam">Открыть антиспам</button></div>
           <div class="actions">
             <button type="button" class="btn-secondary" id="btn-monitor-refresh" data-i18n="refresh">Обновить</button>
             <button type="button" class="btn-spray" id="btn-backup">Backup</button>
@@ -843,33 +822,60 @@ keep;</textarea>
         </div>
       </div>
 
+      <div id="app-antispam" class="app-page hidden panel-page panel-page-wide"><div class="card"><h3 class="heading" data-i18n="nav_antispam">Антиспам</h3><p class="meta">Проверка входящих писем, карантин и правила защиты.</p><div class="actions protection-settings"><button type="button" class="btn-secondary" data-protection-config="spam">Настройки Rspamd</button><button type="button" class="btn-secondary" data-protection-config="scan">Антивирус</button><button type="button" class="btn-secondary" data-protection-config="spf">SPF</button><button type="button" class="btn-secondary" data-protection-config="dkim_verify">DKIM</button><button type="button" class="btn-secondary" data-protection-config="dmarc">DMARC</button><button type="button" class="btn-secondary" data-protection-config="greylist">Серый список</button></div>          <h3 class="heading heading-gap">Карантин и спам</h3>
+          <div class="filter-bar">
+            <div>
+              <label class="field-label" for="q-folder">Папка</label>
+              <select class="field-input" id="q-folder">
+                <option value="">Все</option>
+                <option value="Quarantine">Карантин</option>
+                <option value="Junk">Спам</option>
+              </select>
+            </div>
+            <div>
+              <label class="field-label" for="q-kind">Тип</label>
+              <select class="field-input" id="q-kind">
+                <option value="">Все</option>
+                <option value="virus">Вирусы</option>
+                <option value="spam">Спам</option>
+              </select>
+            </div>
+            <div>
+              <label class="field-label" for="q-search">Поиск</label>
+              <input class="field-input" id="q-search" type="search" />
+            </div>
+            <button type="button" class="btn-secondary" id="btn-q-refresh">Фильтр</button>
+          </div>
+          <div class="protection-table-wrap"><table class="protection-table"><thead><tr><th>Тема</th><th>Отправитель</th><th>Получатель / папка</th><th>Дата</th><th>Размер</th><th>Оценка</th><th>Действия</th></tr></thead><tbody id="quarantine-list"></tbody></table></div>
+          <p id="protection-msg" class="msg" role="status"></p>
+</div></div>
       <!-- ADMIN TENANTS → DOMAINS → USERS -->
-      <div id="app-tenants" class="app-page hidden panel-page">
+      <div id="app-tenants" class="app-page hidden panel-page panel-page-wide">
         <div class="card" id="card-admin">
-          <nav class="tenant-crumb" id="tenant-crumb" aria-label="Breadcrumb"></nav>
+          <div class="admin-directory-nav" role="navigation"><button type="button" data-directory="tenants" data-i18n="tenants_title"></button><button type="button" data-directory="domains" data-i18n="domains_title"></button><button type="button" data-directory="users" data-i18n="users_title"></button><button type="button" data-directory="cos" data-i18n="cos_title"></button></div><nav class="tenant-crumb" id="tenant-crumb" aria-label="Breadcrumb"></nav>
           <h3 class="heading" id="tenant-heading" data-i18n="tenants_title">Тенанты</h3>
           <p class="meta" id="tenant-meta"></p>
 
           <div id="tenant-level-tenants">
-            <form id="form-create-tenant" class="hidden">
+            <details class="admin-create"><summary data-i18n="tenants_new"></summary><form id="form-create-tenant" class="hidden">
               <label class="field-label" for="nt-name" data-i18n="tenants_new">Новый тенант</label>
               <input class="field-input" id="nt-name" type="text" required placeholder="acme" />
               <div class="actions"><button type="submit" class="btn-spray" data-i18n="tenants_add">Добавить</button></div>
-            </form>
+            </form></details>
             <ul class="creds" id="admin-tenant-list"></ul>
           </div>
 
           <div id="tenant-level-domains" class="hidden">
-            <form id="form-create-domain">
+            <details class="admin-create"><summary data-i18n="domains_new"></summary><form id="form-create-domain">
               <label class="field-label" for="nd-name" data-i18n="domains_new">Новый домен</label>
               <input class="field-input" id="nd-name" type="text" required placeholder="example.com" />
               <div class="actions"><button type="submit" class="btn-spray" data-i18n="domains_add">Добавить</button></div>
-            </form>
+            </form></details>
             <ul class="creds" id="admin-domain-list"></ul>
           </div>
 
           <div id="tenant-level-users" class="hidden">
-            <form id="form-create-user">
+            <details class="admin-create"><summary data-i18n="users_create"></summary><form id="form-create-user">
               <label class="field-label" for="nu-email" data-i18n="email">Email</label>
               <input class="field-input" id="nu-email" type="email" required />
               <label class="field-label" for="nu-name" data-i18n="users_name">Имя</label>
@@ -879,12 +885,12 @@ keep;</textarea>
               <label class="field-label" for="nu-quota" data-i18n="users_quota">Quota bytes</label>
               <input class="field-input" id="nu-quota" type="number" min="0" value="0" />
               <div class="actions"><button type="submit" class="btn-spray" data-i18n="users_create">Создать</button></div>
-            </form>
-            <ul class="creds" id="admin-user-list"></ul>
+            </form></details>
+            <div class="admin-table-scroll"><table class="admin-users-table"><thead><tr><th data-i18n="users_name"></th><th data-i18n="email"></th><th data-i18n="users_status"></th><th data-i18n="users_storage"></th><th data-i18n="cos_title"></th><th data-i18n="mig_policy"></th><th data-i18n="users_actions"></th></tr></thead><tbody id="admin-user-list"></tbody></table></div>
 
             <h4 class="heading" style="font-size:1rem;margin-top:1.25rem" data-i18n="resources_title">Ресурсы календаря</h4>
             <p class="meta" data-i18n="resources_lede">Комнаты и оборудование с free/busy (room-201@domain, projector@domain…).</p>
-            <form id="form-create-resource">
+            <details class="admin-create"><summary data-i18n="resources_add"></summary><form id="form-create-resource">
               <label class="field-label" for="nr-local" data-i18n="resources_local">Локальная часть</label>
               <input class="field-input" id="nr-local" type="text" required placeholder="room-201" />
               <label class="field-label" for="nr-name" data-i18n="resources_name">Название</label>
@@ -901,7 +907,7 @@ keep;</textarea>
               <input class="field-input" id="nr-desc" type="text" />
               <label class="field-check"><input type="checkbox" id="nr-auto" checked /> <span data-i18n="resources_auto">Автопринятие</span></label>
               <div class="actions"><button type="submit" class="btn-spray" data-i18n="resources_add">Добавить ресурс</button></div>
-            </form>
+            </form></details>
             <ul class="creds" id="admin-resource-list"></ul>
           </div>
 
@@ -923,9 +929,8 @@ keep;</textarea>
           <h4 class="heading" style="font-size:1rem;margin-top:1rem" data-i18n="ca_list">Сертификаты</h4>
           <ul class="creds" id="ca-cert-list"></ul>
 
-          <div class="ca-panels">
-            <section class="ca-panel">
-              <h4 class="heading" style="font-size:1rem" data-i18n="ca_self_signed">Самоподписанный</h4>
+<div class="migration-options"><button type="button" class="migration-option" data-ca-open="ss"><strong data-i18n="ca_self_signed"></strong><span class="field-hint" data-i18n="ca_self_hint"></span><span data-i18n="ca_configure"></span></button><button type="button" class="migration-option" data-ca-open="upload"><strong data-i18n="ca_upload"></strong><span class="field-hint" data-i18n="ca_pem_hint"></span><span data-i18n="ca_configure"></span></button><button type="button" class="migration-option" data-ca-open="acme"><strong data-i18n="ca_acme"></strong><span class="field-hint" data-i18n="ca_acme_hint"></span><span data-i18n="ca_configure"></span></button></div><dialog class="migration-dialog ca-dialog" id="ca-dialog-ss" aria-labelledby="ca-title-ss"><div class="pane-head"><h3 class="heading" id="ca-title-ss" data-i18n="ca_self_signed"></h3><button type="button" class="btn-secondary" data-ca-close data-i18n-title="close">×</button></div><p class="field-hint" data-i18n="ca_self_hint"></p>
+
               <label class="field-label" for="ca-ss-name" data-i18n="ca_name">Имя</label>
               <input class="field-input" id="ca-ss-name" type="text" />
               <label class="field-label" for="ca-ss-hosts" data-i18n="ca_hosts">Хосты / домены</label>
@@ -933,13 +938,11 @@ keep;</textarea>
               <label class="field-label" for="ca-ss-days" data-i18n="ca_days">Срок (дней)</label>
               <input class="field-input" id="ca-ss-days" type="number" value="365" min="1" max="3650" />
               <label class="field-check"><input type="checkbox" id="ca-ss-activate" checked /> <span data-i18n="ca_activate">Сделать активным</span></label>
-              <div class="actions">
+              <div class="actions"><button type="button" class="btn-secondary" data-ca-close data-i18n="cancel"></button>
                 <button type="button" class="btn-spray" id="btn-ca-ss" data-i18n="ca_issue">Выпустить</button>
               </div>
-            </section>
+            <p class="msg" id="ca-msg-ss" role="status"></p></dialog><dialog class="migration-dialog ca-dialog" id="ca-dialog-upload" aria-labelledby="ca-title-upload"><div class="pane-head"><h3 class="heading" id="ca-title-upload" data-i18n="ca_upload"></h3><button type="button" class="btn-secondary" data-ca-close data-i18n-title="close">×</button></div><p class="field-hint" data-i18n="ca_pem_hint"></p>
 
-            <section class="ca-panel">
-              <h4 class="heading" style="font-size:1rem" data-i18n="ca_upload">Коммерческий (PEM)</h4>
               <label class="field-label" for="ca-up-name" data-i18n="ca_name">Имя</label>
               <input class="field-input" id="ca-up-name" type="text" />
               <label class="field-label" for="tls-cert" data-i18n="ca_cert_pem">Сертификат (PEM)</label>
@@ -947,13 +950,11 @@ keep;</textarea>
               <label class="field-label" for="tls-key" data-i18n="ca_key_pem">Закрытый ключ (PEM)</label>
               <textarea class="field-input-mono" id="tls-key" spellcheck="false" rows="5"></textarea>
               <label class="field-check"><input type="checkbox" id="ca-up-activate" checked /> <span data-i18n="ca_activate">Сделать активным</span></label>
-              <div class="actions">
+              <div class="actions"><button type="button" class="btn-secondary" data-ca-close data-i18n="cancel"></button>
                 <button type="button" class="btn-spray" id="btn-ca-upload" data-i18n="ca_add">Добавить</button>
               </div>
-            </section>
+            <p class="msg" id="ca-msg-upload" role="status"></p></dialog><dialog class="migration-dialog ca-dialog" id="ca-dialog-acme" aria-labelledby="ca-title-acme"><div class="pane-head"><h3 class="heading" id="ca-title-acme" data-i18n="ca_acme"></h3><button type="button" class="btn-secondary" data-ca-close data-i18n-title="close">×</button></div><p class="field-hint" data-i18n="ca_acme_hint"></p>
 
-            <section class="ca-panel">
-              <h4 class="heading" style="font-size:1rem" data-i18n="ca_acme">Let’s Encrypt</h4>
               <label class="field-label" for="ca-acme-name" data-i18n="ca_name">Имя</label>
               <input class="field-input" id="ca-acme-name" type="text" />
               <label class="field-label" for="ca-acme-domains" data-i18n="ca_hosts">Хосты / домены</label>
@@ -962,13 +963,11 @@ keep;</textarea>
               <input class="field-input" id="ca-acme-email" type="email" />
               <label class="field-check"><input type="checkbox" id="ca-acme-staging" /> <span data-i18n="ca_staging">Staging (тест)</span></label>
               <label class="field-check"><input type="checkbox" id="ca-acme-activate" checked /> <span data-i18n="ca_activate">Сделать активным</span></label>
-              <p class="meta">HTTP-01: домен должен указывать на этот сервер, порт 80 должен быть доступен снаружи.</p>
-              <div class="actions">
+              <p class="meta"><span data-i18n="ca_acme_hint"></span></p>
+              <div class="actions"><button type="button" class="btn-secondary" data-ca-close data-i18n="cancel"></button>
                 <button type="button" class="btn-spray" id="btn-ca-acme" data-i18n="ca_issue">Выпустить</button>
               </div>
-            </section>
-          </div>
-          <input type="hidden" id="tls-hosts" />
+            <p class="msg" id="ca-msg-acme" role="status"></p></dialog>          <input type="hidden" id="tls-hosts" />
         </div>
       </div>
 
