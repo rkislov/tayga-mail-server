@@ -115,6 +115,23 @@ END:VCARD`,
 	flowsync.Mount(mux, cfg, slog.Default(), store, layer, ms)
 	authz := "Basic " + base64.StdEncoding.EncodeToString([]byte("u@ex.com:secret"))
 
+	for _, id := range []string{"inbox", "calendar", "contacts", "msgfolderroot", "missing"} {
+		request := httptest.NewRequest(http.MethodPost, "/EWS/Exchange.asmx", strings.NewReader(`<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"><s:Body><m:GetFolder><m:FolderIds><t:DistinguishedFolderId Id="`+id+`"/></m:FolderIds></m:GetFolder></s:Body></s:Envelope>`))
+		request.Header.Set("Authorization", authz)
+		response := httptest.NewRecorder()
+		mux.ServeHTTP(response, request)
+		data := response.Body.String()
+		if !strings.Contains(data, "GetFolderResponseMessage") || strings.Contains(data, "FindFolderResponse") {
+			t.Fatalf("wrong GetFolder response: %s", data)
+		}
+		if id == "missing" {
+			if !strings.Contains(data, "ErrorFolderNotFound") {
+				t.Fatal(data)
+			}
+		} else if !strings.Contains(data, "NoError") || !strings.Contains(data, "<m:Folders>") {
+			t.Fatal(data)
+		}
+	}
 	// FolderSync includes calendar + contacts UUIDs
 	req := httptest.NewRequest(http.MethodPost, "/Microsoft-Server-ActiveSync?Cmd=FolderSync&DeviceId=d1&DeviceType=Test", nil)
 	req.Header.Set("Authorization", authz)
@@ -124,6 +141,9 @@ END:VCARD`,
 		t.Fatalf("foldersync %d %s", w.Code, w.Body.String())
 	}
 	body := w.Body.String()
+	if strings.Count(body, "<Type>8</Type>") != 1 {
+		t.Fatal("multiple default calendars", body)
+	}
 	if !strings.Contains(body, cal.ID) || !strings.Contains(body, ab.ID) {
 		t.Fatalf("FolderSync missing cal/ab UUIDs: %s", body)
 	}
@@ -159,7 +179,7 @@ END:VCARD`,
 		t.Fatalf("contacts sync missing UUID/name: %s", cout)
 	}
 
-	// Provision includes policy data + UUID policy key
+	// Provision includes policy data and a numeric policy key
 	legacyDevice, err := store.EnsureFlowSyncDevice(ctx, u.ID, "d1", "Test")
 	if err != nil {
 		t.Fatal(err)

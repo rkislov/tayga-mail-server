@@ -55,7 +55,9 @@ func (h *ewsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		soap, err = h.deleteItem(r.Context(), u, string(body))
 	case "SyncFolderItems":
 		soap, err = h.syncFolderItems(r.Context(), u, string(body))
-	case "GetFolder", "FindFolder":
+	case "GetFolder":
+		soap, err = h.getFolder(r.Context(), u, string(body))
+	case "FindFolder":
 		soap, err = h.findFolder(r.Context(), u)
 	default:
 		if t := traceRequest(r); t != nil {
@@ -95,9 +97,9 @@ func (h *ewsHandler) findFolder(ctx context.Context, u *storage.User) (string, e
 	}
 	var b strings.Builder
 	b.WriteString(`<m:FindFolderResponse xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types">`)
-	b.WriteString(`<m:ResponseMessages><m:FindFolderResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:RootFolder>`)
+	b.WriteString(`<m:ResponseMessages><m:FindFolderResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:RootFolder IncludesLastItemInRange="true"><t:Folders>`)
 	for _, mb := range mbs {
-		fmt.Fprintf(&b, `<t:Folders><t:Folder><t:FolderId Id="%s" ChangeKey="0"/><t:DisplayName>%s</t:DisplayName><t:FolderClass>IPF.Note</t:FolderClass><t:TotalCount>0</t:TotalCount></t:Folder></t:Folders>`,
+		fmt.Fprintf(&b, `<t:Folder><t:FolderId Id="%s" ChangeKey="0"/><t:DisplayName>%s</t:DisplayName><t:FolderClass>IPF.Note</t:FolderClass><t:TotalCount>0</t:TotalCount></t:Folder>`,
 			xmlEscape(mb.ID), xmlEscape(mb.Name))
 	}
 	for _, cal := range cals {
@@ -105,7 +107,7 @@ func (h *ewsHandler) findFolder(ctx context.Context, u *storage.User) (string, e
 		if name == "" {
 			name = cal.Name
 		}
-		fmt.Fprintf(&b, `<t:Folders><t:CalendarFolder><t:FolderId Id="%s" ChangeKey="0"/><t:DisplayName>%s</t:DisplayName><t:FolderClass>IPF.Appointment</t:FolderClass><t:TotalCount>0</t:TotalCount></t:CalendarFolder></t:Folders>`,
+		fmt.Fprintf(&b, `<t:CalendarFolder><t:FolderId Id="%s" ChangeKey="0"/><t:DisplayName>%s</t:DisplayName><t:FolderClass>IPF.Appointment</t:FolderClass><t:TotalCount>0</t:TotalCount></t:CalendarFolder>`,
 			xmlEscape(cal.ID), xmlEscape(name))
 	}
 	for _, ab := range abs {
@@ -113,7 +115,7 @@ func (h *ewsHandler) findFolder(ctx context.Context, u *storage.User) (string, e
 		if name == "" {
 			name = ab.Name
 		}
-		fmt.Fprintf(&b, `<t:Folders><t:ContactsFolder><t:FolderId Id="%s" ChangeKey="0"/><t:DisplayName>%s</t:DisplayName><t:FolderClass>IPF.Contact</t:FolderClass><t:TotalCount>0</t:TotalCount></t:ContactsFolder></t:Folders>`,
+		fmt.Fprintf(&b, `<t:ContactsFolder><t:FolderId Id="%s" ChangeKey="0"/><t:DisplayName>%s</t:DisplayName><t:FolderClass>IPF.Contact</t:FolderClass><t:TotalCount>0</t:TotalCount></t:ContactsFolder>`,
 			xmlEscape(ab.ID), xmlEscape(name))
 	}
 	for _, nf := range nfs {
@@ -121,10 +123,10 @@ func (h *ewsHandler) findFolder(ctx context.Context, u *storage.User) (string, e
 		if name == "" {
 			name = nf.Name
 		}
-		fmt.Fprintf(&b, `<t:Folders><t:Folder><t:FolderId Id="%s" ChangeKey="%s"/><t:DisplayName>%s</t:DisplayName><t:FolderClass>IPF.StickyNote</t:FolderClass><t:TotalCount>0</t:TotalCount></t:Folder></t:Folders>`,
+		fmt.Fprintf(&b, `<t:Folder><t:FolderId Id="%s" ChangeKey="%s"/><t:DisplayName>%s</t:DisplayName><t:FolderClass>IPF.StickyNote</t:FolderClass><t:TotalCount>0</t:TotalCount></t:Folder>`,
 			xmlEscape(nf.ID), xmlEscape(nf.CTag), xmlEscape(name))
 	}
-	b.WriteString(`</m:RootFolder></m:FindFolderResponseMessage></m:ResponseMessages></m:FindFolderResponse>`)
+	b.WriteString(`</t:Folders></m:RootFolder></m:FindFolderResponseMessage></m:ResponseMessages></m:FindFolderResponse>`)
 	return b.String(), nil
 }
 
@@ -162,7 +164,7 @@ func (h *ewsHandler) findMailItems(ctx context.Context, u *storage.User, mailbox
 	}
 	var b strings.Builder
 	b.WriteString(`<m:FindItemResponse xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types">`)
-	b.WriteString(`<m:ResponseMessages><m:FindItemResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:RootFolder>`)
+	b.WriteString(`<m:ResponseMessages><m:FindItemResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:RootFolder IncludesLastItemInRange="true"><t:Folders>`)
 	b.WriteString(`<t:Items>`)
 	for _, m := range msgs {
 		hdr := readMsgHeaders(h.ms, m.FilePath)
