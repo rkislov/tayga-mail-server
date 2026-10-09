@@ -5,11 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"mime"
-	"mime/multipart"
 	"net/http"
 	"net/mail"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -43,6 +41,10 @@ func (s *Server) handleMail(w http.ResponseWriter, r *http.Request) {
 		s.mailListMessages(w, r, au, parts[1])
 	case r.Method == http.MethodGet && len(parts) == 1 && parts[0] == "search":
 		s.mailSearch(w, r, au)
+	case r.Method == http.MethodGet && len(parts) == 4 && parts[0] == "messages" && parts[2] == "attachments":
+		s.mailDownloadAttachment(w, r, au, parts[1], parts[3])
+	case r.Method == http.MethodGet && len(parts) == 3 && parts[0] == "messages" && parts[2] == "travel":
+		s.mailTravelDrafts(w, r, au, parts[1])
 	case r.Method == http.MethodGet && len(parts) == 2 && parts[0] == "messages":
 		s.mailGetMessage(w, r, au, parts[1])
 	case r.Method == http.MethodPatch && len(parts) == 2 && parts[0] == "messages":
@@ -197,10 +199,47 @@ func (s *Server) mailListMessages(w http.ResponseWriter, r *http.Request, au *au
 			offset = n
 		}
 	}
-	// newest first
-	for i, j := 0, len(msgs)-1; i < j; i, j = i+1, j-1 {
-		msgs[i], msgs[j] = msgs[j], msgs[i]
+	filter := r.URL.Query().Get("filter")
+	filtered := msgs[:0]
+	for _, msg := range msgs {
+		flags := strings.ToUpper(msg.Flags)
+		if filter == "attachments" && !s.hasMailAttachments(msg.FilePath) {
+			continue
+		}
+		if filter == "unread" && strings.Contains(flags, `\SEEN`) {
+			continue
+		}
+		if filter == "flagged" && !strings.Contains(flags, `\FLAGGED`) {
+			continue
+		}
+		filtered = append(filtered, msg)
 	}
+	msgs = filtered
+	sortField := r.URL.Query().Get("sort")
+	ascending := r.URL.Query().Get("order") == "asc"
+	sort.SliceStable(msgs, func(i, j int) bool {
+		x, y := msgs[i], msgs[j]
+		comparison := 0
+		switch sortField {
+		case "from":
+			comparison = strings.Compare(strings.ToLower(mailsearch.DecodeHeader(x.FromAddr)), strings.ToLower(mailsearch.DecodeHeader(y.FromAddr)))
+		case "subject":
+			comparison = strings.Compare(strings.ToLower(mailsearch.DecodeHeader(x.Subject)), strings.ToLower(mailsearch.DecodeHeader(y.Subject)))
+		default:
+			if x.InternalDate.Before(y.InternalDate) {
+				comparison = -1
+			} else if x.InternalDate.After(y.InternalDate) {
+				comparison = 1
+			}
+		}
+		if comparison == 0 {
+			comparison = strings.Compare(x.ID, y.ID)
+		}
+		if ascending {
+			return comparison < 0
+		}
+		return comparison > 0
+	})
 	if offset > len(msgs) {
 		offset = len(msgs)
 	}
@@ -211,7 +250,7 @@ func (s *Server) mailListMessages(w http.ResponseWriter, r *http.Request, au *au
 	slice := msgs[offset:end]
 	out := make([]map[string]any, 0, len(slice))
 	for _, m := range slice {
-		subject, from, to, date := m.Subject, m.FromAddr, m.ToAddr, m.DateHdr
+		subject, from, to, date := mailsearch.DecodeHeader(m.Subject), mailsearch.DecodeHeader(m.FromAddr), mailsearch.DecodeHeader(m.ToAddr), m.DateHdr
 		if subject == "" && from == "" {
 			hdr := s.parseMsgHeaders(m.FilePath)
 			subject, from, to, date = hdr.Subject, hdr.From, hdr.To, hdr.Date
@@ -229,14 +268,15 @@ func (s *Server) mailListMessages(w http.ResponseWriter, r *http.Request, au *au
 		out = append(out, map[string]any{
 			"id": m.ID, "uid": m.UID, "mailbox_id": m.MailboxID,
 			"size": m.Size, "flags": m.Flags,
-			"internal_date": m.InternalDate.UTC().Format(time.RFC3339),
-			"message_id":    m.MessageID,
-			"subject":       subject,
-			"from":          from,
-			"to":            to,
-			"date":          date,
-			"archived":      m.Archived,
-			"seen":          strings.Contains(strings.ToUpper(m.Flags), `\SEEN`),
+			"internal_date":   m.InternalDate.UTC().Format(time.RFC3339),
+			"message_id":      m.MessageID,
+			"subject":         subject,
+			"has_attachments": s.hasMailAttachments(m.FilePath),
+			"from":            from,
+			"to":              to,
+			"date":            date,
+			"archived":        m.Archived,
+			"seen":            strings.Contains(strings.ToUpper(m.Flags), `\SEEN`),
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -256,6 +296,11 @@ func (s *Server) mailGetMessage(w http.ResponseWriter, r *http.Request, au *auth
 		return
 	}
 	parsed := parseMIMEMessage(raw)
+	senderEmail := ""
+	if address, e := mail.ParseAddress(parsed.From); e == nil {
+		senderEmail = strings.ToLower(address.Address)
+	}
+	replyTo, replyCC := replyRecipients(parsed, au.Email)
 	// mark seen
 	if !strings.Contains(strings.ToUpper(msg.Flags), `\SEEN`) {
 		flags := storage.NormalizeFlags(append(storage.ParseFlags(msg.Flags), `\Seen`))
@@ -269,11 +314,16 @@ func (s *Server) mailGetMessage(w http.ResponseWriter, r *http.Request, au *auth
 		"message_id":    msg.MessageID,
 		"subject":       parsed.Subject,
 		"from":          parsed.From,
+		"sender_email":  senderEmail,
+		"reply_to":      parsed.ReplyTo,
+		"reply_all_to":  replyTo,
+		"reply_all_cc":  replyCC,
 		"to":            parsed.To,
 		"cc":            parsed.Cc,
 		"date":          parsed.Date,
 		"text":          parsed.Text,
 		"html":          parsed.HTML,
+		"attachments":   parsed.Attachments,
 	})
 }
 
@@ -444,16 +494,24 @@ func (s *Server) mailSearch(w http.ResponseWriter, r *http.Request, au *authUser
 			return
 		}
 	}
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	if offset < 0 {
+		offset = 0
+	}
 	pq := mailsearch.ParseQuery(q)
-	hits, err := s.store.SearchMessages(r.Context(), au.ID, mailboxID, pq.From, pq.To, pq.Subject, pq.FTSQuery(), limit)
+	hits, err := s.store.SearchMessages(r.Context(), au.ID, mailboxID, pq.From, pq.To, pq.Subject, pq.FTSQuery(), limit+1, storage.MessageSearchOptions{Offset: offset, Sort: r.URL.Query().Get("sort"), Ascending: r.URL.Query().Get("order") == "asc", Filter: r.URL.Query().Get("filter")})
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+	hasMore := len(hits) > limit
+	if hasMore {
+		hits = hits[:limit]
+	}
 	out := make([]map[string]any, 0, len(hits))
 	for _, h := range hits {
 		m := h.Message
-		subj := m.Subject
+		subj := mailsearch.DecodeHeader(m.Subject)
 		if subj == "" {
 			subj = "(no subject)"
 		}
@@ -461,19 +519,20 @@ func (s *Server) mailSearch(w http.ResponseWriter, r *http.Request, au *authUser
 			"id": m.ID, "uid": m.UID, "mailbox_id": m.MailboxID,
 			"mailbox_name": h.MailboxName,
 			"size":         m.Size, "flags": m.Flags,
-			"internal_date": m.InternalDate.UTC().Format(time.RFC3339),
-			"message_id":    m.MessageID,
-			"subject":       subj,
-			"from":          m.FromAddr,
-			"to":            m.ToAddr,
-			"date":          m.DateHdr,
-			"archived":      m.Archived,
-			"snippet":       h.Snippet,
-			"rank":          h.Rank,
-			"seen":          strings.Contains(strings.ToUpper(m.Flags), `\SEEN`),
+			"internal_date":   m.InternalDate.UTC().Format(time.RFC3339),
+			"message_id":      m.MessageID,
+			"subject":         subj,
+			"has_attachments": s.hasMailAttachments(m.FilePath),
+			"from":            mailsearch.DecodeHeader(m.FromAddr),
+			"to":              mailsearch.DecodeHeader(m.ToAddr),
+			"date":            m.DateHdr,
+			"archived":        m.Archived,
+			"snippet":         h.Snippet,
+			"rank":            h.Rank,
+			"seen":            strings.Contains(strings.ToUpper(m.Flags), `\SEEN`),
 		})
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"messages": out, "q": q, "total": len(out)})
+	writeJSON(w, http.StatusOK, map[string]any{"messages": out, "q": q, "offset": offset, "limit": limit, "has_more": hasMore})
 }
 
 func (s *Server) mailDeleteMessage(w http.ResponseWriter, r *http.Request, au *authUser, messageID string) {
@@ -670,63 +729,18 @@ func (s *Server) parseMsgHeaders(filePath string) msgHdr {
 		return h
 	}
 	if v := strings.TrimSpace(m.Header.Get("Subject")); v != "" {
-		h.Subject = v
+		h.Subject = mailsearch.DecodeHeader(v)
 	}
-	h.From = m.Header.Get("From")
-	h.To = m.Header.Get("To")
-	h.Cc = m.Header.Get("Cc")
+	h.From = mailsearch.DecodeHeader(m.Header.Get("From"))
+	h.To = mailsearch.DecodeHeader(m.Header.Get("To"))
+	h.Cc = mailsearch.DecodeHeader(m.Header.Get("Cc"))
 	h.Date = m.Header.Get("Date")
 	return h
 }
 
 type parsedMsg struct {
-	Subject, From, To, Cc, Date, Text, HTML string
-}
-
-func parseMIMEMessage(raw []byte) parsedMsg {
-	out := parsedMsg{Subject: "(no subject)"}
-	m, err := mail.ReadMessage(bytes.NewReader(raw))
-	if err != nil {
-		out.Text = string(raw)
-		return out
-	}
-	if v := strings.TrimSpace(m.Header.Get("Subject")); v != "" {
-		out.Subject = v
-	}
-	out.From = m.Header.Get("From")
-	out.To = m.Header.Get("To")
-	out.Cc = m.Header.Get("Cc")
-	out.Date = m.Header.Get("Date")
-	ct := m.Header.Get("Content-Type")
-	media, params, _ := mime.ParseMediaType(ct)
-	if strings.HasPrefix(media, "multipart/") {
-		mr := multipart.NewReader(m.Body, params["boundary"])
-		for {
-			p, err := mr.NextPart()
-			if err == io.EOF {
-				break
-			}
-			if err != nil {
-				break
-			}
-			body, _ := io.ReadAll(io.LimitReader(p, 2<<20))
-			pct, _, _ := mime.ParseMediaType(p.Header.Get("Content-Type"))
-			switch {
-			case pct == "text/plain" && out.Text == "":
-				out.Text = string(body)
-			case pct == "text/html" && out.HTML == "":
-				out.HTML = string(body)
-			}
-		}
-	} else {
-		body, _ := io.ReadAll(io.LimitReader(m.Body, 2<<20))
-		if media == "text/html" {
-			out.HTML = string(body)
-		} else {
-			out.Text = string(body)
-		}
-	}
-	return out
+	Subject, From, To, Cc, Date, Text, HTML, ReplyTo string
+	Attachments                                      []mailAttachment
 }
 
 func normalizeAddrs(in []string) []string {

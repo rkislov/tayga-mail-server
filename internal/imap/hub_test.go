@@ -57,6 +57,12 @@ func TestHubNotifyFanout(t *testing.T) {
 			if !ok || mu.MailboxStatus.Messages != 1 {
 				t.Fatalf("got %#v", upd)
 			}
+			select {
+			case <-upd.Done():
+				t.Fatal("listener shares completion with another listener")
+			default:
+			}
+			close(upd.Done())
 		case <-time.After(2 * time.Second):
 			t.Fatal("timeout waiting for update")
 		}

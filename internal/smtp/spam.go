@@ -1,9 +1,13 @@
 package smtp
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"fmt"
+	"github.com/tayga/tms/internal/metrics"
 	"log/slog"
+	"net/textproto"
 	"strconv"
 
 	gosmtp "github.com/emersion/go-smtp"
@@ -24,6 +28,7 @@ func (p *spamPolicy) apply(ctx context.Context, u *storage.User, meta spam.Meta,
 	}
 	res, err := p.checker.Check(ctx, meta, data)
 	if err != nil {
+		metrics.RecordProtection("error", false)
 		if p.cfg.FailOpen {
 			if p.log != nil {
 				p.log.Warn("spam check failed; fail-open", "err", err, "user", u.Email)
@@ -33,6 +38,8 @@ func (p *spamPolicy) apply(ctx context.Context, u *storage.User, meta spam.Meta,
 		return nil, &gosmtp.SMTPError{Code: 451, EnhancedCode: gosmtp.EnhancedCode{4, 3, 0}, Message: "Spam filter unavailable"}
 	}
 	action := spam.MapAction(p.cfg, res)
+	hdr, _ := textproto.NewReader(bufio.NewReader(bytes.NewReader(data))).ReadMIMEHeader()
+	metrics.RecordProtection(string(action), hdr.Get("List-Unsubscribe") != "")
 	score := "0"
 	if res != nil {
 		score = strconv.FormatFloat(res.Score, 'f', 2, 64)

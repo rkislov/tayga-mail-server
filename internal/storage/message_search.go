@@ -6,6 +6,13 @@ import (
 	"strings"
 )
 
+type MessageSearchOptions struct {
+	Offset    int
+	Sort      string
+	Ascending bool
+	Filter    string
+}
+
 // SearchHit is one ranked search result with optional FTS snippet.
 type SearchHit struct {
 	Message     *Message
@@ -48,9 +55,16 @@ func (s *Store) DeleteMessageSearch(ctx context.Context, messageID string) error
 }
 
 // SearchMessages runs hybrid header LIKE + FTS over the user's mailboxes.
-func (s *Store) SearchMessages(ctx context.Context, userID, mailboxID, fromFilter, toFilter, subjectFilter, ftsQuery string, limit int) ([]SearchHit, error) {
-	if limit <= 0 || limit > 200 {
+func (s *Store) SearchMessages(ctx context.Context, userID, mailboxID, fromFilter, toFilter, subjectFilter, ftsQuery string, limit int, options ...MessageSearchOptions) ([]SearchHit, error) {
+	if limit <= 0 || limit > 201 {
 		limit = 50
+	}
+	option := MessageSearchOptions{}
+	if len(options) > 0 {
+		option = options[0]
+	}
+	if option.Offset < 0 {
+		option.Offset = 0
 	}
 	fromFilter = strings.TrimSpace(fromFilter)
 	toFilter = strings.TrimSpace(toFilter)
@@ -58,12 +72,12 @@ func (s *Store) SearchMessages(ctx context.Context, userID, mailboxID, fromFilte
 	ftsQuery = strings.TrimSpace(ftsQuery)
 
 	if s.dialect == DialectPostgres {
-		return s.searchPostgres(ctx, userID, mailboxID, fromFilter, toFilter, subjectFilter, ftsQuery, limit)
+		return s.searchPostgres(ctx, userID, mailboxID, fromFilter, toFilter, subjectFilter, ftsQuery, limit, option)
 	}
-	return s.searchSQLite(ctx, userID, mailboxID, fromFilter, toFilter, subjectFilter, ftsQuery, limit)
+	return s.searchSQLite(ctx, userID, mailboxID, fromFilter, toFilter, subjectFilter, ftsQuery, limit, option)
 }
 
-func (s *Store) searchSQLite(ctx context.Context, userID, mailboxID, fromF, toF, subF, fts string, limit int) ([]SearchHit, error) {
+func (s *Store) searchSQLite(ctx context.Context, userID, mailboxID, fromF, toF, subF, fts string, limit int, option MessageSearchOptions) ([]SearchHit, error) {
 	var args []any
 	var b strings.Builder
 	b.WriteString(`SELECT m.id, m.mailbox_id, m.uid, m.size, m.flags, m.internal_date, m.file_path, m.message_id,
@@ -79,6 +93,12 @@ func (s *Store) searchSQLite(ctx context.Context, userID, mailboxID, fromF, toF,
 	if fts != "" {
 		b.WriteString(` AND message_fts MATCH ?`)
 		args = append(args, fts)
+	}
+	if option.Filter == "unread" {
+		b.WriteString(` AND upper(m.flags) NOT LIKE '%\SEEN%'`)
+	}
+	if option.Filter == "flagged" {
+		b.WriteString(` AND upper(m.flags) LIKE '%\FLAGGED%'`)
 	}
 	if mailboxID != "" {
 		b.WriteString(` AND m.mailbox_id = ?`)
@@ -96,13 +116,19 @@ func (s *Store) searchSQLite(ctx context.Context, userID, mailboxID, fromF, toF,
 		b.WriteString(` AND lower(m.subject) LIKE ?`)
 		args = append(args, "%"+strings.ToLower(subF)+"%")
 	}
-	if fts != "" {
-		b.WriteString(` ORDER BY rank`)
+	if field := map[string]string{"from": "lower(m.from_addr)", "subject": "lower(m.subject)", "date": "m.internal_date"}[option.Sort]; field != "" {
+		direction := " DESC"
+		if option.Ascending {
+			direction = " ASC"
+		}
+		b.WriteString(" ORDER BY " + field + direction + ", m.id")
+	} else if fts != "" {
+		b.WriteString(" ORDER BY rank" + ", m.id")
 	} else {
-		b.WriteString(` ORDER BY m.internal_date DESC`)
+		b.WriteString(" ORDER BY m.internal_date DESC, m.id")
 	}
-	b.WriteString(` LIMIT ?`)
-	args = append(args, limit)
+	b.WriteString(` LIMIT ? OFFSET ?`)
+	args = append(args, limit, option.Offset)
 
 	rows, err := s.db.QueryContext(ctx, b.String(), args...)
 	if err != nil {
@@ -112,7 +138,7 @@ func (s *Store) searchSQLite(ctx context.Context, userID, mailboxID, fromF, toF,
 	return scanSearchHits(rows)
 }
 
-func (s *Store) searchPostgres(ctx context.Context, userID, mailboxID, fromF, toF, subF, fts string, limit int) ([]SearchHit, error) {
+func (s *Store) searchPostgres(ctx context.Context, userID, mailboxID, fromF, toF, subF, fts string, limit int, option MessageSearchOptions) ([]SearchHit, error) {
 	var args []any
 	n := 1
 	ph := func() string {
@@ -138,6 +164,12 @@ func (s *Store) searchPostgres(ctx context.Context, userID, mailboxID, fromF, to
 		b.WriteString(` AND ms.tsv @@ plainto_tsquery('simple', ` + ph() + `)`)
 		args = append(args, fts)
 	}
+	if option.Filter == "unread" {
+		b.WriteString(` AND upper(m.flags) NOT LIKE '%\SEEN%'`)
+	}
+	if option.Filter == "flagged" {
+		b.WriteString(` AND upper(m.flags) LIKE '%\FLAGGED%'`)
+	}
 	if mailboxID != "" {
 		b.WriteString(` AND m.mailbox_id = ` + ph())
 		args = append(args, mailboxID)
@@ -154,13 +186,19 @@ func (s *Store) searchPostgres(ctx context.Context, userID, mailboxID, fromF, to
 		b.WriteString(` AND lower(m.subject) LIKE ` + ph())
 		args = append(args, "%"+strings.ToLower(subF)+"%")
 	}
-	if fts != "" {
-		b.WriteString(` ORDER BY rank DESC`)
+	if field := map[string]string{"from": "lower(m.from_addr)", "subject": "lower(m.subject)", "date": "m.internal_date"}[option.Sort]; field != "" {
+		direction := " DESC"
+		if option.Ascending {
+			direction = " ASC"
+		}
+		b.WriteString(" ORDER BY " + field + direction + ", m.id")
+	} else if fts != "" {
+		b.WriteString(" ORDER BY rank" + " DESC" + ", m.id")
 	} else {
-		b.WriteString(` ORDER BY m.internal_date DESC`)
+		b.WriteString(" ORDER BY m.internal_date DESC, m.id")
 	}
-	b.WriteString(` LIMIT ` + ph())
-	args = append(args, limit)
+	b.WriteString(` LIMIT ` + ph() + ` OFFSET ` + ph())
+	args = append(args, limit, option.Offset)
 
 	rows, err := s.db.QueryContext(ctx, b.String(), args...)
 	if err != nil {
@@ -183,7 +221,7 @@ func scanSearchHits(rows interface {
 		var snip string
 		var rank float64
 		if err := rows.Scan(
-			&m.ID, &m.MailboxID, &m.UID, &m.Size, &m.Flags, &m.InternalDate, &m.FilePath, &m.MessageID,
+			&m.ID, &m.MailboxID, &m.UID, &m.Size, &m.Flags, sqlTime{&m.InternalDate}, &m.FilePath, &m.MessageID,
 			&m.Subject, &m.FromAddr, &m.ToAddr, &m.DateHdr, &archived, &m.CreatedAt, &mailboxName,
 			&snip, &rank,
 		); err != nil {

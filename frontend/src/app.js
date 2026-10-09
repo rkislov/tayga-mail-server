@@ -295,10 +295,10 @@ $("color-mode-select")?.addEventListener("change",event=>applyColorMode(event.ta
 const APPS = [
   "mail", "calendar", "contacts", "notes", "files", "chat",
   "profile", "security", "appearance", "filters", "language", "migration",
-  "monitor", "maillog", "tenants", "tls", "xmpp", "server", "cos",
+  "monitor", "antispam", "maillog", "tenants", "tls", "xmpp", "server", "cos",
 ];
 
-const mailState = { mailboxID: "", messageID: "", mailboxes: [], order: [], searchQ: "" };
+const mailState = { mailboxID: "", messageID: "", mailboxes: [], order: [], searchQ: "", offset: 0, pageSize: 50, request: 0, sort: "date", sortOrder: "desc", filter: "all" };
 const calState = {
   calendarID: "",
   eventID: "",
@@ -345,6 +345,7 @@ const APP_I18N = {
   language: "nav_language",
   migration: "nav_migration",
   monitor: "nav_monitor",
+  antispam: "nav_antispam",
   maillog: "nav_maillog",
   tenants: "nav_tenants",
   tls: "nav_tls",
@@ -381,6 +382,7 @@ function showApp(name) {
   }
   $("compose-backdrop")?.classList.add("hidden");
   setNavOpen(false);
+  if (app === "profile") {loadMe();refreshSignature();refreshPasskeys();}
   if (app === "mail") refreshMail();
   if (app === "calendar") refreshCalendar();
   if (app === "contacts") refreshContacts();
@@ -391,6 +393,7 @@ function showApp(name) {
   if (app === "filters") { refreshSieve(); refreshVacation(); }
   if (app === "monitor") { refreshMonitor(); startMonitorLive(); }
   else stopMonitorLive();
+  if (app === "antispam") refreshQuarantine();
   if (app === "maillog") refreshMailLog();
   if (app === "tenants") refreshTenantNav();
   if (app === "tls") refreshTLS();
@@ -586,14 +589,18 @@ async function loadMe() {
   try {
     const me = await api("/api/v1/me");
     state.me = me;
+    refreshMailImagePreferences();
     state.email = me.email || state.email;
     $("acct-email").textContent = me.email;
     localStorage.setItem("tayga.email", state.email);
     const q = me.quota_bytes > 0
-      ? `${fmtBytes(me.used_bytes)} / ${fmtBytes(me.quota_bytes)} used`
-      : `${fmtBytes(me.used_bytes)} used · unlimited quota`;
+      ? `${fmtBytes(me.used_bytes)} / ${fmtBytes(me.quota_bytes)}`
+      : `${fmtBytes(me.used_bytes)} · ${t("profile_unlimited")}`;
     $("acct-quota").textContent = q;
-    $("acct-role").textContent = me.is_admin ? "admin" : "live";
+    $("acct-role").textContent = t(me.is_admin?"profile_admin":"profile_user");
+    if($("profile-name")&&document.activeElement!==$("profile-name"))$("profile-name").value=me.display_name||"";
+    $("profile-info").innerHTML=`<dt>${t("users_status")}</dt><dd>${t(me.enabled?"users_active":"users_disabled")}</dd><dt>${t("profile_auth")}</dt><dd>${escapeHtml(me.auth_source||"local")}</dd><dt>${t("email")}</dt><dd>${escapeHtml(me.email)}</dd>`;
+    refreshSignature();
     $("nav-admin")?.classList.toggle("hidden", !me.is_admin);
     // Migration is always listed; forms unlock when features.migration is true.
     $("nav-migration")?.classList.remove("hidden");
@@ -794,102 +801,14 @@ async function refreshMonitor() {
     ).join("");
     renderMonitorCharts(d);
     await refreshOutbound();
-    await refreshQuarantine();
+    renderProtectionStats(d.protection);
   } catch (err) {
     setMsg($("monitor-msg"), err.message, "err");
   }
 }
 
 async function refreshQuarantine() {
-  const list = $("quarantine-list");
-  const preview = $("q-preview");
-  if (!list) return;
-  if (preview) {
-    preview.classList.add("hidden");
-    preview.textContent = "";
-  }
-  try {
-    const params = new URLSearchParams({ limit: "40" });
-    const folder = $("q-folder")?.value || "";
-    const kind = $("q-kind")?.value || "";
-    const q = ($("q-search")?.value || "").trim();
-    if (folder) params.set("folder", folder);
-    if (kind) params.set("kind", kind);
-    if (q) params.set("q", q);
-    const d = await api("/api/v1/admin/quarantine?" + params.toString());
-    const items = d.items || [];
-    if (!items.length) {
-      list.innerHTML = "<li class=\"meta\">No quarantined messages.</li>";
-      return;
-    }
-    list.innerHTML = items.map((it) => {
-      const subj = it.subject || "(no subject)";
-      const from = it.from || "—";
-      const chips = [];
-      if (it.kind) chips.push(it.kind);
-      if (it.spam_score) chips.push("score " + it.spam_score);
-      if (it.virus_name) chips.push(it.virus_name);
-      if (it.spam_status) chips.push(it.spam_status);
-      if (it.virus_status && !it.virus_name) chips.push(it.virus_status);
-      const chipHtml = chips.length
-        ? `<br/><span class="meta">${chips.map((c) => escapeHtml(String(c))).join(" · ")}</span>`
-        : "";
-      return `<li>
-        <strong>${escapeHtml(subj)}</strong>
-        <span class="meta"> · ${escapeHtml(it.folder)} · ${escapeHtml(it.email)}</span><br/>
-        <span class="meta">from ${escapeHtml(from)} · ${escapeHtml(it.date || "")} · ${fmtBytes(it.size || 0)}</span>
-        ${chipHtml}
-        <div class="actions" style="margin-top:0.35rem">
-          <button type="button" class="btn-secondary" data-q-prev="${escapeHtml(it.id)}">Preview</button>
-          <button type="button" class="btn-secondary" data-q-rel="${escapeHtml(it.id)}">Release</button>
-          <button type="button" class="btn-secondary" data-q-del="${escapeHtml(it.id)}">Delete</button>
-        </div>
-      </li>`;
-    }).join("");
-    list.querySelectorAll("[data-q-prev]").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        try {
-          const it = await api("/api/v1/admin/quarantine/" + btn.getAttribute("data-q-prev"));
-          const lines = [
-            "From: " + (it.from || ""),
-            "Subject: " + (it.subject || ""),
-            "Kind: " + (it.kind || ""),
-            it.spam_score ? "Spam-Score: " + it.spam_score : "",
-            it.spam_status ? "Spam-Status: " + it.spam_status : "",
-            it.virus_name ? "Virus: " + it.virus_name : "",
-            it.auth_results ? "Auth: " + it.auth_results : "",
-            "",
-            it.preview || "(empty body)",
-          ].filter((x, i, a) => x !== "" || (i > 0 && a[i - 1] !== ""));
-          if (preview) {
-            preview.textContent = lines.join("\n");
-            preview.classList.remove("hidden");
-          }
-        } catch (err) { setMsg($("monitor-msg"), err.message, "err"); }
-      });
-    });
-    list.querySelectorAll("[data-q-rel]").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        try {
-          await api("/api/v1/admin/quarantine/" + btn.getAttribute("data-q-rel") + "/release", { method: "POST" });
-          setMsg($("monitor-msg"), "Released to INBOX.", "ok");
-          refreshMonitor();
-        } catch (err) { setMsg($("monitor-msg"), err.message, "err"); }
-      });
-    });
-    list.querySelectorAll("[data-q-del]").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        if (!await askConfirm("Permanently delete this quarantined message?", { danger: true })) return;
-        try {
-          await api("/api/v1/admin/quarantine/" + btn.getAttribute("data-q-del"), { method: "DELETE" });
-          setMsg($("monitor-msg"), "Deleted.", "ok");
-          refreshMonitor();
-        } catch (err) { setMsg($("monitor-msg"), err.message, "err"); }
-      });
-    });
-  } catch (err) {
-    list.innerHTML = `<li class="meta">${escapeHtml(err.message)}</li>`;
-  }
+  return refreshProtectionMessages();
 }
 
 $("btn-q-refresh")?.addEventListener("click", () => refreshQuarantine());
@@ -1060,6 +979,7 @@ const tenantNav = {
 
 function setTenantLevel(level) {
   tenantNav.level = level;
+  document.querySelectorAll("[data-directory]").forEach(btn=>{btn.classList.toggle("is-active",btn.dataset.directory===level);btn.disabled=(btn.dataset.directory==="domains"&&!tenantNav.tenantID)||(btn.dataset.directory==="users"&&!tenantNav.domainID);});
   $("tenant-level-tenants")?.classList.toggle("hidden", level !== "tenants");
   $("tenant-level-domains")?.classList.toggle("hidden", level !== "domains");
   $("tenant-level-users")?.classList.toggle("hidden", level !== "users");
@@ -1121,7 +1041,7 @@ async function refreshTenantNav() {
       <li>
         <span>
           <strong>${escapeHtml(ten.name)}</strong><br/>
-          <span class="meta">${ten.domain_count || 0} ${escapeHtml(t("domains_title").toLowerCase())} · ${ten.user_count || 0} · ${escapeHtml(ten.id)}</span>
+          <span class="meta">${ten.domain_count || 0} ${escapeHtml(t("domains_title").toLowerCase())} · ${ten.user_count || 0} ${escapeHtml(t("users_title").toLowerCase())}</span>
         </span>
         <span class="actions">
           <button type="button" class="btn-spray" data-open-tenant="${escapeHtml(ten.id)}" data-name="${escapeHtml(ten.name)}">${escapeHtml(t("tenants_open"))}</button>
@@ -1146,7 +1066,7 @@ async function refreshTenantDomains() {
   setTenantLevel("domains");
   const list = $("admin-domain-list");
   const meta = $("tenant-meta");
-  if (meta) meta.textContent = tenantNav.tenantName + " · " + tenantNav.tenantID;
+  if (meta) meta.textContent = tenantNav.tenantName;
   try {
     const data = await api("/api/v1/admin/domains?tenant_id=" + encodeURIComponent(tenantNav.tenantID));
     const items = data.domains || [];
@@ -1155,7 +1075,7 @@ async function refreshTenantDomains() {
       <li>
         <span>
           <strong>${escapeHtml(d.name)}</strong><br/>
-          <span class="meta">${d.user_count || 0} · ${escapeHtml(d.id)}</span>
+          <span class="meta">${d.user_count || 0} ${escapeHtml(t("users_title").toLowerCase())}</span>
         </span>
         <span class="actions">
           <label class="mig-policy-label" title="${escapeHtml(t("mig_policy_hint"))}">
@@ -1336,20 +1256,13 @@ async function refreshAdminUsers() {
         `<option value="${escapeHtml(sc.id)}" ${sc.id === selected ? "selected" : ""}>${escapeHtml(sc.name || sc.id)}</option>`
       ),
     ].join("");
-    list.innerHTML = users.map((u) => `
-      <li>
-        <span>
-          <strong>${escapeHtml(u.email)}</strong>${u.enabled ? "" : " · disabled"}<br/>
-          <span class="meta">${fmtBytes(u.used_bytes)} / ${u.quota_bytes > 0 ? fmtBytes(u.quota_bytes) : "∞"} · ${escapeHtml(u.id)}</span>
-        </span>
-        <span class="actions">
-          <label class="mig-policy-label" title="${escapeHtml(t("cos_lede"))}">
+    list.innerHTML = users.map((u) => `<tr><td>${escapeHtml(u.display_name||"—")}</td><td>${escapeHtml(u.email)}</td><td><span class="badge">${t(u.enabled?"users_active":"users_disabled")}</span></td><td>${fmtBytes(u.used_bytes)} / ${u.quota_bytes>0?fmtBytes(u.quota_bytes):"∞"}</td><td>          <label class="mig-policy-label" title="${escapeHtml(t("cos_lede"))}">
             <span>${escapeHtml(t("cos_assign"))}</span>
             <select class="field-input" data-user-cos="${escapeHtml(u.id)}" style="max-width:9rem">
               ${cosOptions(u.service_class_id || "")}
             </select>
           </label>
-          <label class="mig-policy-label" title="${escapeHtml(t("mig_policy_hint"))}">
+</td><td>          <label class="mig-policy-label" title="${escapeHtml(t("mig_policy_hint"))}">
             <span>${escapeHtml(t("mig_policy"))}</span>
             <select class="field-input" data-user-mig="${escapeHtml(u.id)}" style="max-width:9rem">
               <option value="inherit" ${u.migration_enabled === "inherit" || !u.migration_enabled ? "selected" : ""}>${escapeHtml(t("mig_inherit"))}</option>
@@ -1357,11 +1270,10 @@ async function refreshAdminUsers() {
               <option value="off" ${u.migration_enabled === "off" ? "selected" : ""}>${escapeHtml(t("mig_off"))}</option>
             </select>
           </label>
-          <button type="button" class="btn-secondary" data-quota="${escapeHtml(u.id)}">Quota</button>
+</td><td><div class="actions">          <button type="button" class="btn-secondary" data-quota="${escapeHtml(u.id)}">${escapeHtml(t("users_quota_action"))}</button>
           <button type="button" class="btn-secondary" data-toggle="${escapeHtml(u.id)}" data-enabled="${u.enabled ? "1" : "0"}">${escapeHtml(u.enabled ? t("users_disable") : t("users_enable"))}</button>
           <button type="button" class="btn-secondary" data-pass="${escapeHtml(u.id)}">${escapeHtml(t("users_reset_pw"))}</button>
-        </span>
-      </li>`).join("") || `<li><span class="meta">${escapeHtml(t("users_empty"))}</span></li>`;
+</div></td></tr>`).join("") || `<tr><td colspan="7" class="meta">${t("users_empty")}</td></tr>`;
     list.querySelectorAll("[data-user-mig]").forEach((sel) => {
       sel.addEventListener("change", async () => {
         try {
@@ -1485,8 +1397,8 @@ function renderCertList(certs) {
       <div>
         <strong>${escapeHtml(c.name || c.id)}</strong>
         ${c.active ? `<span class="badge">${t("ca_active")}</span>` : ""}
-        <div class="meta">${escapeHtml(sourceLabel(c.source))} · ${(c.domains || []).join(", ") || "—"}</div>
-        <div class="meta">${escapeHtml(c.not_before || "")} → ${escapeHtml(c.not_after || "")}</div>
+        <div class="meta">${escapeHtml(sourceLabel(c.source))} · ${escapeHtml((c.domains || []).join(", ") || "—")}</div>
+        <div class="meta">${escapeHtml(formatCertificateDate(c.not_before))} → ${escapeHtml(formatCertificateDate(c.not_after))}</div>
       </div>
       <div class="actions">
         ${c.active ? "" : `<button type="button" class="btn-secondary btn-sm" data-ca-act="${escapeHtml(c.id)}">${t("ca_activate")}</button>`}
@@ -1551,7 +1463,8 @@ async function refreshTLS() {
 $("btn-tls-refresh")?.addEventListener("click", () => refreshTLS());
 $("btn-ca-ss")?.addEventListener("click", async () => {
   const hosts = ($("ca-ss-hosts")?.value || "").split(",").map((s) => s.trim()).filter(Boolean);
-  setMsg($("tls-msg"), "…");
+  setMsg($("ca-msg-ss"), "…");
+  const submit=$("btn-ca-ss"); if(submit.disabled)return; submit.disabled=true;
   try {
     await api("/api/v1/admin/certs/self-signed", {
       method: "POST",
@@ -1562,12 +1475,14 @@ $("btn-ca-ss")?.addEventListener("click", async () => {
         activate: !!$("ca-ss-activate")?.checked,
       }),
     });
-    setMsg($("tls-msg"), "OK", "ok");
+    setMsg($("ca-msg-ss"), "OK", "ok");
+    $("ca-dialog-ss").close();
     refreshTLS();
-  } catch (err) { setMsg($("tls-msg"), err.message, "err"); }
+  } catch (err) { setMsg($("ca-msg-ss"), err.message, "err"); } finally {submit.disabled=false;}
 });
 $("btn-ca-upload")?.addEventListener("click", async () => {
-  setMsg($("tls-msg"), "…");
+  setMsg($("ca-msg-upload"), "…");
+  const submit=$("btn-ca-upload"); if(submit.disabled)return; submit.disabled=true;
   try {
     await api("/api/v1/admin/certs/upload", {
       method: "POST",
@@ -1579,13 +1494,15 @@ $("btn-ca-upload")?.addEventListener("click", async () => {
       }),
     });
     if ($("tls-key")) $("tls-key").value = "";
-    setMsg($("tls-msg"), "OK", "ok");
+    setMsg($("ca-msg-upload"), "OK", "ok");
+    $("ca-dialog-upload").close();
     refreshTLS();
-  } catch (err) { setMsg($("tls-msg"), err.message, "err"); }
+  } catch (err) { setMsg($("ca-msg-upload"), err.message, "err"); } finally {submit.disabled=false;}
 });
 $("btn-ca-acme")?.addEventListener("click", async () => {
   const domains = ($("ca-acme-domains")?.value || "").split(",").map((s) => s.trim()).filter(Boolean);
-  setMsg($("tls-msg"), "ACME…");
+  setMsg($("ca-msg-acme"), "ACME…");
+  const submit=$("btn-ca-acme"); if(submit.disabled)return; submit.disabled=true;
   try {
     await api("/api/v1/admin/certs/acme", {
       method: "POST",
@@ -1597,9 +1514,10 @@ $("btn-ca-acme")?.addEventListener("click", async () => {
         activate: !!$("ca-acme-activate")?.checked,
       }),
     });
-    setMsg($("tls-msg"), "OK", "ok");
+    setMsg($("ca-msg-acme"), "OK", "ok");
+    $("ca-dialog-acme").close();
     refreshTLS();
-  } catch (err) { setMsg($("tls-msg"), err.message, "err"); }
+  } catch (err) { setMsg($("ca-msg-acme"), err.message, "err"); } finally {submit.disabled=false;}
 });
 
 const xmppState = { status: null, bots: [], users: [] };
@@ -1847,7 +1765,7 @@ document.querySelectorAll("[data-mig-kind]").forEach(form => form.addEventListen
   event.preventDefault();
   if (migrationStarting || !form.reportValidity()) return;
   const kind=form.dataset.migKind;
-  const body={username:$("mig-"+kind+"-user").value.trim(),password:$("mig-"+kind+"-pass").value};
+  const body={username:$("mig-"+kind+"-user").value.trim(),password:$("mig-"+kind+"-pass").value,options:{skip_tls_verify:$("mig-"+kind+"-skip-tls")?.checked===true}};
   if(kind==="imap") Object.assign(body,{host:$("mig-imap-host").value.trim(),port:Number($("mig-imap-port").value),tls:$("mig-imap-tls").checked});
   else body.url=$("mig-"+kind+"-url").value.trim();
   migrationStarting=true;
@@ -2589,6 +2507,7 @@ async function refreshMail() {
     if (!mailState.mailboxes.some(m => m.id === mailState.mailboxID) && mailState.mailboxes.length) {
       const inbox = mailState.mailboxes.find((m) => m.name === "INBOX") || mailState.mailboxes[0];
       mailState.mailboxID = inbox.id;
+      mailState.offset = 0;
     }
     list.innerHTML = mailState.mailboxes.map((mb) => `
       <li>
@@ -2602,6 +2521,7 @@ async function refreshMail() {
         mailState.mailboxID = btn.dataset.mb;
         mailState.messageID = "";
         mailState.searchQ = "";
+        mailState.offset = 0;
         if ($("mail-search")) $("mail-search").value = "";
         refreshMailMessages();
         list.querySelectorAll(".folder-btn").forEach((b) => b.classList.toggle("is-active", b.dataset.mb === mailState.mailboxID));
@@ -2650,19 +2570,25 @@ async function refreshMailMessages() {
   const list = $("mail-msg-list");
   if (!list || !mailState.mailboxID) return;
   const mb = mailState.mailboxes.find((m) => m.id === mailState.mailboxID);
-  const q = (mailState.searchQ || "").trim();
+  const request=++mailState.request;
+ const q = (mailState.searchQ || "").trim();
+ renderMailQuickFilters();
+ renderMailPagination(null, true);
   if ($("mail-folder-title")) {
     $("mail-folder-title").textContent = q ? (lang === "en" ? "Search" : "Поиск") : (mb ? mailFolderLabel(mb) : t("mail_folder_inbox"));
   }
   try {
     let data;
     if (q) {
-      const params = new URLSearchParams({ q, limit: "80" });
+      const params = new URLSearchParams({ q, limit: String(mailState.pageSize), offset: String(mailState.offset), sort: mailState.sort, order: mailState.sortOrder, filter: mailState.filter });
       data = await api("/api/v1/mail/search?" + params.toString());
     } else {
-      data = await api("/api/v1/mail/mailboxes/" + encodeURIComponent(mailState.mailboxID) + "/messages?limit=80");
+      data = await api("/api/v1/mail/mailboxes/" + encodeURIComponent(mailState.mailboxID) + "/messages?limit=" + mailState.pageSize + "&offset=" + mailState.offset + "&sort=" + mailState.sort + "&order=" + mailState.sortOrder + "&filter=" + mailState.filter);
     }
-    const msgs = data.messages || [];
+    if(request!==mailState.request)return;
+ if(typeof data.total === "number" && data.total > 0 && mailState.offset >= data.total) {mailState.offset=Math.floor((data.total-1)/mailState.pageSize)*mailState.pageSize;return refreshMailMessages();}
+ renderMailPagination(data);
+ const msgs = data.messages || [];
     if (!msgs.length) {
       list.innerHTML = `<li class="msg-empty meta">${t(q ? "mail_search_empty" : "empty_mailbox")}</li>`;
       showMailReader(null);
@@ -2674,6 +2600,7 @@ async function refreshMailMessages() {
         : "";
       const dateBits = [
         folder,
+        m.has_attachments ? `<span class="mail-attachment-icon" role="img" aria-label="${lang==='en'?'Attachment':'Вложение'}" title="${lang==='en'?'Contains attachments':'Есть вложения'}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h6"/></svg></span>` : "",
         `<span class="msg-date-val">${escapeHtml(mailDateShort(m.internal_date))}</span>`,
       ].filter(Boolean).join("");
       return `<li>
@@ -2695,11 +2622,14 @@ async function refreshMailMessages() {
         }
         openMailMessage(btn.dataset.msg);
       });
+      btn.addEventListener("dblclick", () => openMailModal(btn.dataset.msg));
     });
     if (mailState.messageID) openMailMessage(mailState.messageID);
     else showMailReader(null);
   } catch (err) {
-    list.innerHTML = `<li class="msg-empty meta">${escapeHtml(err.message)}</li>`;
+    if(request!==mailState.request)return;
+ renderMailPagination(null);
+ list.innerHTML = `<li class="msg-empty meta">${escapeHtml(err.message)}</li>`;
   }
 }
 
@@ -2720,11 +2650,91 @@ function showMailReader(msg) {
   if ($("mail-from")) $("mail-from").textContent = msg.from || "—";
   if ($("mail-to")) $("mail-to").textContent = msg.to || "—";
   if ($("mail-date")) $("mail-date").textContent = mailDateFull(msg.date || msg.internal_date);
+  renderMailActions(msg);
   const body = $("mail-body");
+  body.replaceChildren();
+  if (msg.attachments?.length) {
+    const attachments = document.createElement("div");
+    attachments.className = "mail-attachments";
+    for (const attachment of msg.attachments) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "btn-secondary btn-sm";
+      button.textContent = attachment.filename + " · " + fmtBytes(attachment.size);
+      button.addEventListener("click", async () => {
+        button.disabled = true;
+        try {
+          const headers = {};
+          if (state.tokens?.access_token) headers.Authorization = "Bearer " + state.tokens.access_token;
+          const response = await fetch("/api/v1/mail/messages/" + encodeURIComponent(msg.id) + "/attachments/" + encodeURIComponent(attachment.id), {headers});
+          if (!response.ok) throw new Error("Не удалось скачать вложение");
+          const url = URL.createObjectURL(await response.blob());
+          const link = document.createElement("a");
+          link.href = url; link.download = attachment.filename; link.click();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+        } catch (error) { button.title = error.message; button.textContent = attachment.filename + " · " + error.message; }
+        finally { button.disabled = false; }
+      });
+      attachments.append(button);
+    }
+    body.append(attachments);
+  }
   if (msg.html) {
-    body.innerHTML = msg.html;
+    const frame = document.createElement("iframe");
+    frame.className = "mail-content-frame";
+    frame.title = msg.subject || "Письмо";
+    frame.setAttribute("sandbox", "allow-popups allow-popups-to-escape-sandbox");
+    frame.referrerPolicy = "no-referrer";
+    const render = (externalImages) => {
+      const documentHTML = new DOMParser().parseFromString(msg.html, "text/html");
+      documentHTML.querySelectorAll("script,iframe,object,embed,form,input,button,textarea,select,meta,base,link,svg,math").forEach(element => element.remove());
+      documentHTML.querySelectorAll("*").forEach(element => {
+        for (const attribute of [...element.attributes]) {
+          if (attribute.name.toLowerCase().startsWith("on") || ["srcdoc", "formaction", "ping"].includes(attribute.name.toLowerCase())) element.removeAttribute(attribute.name);
+        }
+        if (element.tagName === "A") {
+          const href = element.getAttribute("href") || "";
+          if (!/^(https?:|mailto:|#)/i.test(href.trim())) element.removeAttribute("href");
+          element.setAttribute("target", "_blank"); element.setAttribute("rel", "noopener noreferrer");
+        }
+      });
+      const policy = documentHTML.createElement("meta");
+      policy.httpEquiv = "Content-Security-Policy";
+      policy.content = "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data:" + (externalImages ? " https: http:" : "") + "; font-src data:; form-action 'none'; base-uri 'none'";
+      documentHTML.head.prepend(policy);
+      const styles = documentHTML.createElement("style");
+      styles.textContent = "html{overflow-x:auto!important}body{margin:12px!important;font:15px/1.5 sans-serif;overflow-wrap:anywhere;white-space:normal!important}body *{box-sizing:border-box;max-width:100%!important}img,video{height:auto!important}table{table-layout:auto}pre{white-space:pre-wrap!important;overflow-wrap:anywhere}body{min-width:0!important;width:auto!important}";
+      documentHTML.head.append(styles);
+      frame.srcdoc = "<!doctype html>" + documentHTML.documentElement.outerHTML;
+    };
+    const sender = msg.sender_email || "";
+    const allowed = mailImagePreferences.mode === "always" || !!sender && (mailImagePreferences.senders || []).includes(sender);
+    render(allowed);
+    if (!allowed) {
+      const choices = document.createElement("div"); choices.className = "mail-image-controls";
+      const status = document.createElement("span");status.className = "meta";status.textContent = mailImageText("Внешние изображения заблокированы", "External images are blocked");
+      choices.append(status);
+      for (const [action, label] of [["once",mailImageText("Загрузить изображения", "Load images")],["sender",mailImageText("Всегда от этого отправителя", "Always from this sender")],["always",mailImageText("Всегда загружать изображения", "Always load images")]]) {
+        if (action === "sender" && !sender) continue;
+        const button = document.createElement("button");button.type = "button";button.className = "btn-secondary btn-sm";button.textContent = label;
+        button.addEventListener("click", async () => {
+          const buttons = [...choices.querySelectorAll("button")]; buttons.forEach(item => item.disabled = true);
+          try {
+            if (action === "always") await saveMailImagePreferences({...mailImagePreferences,mode:"always"});
+            if (action === "sender") await saveMailImagePreferences({...mailImagePreferences,senders:[...new Set([...(mailImagePreferences.senders || []),sender])]});
+            render(true);choices.remove();
+          } catch (error) {status.textContent = error.message;buttons.forEach(item => item.disabled = false);}
+        });
+        choices.append(button);
+      }
+      body.append(choices);
+    }
+    body.append(frame);
   } else {
-    body.textContent = msg.text || "";
+    const text = document.createElement("div");
+    text.className = "mail-plain-text";
+    text.textContent = msg.text || "";
+    body.append(text);
   }
 }
 
@@ -2732,6 +2742,8 @@ async function openMailMessage(id) {
   mailState.messageID = id;
   try {
     const msg = await api("/api/v1/mail/messages/" + encodeURIComponent(id));
+    await refreshMailImagePreferences();
+    if (mailState.messageID !== id) return;
     showMailReader(msg);
     document.querySelectorAll(".msg-item").forEach((el) => {
       el.classList.toggle("is-active", el.dataset.msg === id);
@@ -2749,6 +2761,7 @@ $("mail-search")?.addEventListener("input", () => {
   clearTimeout(mailSearchTimer);
   mailSearchTimer = setTimeout(() => {
     mailState.searchQ = $("mail-search")?.value || "";
+    mailState.offset = 0;
     mailState.messageID = "";
     refreshMailMessages();
   }, 280);
@@ -2757,6 +2770,7 @@ $("mail-search")?.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     $("mail-search").value = "";
     mailState.searchQ = "";
+        mailState.offset = 0;
     refreshMailMessages();
   }
 });
@@ -2816,12 +2830,16 @@ function getComposeText() {
   return el.value || "";
 }
 
-function openCompose({ to = "", subject = "", body = "", bodyHTML = "" } = {}) {
+function openCompose({ to = "", cc = "", subject = "", body = "", bodyHTML = "" } = {}) {
   $("compose-backdrop")?.classList.remove("hidden");
   if ($("compose-to")) $("compose-to").value = to;
+ ensureComposeCC();
+ if ($("compose-cc")) $("compose-cc").value = cc;
   if ($("compose-subject")) $("compose-subject").value = subject;
   if (bodyHTML) setComposeBody(bodyHTML, true);
   else setComposeBody(body, false);
+  const signatureEnabled=to||body||bodyHTML?signatureState.replies:signatureState.new_messages;
+  if(signatureEnabled&&signatureState.text) {const block=document.createElement("div");block.dataset.mailSignature="true";block.style.whiteSpace="pre-wrap";block.textContent="\n-- \n"+signatureState.text;const surface=composeBodyEl();if(body||bodyHTML)surface.prepend(block);else surface.append(block);}
   const surface = composeBodyEl();
   if (surface?.dataset) surface.dataset.placeholder = t("body");
   setMsg($("compose-msg"), "");
@@ -2872,6 +2890,7 @@ $("btn-compose-send")?.addEventListener("click", async () => {
     }
     const payload = {
       to,
+      cc: ($("compose-cc")?.value || "").split(/[,;]/).map(value=>value.trim()).filter(Boolean),
       subject: $("compose-subject").value,
       text,
     };
@@ -2887,16 +2906,6 @@ $("btn-compose-send")?.addEventListener("click", async () => {
   } catch (err) {
     setMsg($("compose-msg"), err.message, "err");
   }
-});
-$("btn-mail-reply")?.addEventListener("click", () => {
-  const fromRaw = $("mail-from")?.textContent || "";
-  const addr = (fromRaw.match(/<([^>]+)>/) || [])[1] || fromRaw.trim();
-  const quoted = ($("mail-body")?.textContent || "").slice(0, 2000);
-  openCompose({
-    to: addr === "—" ? "" : addr,
-    subject: "Re: " + ($("mail-subject")?.textContent || ""),
-    body: "\n\n---\n" + quoted,
-  });
 });
 $("btn-mail-delete")?.addEventListener("click", async () => {
   if (!mailState.messageID || !await askConfirm(t("delete_confirm"), { danger: true })) return;
@@ -2965,7 +2974,9 @@ function calMonthStart(d) {
 }
 
 function showCalCompose(open) {
-  $("cal-backdrop")?.classList.toggle("hidden", !open);
+  const dialog=mountCalendarEditor();
+ if(dialog){if(open&&!dialog.open)dialog.showModal();if(!open&&dialog.open)dialog.close()}
+ syncEventCalendarChoice();
   if (open) {
     setMsg($("cal-msg"), "");
     calState.attendees = [];
@@ -3325,7 +3336,7 @@ function renderCalMonth() {
     });
     cell.addEventListener("dblclick", (event) => {
       clearTimeout(calState.dayClickTimer);
-      if (event.target.closest("[data-ev]")) return;
+      if (event.target.closest("[data-ev]")) {event.preventDefault();return;}
       event.preventDefault();
       selectCalDay(cell.dataset.day);
       startNewCalEvent(cell.dataset.day);
@@ -3383,6 +3394,8 @@ function startNewCalEvent(day = calState.selectedDay || calDayKey(new Date()), h
   clearTimeout(calState.dayClickTimer);
   calState.selectedDay = day;
   $("form-cal-event")?.reset();
+  delete $("form-cal-event").dataset.createdEvent;
+  calState.uploadedFiles=new Set();
   $("cal-start").value = day + "T" + String(hour).padStart(2,"0") + ":00";
   const end = new Date(day + "T" + String(hour).padStart(2,"0") + ":00");
   end.setHours(end.getHours() + 1);
@@ -3660,6 +3673,8 @@ $("cal-read-files")?.addEventListener("change", async () => {
 $("form-cal-event")?.addEventListener("submit", async (e) => {
   e.preventDefault();
   addCalAttendeesFromInput();
+  calState.calendarID=$("event-calendar-choice")?.value || calState.calendarID;
+  if(new Date($("cal-end").value)<=new Date($("cal-start").value)){setMsg($("cal-msg"),mailImageText("Конец должен быть позже начала","End must be after start"),"err");return;}
   if (!calState.calendarID) {
     try {
       const data = await api("/api/v1/calendar/calendars");
@@ -3670,9 +3685,11 @@ $("form-cal-event")?.addEventListener("submit", async (e) => {
     setMsg($("cal-msg"), "no calendar", "err");
     return;
   }
+  const form=$("form-cal-event");if(form.dataset.saving==="true")return;form.dataset.saving="true";
+  const saveButton=form.querySelector('[type="submit"]');if(saveButton)saveButton.disabled=true;
   setMsg($("cal-msg"), "…");
   try {
-    const created = await api("/api/v1/calendar/calendars/" + encodeURIComponent(calState.calendarID) + "/events", {
+    const created = form.dataset.createdEvent ? {id:form.dataset.createdEvent} : await api("/api/v1/calendar/calendars/" + encodeURIComponent(calState.calendarID) + "/events", {
       method: "POST",
       body: JSON.stringify({
         summary: $("cal-summary").value,
@@ -3687,10 +3704,14 @@ $("form-cal-event")?.addEventListener("submit", async (e) => {
         })),
       }),
     });
+    if(created?.id)form.dataset.createdEvent=created.id;
     const files = $("cal-files")?.files;
     if (created?.id && files?.length) {
       for (const file of Array.from(files)) {
+        const key=file.name+":"+file.size+":"+file.lastModified;
+        if(calState.uploadedFiles?.has(key))continue;
         await uploadCalAttachment(created.id, file);
+        if(!calState.uploadedFiles)calState.uploadedFiles=new Set();calState.uploadedFiles.add(key);
       }
     }
     setMsg($("cal-msg"), "OK", "ok");
@@ -3701,13 +3722,15 @@ $("form-cal-event")?.addEventListener("submit", async (e) => {
     await loadCalEvents();
     if (created?.id) openCalEvent(created.id);
   } catch (err) {
-    setMsg($("cal-msg"), err.message, "err");
-  }
+    setMsg($("cal-msg"), form.dataset.createdEvent ? mailImageText("Событие сохранено, но не все вложения загружены. Повторите сохранение, чтобы дозагрузить файлы: ","Event saved, but some attachments failed. Save again to retry uploads: ")+err.message : err.message, "err");
+  } finally {delete form.dataset.saving;if(saveButton)saveButton.disabled=false;}
 });
 
 /* —— Contacts —— */
 function showContactCompose(open) {
-  $("contact-backdrop")?.classList.toggle("hidden", !open);
+  const dialog=mountEditorDialog("contact-backdrop","contact-editor-dialog");
+ const title=dialog?.querySelector("h3");if(title){title.removeAttribute("data-i18n");title.textContent=contactState.editing?mailImageText("Редактировать контакт","Edit contact"):mailImageText("Новый контакт","New contact");title.id="contact-editor-title";dialog.setAttribute("aria-labelledby",title.id)}
+ if(dialog){if(open&&!dialog.open)dialog.showModal();if(!open&&dialog.open)dialog.close()}
   if (open) {
     setMsg($("contact-msg"), "");
     $("contact-fn")?.focus();
@@ -3813,7 +3836,7 @@ async function openContactCard(id) {
 }
 
 $("btn-contacts-refresh")?.addEventListener("click", () => refreshContacts());
-$("btn-contact-new")?.addEventListener("click", () => showContactCompose(true));
+$("btn-contact-new")?.addEventListener("click", () => {contactState.editing=null;$("form-contact")?.reset();showContactCompose(true)});
 $("btn-contact-close")?.addEventListener("click", () => showContactCompose(false));
 $("contact-backdrop")?.addEventListener("click", (e) => {
   if (e.target === $("contact-backdrop")) showContactCompose(false);
@@ -3843,8 +3866,10 @@ $("form-contact")?.addEventListener("submit", async (e) => {
   setMsg($("contact-msg"), "…");
   try {
     await api("/api/v1/contacts/books/" + encodeURIComponent(contactState.bookID) + "/cards", {
-      method: "POST",
+      method: contactState.editing ? "PUT" : "POST",
       body: JSON.stringify({
+        id: contactState.editing?.id,
+        uid: contactState.editing?.uid,
         fn: $("contact-fn").value,
         email: $("contact-email").value,
         tel: $("contact-tel").value,
@@ -3854,6 +3879,7 @@ $("form-contact")?.addEventListener("submit", async (e) => {
     });
     setMsg($("contact-msg"), "OK", "ok");
     $("form-contact").reset();
+    contactState.editing=null;
     showContactCompose(false);
     await loadContactCards();
   } catch (err) {
@@ -4796,6 +4822,7 @@ document.addEventListener("keydown", (e) => {
   }
 });
 $("lang-select")?.addEventListener("change", (e) => {
+  $("topbar-language").open=false;
   applyLang(e.target.value);
   if (state.email) refreshMail();
   renderThemeGallery(normalizeThemeKey(localStorage.getItem("tayga.theme") || "tayga"));
@@ -4889,3 +4916,17 @@ calendarPropertiesDialog.addEventListener('click',event=>{
   else if(['publish','unpublish','rotate'].includes(action)){const props=await api(calendarPropertiesPath(),{method:'PATCH',body:JSON.stringify({public_enabled:action!=='unpublish',rotate_link:action==='rotate'})});renderCalendarPublic(props);setMsg($('calendar-properties-msg'),t('cal_saved'),'ok');}
  });
 });
+
+function formatCertificateDate(value) {const date=new Date(value);return Number.isNaN(date.getTime())?"—":date.toLocaleDateString(lang==="ru"?"ru-RU":"en-US");}
+document.querySelectorAll('[data-ca-open]').forEach(button=>button.addEventListener('click',()=>{const dialog=$('ca-dialog-'+button.dataset.caOpen);setMsg($('ca-msg-'+button.dataset.caOpen),'');dialog.showModal();dialog.querySelector('input')?.focus();}));
+document.querySelectorAll('[data-ca-close]').forEach(button=>button.addEventListener('click',()=>button.closest('dialog').close()));
+$('ca-dialog-upload')?.addEventListener('close',()=>{$('tls-key').value='';});
+document.querySelectorAll('[data-directory]').forEach(button=>button.addEventListener('click',()=>{const level=button.dataset.directory;if(level==='cos')showApp('cos');else if(level==='tenants')refreshTenantNav();else if(level==='domains')refreshTenantDomains();else refreshAdminUsers();}));
+$('profile-form')?.addEventListener('submit',async event=>{event.preventDefault();try{await api('/api/v1/me',{method:'PATCH',body:JSON.stringify({display_name:$('profile-name').value.trim()})});await loadMe();setMsg($('profile-msg'),t('saved'),'ok');}catch(err){setMsg($('profile-msg'),err.message,'err');}});
+const signatureState={text:'',new_messages:false,replies:false};
+async function refreshSignature(){try{const data=await api('/api/v1/mail/signature');Object.assign(signatureState,data);if(document.activeElement!==$('profile-signature')){$('profile-signature').value=data.text||'';$('signature-new').checked=!!data.new_messages;$('signature-reply').checked=!!data.replies;renderSignaturePreview();}}catch(err){setMsg($('signature-msg'),err.message,'err');}}
+function renderSignaturePreview(){$('signature-preview').textContent=$('profile-signature').value||t('signature_empty');}
+$('profile-signature')?.addEventListener('input',renderSignaturePreview);
+$('signature-form')?.addEventListener('submit',async event=>{event.preventDefault();try{const data=await api('/api/v1/mail/signature',{method:'PUT',body:JSON.stringify({text:$('profile-signature').value,new_messages:$('signature-new').checked,replies:$('signature-reply').checked})});Object.assign(signatureState,data);setMsg($('signature-msg'),t('saved'),'ok');}catch(err){setMsg($('signature-msg'),err.message,'err');}});
+document.addEventListener('click',event=>{if(!$('topbar-language')?.contains(event.target))$('topbar-language').open=false;});
+document.addEventListener('keydown',event=>{if(event.key==='Escape'&&$('topbar-language')?.open){$('topbar-language').open=false;$('topbar-language').querySelector('summary').focus();}});

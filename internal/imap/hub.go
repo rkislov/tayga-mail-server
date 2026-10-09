@@ -80,13 +80,19 @@ func (h *Hub) notifyLocal(email, mailbox string) {
 	})
 }
 
-func (h *Hub) publish(upd backend.Update) {
+func (h *Hub) publish(upd *backend.MailboxUpdate) {
 	h.mu.Lock()
 	subs := append([]chan backend.Update(nil), h.subs...)
 	h.mu.Unlock()
 	for _, ch := range subs {
+		// Each listener closes Done after broadcasting. Never share that channel
+		// between the plain IMAP and IMAPS servers.
+		copy := &backend.MailboxUpdate{
+			Update:        backend.NewUpdate(upd.Username(), upd.Mailbox()),
+			MailboxStatus: upd.MailboxStatus,
+		}
 		select {
-		case ch <- upd:
+		case ch <- copy:
 		default:
 		}
 	}
