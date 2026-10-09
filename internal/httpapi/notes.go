@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"io"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -43,7 +44,7 @@ func noteItemJSON(n *storage.NoteItem, atts []map[string]any, rights string) map
 		"id": n.ID, "folder_id": n.FolderID, "user_id": n.UserID, "title": n.Title,
 		"document": n.DocumentJSON, "body_html": n.BodyHTML, "body_text": n.BodyText,
 		"pinned": n.Pinned, "archived": n.Archived, "color": n.Color, "etag": n.ETag,
-		"rights": rights,
+		"rights":     rights,
 		"created_at": n.CreatedAt.UTC().Format(time.RFC3339),
 		"updated_at": n.UpdatedAt.UTC().Format(time.RFC3339),
 	}
@@ -87,7 +88,7 @@ func noteAttachJSON(a *storage.NoteAttachment) map[string]any {
 	return map[string]any{
 		"id": a.ID, "note_id": a.NoteID, "filename": a.Filename,
 		"content_type": a.ContentType, "size": a.Size, "kind": a.Kind,
-		"url": "/api/v1/notes/attachments/" + a.ID,
+		"url":        "/api/v1/notes/attachments/" + a.ID,
 		"created_at": a.CreatedAt.UTC().Format(time.RFC3339),
 	}
 }
@@ -314,7 +315,7 @@ func (s *Server) handleNotes(w http.ResponseWriter, r *http.Request) {
 		if ifMatch != "" && ifMatch != strings.Trim(n.ETag, `"`) {
 			writeJSON(w, http.StatusConflict, map[string]any{
 				"error": "etag mismatch", "etag": n.ETag,
-				"note":  noteItemJSON(n, s.noteAttachmentsJSON(r, n.ID), rights),
+				"note": noteItemJSON(n, s.noteAttachmentsJSON(r, n.ID), rights),
 			})
 			return
 		}
@@ -328,19 +329,14 @@ func (s *Server) handleNotes(w http.ResponseWriter, r *http.Request) {
 		if req.Title != nil {
 			n.Title = strings.TrimSpace(*req.Title)
 		}
-		doc, htmlIn, textIn := n.DocumentJSON, n.BodyHTML, n.BodyText
 		if req.Document != nil {
-			doc = *req.Document
+			n.DocumentJSON, n.BodyHTML, n.BodyText = normalizeNoteBodies(*req.Document, "", "")
+		} else if req.BodyHTML != nil {
+			n.DocumentJSON, n.BodyHTML, n.BodyText = normalizeNoteBodies("", *req.BodyHTML, "")
+		} else if req.BodyText != nil {
+			n.DocumentJSON, n.BodyHTML, n.BodyText = normalizeNoteBodies("", "", *req.BodyText)
 		}
-		if req.BodyHTML != nil {
-			htmlIn = *req.BodyHTML
-		}
-		if req.BodyText != nil {
-			textIn = *req.BodyText
-		}
-		if req.Document != nil || req.BodyHTML != nil || req.BodyText != nil {
-			n.DocumentJSON, n.BodyHTML, n.BodyText = normalizeNoteBodies(doc, htmlIn, textIn)
-		}
+
 		if req.Pinned != nil {
 			n.Pinned = *req.Pinned
 		}
@@ -562,9 +558,13 @@ func (s *Server) handleNoteAttachments(w http.ResponseWriter, r *http.Request, a
 	case http.MethodGet:
 		writeJSON(w, http.StatusOK, map[string]any{"attachments": s.noteAttachmentsJSON(r, n.ID)})
 	case http.MethodPost:
+		r.Body = http.MaxBytesReader(w, r.Body, maxNoteAttachmentBytes+(1<<20))
 		if err := r.ParseMultipartForm(maxNoteAttachmentBytes); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "multipart form required (file)"})
 			return
+		}
+		if r.MultipartForm != nil {
+			defer r.MultipartForm.RemoveAll()
 		}
 		file, hdr, err := r.FormFile("file")
 		if err != nil {
@@ -654,7 +654,7 @@ func (s *Server) handleNoteAttachmentByID(w http.ResponseWriter, r *http.Request
 			ct = "application/octet-stream"
 		}
 		w.Header().Set("Content-Type", ct)
-		w.Header().Set("Content-Disposition", `attachment; filename="`+strings.ReplaceAll(a.Filename, `"`, "")+`"`)
+		w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": a.Filename}))
 		http.ServeContent(w, r, a.Filename, st.ModTime(), f)
 	case http.MethodDelete:
 		if root, err := s.notesRoot(); err == nil {
@@ -681,7 +681,7 @@ func (s *Server) handleNoteDrawing(w http.ResponseWriter, r *http.Request, au *a
 		return
 	}
 	var req struct {
-		StrokesJSON string `json:"strokes"`      // raw JSON string of strokes
+		StrokesJSON string `json:"strokes"`     // raw JSON string of strokes
 		PreviewPNG  string `json:"preview_png"` // data URL or base64
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
