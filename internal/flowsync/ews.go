@@ -5,6 +5,7 @@ package flowsync
 
 import (
 	"context"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"net/http"
@@ -35,6 +36,9 @@ func (h *ewsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	body, _ := io.ReadAll(io.LimitReader(r.Body, 8<<20))
 	op := detectEWSOp(string(body))
+	if t := traceRequest(r); t != nil {
+		t.Command = op
+	}
 
 	var soap string
 	var err error
@@ -54,9 +58,15 @@ func (h *ewsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "GetFolder", "FindFolder":
 		soap, err = h.findFolder(r.Context(), u)
 	default:
+		if t := traceRequest(r); t != nil {
+			t.Result = "unsupported_operation"
+		}
 		soap = ewsFault("ErrorInvalidRequest", "FlowSync: unsupported operation "+op)
 	}
 	if err != nil {
+		if t := traceRequest(r); t != nil {
+			t.Result = "internal_error"
+		}
 		soap = ewsFault("ErrorInternalServerError", err.Error())
 	}
 	w.Header().Set("Content-Type", "text/xml; charset=utf-8")
@@ -347,12 +357,30 @@ func (h *ewsHandler) syncFolderItems(ctx context.Context, u *storage.User, body 
 }
 
 func detectEWSOp(body string) string {
-	for _, op := range []string{"SyncFolderItems", "CreateItem", "UpdateItem", "DeleteItem", "FindItem", "GetItem", "FindFolder", "GetFolder"} {
-		if strings.Contains(body, op) {
-			return op
+	decoder := xml.NewDecoder(strings.NewReader(body))
+	inBody := false
+	first := true
+	for {
+		token, err := decoder.Token()
+		if err != nil {
+			return ""
+		}
+		switch value := token.(type) {
+		case xml.StartElement:
+			if first {
+				first = false
+				if value.Name.Local != "Envelope" {
+					return value.Name.Local
+				}
+			}
+			if inBody {
+				return value.Name.Local
+			}
+			if value.Name.Local == "Body" {
+				inBody = true
+			}
 		}
 	}
-	return ""
 }
 
 func soapEnvelope(inner string) string {

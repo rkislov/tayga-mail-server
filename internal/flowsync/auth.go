@@ -30,9 +30,15 @@ func authMiddleware(authn *auth.Layer, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		u, err := authenticate(r, authn)
 		if err != nil || u == nil {
+			if t := traceRequest(r); t != nil {
+				t.Result = "authentication_failed"
+			}
 			w.Header().Set("WWW-Authenticate", `Basic realm="FlowSync", Bearer`)
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
+		}
+		if t := traceRequest(r); t != nil {
+			t.User = u.ID
 		}
 		next.ServeHTTP(w, r.WithContext(withUser(r.Context(), u)))
 	})

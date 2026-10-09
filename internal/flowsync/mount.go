@@ -29,18 +29,18 @@ func Mount(mux *http.ServeMux, cfg *config.Config, log *slog.Logger, store stora
 	eas := &easHandler{store: store, ms: ms}
 	ews := &ewsHandler{store: store, ms: ms, publicURL: public}
 
-	mux.HandleFunc("/Autodiscover/Autodiscover.xml", ad.handlePOX)
-	mux.HandleFunc("/autodiscover/autodiscover.xml", ad.handlePOX)
-	mux.HandleFunc("/Autodiscover/", ad.handlePOX)
-	mux.HandleFunc("/autodiscover/autodiscover.json", ad.handleJSON)
-	mux.HandleFunc("/autodiscover/autodiscover.json/", ad.handleJSON)
-	mux.HandleFunc("/.well-known/autoconfig/mail/config-v1.1.xml", ad.handleMozilla)
-	mux.HandleFunc("/mail/config-v1.1.xml", ad.handleMozilla)
+	mux.Handle("/Autodiscover/Autodiscover.xml", logRequests(log, "autodiscover", http.HandlerFunc(ad.handlePOX)))
+	mux.Handle("/autodiscover/autodiscover.xml", logRequests(log, "autodiscover", http.HandlerFunc(ad.handlePOX)))
+	mux.Handle("/Autodiscover/", logRequests(log, "autodiscover", http.HandlerFunc(ad.handlePOX)))
+	mux.Handle("/autodiscover/autodiscover.json", logRequests(log, "autodiscover", http.HandlerFunc(ad.handleJSON)))
+	mux.Handle("/autodiscover/autodiscover.json/", logRequests(log, "autodiscover", http.HandlerFunc(ad.handleJSON)))
+	mux.Handle("/.well-known/autoconfig/mail/config-v1.1.xml", logRequests(log, "autodiscover", http.HandlerFunc(ad.handleMozilla)))
+	mux.Handle("/mail/config-v1.1.xml", logRequests(log, "autodiscover", http.HandlerFunc(ad.handleMozilla)))
 
-	mux.Handle("/Microsoft-Server-ActiveSync", authMiddleware(authn, eas))
-	mux.Handle("/Microsoft-Server-ActiveSync/", authMiddleware(authn, eas))
-	mux.Handle("/EWS/Exchange.asmx", authMiddleware(authn, ews))
-	mux.Handle("/ews/exchange.asmx", authMiddleware(authn, ews))
+	mux.Handle("/Microsoft-Server-ActiveSync", logRequests(log, "activesync", authMiddleware(authn, eas)))
+	mux.Handle("/Microsoft-Server-ActiveSync/", logRequests(log, "activesync", authMiddleware(authn, eas)))
+	mux.Handle("/EWS/Exchange.asmx", logRequests(log, "ews", authMiddleware(authn, ews)))
+	mux.Handle("/ews/exchange.asmx", logRequests(log, "ews", authMiddleware(authn, ews)))
 
 	log.Info("flowsync enabled",
 		"engine", "FlowSync/1.0",
