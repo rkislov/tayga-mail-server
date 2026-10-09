@@ -3438,3 +3438,15 @@ html[data-color-mode="light"] {
 .contact-list-actions{display:flex;align-items:center;gap:8px;padding:10px 12px;flex-wrap:wrap;border-bottom:1px solid #8883}.contact-pagination{display:flex;align-items:center;gap:8px;margin-left:auto}.contact-pagination select{width:auto;min-width:130px;margin:0;height:36px}.contact-select-row{display:flex;align-items:center;gap:8px;padding-left:12px}.contact-select-row .contact-item{flex:1;min-width:0}
 
 .user-role-dialog{height:fit-content;width:min(560px,94vw)}.user-role-dialog .document-preview-content{display:block;height:auto;max-height:70dvh}.user-role-dialog form{display:flex;flex-direction:column;gap:12px}.user-role-dialog fieldset label{display:block;margin:8px 0}.user-role-dialog .action-icon svg{width:20px;height:20px}
+
+/* Contacts give the list priority over the compact detail pane. */
+@media (min-width:901px){
+ #app-contacts.contacts-layout{grid-template-columns:clamp(10rem,14vw,13rem) minmax(0,1.8fr) minmax(16rem,.8fr)}
+}
+#app-contacts>.panel-pane{min-width:0}
+.contact-list-actions{font-size:.875rem;gap:8px}
+.contact-list-actions>span,.contact-pagination>span{white-space:nowrap}
+.contact-list-actions .contact-bulk-icon{width:36px;height:36px;min-height:36px;padding:8px;display:grid;place-items:center}
+.contact-bulk-icon svg{width:18px;height:18px}
+.contact-pagination .field-input{box-sizing:border-box;width:144px;min-width:144px;height:36px;min-height:36px;padding:0 28px 0 10px;line-height:normal;font-size:.875rem;border-radius:10px}
+.contact-pagination .btn-secondary{width:36px;height:36px;min-height:36px;padding:0;display:grid;place-items:center}
