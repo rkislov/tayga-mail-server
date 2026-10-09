@@ -1,5 +1,6 @@
 const I18N = {
   ru: {
+    rules_new: "Создать правило",
  mig_history: "История миграций", mig_previous: "Назад", mig_next: "Далее",
  mig_skip_tls: "Не проверять сертификат старого сервера", mig_skip_tls_hint: "Только для этой задачи. Для доверенного сервера с самоподписанным сертификатом.",
  nav_antispam: "Антиспам",
@@ -502,6 +503,7 @@ const I18N = {
     save: "Сохранить",
   },
   en: {
+    rules_new: "Create rule",
  mig_history: "Migration history", mig_previous: "Previous", mig_next: "Next",
  mig_skip_tls: "Skip source server certificate verification", mig_skip_tls_hint: "This migration only. Use for a trusted server with a self-signed certificate.",
  nav_antispam: "Antispam",
