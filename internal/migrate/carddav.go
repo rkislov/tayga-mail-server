@@ -5,10 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"path"
 	"strings"
-	"time"
 
 	"github.com/emersion/go-vcard"
 	"github.com/emersion/go-webdav"
@@ -17,6 +15,7 @@ import (
 )
 
 type cardOptions struct {
+	SkipTLSVerify   bool   `json:"skip_tls_verify"`
 	AddressBookPath string `json:"addressbook_path"`
 	LocalName       string `json:"local_name"`
 }
@@ -41,7 +40,12 @@ func (s *Service) runCardDAV(ctx context.Context, job *Job) error {
 		localName = "default"
 	}
 
-	httpClient := webdav.HTTPClientWithBasicAuth(&http.Client{Timeout: 60 * time.Second}, job.Username, password)
+	baseClient, err := davHTTPClient(job.URL, opts.SkipTLSVerify)
+	if err != nil {
+		return err
+	}
+	defer baseClient.Transport.(interface{ CloseIdleConnections() }).CloseIdleConnections()
+	httpClient := webdav.HTTPClientWithBasicAuth(baseClient, job.Username, password)
 	cli, err := carddav.NewClient(httpClient, job.URL)
 	if err != nil {
 		return err

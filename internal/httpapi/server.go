@@ -85,6 +85,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/auth/webauthn/credentials/", s.handleWebAuthnCredentials)
 	mux.HandleFunc("/api/v1/auth/oidc/", s.handleOIDCRoutes)
 	mux.HandleFunc("/api/v1/me", s.handleMe)
+	mux.HandleFunc("/api/v1/mail/signature", s.handleSignature)
+	mux.HandleFunc("/api/v1/mail/image-preferences", s.handleMailImages)
 	mux.HandleFunc("/api/v1/mail/", s.handleMail)
 	mux.HandleFunc("/api/v1/mail", s.handleMail)
 	mux.HandleFunc("/api/v1/calendar/", s.handleCalendar)

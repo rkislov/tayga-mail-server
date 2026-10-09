@@ -601,7 +601,7 @@ func (s *Store) InsertMessage(ctx context.Context, msg *Message) (*Message, erro
 	ins := s.rebind(`INSERT INTO messages(id, mailbox_id, uid, size, flags, internal_date, file_path, message_id, subject, from_addr, to_addr, date_hdr, archived, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	args := []any{
-		msg.ID, msg.MailboxID, msg.UID, msg.Size, msg.Flags, msg.InternalDate, msg.FilePath, msg.MessageID,
+		msg.ID, msg.MailboxID, msg.UID, msg.Size, msg.Flags, msg.InternalDate.UTC(), msg.FilePath, msg.MessageID,
 		msg.Subject, msg.FromAddr, msg.ToAddr, msg.DateHdr, arch, msg.CreatedAt,
 	}
 	if _, err := tx.ExecContext(ctx, ins, args...); err != nil {

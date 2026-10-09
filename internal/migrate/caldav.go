@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"path"
 	"strings"
 	"time"
@@ -17,8 +16,9 @@ import (
 )
 
 type davOptions struct {
-	CalendarPath string `json:"calendar_path"` // optional remote path filter
-	LocalName    string `json:"local_name"`    // local calendar name; default "default"
+	SkipTLSVerify bool   `json:"skip_tls_verify"`
+	CalendarPath  string `json:"calendar_path"` // optional remote path filter
+	LocalName     string `json:"local_name"`    // local calendar name; default "default"
 }
 
 func (s *Service) runCalDAV(ctx context.Context, job *Job) error {
@@ -41,7 +41,12 @@ func (s *Service) runCalDAV(ctx context.Context, job *Job) error {
 		localName = "default"
 	}
 
-	httpClient := webdav.HTTPClientWithBasicAuth(&http.Client{Timeout: 60 * time.Second}, job.Username, password)
+	baseClient, err := davHTTPClient(job.URL, opts.SkipTLSVerify)
+	if err != nil {
+		return err
+	}
+	defer baseClient.Transport.(interface{ CloseIdleConnections() }).CloseIdleConnections()
+	httpClient := webdav.HTTPClientWithBasicAuth(baseClient, job.Username, password)
 	cli, err := caldav.NewClient(httpClient, job.URL)
 	if err != nil {
 		return err

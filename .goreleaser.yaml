@@ -43,6 +43,10 @@ archives:
       - NOTICE
       - README.md
       - configs/tayga.example.yaml
+      - deploy/systemd/tayga.service
+      - docs/setup.md
+      - docs/setup-filters.md
+      - docs/release-0.9.4.md
 
 checksum:
   name_template: checksums.txt
