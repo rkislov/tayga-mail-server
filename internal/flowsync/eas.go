@@ -5,6 +5,8 @@ package flowsync
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"net/http"
@@ -230,7 +232,18 @@ func (h *easHandler) provision(ctx context.Context, u *storage.User, dev *storag
 		}
 		return `<Provision xmlns="Provision:"><Status>1</Status>` + command + `</Provision>`, nil, nil
 	}
-	policy := storage.NewID() // UUID policy key
+	policy := dev.PolicyKey
+	if value, parseErr := strconv.ParseUint(policy, 10, 32); parseErr != nil || value == 0 {
+		var random [4]byte
+		if _, err := rand.Read(random[:]); err != nil {
+			return "", nil, err
+		}
+		value := binary.BigEndian.Uint32(random[:])
+		if value == 0 {
+			value = 1
+		}
+		policy = strconv.FormatUint(uint64(value), 10)
+	}
 	if err := h.store.SetFlowSyncPolicyKey(ctx, dev.ID, policy); err != nil {
 		return "", nil, err
 	}

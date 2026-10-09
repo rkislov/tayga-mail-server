@@ -991,6 +991,7 @@ const tenantNav = {
 
 function setTenantLevel(level) {
   tenantNav.level = level;
+  if (!$("app-tenants")?.classList.contains("hidden")) updateCreateButton("tenants");
   document.querySelectorAll("[data-directory]").forEach(btn=>{btn.classList.toggle("is-active",btn.dataset.directory===level);btn.disabled=(btn.dataset.directory==="domains"&&!tenantNav.tenantID)||(btn.dataset.directory==="users"&&!tenantNav.domainID);});
   $("tenant-level-tenants")?.classList.toggle("hidden", level !== "tenants");
   $("tenant-level-domains")?.classList.toggle("hidden", level !== "domains");
@@ -1270,7 +1271,7 @@ async function refreshAdminUsers() {
         `<option value="${escapeHtml(sc.id)}" ${sc.id === selected ? "selected" : ""}>${escapeHtml(sc.name || sc.id)}</option>`
       ),
     ].join("");
-    list.innerHTML = users.map((u) => `<tr><td>${escapeHtml(u.display_name||"—")}</td><td>${escapeHtml(u.email)}</td><td><span class="badge">${t(u.enabled?"users_active":"users_disabled")}</span></td><td>${fmtBytes(u.used_bytes)} / ${u.quota_bytes>0?fmtBytes(u.quota_bytes):"∞"}</td><td>          <label class="mig-policy-label" title="${escapeHtml(t("cos_lede"))}">
+    list.innerHTML = users.map((u) => `<tr><td>${escapeHtml(u.display_name||"—")}</td><td>${escapeHtml(u.email)}</td><td><span class="badge">${t(u.enabled?"users_active":"users_disabled")}</span><div class="meta">${escapeHtml(u.roles?.includes("global_admin")?mailImageText("Глобальный администратор","Global administrator"):u.roles?.includes("domain_admin")?mailImageText("Администратор домена","Domain administrator"):mailImageText("Пользователь","User"))}</div></td><td>${fmtBytes(u.used_bytes)} / ${u.quota_bytes>0?fmtBytes(u.quota_bytes):"∞"}</td><td>          <label class="mig-policy-label" title="${escapeHtml(t("cos_lede"))}">
             <span>${escapeHtml(t("cos_assign"))}</span>
             <select class="field-input" data-user-cos="${escapeHtml(u.id)}" style="max-width:9rem">
               ${cosOptions(u.service_class_id || "")}
@@ -1284,10 +1285,9 @@ async function refreshAdminUsers() {
               <option value="off" ${u.migration_enabled === "off" ? "selected" : ""}>${escapeHtml(t("mig_off"))}</option>
             </select>
           </label>
-</td><td><details class="user-action-menu"><summary>${escapeHtml(t("users_actions"))}</summary><div class="actions">          <button type="button" class="btn-secondary" data-quota="${escapeHtml(u.id)}">${escapeHtml(t("users_quota_action"))}</button>
-          <button type="button" class="btn-secondary" data-toggle="${escapeHtml(u.id)}" data-enabled="${u.enabled ? "1" : "0"}">${escapeHtml(u.enabled ? t("users_disable") : t("users_enable"))}</button>
-          <button type="button" class="btn-secondary" data-pass="${escapeHtml(u.id)}">${escapeHtml(t("users_reset_pw"))}</button>
-${state.me?.is_global_admin?`<button type="button" class="btn-secondary" data-user-role="${escapeHtml(u.id)}">${mailImageText("Роль пользователя","User role")}</button>`:""}<button type="button" class="btn-secondary" data-mail-access="${escapeHtml(u.id)}">${mailImageText("Доступ к ящику","Mailbox access")}</button></div></details></td></tr>`).join("") || `<tr><td colspan="7" class="meta">${t("users_empty")}</td></tr>`;
+</td><td><div class="user-action-icons">
+ ${[['quota','download',t('users_quota_action')],['toggle','disconnect',t(u.enabled?'users_disable':'users_enable')],['pass','key',t('users_reset_pw')],...(state.me?.is_global_admin?[['user-role','shield',mailImageText('Роль и права пользователя','User role and permissions')]]:[]),['mail-access','reply',mailImageText('Доступ к ящику','Mailbox access')]].map(([action,icon,label])=>`<button type="button" class="btn-secondary user-action-icon" data-${action}="${escapeHtml(u.id)}" data-enabled="${u.enabled?'1':'0'}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${designIcon(icon)}</button>`).join('')}
+ </div></td></tr>`).join("") || `<tr><td colspan="7" class="meta">${t("users_empty")}</td></tr>`;
     list.querySelectorAll("[data-mail-access]").forEach(button=>button.onclick=()=>openMailboxAccess(button.dataset.mailAccess));list.querySelectorAll("[data-user-role]").forEach(button=>button.onclick=()=>openUserRole(users.find(u=>u.id===button.dataset.userRole)));
     list.querySelectorAll("[data-user-mig]").forEach((sel) => {
       sel.addEventListener("change", async () => {
@@ -2145,6 +2145,7 @@ $("form-create-user")?.addEventListener("submit", async (e) => {
 async function refreshSieve() {
   try {
     const data = await api("/api/v1/sieve/scripts");
+    refreshVisualRules(data.scripts || []);
     const list = $("sieve-list");
     list.innerHTML = (data.scripts || []).map((sc) => `
       <li>

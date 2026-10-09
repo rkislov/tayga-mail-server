@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -159,6 +160,13 @@ END:VCARD`,
 	}
 
 	// Provision includes policy data + UUID policy key
+	legacyDevice, err := store.EnsureFlowSyncDevice(ctx, u.ID, "d1", "Test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetFlowSyncPolicyKey(ctx, legacyDevice.ID, storage.NewID()); err != nil {
+		t.Fatal(err)
+	}
 	req4 := httptest.NewRequest(http.MethodPost, "/Microsoft-Server-ActiveSync?Cmd=Provision&DeviceId=d1&DeviceType=Test", nil)
 	req4.Header.Set("Authorization", authz)
 	w4 := httptest.NewRecorder()
@@ -173,4 +181,16 @@ END:VCARD`,
 	if !strings.Contains(pout, "<PolicyKey>") {
 		t.Fatalf("provision missing PolicyKey: %s", pout)
 	}
+	policyKey := strings.Split(strings.Split(pout, "<PolicyKey>")[1], "</PolicyKey>")[0]
+	if value, err := strconv.ParseUint(policyKey, 10, 32); err != nil || value == 0 {
+		t.Fatalf("policy key must be a nonzero uint32, got %q", policyKey)
+	}
+	repeated := httptest.NewRequest(http.MethodPost, "/Microsoft-Server-ActiveSync?Cmd=Provision&DeviceId=d1&DeviceType=Test", nil)
+	repeated.Header.Set("Authorization", authz)
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, repeated)
+	if !strings.Contains(response.Body.String(), "<PolicyKey>"+policyKey+"</PolicyKey>") {
+		t.Fatal("policy key changed during provisioning handshake")
+	}
+
 }
