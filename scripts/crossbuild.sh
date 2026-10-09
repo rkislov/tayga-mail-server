@@ -20,7 +20,7 @@ mkdir -p "$PACKAGE_STAGE/configs" "$PACKAGE_STAGE/deploy/systemd" "$PACKAGE_STAG
 cp LICENSE NOTICE README.md "$PACKAGE_STAGE/"
 cp configs/tayga.example.yaml "$PACKAGE_STAGE/configs/"
 cp deploy/systemd/tayga.service "$PACKAGE_STAGE/deploy/systemd/"
-cp docs/setup.md docs/migration.md docs/setup-filters.md docs/release-0.9.4.md "$PACKAGE_STAGE/docs/"
+cp docs/setup.md docs/migration.md docs/setup-filters.md docs/release-0.9.5.md "$PACKAGE_STAGE/docs/"
 archives=()
 
 targets=(

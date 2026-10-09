@@ -85,6 +85,17 @@ async function main() {
 
   await login(page);
   await theme(page, "tayga");
+  if (process.env.TMS_SHOT_ONLY === "dkim") {
+    await page.evaluate(() => applyColorMode("light"));
+    await goApp(page, "server");
+    await page.getByRole("button", {name:"DKIM: ключи и DNS",exact:true}).click();
+    await page.locator("dialog[open] input").first().fill("example.com");
+    await page.getByRole("button", {name:"Сгенерировать ключ",exact:true}).click();
+    await page.getByRole("button", {name:"Скачать закрытый ключ (.pem)",exact:true}).waitFor();
+    await shot(page,"ui-dkim-generator-tayga-light.png");
+    await browser.close();
+    return;
+  }
 
   for (const [app, file] of [
     ["mail", "ui-mail-tayga.png"],
@@ -142,6 +153,20 @@ async function main() {
   await page.evaluate(() => openCalInviteInbox());
   await shot(page, "ui-calendar-invites-tayga-light.png");
   await page.evaluate(() => closeCalInviteInbox());
+  await page.evaluate(() => showCalCompose(true));
+  await shot(page, "ui-event-editor-tayga-light.png");
+  await page.evaluate(() => showCalCompose(false));
+  await goApp(page, "contacts");
+  await page.evaluate(() => showContactCompose(true));
+  await shot(page, "ui-contact-editor-tayga-light.png");
+  await page.keyboard.press("Escape");
+  await goApp(page, "server");
+  await page.getByRole("button", {name:"DKIM: ключи и DNS",exact:true}).click();
+  await page.locator("dialog[open] input").first().fill("example.com");
+  await page.getByRole("button", {name:"Сгенерировать ключ",exact:true}).click();
+  await page.getByRole("button", {name:"Скачать закрытый ключ (.pem)",exact:true}).waitFor();
+  await shot(page,"ui-dkim-generator-tayga-light.png");
+  await page.keyboard.press("Escape");
   await goApp(page, "mail");
   await page.evaluate(() => openCompose());
   await shot(page, "ui-compose-tayga-light.png");

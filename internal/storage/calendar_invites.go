@@ -186,19 +186,27 @@ func (s *Store) FreeBusyForUser(ctx context.Context, userID string, from, to tim
 			return nil, err
 		}
 		for _, o := range objs {
-			if o.DTStart == nil {
+			if !strings.Contains(strings.ToUpper(o.Data), "RRULE:") && !strings.Contains(strings.ToUpper(o.Data), "RDATE:") && o.DTStart != nil {
+				if strings.Contains(strings.ToUpper(o.Data), "STATUS:CANCELLED") || strings.Contains(strings.ToUpper(o.Data), "TRANSP:TRANSPARENT") {
+					continue
+				}
+				start := o.DTStart.UTC()
+				end := start.Add(time.Hour)
+				if o.DTEnd != nil {
+					end = o.DTEnd.UTC()
+				}
+				if start.Before(to) && end.After(from) {
+					out = append(out, BusyInterval{Start: start, End: end})
+				}
 				continue
 			}
-			start := o.DTStart.UTC()
-			end := start.Add(time.Hour)
-			if o.DTEnd != nil {
-				end = o.DTEnd.UTC()
+			intervals, err := objectBusyIntervals(o.Data, from, to)
+			if err != nil {
+				return nil, err
 			}
-			if !end.After(from) || !start.Before(to) {
-				continue
-			}
-			out = append(out, BusyInterval{Start: start, End: end})
+			out = append(out, intervals...)
 		}
+
 	}
 	return out, nil
 }

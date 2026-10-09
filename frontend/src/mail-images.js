@@ -161,7 +161,7 @@ function replyToMessage(message, all=false, dialog=null) {
 function createMailActionBar(message, dialog=null) {
   const bar=document.createElement('div');bar.className='reader-actions';
   for (const [action,label] of [['trip',mailImageText('Поездка в календарь','Trip to calendar')],['reply',mailImageText('Ответить','Reply')],['reply-all',mailImageText('Ответить всем','Reply all')],['spam',mailImageText('В спам','Mark as spam')],['archive',mailImageText('В архив','Archive')],['delete',mailImageText('Удалить','Delete')]]) {
-    const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.textContent=label;button.dataset.mailAction=action;if(!dialog)button.id='btn-mail-'+action;
+    const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.title=label;button.setAttribute('aria-label',label);button.classList.add('action-icon');button.innerHTML=designIcon(action);button.dataset.mailAction=action;if(!dialog)button.id='btn-mail-'+action;
     if(action==='spam' && (mailState.mailboxes || []).some(folder=>folder.id===message.mailbox_id&&folder.name==='Junk'))button.disabled=true;
     button.addEventListener('click',async()=>{
       if(action==='trip'){if(dialog?.open)dialog.close();await openTravelDrafts(message.id);return;}

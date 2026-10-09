@@ -6,6 +6,7 @@ const {chromium}=require('playwright-core');const fs=require('fs');
  if(url.pathname==='/') {body=fs.readFileSync('internal/frontend/dist/index.html','utf8');type='text/html'}
  else if(url.pathname==='/assets/app.js'){body=fs.readFileSync('internal/frontend/dist/assets/app.js','utf8');type='text/javascript'}
  else if(url.pathname==='/assets/app.css'){body=fs.readFileSync('internal/frontend/dist/assets/app.css','utf8');type='text/css'}
+ else if(url.pathname==='/api/v1/migration')body={allowed:true,jobs:Array.from({length:7},(_,i)=>({id:'job'+i,kind:'imap',status:'done',copied:i}))};
  else if(url.pathname==='/api/v1/admin/quarantine')body={items:[item]};
  else if(url.pathname==='/api/v1/admin/quarantine/q1')body=item;
  else if(url.pathname.endsWith('/travel'))body={trips:[{kind:'flight',number:'SU1234',origin:'Москва',destination:'Сочи',departure:'2026-10-09T23:55',arrival:'2026-10-10T03:10',seat:'12A',source:'ticket.pdf'}]};
@@ -22,5 +23,14 @@ const {chromium}=require('playwright-core');const fs=require('fs');
  await page.evaluate(()=>openTravelDrafts('ticket'));await page.locator('dialog[open] select').nth(0).selectOption('180');await page.locator('dialog[open] select').nth(1).selectOption('180');await page.locator('dialog[open]').getByRole('button',{name:'Создать событие',exact:true}).click();await page.locator('#cal-backdrop[open]').waitFor();if(!await page.locator('#cal-description').inputValue().then(v=>v.includes('12A')))throw Error('Seat missing from event');
  await page.keyboard.press('Escape');
  for(const kind of ['cal','card','imap'])if(await page.locator('#mig-'+kind+'-skip-tls').isChecked())throw Error('Certificate bypass enabled by default');
+ await page.evaluate(()=>{showApp('migration');window.testMigrationJobs=Array.from({length:7},(_,i)=>({id:'job'+i,kind:'imap',status:'done',copied:i}));renderMigJobs($('mig-job-list'),window.testMigrationJobs)});
+ if(await page.locator('#mig-job-list > li').count()!==3)throw Error('Migration page is not three jobs');
+ await page.locator('#mig-job-list-pagination').getByRole('button',{name:'Далее',exact:true}).click();
+ await page.evaluate(()=>renderMigJobs($('mig-job-list'),window.testMigrationJobs));
+ if(!await page.locator('#mig-job-list').textContent().then(v=>v.includes('3 перенесено')))throw Error('Migration refresh lost current page');
+ await page.locator('#mig-job-list-pagination').getByRole('button',{name:'Далее',exact:true}).click();
+ if(await page.locator('#mig-job-list > li').count()!==1||!await page.locator('#mig-job-list-pagination').getByRole('button',{name:'Далее',exact:true}).isDisabled())throw Error('Last migration page incorrect');
+ await page.locator('#mig-job-list-pagination').getByRole('button',{name:'Назад',exact:true}).click();
+ if(await page.locator('#mig-job-list > li').count()!==3)throw Error('Migration previous failed');
  if(errors.length)throw Error(errors.join('\n'));console.log('PASS: full app bootstrap, quarantine bounded desktop/mobile, safe modal text, ticket to calendar, certificate verification defaults');await browser.close();
 })().catch(err=>{console.error(err);process.exit(1)});

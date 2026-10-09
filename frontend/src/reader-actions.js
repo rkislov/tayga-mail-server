@@ -20,11 +20,11 @@ function mountCalendarEditor() {
   $('cal-start').required=true;$('cal-end').required=true;
   const calendarLabel=document.createElement('label');calendarLabel.className='field-label';calendarLabel.htmlFor='event-calendar-choice';calendarLabel.textContent=mailImageText('Календарь','Calendar');
   const calendar=document.createElement('select');calendar.id='event-calendar-choice';calendar.className='field-input';times.after(calendarLabel,calendar);
-  const details=document.createElement('details');details.className='event-advanced';const heading=document.createElement('summary');heading.textContent=mailImageText('Ресурсы, занятость и вложения','Resources, availability and attachments');details.append(heading);
-  const resources=$('cal-resource-select')?.closest('.cal-attendee-row');const resourceLabel=resources?.previousElementSibling;if(resourceLabel)details.append(resourceLabel);if(resources)details.append(resources);
-  const freebusy=$('cal-freebusy')?.closest('.cal-freebusy-block');if(freebusy)details.append(freebusy);
+  const details=document.createElement('details');details.className='event-advanced';const heading=document.createElement('summary');heading.textContent=mailImageText('Вложения','Attachments');details.append(heading);
+  const resources=$('cal-resource-select')?.closest('.cal-attendee-row');const resourceLabel=resources?.previousElementSibling;if(resourceLabel)form.insertBefore(resourceLabel,form.querySelector(':scope > .actions'));if(resources)form.insertBefore(resources,form.querySelector(':scope > .actions'));
+  const freebusy=$('cal-freebusy')?.closest('.cal-freebusy-block');if(freebusy)form.insertBefore(freebusy,form.querySelector(':scope > .actions'));
   moveField('cal-files',details);if($('cal-file-list'))details.append($('cal-file-list'));
-  const actions=form.querySelector('.actions');actions?.before(details);
+  const actions=form.querySelector(':scope > .actions');actions?.before(details);
   if(actions){actions.classList.add('event-editor-footer');const save=actions.querySelector('[type=submit]');if(save){save.className='btn-spray';save.removeAttribute('data-i18n-title');save.removeAttribute('data-i18n');save.textContent=mailImageText('Сохранить событие','Save event')}const cancel=$('btn-cal-close');if(cancel){cancel.className='btn-secondary';cancel.textContent=mailImageText('Отмена','Cancel')}}
   if(actions){const content=document.createElement('div');content.className='event-editor-content';for(const child of [...form.children])if(child!==actions&&child.id!=='cal-msg')content.append(child);form.prepend(content)}
   const title=dialog.querySelector('h3');if(title){title.id='event-editor-title';dialog.setAttribute('aria-labelledby',title.id)}
@@ -32,7 +32,7 @@ function mountCalendarEditor() {
 }
 function syncEventCalendarChoice() {
   const select=$('event-calendar-choice');if(!select)return;
-  select.replaceChildren();for(const calendar of calState.calendars.filter(calendar=>calendar.writable!==false)){const option=document.createElement('option');option.value=calendar.id;option.textContent=calendar.display_name||calendar.name;select.append(option)}
+  select.replaceChildren();for(const calendar of calState.calendars.filter(calendar=>calendar.writable!==false)){const option=document.createElement('option');option.value=calendar.id;option.textContent=calendarDisplayLabel(calendar);select.append(option)}
   select.value=calState.calendarID;
 }
 
@@ -50,7 +50,7 @@ async function openEntityModal(kind,id) {
     const addButton=(label,callback)=>{const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.textContent=label;button.addEventListener('click',callback);actions.append(button);return button};
     if(kind==='contact'){
       addButton(mailImageText('Написать письмо','Write email'),()=>{dialog.close();showApp('mail');openCompose({to:record.email||''})});
-      addButton(mailImageText('Редактировать','Edit'),()=>{dialog.close();editContactRecord(record)});
+      const edit=addButton(mailImageText('Редактировать','Edit'),()=>{dialog.close();editContactRecord(record)});edit.disabled=!!record.readonly;
     }else{
       addButton(mailImageText('Создать похожее событие','Create similar event'),()=>{dialog.close();startNewCalEvent(calEventDayKey(record));$('cal-summary').value=record.summary||'';$('cal-location').value=record.location||'';$('cal-description').value=record.description||''});
     }
@@ -58,6 +58,7 @@ async function openEntityModal(kind,id) {
       dialog.close();if(!await askConfirm(t('delete_confirm'),{danger:true})){dialog.showModal();return}
       try{await api((kind==='calendar'?'/api/v1/calendar/events/':'/api/v1/contacts/cards/')+encodeURIComponent(id),{method:'DELETE'});if(kind==='calendar'){calState.eventID='';await loadCalEvents()}else{contactState.cardID='';await loadContactCards()}}catch(error){content.textContent=error.message;dialog.showModal()}
     });
+    if(kind==='contact')remove.disabled=!!record.readonly;
     if(kind==='calendar')remove.disabled=calState.calendars.find(calendar=>calendar.id===record.calendar_id)?.writable===false;
     const body=document.createElement('div');
     for(const element of [...reader.children]) {if(element.classList.contains('reader-actions')||element.id==='cal-attach-upload')continue;const copy=element.cloneNode(true);const attachmentTarget=copy.querySelector('#cal-read-attachments');if(attachmentTarget)attachmentTarget.dataset.entityAttachments='true';copy.removeAttribute('id');copy.querySelectorAll('[id]').forEach(child=>child.removeAttribute('id'));body.append(copy)}

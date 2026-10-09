@@ -23,12 +23,12 @@ type Checker interface {
 
 // Meta is envelope context for the checker.
 type Meta struct {
-	From       string
-	To         string
-	Helo       string
-	IP         string
-	User       string // authenticated submitter, if any
-	Hostname   string
+	From     string
+	To       string
+	Helo     string
+	IP       string
+	User     string // authenticated submitter, if any
+	Hostname string
 }
 
 // Action is what Tayga does after scoring.
@@ -44,17 +44,20 @@ const (
 
 // Config from YAML.
 type Config struct {
-	Enabled          bool
-	Backend          string // rspamd | none
-	URL              string
-	Password         string
-	Timeout          time.Duration
-	FailOpen         bool
-	Folder           string  // quarantine/junk folder
-	FollowRspamd     bool    // map rspamd action when true
-	RejectAbove      float64 // used when !FollowRspamd; 0 = unset
-	QuarantineAbove  float64
-	TagAbove         float64
+	DNSBLEnabled    bool
+	DNSBLZones      []string
+	DNSBLScore      float64
+	Enabled         bool
+	Backend         string // rspamd | none
+	URL             string
+	Password        string
+	Timeout         time.Duration
+	FailOpen        bool
+	Folder          string  // quarantine/junk folder
+	FollowRspamd    bool    // map rspamd action when true
+	RejectAbove     float64 // used when !FollowRspamd; 0 = unset
+	QuarantineAbove float64
+	TagAbove        float64
 }
 
 func (c Config) Normalized() Config {
@@ -81,9 +84,9 @@ func New(cfg Config) (Checker, error) {
 	}
 	switch cfg.Backend {
 	case "none", "noop":
-		return Noop{}, nil
+		return withDNSBL(Noop{}, cfg), nil
 	case "rspamd":
-		return NewRspamd(cfg.URL, cfg.Password, cfg.Timeout), nil
+		return withDNSBL(NewRspamd(cfg.URL, cfg.Password, cfg.Timeout), cfg), nil
 	default:
 		return nil, fmt.Errorf("unknown spam backend %q", cfg.Backend)
 	}

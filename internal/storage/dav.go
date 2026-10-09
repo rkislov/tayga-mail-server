@@ -489,6 +489,11 @@ func (s *Store) EnsureDAVDefaults(ctx context.Context, userID string) error {
 	if _, err := s.EnsureCalendar(ctx, userID, "default", "Календарь"); err != nil {
 		return fmt.Errorf("ensure calendar: %w", err)
 	}
+	for _, entry := range []struct{ name, display string }{{"personal", "Personal calendar"}, {"work", "Work calendar"}} {
+		if _, err := s.EnsureCalendar(ctx, userID, entry.name, entry.display); err != nil {
+			return fmt.Errorf("ensure calendar: %w", err)
+		}
+	}
 	if _, err := s.EnsureAddressBook(ctx, userID, "default", "Contacts"); err != nil {
 		return fmt.Errorf("ensure addressbook: %w", err)
 	}

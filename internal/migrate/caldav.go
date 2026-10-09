@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"path"
 	"strings"
 	"time"
@@ -51,17 +52,33 @@ func (s *Service) runCalDAV(ctx context.Context, job *Job) error {
 	if err != nil {
 		return err
 	}
-	principal, err := cli.FindCurrentUserPrincipal(ctx)
-	if err != nil {
-		return fmt.Errorf("principal: %w", err)
+	// A supplied collection URL must import that collection, not every calendar in its home.
+	remote, _ := url.Parse(job.URL)
+	cals, discoverErr := cli.FindCalendars(ctx, remote.Path)
+	selected := []caldav.Calendar{}
+	for _, calendar := range cals {
+		if strings.TrimRight(calendar.Path, "/") == strings.TrimRight(remote.Path, "/") {
+			selected = append(selected, calendar)
+		}
 	}
-	home, err := cli.FindCalendarHomeSet(ctx, principal)
-	if err != nil {
-		return fmt.Errorf("calendar-home: %w", err)
+	if len(selected) > 0 {
+		cals = selected
+	} else if discoverErr != nil || len(cals) == 0 {
+		principal, err := cli.FindCurrentUserPrincipal(ctx)
+		if err != nil {
+			return fmt.Errorf("principal: %w", err)
+		}
+		home, err := cli.FindCalendarHomeSet(ctx, principal)
+		if err != nil {
+			return fmt.Errorf("calendar-home: %w", err)
+		}
+		cals, err = cli.FindCalendars(ctx, home)
+		if err != nil {
+			return fmt.Errorf("find calendars: %w", err)
+		}
 	}
-	cals, err := cli.FindCalendars(ctx, home)
-	if err != nil {
-		return fmt.Errorf("find calendars: %w", err)
+	if len(cals) == 0 {
+		return fmt.Errorf("no calendars found at the source URL")
 	}
 
 	dbCal, err := s.store.EnsureCalendar(ctx, user.ID, localName, localName)
@@ -74,7 +91,7 @@ func (s *Service) runCalDAV(ctx context.Context, job *Job) error {
 		CompRequest: caldav.CalendarCompRequest{
 			Name: "VCALENDAR", AllProps: true, AllComps: true,
 		},
-		CompFilter: caldav.CompFilter{Name: "VCALENDAR"},
+		CompFilter: caldav.CompFilter{Name: "VCALENDAR", Comps: []caldav.CompFilter{{Name: "VEVENT"}}},
 	}
 
 	for _, cal := range cals {
@@ -86,6 +103,18 @@ func (s *Service) runCalDAV(ctx context.Context, job *Job) error {
 			return ctx.Err()
 		}
 		objs, err := cli.QueryCalendar(ctx, cal.Path, query)
+		// SOGo needs an explicit component filter; import tasks separately as well.
+		if err == nil {
+			tasksQuery := *query
+			tasksQuery.CompFilter = caldav.CompFilter{Name: "VCALENDAR", Comps: []caldav.CompFilter{{Name: "VTODO"}}}
+			tasks, tasksErr := cli.QueryCalendar(ctx, cal.Path, &tasksQuery)
+			if tasksErr == nil {
+				objs = append(objs, tasks...)
+			} else {
+				errs++
+				_ = s.bumpProgress(ctx, job.ID, copied, skipped, errs, tasksErr.Error(), "")
+			}
+		}
 		if err != nil {
 			errs++
 			_ = s.bumpProgress(ctx, job.ID, copied, skipped, errs, err.Error(), `{"cal":`+jsonString(cal.Path)+`}`)

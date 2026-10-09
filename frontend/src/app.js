@@ -1086,6 +1086,7 @@ async function refreshTenantDomains() {
               <option value="off" ${d.migration_enabled === "off" ? "selected" : ""}>${escapeHtml(t("mig_off"))}</option>
             </select>
           </label>
+          <label class="field-check" title="${escapeHtml(mailImageText('Общий адресный справочник пользователей этого домена','Global address list for users in this domain'))}"><input type="checkbox" data-domain-gal="${escapeHtml(d.id)}" ${d.gal_enabled?'checked':''}> GAL</label>
           <button type="button" class="btn-spray" data-open-domain="${escapeHtml(d.id)}" data-name="${escapeHtml(d.name)}">${escapeHtml(t("domains_open"))}</button>
           <button type="button" class="btn-secondary" data-del-domain="${escapeHtml(d.name)}" ${d.user_count > 0 ? "disabled" : ""}>${escapeHtml(t("domains_remove"))}</button>
         </span>
@@ -1109,6 +1110,7 @@ async function refreshTenantDomains() {
         }
       });
     });
+    list.querySelectorAll('[data-domain-gal]').forEach(input=>input.addEventListener('change',async()=>{const value=input.checked;input.disabled=true;try{await api('/api/v1/admin/domains/'+encodeURIComponent(input.dataset.domainGal),{method:'PATCH',body:JSON.stringify({gal_enabled:value})});composeContactsCache=null;}catch(error){input.checked=!value;setMsg($('admin-domains-msg'),error.message,'err')}finally{input.disabled=false}}));
     list.querySelectorAll("[data-dom-mig]").forEach((sel) => {
       sel.addEventListener("change", async () => {
         try {
@@ -1642,13 +1644,54 @@ $("xmpp-bot-form")?.addEventListener("submit",async event=>{
  finally{xmppBotBusy=false;$("btn-xmpp-bot-create").disabled=false;$("xmpp-bot-close").disabled=false;}
 });
 
+const migrationPages = new Map();
 function renderMigJobs(listEl, jobs) {
+  if (!listEl) return;
+  const key = (state.me?.id || "") + ":" + listEl.id;
+  const pagination = migrationPages.get(key) || { page: 0, firstID: "" };
+  const pageSize = 3;
+  if (pagination.page > 0 && pagination.firstID) {
+    const position = jobs.findIndex(job => job.id === pagination.firstID);
+    if (position >= 0) pagination.page = Math.floor(position / pageSize);
+  }
+  pagination.page = Math.min(pagination.page, Math.max(0, Math.ceil(jobs.length / pageSize) - 1));
+  const offset = pagination.page * pageSize;
+  const visibleJobs = jobs.slice(offset, offset + pageSize);
+  pagination.firstID = visibleJobs[0]?.id || "";
+  migrationPages.set(key, pagination);
+  let pager = $(listEl.id + "-pagination");
+  if (!pager) {
+    pager = document.createElement("nav");
+    pager.id = listEl.id + "-pagination";
+    pager.className = "mail-pagination";
+    pager.setAttribute("aria-label", t("mig_history"));
+    listEl.after(pager);
+  }
+  pager.replaceChildren();
+  pager.classList.toggle("hidden", jobs.length <= pageSize);
+  for (const [delta, label] of [[-1, t("mig_previous")], [1, t("mig_next")]]) {
+    const button = document.createElement("button");
+    button.type = "button"; button.className = "btn-secondary btn-sm";
+    button.textContent = label;
+    button.disabled = delta < 0 ? pagination.page === 0 : offset + pageSize >= jobs.length;
+    button.addEventListener("click", () => {
+      pagination.page += delta; pagination.firstID = "";
+      renderMigJobs(listEl, jobs);
+    });
+    pager.append(button);
+    if (delta < 0) {
+      const range = document.createElement("span");
+      range.className = "meta";
+      range.textContent = `${offset + 1}–${offset + visibleJobs.length} / ${jobs.length}`;
+      range.setAttribute("aria-live", "polite"); pager.append(range);
+    }
+  }
   if (!listEl) return;
   if (!jobs.length) {
     listEl.innerHTML = `<li class="meta">${t("mig_no_jobs")}</li>`;
     return;
   }
-  listEl.innerHTML = jobs.map((j) => `
+  listEl.innerHTML = visibleJobs.map((j) => `
     <li class="ca-cert-item">
       <div>
         <strong>${escapeHtml(j.kind)}</strong> · ${escapeHtml(t("mig_status_"+j.status))}
@@ -1774,6 +1817,7 @@ document.querySelectorAll("[data-mig-kind]").forEach(form => form.addEventListen
   setMsg($("mig-dialog-msg"),t("mig_starting"));
   try {
     await api("/api/v1/migration/jobs", {method:"POST",body:JSON.stringify({kind:{imap:"imap",cal:"caldav",card:"carddav"}[kind],...body})});
+    migrationPages.clear();
     migrationDialog.close();
     await refreshMigration();
     setMsg($("mig-msg"),t("mig_started"),"ok");
@@ -2590,6 +2634,7 @@ async function refreshMailMessages() {
  renderMailPagination(data);
  const msgs = data.messages || [];
     if (!msgs.length) {
+      renderMailSelection([]);
       list.innerHTML = `<li class="msg-empty meta">${t(q ? "mail_search_empty" : "empty_mailbox")}</li>`;
       showMailReader(null);
       return;
@@ -2612,6 +2657,7 @@ async function refreshMailMessages() {
         </button>
       </li>`;
     }).join("");
+    renderMailSelection(msgs);
     list.querySelectorAll("[data-msg]").forEach((btn) => {
       btn.addEventListener("click", () => {
         if (btn.dataset.mailbox) {
@@ -2661,20 +2707,10 @@ function showMailReader(msg) {
       button.type = "button";
       button.className = "btn-secondary btn-sm";
       button.textContent = attachment.filename + " · " + fmtBytes(attachment.size);
-      button.addEventListener("click", async () => {
-        button.disabled = true;
-        try {
-          const headers = {};
-          if (state.tokens?.access_token) headers.Authorization = "Bearer " + state.tokens.access_token;
-          const response = await fetch("/api/v1/mail/messages/" + encodeURIComponent(msg.id) + "/attachments/" + encodeURIComponent(attachment.id), {headers});
-          if (!response.ok) throw new Error("Не удалось скачать вложение");
-          const url = URL.createObjectURL(await response.blob());
-          const link = document.createElement("a");
-          link.href = url; link.download = attachment.filename; link.click();
-          setTimeout(() => URL.revokeObjectURL(url), 1000);
-        } catch (error) { button.title = error.message; button.textContent = attachment.filename + " · " + error.message; }
-        finally { button.disabled = false; }
-      });
+      button.addEventListener("click", () => openDocumentPreview({
+        url: "/api/v1/mail/messages/" + encodeURIComponent(msg.id) + "/attachments/" + encodeURIComponent(attachment.id),
+        name: attachment.filename, size: attachment.size
+      }));
       attachments.append(button);
     }
     body.append(attachments);
@@ -2974,6 +3010,7 @@ function calMonthStart(d) {
 }
 
 function showCalCompose(open) {
+ if(open && $("cal-location")){delete $("cal-location").dataset.geo;$("cal-location").dispatchEvent(new Event("input"));}
   const dialog=mountCalendarEditor();
  if(dialog){if(open&&!dialog.open)dialog.showModal();if(!open&&dialog.open)dialog.close()}
  syncEventCalendarChoice();
@@ -3033,6 +3070,7 @@ function renderCalReadAttachments(atts) {
     dd.querySelectorAll("[data-att-dl]").forEach((btn) => {
       btn.addEventListener("click", async () => {
         try {
+          if(documentPreviewType(btn.dataset.name)){await openDocumentPreview({url:"/api/v1/calendar/attachments/"+encodeURIComponent(btn.dataset.attDl),name:btn.dataset.name,size:atts.find(a=>a.id===btn.dataset.attDl)?.size});return;}
           const headers = {};
           if (state.tokens?.access_token) headers.Authorization = "Bearer " + state.tokens.access_token;
           const res = await fetch("/api/v1/calendar/attachments/" + encodeURIComponent(btn.dataset.attDl), { headers });
@@ -3304,7 +3342,7 @@ function renderCalMonth() {
       continue;
     }
     const dots = cell.events.slice(0, 3).map((ev) =>
-      `<span class="cal-pill" data-ev="${escapeHtml(ev.id)}" title="${escapeHtml(ev.summary || "")}">${escapeHtml(ev.summary || "•")}</span>`
+      `<span class="cal-pill" data-ev="${escapeHtml(ev.id)}" title="${escapeHtml(calendarEventLabel(ev))}">${escapeHtml(calendarEventLabel(ev))}</span>`
     ).join("");
     const more = cell.events.length > 3
       ? `<span class="cal-more">+${cell.events.length - 3}</span>`
@@ -3380,7 +3418,7 @@ function renderCalDay() {
   $("cal-day-schedule").innerHTML = Array.from({length:24}, (_, hour) => {
     const time = String(hour).padStart(2,"0") + ":00";
     const matching = events.filter(event => new Date(event.start).getHours() === hour);
-    return `<div class="cal-hour-row"><button type="button" class="cal-hour-slot" data-hour="${hour}" aria-label="${escapeHtml(t("new_event") + " · " + day + " " + time)}"><time>${time}</time><span>${escapeHtml(t("cal_hour_add"))}</span></button><div class="cal-hour-events">${matching.map(event => `<button type="button" class="cal-agenda-event" data-ev="${escapeHtml(event.id)}"><strong>${escapeHtml(event.summary || "—")}</strong><span>${escapeHtml(fmtCalTime(event.start))}–${escapeHtml(fmtCalTime(event.end))}${event.location ? " · " + escapeHtml(event.location) : ""}</span></button>`).join("")}</div></div>`;
+    return `<div class="cal-hour-row"><button type="button" class="cal-hour-slot" data-hour="${hour}" aria-label="${escapeHtml(t("new_event") + " · " + day + " " + time)}"><time>${time}</time><span>${escapeHtml(t("cal_hour_add"))}</span></button><div class="cal-hour-events">${matching.map(event => `<button type="button" class="cal-agenda-event" data-ev="${escapeHtml(event.id)}"><strong>${escapeHtml(calendarEventLabel(event))}</strong><span>${escapeHtml(fmtCalTime(event.start))}–${escapeHtml(fmtCalTime(event.end))}${event.location ? " · " + escapeHtml(event.location) : ""}</span></button>`).join("")}</div></div>`;
   }).join("");
   $("cal-day-schedule").querySelectorAll("[data-hour]").forEach(slot => {
     slot.addEventListener("dblclick", () => startNewCalEvent(day, Number(slot.dataset.hour)));
@@ -3460,7 +3498,7 @@ function renderCalEventLog() {
   list.innerHTML = events.map((e) => `
     <li>
       <button type="button" class="msg-item cal-item${e.id === calState.eventID ? " is-active" : ""}" data-ev="${escapeHtml(e.id)}">
-        <span class="msg-subject">${escapeHtml(e.summary || "—")}</span>
+        <span class="msg-subject">${escapeHtml(calendarEventLabel(e))}</span>
         <span class="msg-date cal-start">${escapeHtml(fmtCalShort(e.start))}</span>
         <span class="msg-date cal-end">${escapeHtml(fmtCalTime(e.end) || fmtCalShort(e.end))}</span>
       </button>
@@ -3484,7 +3522,7 @@ async function refreshCalendar() {
       calState.calendarID = calState.calendars[0].id;
     }
     folders.innerHTML = calState.calendars.map((c) => {
-      const label = (c.display_name || c.name || c.id) + (c.shared ? " · " + t("cal_shared") : "");
+      const label = calendarDisplayLabel(c) + (c.shared ? " · " + t("cal_shared") : "");
       const del = `<button type="button" class="btn-secondary btn-sm btn-ico" data-cal-properties="${escapeHtml(c.id)}" title="${escapeHtml(t("cal_properties"))}" aria-label="${escapeHtml(t("cal_properties"))}">⋯</button>`;
       return `<li class="folder-row">
         <button type="button" class="folder-btn${c.id === calState.calendarID ? " is-active" : ""}" data-cal="${escapeHtml(c.id)}">
@@ -3563,7 +3601,7 @@ function showCalReader(ev) {
   empty.classList.add("hidden");
   reader.classList.remove("hidden");
   setMobilePane("read");
-  $("cal-subject").textContent = ev.summary || "—";
+  $("cal-subject").textContent = calendarEventLabel(ev);
   $("cal-read-start").textContent = fmtCalWhen(ev.start);
   $("cal-read-end").textContent = fmtCalWhen(ev.end);
   $("cal-read-location").textContent = ev.location || "—";
@@ -3694,6 +3732,7 @@ $("form-cal-event")?.addEventListener("submit", async (e) => {
       body: JSON.stringify({
         summary: $("cal-summary").value,
         location: $("cal-location")?.value || "",
+ geo: $("cal-location")?.dataset.geo || "",
         description: $("cal-description")?.value || "",
         start: localInputToISO($("cal-start").value),
         end: localInputToISO($("cal-end").value),
@@ -3750,6 +3789,7 @@ function showContactReader(c) {
   empty.classList.add("hidden");
   reader.classList.remove("hidden");
   setMobilePane("read");
+  $("btn-contact-delete").disabled=!!c.readonly;
   $("contact-subject").textContent = c.fn || "—";
   $("contact-read-email").textContent = c.email || "—";
   $("contact-read-tel").textContent = c.tel || "—";
@@ -3828,6 +3868,7 @@ async function openContactCard(id) {
   const cached = contactState.cards.find((c) => c.id === id);
   if (cached) showContactReader(cached);
   try {
+    if(cached?.readonly){showContactReader(cached);return;}
     const d = await api("/api/v1/contacts/cards/" + encodeURIComponent(id));
     showContactReader(d);
   } catch (err) {
@@ -3836,7 +3877,7 @@ async function openContactCard(id) {
 }
 
 $("btn-contacts-refresh")?.addEventListener("click", () => refreshContacts());
-$("btn-contact-new")?.addEventListener("click", () => {contactState.editing=null;$("form-contact")?.reset();showContactCompose(true)});
+$("btn-contact-new")?.addEventListener("click", () => {contactState.editing=null;if(contactState.books.find(b=>b.id===contactState.bookID)?.readonly)contactState.bookID=contactState.books.find(b=>!b.readonly)?.id||"";$("form-contact")?.reset();showContactCompose(true)});
 $("btn-contact-close")?.addEventListener("click", () => showContactCompose(false));
 $("contact-backdrop")?.addEventListener("click", (e) => {
   if (e.target === $("contact-backdrop")) showContactCompose(false);
@@ -3912,6 +3953,10 @@ function showFileReader(entry) {
   $("files-read-type").textContent = entry.is_dir ? t("type_folder") : t("type_file");
   $("btn-files-download")?.classList.remove("hidden");
   $("btn-files-open")?.classList.toggle("hidden", !entry.is_dir);
+  let preview=$('btn-files-preview');
+  if(!preview){preview=document.createElement('button');preview.id='btn-files-preview';preview.type='button';preview.className='btn-secondary btn-sm';$('btn-files-download').after(preview);}
+  preview.textContent=mailImageText('Просмотр','Preview');preview.hidden=entry.is_dir||!documentPreviewType(entry.name);
+  preview.onclick=()=>openDocumentPreview({url:'/api/v1/files/content?path='+encodeURIComponent(joinPath(filesState.path,entry.name)),name:entry.name,size:entry.size});
 }
 
 function selectFileEntry(name) {
@@ -4674,7 +4719,8 @@ $('note-attach-list')?.addEventListener('click',async event=>{
  button.disabled=true;
  try {
   const path='/api/v1/notes/attachments/'+encodeURIComponent(att.id);
-  if(button.dataset.noteDownload){const headers={};if(state.tokens?.access_token)headers.Authorization='Bearer '+state.tokens.access_token;const res=await fetch(path,{headers});if(!res.ok)throw new Error(t('files_download_error'));const blob=await res.blob(),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=att.filename;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
+  if(button.dataset.noteDownload&&documentPreviewType(att.filename)){await openDocumentPreview({url:path,name:att.filename,size:att.size});}
+  else if(button.dataset.noteDownload){const headers={};if(state.tokens?.access_token)headers.Authorization='Bearer '+state.tokens.access_token;const res=await fetch(path,{headers});if(!res.ok)throw new Error(t('files_download_error'));const blob=await res.blob(),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=att.filename;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
   else {await api(path,{method:'DELETE'});if(notesState.noteID===id){const data=await api('/api/v1/notes/'+encodeURIComponent(id)+'/attachments');if(notesState.noteID===id)renderNoteAttachments(data.attachments);}}
  }catch(err){if(notesState.noteID===id)setMsg($('note-attachment-status'),err.message,'err');}finally{button.disabled=false;}
 });
@@ -4873,7 +4919,12 @@ function renderCalendarProperties(props) {
  ${owned?`<section><h3>${t('cal_access')}</h3><p class="meta">${t('cal_access_hint')}</p><ul id="calendar-access-list"></ul><form id="calendar-access-form" class="calendar-access-form"><input class="field-input" id="calendar-access-email" type="email" required placeholder="user@example.com" aria-label="Email"><select class="field-input" id="calendar-access-rights" aria-label="${t('cal_access')}"><option value="read">${t('cal_read')}</option><option value="write">${t('cal_write')}</option></select><button class="btn-secondary" type="submit">${t('cal_grant')}</button></form></section>
  <section><h3>${t('cal_public')}</h3><p class="meta">${t('cal_public_hint')}</p><div id="calendar-public-controls"></div></section>`:''}</div>
  <p id="calendar-properties-msg" class="msg" role="status"></p><footer class="actions">${props.deletable?`<button class="btn-secondary" data-cal-action="delete" type="button">${t('cal_delete')}</button>`:''}<button class="btn-secondary" type="button" data-cal-action="close">${t('close')}</button></footer>`;
- if(owned)renderCalendarPublic(props);
+ if(owned){renderCalendarPublic(props);
+ const section=document.createElement('section'),heading=document.createElement('h3');heading.textContent=mailImageText('Ссылки на календарь','Calendar links');section.append(heading);
+ const hint=document.createElement('p');hint.className='meta';hint.textContent=mailImageText('Доступ с авторизацией: CalDAV — синхронизация, ICS — подписка, XML — данные WebDAV.','Authenticated access: CalDAV synchronization, ICS subscription, WebDAV XML data.');section.append(hint);
+ for(const [kind,url] of Object.entries(props.links||{})){const row=document.createElement('div');row.className='calendar-link-row';const label=document.createElement('label');label.textContent=({caldav:'CalDAV URL',ics:'WebDAV ICS URL',xml:'WebDAV XML URL'})[kind]||kind;const input=document.createElement('input');input.className='field-input';input.readOnly=true;input.value=url;input.setAttribute('aria-label',label.textContent);const copy=document.createElement('button');copy.className='btn-secondary btn-sm';copy.type='button';copy.textContent=t('cal_copy');copy.onclick=async()=>{try{await navigator.clipboard.writeText(url);setMsg($('calendar-properties-msg'),mailImageText('Ссылка скопирована','Link copied'),'ok')}catch{input.select();setMsg($('calendar-properties-msg'),mailImageText('Скопируйте выделенную ссылку','Copy the selected link'))}};row.append(label,input,copy);section.append(row);}
+ calendarPropertiesDialog.querySelector('.calendar-properties-body').append(section);
+}
 }
 function renderCalendarPublic(props) {
  const active=props.public_enabled;

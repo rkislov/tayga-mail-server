@@ -1,14 +1,17 @@
 {
   "name": "tayga-frontend",
   "private": true,
-  "version": "1.0.0",
+  "version": "0.9.5",
   "description": "Tayga Mail web UI (Tailwind) embedded via go:embed",
   "scripts": {
-    "build": "tailwindcss -i ./src/input.css -o ../internal/frontend/dist/assets/app.css --minify && cat ./src/i18n.js ./src/app.js ./src/admin-config.js ./src/mail-images.js ./src/reader-actions.js ./src/protection.js ./src/travel.js > ../internal/frontend/dist/assets/app.js",
+    "build": "node build-pdfjs.cjs && tailwindcss -i ./src/input.css -o ../internal/frontend/dist/assets/app.css --minify && cat ./src/i18n.js ./src/app.js ./src/admin-config.js ./src/mail-images.js ./src/reader-actions.js ./src/protection.js ./src/travel.js ./src/design-pack.js > ../internal/frontend/dist/assets/app.js",
     "watch": "tailwindcss -i ./src/input.css -o ../internal/frontend/dist/assets/app.css --watch"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.1.14",
     "tailwindcss": "^4.1.14"
+  },
+  "dependencies": {
+    "pdfjs-dist": "^6.4.299"
   }
 }
