@@ -29,7 +29,7 @@ const (
 	cpContacts        = 1
 	cpEmail           = 2
 	cpCalendar        = 4
-	cpFolderHierarchy = 5
+	cpFolderHierarchy = 7
 	cpGetItemEstimate = 6
 	cpPing            = 13
 	cpProvision       = 14
@@ -83,7 +83,7 @@ var (
 	tagCalUID       = wbTag{cpCalendar, 0x24}
 	tagCalStartTime = wbTag{cpCalendar, 0x25}
 
-	// FolderHierarchy (5)
+	// FolderHierarchy (7)
 	tagFHDisplayName = wbTag{cpFolderHierarchy, 0x07}
 	tagFHServerID    = wbTag{cpFolderHierarchy, 0x08}
 	tagFHParentID    = wbTag{cpFolderHierarchy, 0x09}
