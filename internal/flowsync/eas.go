@@ -7,11 +7,13 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/binary"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/tayga/tms/internal/mailstore"
 	"github.com/tayga/tms/internal/storage"
@@ -19,14 +21,16 @@ import (
 
 // ActiveSync-compatible endpoint handled by original FlowSync engine.
 type easHandler struct {
-	store storage.Driver
-	ms    *mailstore.Store
+	sender *mailSubmission
+	syncMu sync.Mutex
+	store  storage.Driver
+	ms     *mailstore.Store
 }
 
 func (h *easHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("MS-Server-ActiveSync", "18.0")
 	w.Header().Set("MS-ASProtocolVersions", "14.0,14.1,16.0,16.1")
-	w.Header().Set("MS-ASProtocolCommands", "FolderSync,FolderCreate,FolderDelete,FolderUpdate,Sync,MoveItems,Ping,Provision,GetItemEstimate,Options")
+	w.Header().Set("MS-ASProtocolCommands", "FolderSync,FolderCreate,FolderDelete,FolderUpdate,Sync,MoveItems,Ping,Provision,GetItemEstimate,ItemOperations,SendMail,Settings")
 	w.Header().Set("X-FlowSync", "Tayga-FlowSync")
 	w.Header().Set("X-FlowSync-Engine", "FlowSync/1.0")
 
@@ -62,7 +66,7 @@ func (h *easHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	version := r.Header.Get("MS-ASProtocolVersion")
-	if err = h.store.TouchFlowSyncDevice(r.Context(), dev.ID, r.RemoteAddr, r.UserAgent(), version, strings.EqualFold(cmd, "provision")); err != nil {
+	if err = h.store.TouchFlowSyncDevice(r.Context(), dev.ID, r.RemoteAddr, r.UserAgent(), version, false); err != nil {
 		http.Error(w, "device update failed", 500)
 		return
 	}
@@ -74,43 +78,69 @@ func (h *easHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(449)
 		return
 	}
-	body, _ := io.ReadAll(io.LimitReader(r.Body, 8<<20))
+	body, readErr := io.ReadAll(io.LimitReader(r.Body, (8<<20)+1))
+	if readErr != nil || len(body) > 8<<20 {
+		http.Error(w, "invalid or oversized request", http.StatusBadRequest)
+		return
+	}
 	useWBXML := requestWantsWBXML(r.Header.Get("Content-Type"), r.Header.Get("Accept"), body)
+	if len(body) > 0 && body[0] == wbxmlVersion {
+		body, err = decodeWire(body)
+		if err != nil {
+			http.Error(w, "invalid WBXML request", 400)
+			return
+		}
+	}
+	if len(body) > 0 {
+		if err = validateCommandXML(body, cmd); err != nil {
+			http.Error(w, "invalid command document", 400)
+			return
+		}
+	}
 
 	var (
 		xmlOut string
 		binOut []byte
 	)
 	switch strings.ToLower(cmd) {
+	case "sendmail":
+		xmlOut, err = h.sendMail(r.Context(), u, body)
+	case "itemoperations":
+		xmlOut, err = h.itemOperations(r.Context(), u, body)
+	case "settings":
+		xmlOut, err = settingsResponse(u, body)
 	case "foldersync":
-		xmlOut, binOut, err = h.folderSync(r.Context(), u, dev, useWBXML)
+		xmlOut, err = h.hierarchySync(r.Context(), u, dev, body)
 	case "foldercreate":
-		xmlOut, binOut, err = h.folderCreate(r.Context(), u, body, useWBXML)
+		xmlOut, err = h.mutateHierarchy(r.Context(), u, dev, "FolderCreate", body, h.folderCreate)
 	case "folderdelete":
-		xmlOut, binOut, err = h.folderDelete(r.Context(), u, body, useWBXML)
+		xmlOut, err = h.mutateHierarchy(r.Context(), u, dev, "FolderDelete", body, h.folderDelete)
 	case "folderupdate":
-		xmlOut, binOut, err = h.folderUpdate(r.Context(), u, body, useWBXML)
+		xmlOut, err = h.mutateHierarchy(r.Context(), u, dev, "FolderUpdate", body, h.folderUpdate)
 	case "sync":
-		xmlOut, binOut, err = h.syncCollection(r.Context(), u, dev, body, useWBXML)
+		xmlOut, err = h.syncCollections(r.Context(), u, dev, body)
 	case "moveitems":
-		xmlOut, binOut, err = h.moveItems(r.Context(), u, body, useWBXML)
+		xmlOut, binOut, err = h.moveItems(r.Context(), u, body, false)
 	case "provision":
-		xmlOut, binOut, err = h.provision(r.Context(), u, dev, useWBXML, body)
+		xmlOut, binOut, err = h.provision(r.Context(), u, dev, false, body)
 	case "ping":
-		if useWBXML {
-			binOut = encodePingWBXML()
-		} else {
-			xmlOut = `<?xml version="1.0" encoding="utf-8"?><Ping xmlns="Ping:"><Status>1</Status></Ping>`
-		}
+		xmlOut, err = h.ping(r.Context(), u, dev, body)
 	case "getitemestimate":
-		xmlOut, binOut, err = h.itemEstimate(r.Context(), u, body, useWBXML)
+		xmlOut, binOut, err = h.itemEstimate(r.Context(), u, dev, body, false)
 	default:
 		http.Error(w, "unsupported command", http.StatusBadRequest)
 		return
 	}
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "FlowSync command failed", http.StatusInternalServerError)
 		return
+	}
+	if useWBXML && xmlOut != "" {
+		binOut, err = encodeWire(xmlOut)
+		if err != nil {
+			http.Error(w, "response encoding failed", 500)
+			return
+		}
 	}
 	if useWBXML && binOut != nil {
 		w.Header().Set("Content-Type", "application/vnd.ms-sync.wbxml")
@@ -124,6 +154,9 @@ func (h *easHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *easHandler) folderSync(ctx context.Context, u *storage.User, dev *storage.FlowSyncDevice, wbxml bool) (string, []byte, error) {
+	if err := (&ewsHandler{store: h.store, ms: h.ms}).ensureStandardMailFolders(ctx, u); err != nil {
+		return "", nil, err
+	}
 	_ = h.store.EnsureDAVDefaults(ctx, u.ID)
 	_ = h.store.EnsureNoteDefaults(ctx, u.ID)
 
@@ -144,14 +177,7 @@ func (h *easHandler) folderSync(ctx context.Context, u *storage.User, dev *stora
 		return "", nil, err
 	}
 
-	key, err := h.store.GetFlowSyncSyncKey(ctx, dev.ID, "hierarchy")
-	if err != nil {
-		return "", nil, err
-	}
-	next := nextSyncKey(key)
-	if err := h.store.SetFlowSyncSyncKey(ctx, dev.ID, "hierarchy", next); err != nil {
-		return "", nil, err
-	}
+	next := "snapshot"
 
 	folders := make([]folderChange, 0, len(mbs)+len(cals)+len(abs)+len(nfs))
 	for _, mb := range mbs {
@@ -183,7 +209,7 @@ func (h *easHandler) folderSync(ctx context.Context, u *storage.User, dev *stora
 			name = nf.Name
 		}
 		folders = append(folders, folderChange{
-			ServerID: nf.ID, ParentID: "0", DisplayName: name, Type: defaultFolderType(nf.Name, folderTypeNotes, 17),
+			ServerID: nf.ID, ParentID: "0", DisplayName: name, Type: noteFolderType(nf.Name),
 		})
 	}
 	if wbxml {
@@ -232,6 +258,21 @@ func (h *easHandler) provision(ctx context.Context, u *storage.User, dev *storag
 		}
 		return `<Provision xmlns="Provision:"><Status>1</Status>` + command + `</Provision>`, nil, nil
 	}
+	if len(body) > 0 {
+		doc, err := parseProtocolXML(body)
+		if err != nil {
+			return "", nil, err
+		}
+		if p := doc.find("Policy"); p != nil && p.child("Status") != nil {
+			if p.value("PolicyKey") != dev.PolicyKey || p.value("Status") != "1" || dev.PolicyKey == "" {
+				return `<Provision xmlns="Provision:"><Status>1</Status><Policies><Policy><Status>5</Status></Policy></Policies></Provision>`, nil, nil
+			}
+			if err = h.store.TouchFlowSyncDevice(ctx, dev.ID, dev.Address, dev.Agent, dev.Version, true); err != nil {
+				return "", nil, err
+			}
+			return fmt.Sprintf(`<Provision xmlns="Provision:"><Status>1</Status><Policies><Policy><PolicyType>MS-EAS-Provisioning-WBXML</PolicyType><Status>1</Status><PolicyKey>%s</PolicyKey></Policy></Policies></Provision>`, xmlEscape(dev.PolicyKey)), nil, nil
+		}
+	}
 	policy := dev.PolicyKey
 	if value, parseErr := strconv.ParseUint(policy, 10, 32); parseErr != nil || value == 0 {
 		var random [4]byte
@@ -270,52 +311,78 @@ func (h *easHandler) provision(ctx context.Context, u *storage.User, dev *storag
 	return b.String(), nil, nil
 }
 
-func (h *easHandler) itemEstimate(ctx context.Context, u *storage.User, reqBody []byte, wbxml bool) (string, []byte, error) {
-	_ = h.store.EnsureDAVDefaults(ctx, u.ID)
-	collectionID := extractCollectionID(reqBody)
-	if collectionID == "" {
-		mb, err := h.store.GetMailbox(ctx, u.ID, "INBOX")
-		if err != nil {
-			return "", nil, err
-		}
-		collectionID = mb.ID
-	}
-	kind, err := h.resolveCollection(ctx, u.ID, collectionID)
+func (h *easHandler) itemEstimate(ctx context.Context, u *storage.User, dev *storage.FlowSyncDevice, reqBody []byte, wbxml bool) (string, []byte, error) {
+	doc, err := parseProtocolXML(reqBody)
 	if err != nil {
 		return "", nil, err
 	}
-	var n int
-	switch kind {
-	case kindCalendar:
-		objs, err := h.store.ListCalendarObjects(ctx, collectionID)
-		if err != nil {
-			return "", nil, err
-		}
-		n = len(objs)
-	case kindContacts:
-		objs, err := h.store.ListAddressObjects(ctx, collectionID)
-		if err != nil {
-			return "", nil, err
-		}
-		n = len(objs)
-	case kindNotes:
-		items, err := h.store.ListNoteItems(ctx, u.ID, collectionID, false)
-		if err != nil {
-			return "", nil, err
-		}
-		n = len(items)
-	default:
-		msgs, err := h.store.ListMessages(ctx, collectionID)
-		if err != nil {
-			return "", nil, err
-		}
-		n = len(msgs)
+	collections := doc.find("Collections")
+	if collections == nil || len(collections.Children) == 0 || len(collections.Children) > 100 {
+		return `<GetItemEstimate xmlns="GetItemEstimate:"><Response><Status>2</Status></Response></GetItemEstimate>`, nil, nil
 	}
+	var out strings.Builder
+	out.WriteString(`<GetItemEstimate xmlns="GetItemEstimate:">`)
+	for _, request := range collections.Children {
+		id := request.value("CollectionId")
+		kind, e := h.resolveCollection(ctx, u.ID, id)
+		status, count := 1, 0
+		if e != nil {
+			status = 2
+		} else {
+			state, e := loadCollectionState(ctx, h.store, u.ID, dev.ID, id)
+			if e != nil {
+				return "", nil, e
+			}
+			key := request.value("SyncKey")
+			if key != "0" && key != state.Key {
+				status = 4
+			} else {
+				prefs, e := preferencesFrom(request, state.Preferences)
+				if e != nil || !validFilter(kind, prefs) {
+					status = 2
+				} else {
+					snapshotCtx := context.WithValue(ctx, preferencesKey{}, prefs)
+					var full string
+					switch kind {
+					case kindCalendar:
+						full, _, e = h.syncCalendar(snapshotCtx, id, "unused", false, nil)
+					case kindContacts:
+						full, _, e = h.syncContacts(snapshotCtx, id, "unused", false, nil)
+					case kindNotes:
+						full, _, e = h.syncNotes(snapshotCtx, u, id, "unused", false, nil)
+					default:
+						full, _, e = h.syncMailCollection(context.WithValue(snapshotCtx, mailSnapshotKey{}, true), u, id, "unused", false, nil)
+					}
+					if e != nil {
+						return "", nil, e
+					}
+					parsed, e := parseProtocolXML([]byte(full))
+					if e != nil {
+						return "", nil, e
+					}
+					hashes := map[string]string{}
+					if commands := parsed.find("Commands"); commands != nil {
+						for _, add := range commands.Children {
+							hashes[add.value("ServerId")] = digest(add.render() + prefs.hash())
+						}
+					}
+					previous := state.Items
+					if key == "0" {
+						previous = nil
+					}
+					changes, _, _ := diffItems(previous, hashes, len(previous)+len(hashes)+1)
+					count = len(changes)
+				}
+			}
+		}
+		fmt.Fprintf(&out, `<Response><Status>%d</Status><Collection><CollectionId>%s</CollectionId><Estimate>%d</Estimate></Collection></Response>`, status, xmlEscape(id), count)
+	}
+	out.WriteString(`</GetItemEstimate>`)
 	if wbxml {
-		return "", encodeItemEstimateWBXML(collectionID, n), nil
+		raw, e := encodeWire(out.String())
+		return "", raw, e
 	}
-	return fmt.Sprintf(`<?xml version="1.0" encoding="utf-8"?><GetItemEstimate xmlns="GetItemEstimate:"><Response><Status>1</Status><Collection><CollectionId>%s</CollectionId><Estimate>%d</Estimate></Collection></Response></GetItemEstimate>`,
-		xmlEscape(collectionID), n), nil, nil
+	return out.String(), nil, nil
 }
 
 func (h *easHandler) mailboxByID(ctx context.Context, userID, id string) (*storage.Mailbox, error) {
@@ -377,23 +444,20 @@ func extractCollectionID(body []byte) string {
 }
 
 func extractTag(body, local string) string {
-	candidates := []string{"<" + local + ">", ":" + local + ">"}
-	var start int = -1
-	for _, c := range candidates {
-		if i := strings.Index(body, c); i >= 0 {
-			start = i + len(c)
-			break
+	decoder := xml.NewDecoder(strings.NewReader(body))
+	for {
+		token, err := decoder.Token()
+		if err != nil {
+			return ""
+		}
+		if start, ok := token.(xml.StartElement); ok && start.Name.Local == local {
+			var value string
+			if decoder.DecodeElement(&value, &start) != nil {
+				return ""
+			}
+			return strings.TrimSpace(value)
 		}
 	}
-	if start < 0 {
-		return ""
-	}
-	rest := body[start:]
-	closeIdx := strings.Index(rest, "</")
-	if closeIdx < 0 {
-		return ""
-	}
-	return strings.TrimSpace(rest[:closeIdx])
 }
 
 // devicePolicy is the FlowSync remote policy applied during Provision.
@@ -428,4 +492,11 @@ func defaultFolderType(name string, standard, custom int) int {
 		return standard
 	}
 	return custom
+}
+
+func noteFolderType(name string) int {
+	if name == "notes" {
+		return folderTypeNotes
+	}
+	return 17
 }

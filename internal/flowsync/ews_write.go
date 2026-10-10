@@ -13,6 +13,13 @@ import (
 )
 
 func (h *ewsHandler) createItem(ctx context.Context, u *storage.User, body string) (string, error) {
+	doc, parseErr := parseProtocolXML([]byte(body))
+	if parseErr != nil {
+		return "", parseErr
+	}
+	if items := doc.find("Items"); items != nil && len(items.Children) > 0 && items.Children[0].Name.Local == "Message" && !strings.Contains(body, "IPM.StickyNote") {
+		return h.createMailItem(ctx, u, body)
+	}
 	_ = h.store.EnsureDAVDefaults(ctx, u.ID)
 	folderID := extractAttr(body, "ParentFolderId", "Id")
 	if folderID == "" {
@@ -122,7 +129,7 @@ func (h *ewsHandler) updateItem(ctx context.Context, u *storage.User, body strin
 		_, err = h.store.UpsertCalendarObject(ctx, &storage.CalendarObject{
 			ID: o.ID, CalendarID: o.CalendarID, UID: o.UID, HrefName: o.HrefName,
 			Component: "VEVENT", DTStart: start, DTEnd: end,
-			Data: buildVEVENT(o.UID, subject, location, start, end, ev.AllDay),
+			Data: mergeDAVProperties(o.Data, buildVEVENT(o.UID, subject, location, start, end, ev.AllDay), "VEVENT", changedDAVProperties(body, map[string]string{"Subject": "SUMMARY", "Location": "LOCATION", "Start": "DTSTART", "End": "DTEND"})),
 		})
 		if err != nil {
 			return "", err
@@ -144,7 +151,7 @@ func (h *ewsHandler) updateItem(ctx context.Context, u *storage.User, body strin
 		}
 		_, err = h.store.UpsertAddressObject(ctx, &storage.AddressObject{
 			ID: o.ID, AddressBookID: o.AddressBookID, UID: o.UID, HrefName: o.HrefName,
-			Data: buildVCARD(o.UID, fields),
+			Data: mergeDAVProperties(o.Data, buildVCARD(o.UID, fields), "VCARD", changedDAVProperties(body, map[string]string{"DisplayName": "FN", "GivenName": "N", "Surname": "N", "EmailAddress": "EMAIL", "PhoneNumber": "TEL"})),
 		})
 		if err != nil {
 			return "", err
@@ -155,6 +162,9 @@ func (h *ewsHandler) updateItem(ctx context.Context, u *storage.User, body strin
 	if msg, err := h.store.GetMessageByID(ctx, id); err == nil {
 		if err := h.ensureMailboxOwned(ctx, u.ID, msg.MailboxID); err != nil {
 			return ewsFault("ErrorAccessDenied", "forbidden"), nil
+		}
+		if extractTag(body, "Subject") != "" || extractTag(body, "Body") != "" || strings.Contains(body, "DeleteItemField") {
+			return ewsFault("ErrorInvalidPropertySet", "Only IsRead updates are supported for mail"), nil
 		}
 		// IsRead via UpdateItem
 		if strings.Contains(body, "IsRead") {

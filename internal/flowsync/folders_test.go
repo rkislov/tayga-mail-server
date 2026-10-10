@@ -6,6 +6,7 @@ package flowsync_test
 import (
 	"context"
 	"encoding/base64"
+	"encoding/xml"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -72,6 +73,18 @@ func TestFolderCreateAndMoveItems(t *testing.T) {
 
 	createBody := `<FolderCreate><DisplayName>Archive</DisplayName><ParentId>0</ParentId><Type>12</Type></FolderCreate>`
 	req := httptest.NewRequest(http.MethodPost, "/Microsoft-Server-ActiveSync?Cmd=FolderCreate&DeviceId=d1&DeviceType=T", strings.NewReader(createBody))
+	initReq := httptest.NewRequest(http.MethodPost, "/Microsoft-Server-ActiveSync?Cmd=FolderSync&DeviceId=d1&DeviceType=T", strings.NewReader(`<FolderSync><SyncKey>0</SyncKey></FolderSync>`))
+	initReq.Header.Set("Authorization", authz)
+	initW := httptest.NewRecorder()
+	mux.ServeHTTP(initW, initReq)
+	initDoc := struct {
+		Key string `xml:"SyncKey"`
+	}{}
+	if err := xml.Unmarshal(initW.Body.Bytes(), &initDoc); err != nil {
+		t.Fatal(err)
+	}
+	createBody = strings.Replace(createBody, "<FolderCreate>", "<FolderCreate><SyncKey>"+initDoc.Key+"</SyncKey>", 1)
+	req = httptest.NewRequest(http.MethodPost, "/Microsoft-Server-ActiveSync?Cmd=FolderCreate&DeviceId=d1&DeviceType=T", strings.NewReader(createBody))
 	req.Header.Set("Authorization", authz)
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
@@ -90,7 +103,7 @@ func TestFolderCreateAndMoveItems(t *testing.T) {
 		t.Fatalf("expected UUID folder id %q", archive.ID)
 	}
 
-	moveBody := `<MoveItems><Move><SrcMsgId>` + msg.ID + `</SrcMsgId><DstFldId>` + archive.ID + `</DstFldId></Move></MoveItems>`
+	moveBody := `<MoveItems><Move><SrcMsgId>` + msg.ID + `</SrcMsgId><SrcFldId>` + msg.MailboxID + `</SrcFldId><DstFldId>` + archive.ID + `</DstFldId></Move></MoveItems>`
 	req2 := httptest.NewRequest(http.MethodPost, "/Microsoft-Server-ActiveSync?Cmd=MoveItems&DeviceId=d1&DeviceType=T", strings.NewReader(moveBody))
 	req2.Header.Set("Authorization", authz)
 	w2 := httptest.NewRecorder()

@@ -16,12 +16,12 @@ import (
 const folderTypeNotes = 10
 
 type noteAdd struct {
-	ServerID  string
-	Subject   string
-	Body      string
-	BodyType  string // 1=plain 2=HTML
-	LastMod   string
-	Created   string
+	ServerID   string
+	Subject    string
+	Body       string
+	BodyType   string // 1=plain 2=HTML
+	LastMod    string
+	Created    string
 	Categories string
 }
 
@@ -80,8 +80,7 @@ func renderNotesSyncXML(syncKey, collectionID string, adds []noteAdd, wb []write
 		fmt.Fprintf(&b, `<ServerId>%s</ServerId>`, xmlEscape(a.ServerID))
 		b.WriteString(`<ApplicationData>`)
 		fmt.Fprintf(&b, `<Notes:Subject xmlns:Notes="Notes:">%s</Notes:Subject>`, xmlEscape(a.Subject))
-		fmt.Fprintf(&b, `<Notes:Body xmlns:Notes="Notes:">%s</Notes:Body>`, xmlEscape(a.Body))
-		fmt.Fprintf(&b, `<Notes:BodyType xmlns:Notes="Notes:">%s</Notes:BodyType>`, xmlEscape(a.BodyType))
+		fmt.Fprintf(&b, `<Body xmlns="AirSyncBase:"><Type>%s</Type><EstimatedDataSize>%d</EstimatedDataSize><Truncated>0</Truncated><Data>%s</Data></Body>`, xmlEscape(a.BodyType), len([]byte(a.Body)), xmlEscape(a.Body))
 		if a.LastMod != "" {
 			fmt.Fprintf(&b, `<Notes:LastModifiedDate xmlns:Notes="Notes:">%s</Notes:LastModifiedDate>`, xmlEscape(a.LastMod))
 		}

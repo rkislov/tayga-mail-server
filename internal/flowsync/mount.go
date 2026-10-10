@@ -15,7 +15,7 @@ import (
 )
 
 // Mount registers original FlowSync endpoints (ActiveSync- and EWS-compatible).
-func Mount(mux *http.ServeMux, cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth.Layer, ms *mailstore.Store) {
+func Mount(mux *http.ServeMux, cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth.Layer, ms *mailstore.Store, submit ...SubmitFunc) {
 	if cfg == nil || !cfg.FlowSync.Enabled {
 		log.Info("flowsync disabled")
 		return
@@ -26,8 +26,12 @@ func Mount(mux *http.ServeMux, cfg *config.Config, log *slog.Logger, store stora
 	}
 
 	ad := &autodiscover{publicURL: public, hostname: cfg.Server.Hostname, cfg: cfg, store: store}
-	eas := &easHandler{store: store, ms: ms}
-	ews := &ewsHandler{store: store, ms: ms, publicURL: public}
+	sender := &mailSubmission{store: store, ms: ms}
+	if len(submit) > 0 {
+		sender.submit = submit[0]
+	}
+	eas := &easHandler{store: store, ms: ms, sender: sender}
+	ews := &ewsHandler{store: store, ms: ms, publicURL: public, sender: sender}
 
 	mux.Handle("/Autodiscover/Autodiscover.xml", logRequests(log, "autodiscover", http.HandlerFunc(ad.handlePOX), cfg.FlowSync.ProtocolDebug))
 	mux.Handle("/autodiscover/autodiscover.xml", logRequests(log, "autodiscover", http.HandlerFunc(ad.handlePOX), cfg.FlowSync.ProtocolDebug))

@@ -209,13 +209,11 @@ func (q *OutboundQueue) writeMailLog(it *storage.OutboundItem, event, detail str
 	if q.siem != nil {
 		q.siem.EmitMail(e.Event, e.Direction, e.Peer, e.MailFrom, e.RcptTo, e.MessageID, e.Detail, e.Size)
 	}
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
-		if err := q.store.InsertMailLog(ctx, e); err != nil {
-			q.log.Warn("mail log write failed", "err", err)
-		}
-	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := q.store.InsertMailLog(ctx, e); err != nil {
+		q.log.Warn("mail log write failed", "err", err)
+	}
 }
 
 func backoff(attempt int) time.Duration {

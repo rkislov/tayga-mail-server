@@ -58,30 +58,30 @@ var (
 	tagApplicationData = wbTag{cpAirSync, 0x1D}
 
 	// Contacts (1)
-	tagContactBusinessPhone = wbTag{cpContacts, 0x11}
-	tagContactCompany       = wbTag{cpContacts, 0x16}
-	tagContactEmail1        = wbTag{cpContacts, 0x1A}
-	tagContactEmail2        = wbTag{cpContacts, 0x1B}
-	tagContactFileAs        = wbTag{cpContacts, 0x1D}
-	tagContactFirst         = wbTag{cpContacts, 0x1E}
-	tagContactHomePhone     = wbTag{cpContacts, 0x20}
-	tagContactJobTitle      = wbTag{cpContacts, 0x26}
-	tagContactLast          = wbTag{cpContacts, 0x30}
-	tagContactMobile        = wbTag{cpContacts, 0x36}
+	tagContactBusinessPhone = wbTag{cpContacts, 0x13}
+	tagContactCompany       = wbTag{cpContacts, 0x19}
+	tagContactEmail1        = wbTag{cpContacts, 0x1B}
+	tagContactEmail2        = wbTag{cpContacts, 0x1C}
+	tagContactFileAs        = wbTag{cpContacts, 0x1E}
+	tagContactFirst         = wbTag{cpContacts, 0x1F}
+	tagContactHomePhone     = wbTag{cpContacts, 0x27}
+	tagContactJobTitle      = wbTag{cpContacts, 0x28}
+	tagContactLast          = wbTag{cpContacts, 0x29}
+	tagContactMobile        = wbTag{cpContacts, 0x2B}
 
 	// Email (2)
-	tagEmailFrom         = wbTag{cpEmail, 0x07}
-	tagEmailSubject      = wbTag{cpEmail, 0x08}
+	tagEmailFrom         = wbTag{cpEmail, 0x18}
+	tagEmailSubject      = wbTag{cpEmail, 0x14}
 	tagEmailDateReceived = wbTag{cpEmail, 0x0F}
-	tagEmailRead         = wbTag{cpEmail, 0x13}
+	tagEmailRead         = wbTag{cpEmail, 0x15}
 
 	// Calendar (4)
 	tagCalAllDay    = wbTag{cpCalendar, 0x06}
-	tagCalEndTime   = wbTag{cpCalendar, 0x16}
-	tagCalLocation  = wbTag{cpCalendar, 0x1D}
-	tagCalSubject   = wbTag{cpCalendar, 0x23}
-	tagCalUID       = wbTag{cpCalendar, 0x24}
-	tagCalStartTime = wbTag{cpCalendar, 0x25}
+	tagCalEndTime   = wbTag{cpCalendar, 0x12}
+	tagCalLocation  = wbTag{cpCalendar, 0x17}
+	tagCalSubject   = wbTag{cpCalendar, 0x26}
+	tagCalUID       = wbTag{cpCalendar, 0x28}
+	tagCalStartTime = wbTag{cpCalendar, 0x27}
 
 	// FolderHierarchy (7)
 	tagFHDisplayName = wbTag{cpFolderHierarchy, 0x07}
@@ -98,14 +98,14 @@ var (
 	// GetItemEstimate (6)
 	tagGIEGetItemEstimate = wbTag{cpGetItemEstimate, 0x05}
 	tagGIECollection      = wbTag{cpGetItemEstimate, 0x08}
-	tagGIEStatus          = wbTag{cpGetItemEstimate, 0x0A}
+	tagGIEStatus          = wbTag{cpGetItemEstimate, 0x0E}
 	tagGIEEstimate        = wbTag{cpGetItemEstimate, 0x0C}
 	tagGIEResponse        = wbTag{cpGetItemEstimate, 0x0D}
-	tagGIECollectionID    = wbTag{cpGetItemEstimate, 0x12}
+	tagGIECollectionID    = wbTag{cpGetItemEstimate, 0x0A}
 
 	// Ping (13)
 	tagPing       = wbTag{cpPing, 0x05}
-	tagPingStatus = wbTag{cpPing, 0x08}
+	tagPingStatus = wbTag{cpPing, 0x07}
 
 	// Provision (14)
 	tagProvProvision  = wbTag{cpProvision, 0x05}
@@ -200,11 +200,17 @@ type folderChange struct {
 }
 
 type syncAdd struct {
-	ServerID string
-	Subject  string
-	From     string
-	Date     string
-	Read     bool
+	EstimatedSize int
+	Truncated     bool
+	Body          string
+	BodyType      string
+	To            string
+	Attachments   []messageAttachment
+	ServerID      string
+	Subject       string
+	From          string
+	Date          string
+	Read          bool
 }
 
 func encodeSyncWBXML(syncKey, collectionID, class string, adds []syncAdd) []byte {
@@ -258,10 +264,10 @@ func encodeCalendarSyncWBXML(syncKey, collectionID string, adds []calendarAdd) [
 			e.taggedStr(tagCalLocation, a.Location)
 		}
 		if a.StartTime != "" {
-			e.taggedStr(tagCalStartTime, a.StartTime)
+			e.taggedStr(tagCalStartTime, calendarWireTime(a.StartTime))
 		}
 		if a.EndTime != "" {
-			e.taggedStr(tagCalEndTime, a.EndTime)
+			e.taggedStr(tagCalEndTime, calendarWireTime(a.EndTime))
 		}
 		e.taggedStr(tagCalUID, a.UID)
 		e.taggedStr(tagCalAllDay, fmt.Sprintf("%d", bool01(a.AllDay)))
@@ -501,6 +507,9 @@ func readMultiByteInt(r *bytes.Reader) (uint64, error) {
 		b, err := r.ReadByte()
 		if err != nil {
 			return 0, err
+		}
+		if v > (^uint64(0) >> 7) {
+			return 0, fmt.Errorf("WBXML integer overflow")
 		}
 		v = (v << 7) | uint64(b&0x7F)
 		if b&0x80 == 0 {

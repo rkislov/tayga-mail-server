@@ -28,18 +28,19 @@ import (
 
 // Server exposes health, metrics, auth API, and the embedded Web UI.
 type Server struct {
-	log     *slog.Logger
-	cfg     *config.Config
-	hub     *settings.Hub
-	store   storage.Driver
-	authn   *auth.Layer
-	ms      *mailstore.Store
-	tls     *tlsutil.Manager
-	xmpp    xmpp.Gateway
-	migrate *migrate.Service
-	notify  *notify.Hub
-	siem    *siem.Exporter
-	servers []*http.Server
+	flowSubmit flowsync.SubmitFunc
+	log        *slog.Logger
+	cfg        *config.Config
+	hub        *settings.Hub
+	store      storage.Driver
+	authn      *auth.Layer
+	ms         *mailstore.Store
+	tls        *tlsutil.Manager
+	xmpp       xmpp.Gateway
+	migrate    *migrate.Service
+	notify     *notify.Hub
+	siem       *siem.Exporter
+	servers    []*http.Server
 }
 
 func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth.Layer, ms *mailstore.Store, tlsMgr *tlsutil.Manager, hub *settings.Hub) *Server {
@@ -147,7 +148,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/notifications/", s.handleNotifications)
 
 	dav.Mount(mux, s.store, s.authn)
-	flowsync.Mount(mux, s.cfg, s.log, s.store, s.authn, s.ms)
+	flowsync.Mount(mux, s.cfg, s.log, s.store, s.authn, s.ms, s.flowSubmit)
 
 	mux.Handle("/", frontend.Handler())
 	if s.tls != nil {
@@ -280,3 +281,5 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(v)
 }
+
+func (s *Server) SetFlowSyncSubmit(submit flowsync.SubmitFunc) { s.flowSubmit = submit }

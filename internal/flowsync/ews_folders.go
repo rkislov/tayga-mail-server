@@ -13,6 +13,9 @@ import (
 
 // Resolve only folders enumerated for the authenticated user, never a global ID.
 func (h *ewsHandler) getFolder(ctx context.Context, u *storage.User, body string) (string, error) {
+	if email := extractTag(body, "EmailAddress"); email != "" && !strings.EqualFold(email, u.Email) {
+		return ewsOperationError("GetFolder", "ErrorAccessDenied", "Mailbox delegation is not supported"), nil
+	}
 	listing, err := h.findFolder(ctx, u)
 	if err != nil {
 		return "", err
@@ -44,7 +47,7 @@ func (h *ewsHandler) getFolder(ctx context.Context, u *storage.User, body string
 			folders[f.ID.Value] = f
 		}
 	}
-	aliases := map[string]string{"inbox": "INBOX", "sentitems": "Sent", "deleteditems": "Trash", "drafts": "Drafts", "junkemail": "Junk"}
+	aliases := map[string]string{"inbox": "INBOX", "sentitems": "Sent", "deleteditems": "Trash", "drafts": "Drafts", "junkemail": "Junk", "outbox": "Outbox"}
 	var out strings.Builder
 	out.WriteString(`<m:GetFolderResponse xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"><m:ResponseMessages>`)
 	decoder = xml.NewDecoder(strings.NewReader(body))
@@ -72,6 +75,11 @@ func (h *ewsHandler) getFolder(ctx context.Context, u *storage.User, body string
 		found := false
 		if start.Name.Local == "FolderId" {
 			f, found = folders[id]
+			if id == "root:"+u.ID {
+				f.Kind.Local = "Folder"
+				f.Inner = fmt.Sprintf(`<t:FolderId Id="%s"/><t:DisplayName>Mailbox</t:DisplayName><t:ChildFolderCount>%d</t:ChildFolderCount>`, xmlEscape(id), len(folders))
+				found = true
+			}
 		} else {
 			if id == "msgfolderroot" || id == "root" {
 				f.Kind.Local = "Folder"
@@ -88,6 +96,11 @@ func (h *ewsHandler) getFolder(ctx context.Context, u *storage.User, body string
 			} else {
 				defaultID := ""
 				switch id {
+				case "notes":
+					n, e := h.store.EnsureNoteFolder(ctx, u.ID, "notes", "Notes")
+					if e == nil {
+						defaultID = n.ID
+					}
 				case "calendar":
 					c, e := h.store.GetCalendarByName(ctx, u.ID, "default")
 					if e == nil {

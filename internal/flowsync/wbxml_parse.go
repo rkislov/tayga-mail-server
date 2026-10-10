@@ -174,102 +174,21 @@ func wbFieldName(page, tagID byte) string {
 			return "ApplicationData"
 		}
 	case cpEmail:
-		switch tagID {
-		case 0x06:
-			return "To"
-		case 0x07:
-			return "From"
-		case 0x08:
-			return "Subject"
-		case 0x09:
-			return "Cc"
-		case 0x0B:
-			return "ReplyTo"
-		case 0x0F:
-			return "DateReceived"
-		case 0x11:
-			return "Importance"
-		case 0x13:
-			return "Read"
-		case 0x15:
-			return "MessageClass"
-		}
+		return map[byte]string{0x16: "To", 0x18: "From", 0x14: "Subject", 0x17: "Cc", 0x19: "ReplyTo", 0x0F: "DateReceived", 0x12: "Importance", 0x15: "Read", 0x13: "MessageClass"}[tagID]
 	case cpCalendar:
-		switch tagID {
-		case 0x06:
-			return "AllDayEvent"
-		case 0x0D:
-			return "BusyStatus"
-		case 0x15:
-			return "DTStamp"
-		case 0x16:
-			return "EndTime"
-		case 0x1D:
-			return "Location"
-		case 0x1E:
-			return "MeetingStatus"
-		case 0x1F:
-			return "OrganizerEmail"
-		case 0x20:
-			return "OrganizerName"
-		case 0x23:
-			return "Subject"
-		case 0x24:
-			return "UID"
-		case 0x25:
-			return "StartTime"
-		case 0x26:
-			return "Sensitivity"
-		case 0x2B:
-			return "Timezone"
-		}
+		return map[byte]string{0x06: "AllDayEvent", 0x0D: "BusyStatus", 0x11: "DTStamp", 0x12: "EndTime", 0x17: "Location", 0x18: "MeetingStatus", 0x19: "OrganizerEmail", 0x1A: "OrganizerName", 0x26: "Subject", 0x28: "UID", 0x27: "StartTime", 0x25: "Sensitivity", 0x05: "Timezone"}[tagID]
 	case cpContacts:
-		switch tagID {
-		case 0x06:
-			return "Anniversary"
-		case 0x07:
-			return "AssistantName"
-		case 0x0A:
-			return "Birthday"
-		case 0x0C:
-			return "BusinessAddressCity"
-		case 0x0F:
-			return "BusinessAddressStreet"
-		case 0x10:
-			return "BusinessFaxNumber"
-		case 0x11:
-			return "BusinessPhoneNumber"
-		case 0x16:
-			return "CompanyName"
-		case 0x18:
-			return "Department"
-		case 0x1A:
-			return "Email1Address"
-		case 0x1B:
-			return "Email2Address"
-		case 0x1C:
-			return "Email3Address"
-		case 0x1D:
-			return "FileAs"
-		case 0x1E:
-			return "FirstName"
-		case 0x20:
-			return "HomePhoneNumber"
-		case 0x26:
-			return "JobTitle"
-		case 0x30:
-			return "LastName"
-		case 0x31:
-			return "MiddleName"
-		case 0x36:
-			return "MobilePhoneNumber"
-		case 0x3A:
+		return map[byte]string{0x05: "Anniversary", 0x06: "AssistantName", 0x08: "Birthday", 0x0D: "BusinessAddressCity", 0x11: "BusinessAddressStreet", 0x12: "BusinessFaxNumber", 0x13: "BusinessPhoneNumber", 0x19: "CompanyName", 0x1A: "Department", 0x1B: "Email1Address", 0x1C: "Email2Address", 0x1D: "Email3Address", 0x1E: "FileAs", 0x1F: "FirstName", 0x27: "HomePhoneNumber", 0x28: "JobTitle", 0x29: "LastName", 0x2A: "MiddleName", 0x2B: "MobilePhoneNumber", 0x2C: "OfficeLocation", 0x37: "WebPage"}[tagID]
+	case 12:
+		if tagID == 0x0D {
 			return "NickName"
-		case 0x3B:
-			return "OfficeLocation"
-		case 0x49:
-			return "WebPage"
 		}
+	case cpGetItemEstimate:
+		if tagID == 0x0A {
+			return "CollectionId"
+		}
+	case 17:
+		return map[byte]string{0x0A: "Body", 0x06: "BodyType", 0x0B: "Data"}[tagID]
 	}
 	return ""
 }

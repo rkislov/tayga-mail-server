@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/tayga/tms/internal/mailstore"
 	"github.com/tayga/tms/internal/storage"
@@ -17,6 +18,8 @@ import (
 
 // EWS-compatible SOAP endpoint handled by original FlowSync engine.
 type ewsHandler struct {
+	sender    *mailSubmission
+	syncMu    sync.Mutex
 	store     storage.Driver
 	ms        *mailstore.Store
 	publicURL string
@@ -34,7 +37,15 @@ func (h *ewsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	body, _ := io.ReadAll(io.LimitReader(r.Body, 8<<20))
+	body, readErr := io.ReadAll(io.LimitReader(r.Body, (8<<20)+1))
+	if readErr != nil || len(body) > 8<<20 {
+		http.Error(w, "invalid or oversized request", 400)
+		return
+	}
+	if _, e := parseProtocolXML(body); e != nil {
+		http.Error(w, "invalid XML", 400)
+		return
+	}
 	op := detectEWSOp(string(body))
 	if t := traceRequest(r); t != nil {
 		t.Command = boundedLog(op)
@@ -46,16 +57,22 @@ func (h *ewsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch op {
 	case "FindItem":
 		soap, err = h.findItem(r.Context(), u, string(body))
+	case "GetAttachment":
+		soap, err = h.getAttachment(r.Context(), u, string(body))
 	case "GetItem":
-		soap, err = h.getItem(r.Context(), u, string(body))
+		soap, err = h.batchItems(r.Context(), u, "GetItem", string(body), h.getItem)
+	case "SendItem":
+		soap, err = h.batchItems(r.Context(), u, "SendItem", string(body), h.sendItem)
 	case "CreateItem":
 		soap, err = h.createItem(r.Context(), u, string(body))
 	case "UpdateItem":
-		soap, err = h.updateItem(r.Context(), u, string(body))
+		soap, err = h.batchItems(r.Context(), u, "UpdateItem", string(body), h.updateItem)
 	case "DeleteItem":
-		soap, err = h.deleteItem(r.Context(), u, string(body))
+		soap, err = h.batchItems(r.Context(), u, "DeleteItem", string(body), h.deleteItem)
+	case "SyncFolderHierarchy":
+		soap, err = h.syncEWSHierarchy(r.Context(), u, string(body))
 	case "SyncFolderItems":
-		soap, err = h.syncFolderItems(r.Context(), u, string(body))
+		soap, err = h.syncEWSItems(r.Context(), u, string(body))
 	case "GetFolder":
 		soap, err = h.getFolder(r.Context(), u, string(body))
 	case "FindFolder":
@@ -70,7 +87,10 @@ func (h *ewsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if t := traceRequest(r); t != nil {
 			t.Result = "internal_error"
 		}
-		soap = ewsFault("ErrorInternalServerError", err.Error())
+		soap = ewsFault("ErrorInternalServerError", "FlowSync operation failed")
+	}
+	if strings.Contains(soap, "<m:FaultResponse") && op != "" {
+		soap = ewsOperationError(op, extractTag(soap, "ResponseCode"), extractTag(soap, "MessageText"))
 	}
 	if t := traceRequest(r); t != nil {
 		decoder := xml.NewDecoder(strings.NewReader(soap))
@@ -94,7 +114,12 @@ func (h *ewsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ewsHandler) findFolder(ctx context.Context, u *storage.User) (string, error) {
-	_ = h.store.EnsureDAVDefaults(ctx, u.ID)
+	if err := h.store.EnsureDAVDefaults(ctx, u.ID); err != nil {
+		return "", err
+	}
+	if err := h.ensureStandardMailFolders(ctx, u); err != nil {
+		return "", err
+	}
 	mbs, err := h.store.ListMailboxes(ctx, u.ID)
 	if err != nil {
 		return "", err
@@ -149,13 +174,9 @@ func (h *ewsHandler) findFolder(ctx context.Context, u *storage.User) (string, e
 
 func (h *ewsHandler) findItem(ctx context.Context, u *storage.User, body string) (string, error) {
 	_ = h.store.EnsureDAVDefaults(ctx, u.ID)
-	folderID := extractAttr(body, "FolderId", "Id")
-	if folderID == "" {
-		mb, err := h.store.GetMailbox(ctx, u.ID, "INBOX")
-		if err != nil {
-			return "", err
-		}
-		folderID = mb.ID
+	folderID, resolveErr := h.resolveEWSFolder(ctx, u, body)
+	if resolveErr != nil {
+		return ewsFault("ErrorFolderNotFound", "folder unavailable"), nil
 	}
 
 	if cal, err := h.store.GetCalendarByID(ctx, u.ID, folderID); err == nil {
@@ -171,22 +192,21 @@ func (h *ewsHandler) findItem(ctx context.Context, u *storage.User, body string)
 }
 
 func (h *ewsHandler) findMailItems(ctx context.Context, u *storage.User, mailboxID string) (string, error) {
-	_ = u
+	if err := h.ensureMailboxOwned(ctx, u.ID, mailboxID); err != nil {
+		return ewsFault("ErrorAccessDenied", "forbidden"), nil
+	}
 	msgs, err := h.store.ListMessages(ctx, mailboxID)
 	if err != nil {
 		return "", err
 	}
-	if len(msgs) > 50 {
-		msgs = msgs[len(msgs)-50:]
-	}
 	var b strings.Builder
 	b.WriteString(`<m:FindItemResponse xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types">`)
-	b.WriteString(`<m:ResponseMessages><m:FindItemResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:RootFolder IncludesLastItemInRange="true"><t:Folders>`)
+	b.WriteString(`<m:ResponseMessages><m:FindItemResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:RootFolder IncludesLastItemInRange="true">`)
 	b.WriteString(`<t:Items>`)
 	for _, m := range msgs {
 		hdr := readMsgHeaders(h.ms, m.FilePath)
-		fmt.Fprintf(&b, `<t:Message><t:ItemId Id="%s" ChangeKey="%s"/><t:Subject>%s</t:Subject><t:DateTimeReceived>%s</t:DateTimeReceived></t:Message>`,
-			xmlEscape(m.ID), xmlEscape(m.ID), xmlEscape(hdr.Subject), m.InternalDate.UTC().Format("2006-01-02T15:04:05Z"))
+		fmt.Fprintf(&b, `<t:Message><t:ItemId Id="%s" ChangeKey="%s"/><t:Subject>%s</t:Subject><t:DateTimeReceived>%s</t:DateTimeReceived><t:IsRead>%t</t:IsRead></t:Message>`,
+			xmlEscape(m.ID), xmlEscape(m.ID), xmlEscape(hdr.Subject), m.InternalDate.UTC().Format("2006-01-02T15:04:05Z"), storage.HasFlag(m.Flags, `\Seen`))
 	}
 	b.WriteString(`</t:Items></m:RootFolder></m:FindItemResponseMessage></m:ResponseMessages></m:FindItemResponse>`)
 	return b.String(), nil
@@ -215,7 +235,7 @@ func (h *ewsHandler) findCalendarItems(ctx context.Context, calendarID string) (
 			end = ev.End
 		}
 		fmt.Fprintf(&b, `<t:CalendarItem><t:ItemId Id="%s" ChangeKey="%s"/><t:Subject>%s</t:Subject><t:Start>%s</t:Start><t:End>%s</t:End><t:Location>%s</t:Location><t:UID>%s</t:UID></t:CalendarItem>`,
-			xmlEscape(o.ID), xmlEscape(o.ID), xmlEscape(subject), xmlEscape(start), xmlEscape(end), xmlEscape(ev.Location), xmlEscape(o.UID))
+			xmlEscape(o.ID), xmlEscape(o.ETag), xmlEscape(subject), xmlEscape(start), xmlEscape(end), xmlEscape(ev.Location), xmlEscape(o.UID))
 	}
 	b.WriteString(`</t:Items></m:RootFolder></m:FindItemResponseMessage></m:ResponseMessages></m:FindItemResponse>`)
 	return b.String(), nil
@@ -236,7 +256,7 @@ func (h *ewsHandler) findContactItems(ctx context.Context, addressBookID string)
 			dn = strings.TrimSpace(c.FirstName + " " + c.LastName)
 		}
 		fmt.Fprintf(&b, `<t:Contact><t:ItemId Id="%s" ChangeKey="%s"/><t:DisplayName>%s</t:DisplayName><t:GivenName>%s</t:GivenName><t:Surname>%s</t:Surname><t:EmailAddresses><t:Entry Key="EmailAddress1">%s</t:Entry></t:EmailAddresses></t:Contact>`,
-			xmlEscape(o.ID), xmlEscape(o.ID), xmlEscape(dn), xmlEscape(c.FirstName), xmlEscape(c.LastName), xmlEscape(c.Email))
+			xmlEscape(o.ID), xmlEscape(o.ETag), xmlEscape(dn), xmlEscape(c.FirstName), xmlEscape(c.LastName), xmlEscape(c.Email))
 	}
 	b.WriteString(`</t:Items></m:RootFolder></m:FindItemResponseMessage></m:ResponseMessages></m:FindItemResponse>`)
 	return b.String(), nil
@@ -249,32 +269,7 @@ func (h *ewsHandler) getItem(ctx context.Context, u *storage.User, body string) 
 	}
 	// Try mail first, then calendar object / contact by scanning user collections.
 	if msg, err := h.store.GetMessageByID(ctx, id); err == nil {
-		mbs, err := h.store.ListMailboxes(ctx, u.ID)
-		if err != nil {
-			return "", err
-		}
-		owned := false
-		for _, mb := range mbs {
-			if mb.ID == msg.MailboxID {
-				owned = true
-				break
-			}
-		}
-		if !owned {
-			return ewsFault("ErrorAccessDenied", "forbidden"), nil
-		}
-		raw, err := h.ms.Read(msg.FilePath)
-		if err != nil {
-			raw = []byte("")
-		}
-		hdr := readMsgHeaders(h.ms, msg.FilePath)
-		var b strings.Builder
-		b.WriteString(`<m:GetItemResponse xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types">`)
-		b.WriteString(`<m:ResponseMessages><m:GetItemResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:Items>`)
-		fmt.Fprintf(&b, `<t:Message><t:ItemId Id="%s" ChangeKey="%s"/><t:Subject>%s</t:Subject><t:Body BodyType="Text">%s</t:Body></t:Message>`,
-			xmlEscape(msg.ID), xmlEscape(msg.ID), xmlEscape(hdr.Subject), xmlEscape(truncate(string(raw), 64<<10)))
-		b.WriteString(`</m:Items></m:GetItemResponseMessage></m:ResponseMessages></m:GetItemResponse>`)
-		return b.String(), nil
+		return h.getMailItem(ctx, u, msg, body)
 	}
 
 	cals, _ := h.store.ListCalendars(ctx, u.ID)
@@ -288,8 +283,8 @@ func (h *ewsHandler) getItem(ctx context.Context, u *storage.User, body string) 
 			var b strings.Builder
 			b.WriteString(`<m:GetItemResponse xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types">`)
 			b.WriteString(`<m:ResponseMessages><m:GetItemResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:Items>`)
-			fmt.Fprintf(&b, `<t:CalendarItem><t:ItemId Id="%s" ChangeKey="%s"/><t:Subject>%s</t:Subject><t:Body BodyType="Text">%s</t:Body><t:UID>%s</t:UID></t:CalendarItem>`,
-				xmlEscape(o.ID), xmlEscape(o.ID), xmlEscape(ev.Summary), xmlEscape(truncate(o.Data, 64<<10)), xmlEscape(o.UID))
+			fmt.Fprintf(&b, `<t:CalendarItem><t:ItemId Id="%s" ChangeKey="%s"/><t:Subject>%s</t:Subject><t:Body BodyType="Text">%s</t:Body><t:UID>%s</t:UID><t:Start>%s</t:Start><t:End>%s</t:End><t:IsAllDayEvent>%t</t:IsAllDayEvent><t:Location>%s</t:Location></t:CalendarItem>`,
+				xmlEscape(o.ID), xmlEscape(o.ETag), xmlEscape(ev.Summary), xmlEscape(davTextProperty(o.Data, "DESCRIPTION")), xmlEscape(o.UID), ewsDate(o.DTStart), ewsDate(o.DTEnd), ev.AllDay, xmlEscape(ev.Location))
 			b.WriteString(`</m:Items></m:GetItemResponseMessage></m:ResponseMessages></m:GetItemResponse>`)
 			return b.String(), nil
 		}
@@ -305,8 +300,8 @@ func (h *ewsHandler) getItem(ctx context.Context, u *storage.User, body string) 
 			var b strings.Builder
 			b.WriteString(`<m:GetItemResponse xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types">`)
 			b.WriteString(`<m:ResponseMessages><m:GetItemResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:Items>`)
-			fmt.Fprintf(&b, `<t:Contact><t:ItemId Id="%s" ChangeKey="%s"/><t:DisplayName>%s</t:DisplayName><t:Body BodyType="Text">%s</t:Body></t:Contact>`,
-				xmlEscape(o.ID), xmlEscape(o.ID), xmlEscape(c.FN), xmlEscape(truncate(o.Data, 64<<10)))
+			fmt.Fprintf(&b, `<t:Contact><t:ItemId Id="%s" ChangeKey="%s"/><t:DisplayName>%s</t:DisplayName><t:GivenName>%s</t:GivenName><t:Surname>%s</t:Surname><t:CompanyName>%s</t:CompanyName><t:JobTitle>%s</t:JobTitle><t:EmailAddresses><t:Entry Key="EmailAddress1">%s</t:Entry></t:EmailAddresses><t:PhoneNumbers><t:Entry Key="MobilePhone">%s</t:Entry></t:PhoneNumbers></t:Contact>`,
+				xmlEscape(o.ID), xmlEscape(o.ETag), xmlEscape(c.FN), xmlEscape(c.FirstName), xmlEscape(c.LastName), xmlEscape(c.Org), xmlEscape(c.Title), xmlEscape(c.Email), xmlEscape(c.Tel))
 			b.WriteString(`</m:Items></m:GetItemResponseMessage></m:ResponseMessages></m:GetItemResponse>`)
 			return b.String(), nil
 		}
@@ -319,13 +314,9 @@ func (h *ewsHandler) getItem(ctx context.Context, u *storage.User, body string) 
 
 func (h *ewsHandler) syncFolderItems(ctx context.Context, u *storage.User, body string) (string, error) {
 	_ = h.store.EnsureDAVDefaults(ctx, u.ID)
-	folderID := extractAttr(body, "FolderId", "Id")
-	if folderID == "" {
-		mb, err := h.store.GetMailbox(ctx, u.ID, "INBOX")
-		if err != nil {
-			return "", err
-		}
-		folderID = mb.ID
+	folderID, resolveErr := h.resolveEWSFolder(ctx, u, body)
+	if resolveErr != nil {
+		return ewsFault("ErrorFolderNotFound", "folder unavailable"), nil
 	}
 	syncState := storage.NewID() // UUID sync state token
 	var b strings.Builder
@@ -362,6 +353,9 @@ func (h *ewsHandler) syncFolderItems(ctx context.Context, u *storage.User, body 
 				xmlEscape(n.ID), xmlEscape(n.ETag))
 		}
 	} else {
+		if err := h.ensureMailboxOwned(ctx, u.ID, folderID); err != nil {
+			return ewsFault("ErrorAccessDenied", "forbidden"), nil
+		}
 		msgs, err := h.store.ListMessages(ctx, folderID)
 		if err != nil {
 			return "", err
@@ -414,26 +408,20 @@ func ewsFault(code, msg string) string {
 }
 
 func extractAttr(body, elem, attr string) string {
-	needle := elem
-	i := strings.Index(body, needle)
-	if i < 0 {
-		return ""
+	decoder := xml.NewDecoder(strings.NewReader(body))
+	for {
+		token, err := decoder.Token()
+		if err != nil {
+			return ""
+		}
+		if start, ok := token.(xml.StartElement); ok && start.Name.Local == elem {
+			for _, a := range start.Attr {
+				if a.Name.Local == attr {
+					return a.Value
+				}
+			}
+		}
 	}
-	chunk := body[i:]
-	if len(chunk) > 200 {
-		chunk = chunk[:200]
-	}
-	key := attr + `="`
-	j := strings.Index(chunk, key)
-	if j < 0 {
-		return ""
-	}
-	rest := chunk[j+len(key):]
-	k := strings.Index(rest, `"`)
-	if k < 0 {
-		return ""
-	}
-	return rest[:k]
 }
 
 func truncate(s string, n int) string {

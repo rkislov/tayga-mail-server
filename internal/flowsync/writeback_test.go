@@ -58,8 +58,12 @@ func TestFlowSyncWritebackCalendarContactsMail(t *testing.T) {
 	cal, _ := store.GetCalendarByName(ctx, u.ID, "default")
 	ab, _ := store.GetAddressBookByName(ctx, u.ID, "default")
 
+	rel, size, err := ms.Deliver(u.Email, "INBOX", []byte("From: sender@example.com\r\nTo: u@ex.com\r\nSubject: Test\r\n\r\nHello"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	msg, err := store.InsertMessage(ctx, &storage.Message{
-		MailboxID: mb.ID, UID: 1, Size: 10, Flags: "", FilePath: "x", InternalDate: time.Now().UTC(),
+		MailboxID: mb.ID, UID: 1, Size: size, Flags: "", FilePath: rel, InternalDate: time.Now().UTC(),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -80,7 +84,7 @@ func TestFlowSyncWritebackCalendarContactsMail(t *testing.T) {
 		`<Subject>Demo</Subject><Location>HQ</Location>` +
 		`<StartTime>2026-10-08T09:00:00.000Z</StartTime><EndTime>2026-10-08T10:00:00.000Z</EndTime>` +
 		`</ApplicationData></Add></Commands></Collection></Collections></Sync>`
-	req := httptest.NewRequest(http.MethodPost, "/Microsoft-Server-ActiveSync?Cmd=Sync&DeviceId=d1&DeviceType=T", strings.NewReader(calBody))
+	req := httptest.NewRequest(http.MethodPost, "/Microsoft-Server-ActiveSync?Cmd=Sync&DeviceId=d1&DeviceType=T", strings.NewReader(strings.Replace(calBody, "<SyncKey>0</SyncKey>", "<SyncKey>"+initializeSync(t, mux, authz, cal.ID)+"</SyncKey>", 1)))
 	req.Header.Set("Authorization", authz)
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
@@ -103,7 +107,7 @@ func TestFlowSyncWritebackCalendarContactsMail(t *testing.T) {
 		`<FileAs>Grace Hopper</FileAs><FirstName>Grace</FirstName><LastName>Hopper</LastName>` +
 		`<Email1Address>grace@ex.com</Email1Address>` +
 		`</ApplicationData></Add></Commands></Collection></Collections></Sync>`
-	req2 := httptest.NewRequest(http.MethodPost, "/Microsoft-Server-ActiveSync?Cmd=Sync&DeviceId=d1&DeviceType=T", strings.NewReader(cardBody))
+	req2 := httptest.NewRequest(http.MethodPost, "/Microsoft-Server-ActiveSync?Cmd=Sync&DeviceId=d1&DeviceType=T", strings.NewReader(strings.Replace(cardBody, "<SyncKey>0</SyncKey>", "<SyncKey>"+initializeSync(t, mux, authz, ab.ID)+"</SyncKey>", 1)))
 	req2.Header.Set("Authorization", authz)
 	w2 := httptest.NewRecorder()
 	mux.ServeHTTP(w2, req2)
@@ -119,7 +123,7 @@ func TestFlowSyncWritebackCalendarContactsMail(t *testing.T) {
 	mailBody := `<Sync><Collections><Collection><SyncKey>0</SyncKey><CollectionId>` + mb.ID + `</CollectionId>` +
 		`<Commands><Change><ServerId>` + msg.ID + `</ServerId><ApplicationData><Read>1</Read></ApplicationData></Change></Commands>` +
 		`</Collection></Collections></Sync>`
-	req3 := httptest.NewRequest(http.MethodPost, "/Microsoft-Server-ActiveSync?Cmd=Sync&DeviceId=d1&DeviceType=T", strings.NewReader(mailBody))
+	req3 := httptest.NewRequest(http.MethodPost, "/Microsoft-Server-ActiveSync?Cmd=Sync&DeviceId=d1&DeviceType=T", strings.NewReader(strings.Replace(mailBody, "<SyncKey>0</SyncKey>", "<SyncKey>"+initializeSync(t, mux, authz, mb.ID)+"</SyncKey>", 1)))
 	req3.Header.Set("Authorization", authz)
 	w3 := httptest.NewRecorder()
 	mux.ServeHTTP(w3, req3)
@@ -134,7 +138,7 @@ func TestFlowSyncWritebackCalendarContactsMail(t *testing.T) {
 	// Calendar Delete
 	delBody := `<Sync><Collections><Collection><Class>Calendar</Class><SyncKey>1</SyncKey><CollectionId>` + cal.ID + `</CollectionId>` +
 		`<Commands><Delete><ServerId>` + calObjID + `</ServerId></Delete></Commands></Collection></Collections></Sync>`
-	req4 := httptest.NewRequest(http.MethodPost, "/Microsoft-Server-ActiveSync?Cmd=Sync&DeviceId=d1&DeviceType=T", strings.NewReader(delBody))
+	req4 := httptest.NewRequest(http.MethodPost, "/Microsoft-Server-ActiveSync?Cmd=Sync&DeviceId=d1&DeviceType=T", strings.NewReader(strings.Replace(delBody, "<SyncKey>1</SyncKey>", "<SyncKey>"+syncResponseKey(out)+"</SyncKey>", 1)))
 	req4.Header.Set("Authorization", authz)
 	w4 := httptest.NewRecorder()
 	mux.ServeHTTP(w4, req4)
