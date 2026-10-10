@@ -10,7 +10,7 @@ import (
 )
 
 type traceKey struct{}
-type requestTrace struct{ User, Command, Result string }
+type requestTrace struct{ User, Command, Result, Folders string }
 type loggedResponse struct {
 	http.ResponseWriter
 	status, bytes int
@@ -57,7 +57,7 @@ func logRequests(log *slog.Logger, protocol string, next http.Handler) http.Hand
 			if status >= 400 || t.Result != "" {
 				level = slog.LevelWarn
 			}
-			log.Log(r.Context(), level, "flowsync request", "protocol", protocol, "method", r.Method, "command", t.Command, "user_id", t.User, "device_id", boundedLog(r.URL.Query().Get("DeviceId")), "client", boundedLog(r.UserAgent()), "peer", r.RemoteAddr, "version", boundedLog(r.Header.Get("MS-ASProtocolVersion")), "status", status, "result", t.Result, "response_bytes", rw.bytes, "duration_ms", time.Since(start).Milliseconds())
+			log.Log(r.Context(), level, "flowsync request", "protocol", protocol, "method", r.Method, "command", t.Command, "user_id", t.User, "device_id", boundedLog(r.URL.Query().Get("DeviceId")), "client", boundedLog(r.UserAgent()), "peer", r.RemoteAddr, "version", boundedLog(r.Header.Get("MS-ASProtocolVersion")), "status", status, "result", t.Result, "folders", t.Folders, "response_bytes", rw.bytes, "duration_ms", time.Since(start).Milliseconds())
 		}()
 		next.ServeHTTP(rw, r.WithContext(context.WithValue(r.Context(), traceKey{}, t)))
 	})
