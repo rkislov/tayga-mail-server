@@ -427,7 +427,8 @@ type WebAuthnConfig struct {
 // FlowSyncConfig controls Tayga's proprietary FlowSync engine
 // (ActiveSync- and EWS-compatible wire protocols).
 type FlowSyncConfig struct {
-	Enabled bool `yaml:"enabled"`
+	ProtocolDebug bool `yaml:"protocol_debug"`
+	Enabled       bool `yaml:"enabled"`
 }
 
 type TLSConfig struct {
