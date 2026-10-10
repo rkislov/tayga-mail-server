@@ -37,7 +37,8 @@ func (h *ewsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(io.LimitReader(r.Body, 8<<20))
 	op := detectEWSOp(string(body))
 	if t := traceRequest(r); t != nil {
-		t.Command = op
+		t.Command = boundedLog(op)
+		t.Folders = ewsFolderReferences(body)
 	}
 
 	var soap string
@@ -70,6 +71,22 @@ func (h *ewsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			t.Result = "internal_error"
 		}
 		soap = ewsFault("ErrorInternalServerError", err.Error())
+	}
+	if t := traceRequest(r); t != nil {
+		decoder := xml.NewDecoder(strings.NewReader(soap))
+		for {
+			token, e := decoder.Token()
+			if e != nil {
+				break
+			}
+			if start, ok := token.(xml.StartElement); ok && start.Name.Local == "ResponseCode" {
+				var code string
+				if decoder.DecodeElement(&code, &start) == nil && code != "NoError" {
+					t.Result = boundedLog(code)
+					break
+				}
+			}
+		}
 	}
 	w.Header().Set("Content-Type", "text/xml; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
@@ -424,4 +441,26 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n]
+}
+
+func ewsFolderReferences(body []byte) string {
+	decoder := xml.NewDecoder(strings.NewReader(string(body)))
+	var ids []string
+	for {
+		token, e := decoder.Token()
+		if e != nil {
+			break
+		}
+		if start, ok := token.(xml.StartElement); ok && (start.Name.Local == "FolderId" || start.Name.Local == "DistinguishedFolderId") {
+			for _, a := range start.Attr {
+				if a.Name.Local == "Id" {
+					ids = append(ids, boundedLog(a.Value))
+				}
+			}
+		}
+		if len(ids) >= 8 {
+			break
+		}
+	}
+	return boundedLog(strings.Join(ids, ","))
 }
