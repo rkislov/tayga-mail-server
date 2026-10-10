@@ -6,7 +6,6 @@ package flowsync
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"strings"
 	"time"
 
@@ -41,19 +40,20 @@ func parseSyncClientOps(body []byte) []clientOp {
 
 func parseXMLClientOps(src string) []clientOp {
 	var ops []clientOp
-	for _, kind := range []string{"Add", "Change", "Delete"} {
-		re := regexp.MustCompile(`(?is)<(?:\w+:)?` + kind + `\b[^>]*>(.*?)</(?:\w+:)?` + kind + `>`)
-		matches := re.FindAllStringSubmatch(src, -1)
-		for _, m := range matches {
-			block := m[1]
-			op := clientOp{
-				Kind:     strings.ToLower(kind),
-				ClientID: extractTag(block, "ClientId"),
-				ServerID: extractTag(block, "ServerId"),
-				Fields:   extractAppDataFields(block),
-			}
-			ops = append(ops, op)
+	doc, err := parseProtocolXML([]byte(src))
+	if err != nil {
+		return nil
+	}
+	commands := doc.find("Commands")
+	if commands == nil {
+		return nil
+	}
+	for _, n := range commands.Children {
+		kind := strings.ToLower(n.Name.Local)
+		if kind != "add" && kind != "change" && kind != "delete" {
+			continue
 		}
+		ops = append(ops, clientOp{Kind: kind, ClientID: n.value("ClientId"), ServerID: n.value("ServerId"), Fields: extractAppDataFields(n.render())})
 	}
 	return ops
 }
@@ -153,6 +153,16 @@ func (h *easHandler) wbCalendar(ctx context.Context, calendarID string, op clien
 			allDay = parseICalEvent(existing.Data).AllDay
 		}
 		data := buildVEVENT(uid, subject, location, start, end, allDay)
+		changed := map[string]bool{}
+		for field, property := range map[string]string{"Subject": "SUMMARY", "Location": "LOCATION", "StartTime": "DTSTART", "EndTime": "DTEND", "UID": "UID"} {
+			if _, ok := op.Fields[field]; ok {
+				changed[property] = true
+			}
+		}
+		if _, ok := op.Fields["AllDayEvent"]; ok {
+			changed["DTSTART"], changed["DTEND"] = true, true
+		}
+		data = mergeDAVProperties(existing.Data, data, "VEVENT", changed)
 		_, err = h.store.UpsertCalendarObject(ctx, &storage.CalendarObject{
 			ID:         existing.ID,
 			CalendarID: calendarID,
@@ -286,6 +296,24 @@ func (h *easHandler) wbMail(ctx context.Context, u *storage.User, mailboxID stri
 		}
 		return op.ServerID, h.store.UpdateMessageFlags(ctx, msg.ID, storage.NormalizeFlags(flags))
 	case "delete":
+		moves, _ := ctx.Value(deleteMovesKey{}).(bool)
+		if moves {
+			mb, err := h.mailboxByID(ctx, u.ID, mailboxID)
+			if err != nil {
+				return op.ServerID, err
+			}
+			if !strings.EqualFold(mb.Name, "Trash") {
+				if err := (&ewsHandler{store: h.store, ms: h.ms}).ensureStandardMailFolders(ctx, u); err != nil {
+					return op.ServerID, err
+				}
+				trash, err := h.store.GetMailbox(ctx, u.ID, "Trash")
+				if err != nil {
+					return op.ServerID, err
+				}
+				_, err = h.store.MoveMessage(ctx, msg.ID, trash.ID)
+				return op.ServerID, err
+			}
+		}
 		return op.ServerID, h.store.DeleteMessage(ctx, msg.ID)
 	case "add":
 		// Creating raw MIME via ActiveSync is out of scope for this milestone.
@@ -326,6 +354,7 @@ func parseASTime(s string) *time.Time {
 		return nil
 	}
 	layouts := []string{
+		"20060102T150405Z",
 		"2006-01-02T15:04:05.000Z",
 		"2006-01-02T15:04:05Z",
 		"2006-01-02T15:04:05",

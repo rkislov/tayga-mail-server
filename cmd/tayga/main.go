@@ -489,6 +489,7 @@ func run(cfgPath string) error {
 	}
 
 	httpSrv := httpapi.New(cfg, log, store, authn, ms, tlsMgr, hub)
+	httpSrv.SetFlowSyncSubmit(smtpSrv.SubmitAuthenticated)
 	httpSrv.SetXMPP(xmppSrv)
 	httpSrv.SetMigrate(migSvc)
 	httpSrv.SetNotify(notifyHub)

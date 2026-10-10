@@ -28,6 +28,7 @@ import (
 
 // Server wraps one or more go-smtp listeners (MX / submission / SMTPS).
 type Server struct {
+	submission   *backend
 	cfg          *config.Config
 	log          *slog.Logger
 	store        storage.Driver
@@ -344,6 +345,11 @@ func (s *Server) Start(ctx context.Context) error {
 			siem:         s.siem,
 			ipLimit:      ipLim,
 			userLimit:    userLim,
+		}
+		if s.submission == nil {
+			copy := *be
+			copy.requireAuth = true
+			s.submission = &copy
 		}
 		srv := gosmtp.NewServer(be)
 		srv.Domain = s.cfg.Server.Hostname

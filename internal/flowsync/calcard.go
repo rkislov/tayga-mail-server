@@ -126,6 +126,9 @@ func (h *easHandler) syncCollection(ctx context.Context, u *storage.User, dev *s
 	}
 }
 
+type mailSnapshotKey struct{}
+type mailSelectionKey struct{}
+
 func (h *easHandler) syncMailCollection(ctx context.Context, u *storage.User, collectionID, next string, wbxml bool, wb []writebackResult) (string, []byte, error) {
 	mb, err := h.mailboxByID(ctx, u.ID, collectionID)
 	if err != nil {
@@ -135,19 +138,43 @@ func (h *easHandler) syncMailCollection(ctx context.Context, u *storage.User, co
 	if err != nil {
 		return "", nil, err
 	}
-	window := 25
-	if len(msgs) > window {
-		msgs = msgs[len(msgs)-window:]
-	}
 	adds := make([]syncAdd, 0, len(msgs))
+	metadata, _ := ctx.Value(mailSnapshotKey{}).(bool)
+	selection, _ := ctx.Value(mailSelectionKey{}).(map[string]bool)
+	preferences := contextPreferences(ctx)
+	cutoff := filterCutoff(preferences.Filter, time.Now().UTC())
 	for _, m := range msgs {
-		hdr := readMsgHeaders(h.ms, m.FilePath)
+		if !cutoff.IsZero() && m.InternalDate.Before(cutoff) {
+			continue
+		}
+		if selection != nil && !selection[m.ID] {
+			continue
+		}
+		hdr := msgHeaders{Subject: m.Subject, From: m.FromAddr}
+		content := messageContent{}
+		if h.ms != nil && !metadata {
+			raw, e := h.ms.Read(m.FilePath)
+			if e != nil {
+				return "", nil, e
+			}
+			content, e = parseMessageContent(raw)
+			if e != nil {
+				return "", nil, e
+			}
+			hdr.Subject = content.Subject
+			hdr.From = content.From
+		}
+		body, bt, estimated, truncated := preferredBody(content, preferences)
+		if metadata {
+			body = digest(fmt.Sprintf("%s:%d:%s", m.FilePath, m.Size, m.Flags))
+		}
 		adds = append(adds, syncAdd{
 			ServerID: m.ID,
-			Subject:  hdr.Subject,
-			From:     hdr.From,
-			Date:     m.InternalDate.UTC().Format("2006-01-02T15:04:05.000Z"),
-			Read:     storage.HasFlag(m.Flags, `\Seen`),
+			Body:     body, BodyType: bt, EstimatedSize: estimated, Truncated: truncated, To: content.To, Attachments: content.Attachments,
+			Subject: hdr.Subject,
+			From:    hdr.From,
+			Date:    m.InternalDate.UTC().Format("2006-01-02T15:04:05.000Z"),
+			Read:    storage.HasFlag(m.Flags, `\Seen`),
 		})
 	}
 	if wbxml {
@@ -162,7 +189,11 @@ func (h *easHandler) syncCalendar(ctx context.Context, collectionID, next string
 		return "", nil, err
 	}
 	adds := make([]calendarAdd, 0, len(objs))
+	cutoff := filterCutoff(contextPreferences(ctx).Filter, time.Now().UTC())
 	for _, o := range objs {
+		if !cutoff.IsZero() && o.DTEnd != nil && o.DTEnd.Before(cutoff) && !strings.Contains(strings.ToUpper(o.Data), "RRULE:") {
+			continue
+		}
 		ev := parseICalEvent(o.Data)
 		start, end := formatASTime(o.DTStart), formatASTime(o.DTEnd)
 		if start == "" {
@@ -240,6 +271,15 @@ func renderMailSyncXML(syncKey, collectionID string, adds []syncAdd, wb []writeb
 		}
 		fmt.Fprintf(&b, `<Email:DateReceived xmlns:Email="Email:">%s</Email:DateReceived>`, xmlEscape(a.Date))
 		fmt.Fprintf(&b, `<Email:Read xmlns:Email="Email:">%d</Email:Read>`, bool01(a.Read))
+		fmt.Fprintf(&b, `<Email:To xmlns:Email="Email:">%s</Email:To>`, xmlEscape(a.To))
+		fmt.Fprintf(&b, `<Body xmlns="AirSyncBase:"><Type>%s</Type><EstimatedDataSize>%d</EstimatedDataSize><Truncated>%d</Truncated><Data>%s</Data></Body>`, xmlEscape(a.BodyType), a.EstimatedSize, bool01(a.Truncated), xmlEscape(a.Body))
+		if len(a.Attachments) > 0 {
+			b.WriteString(`<Attachments xmlns="AirSyncBase:">`)
+			for index, attachment := range a.Attachments {
+				fmt.Fprintf(&b, `<Attachment><DisplayName>%s</DisplayName><FileReference>%s:%d</FileReference><Method>1</Method><EstimatedDataSize>%d</EstimatedDataSize></Attachment>`, xmlEscape(attachment.Name), xmlEscape(a.ServerID), index, len(attachment.Data))
+			}
+			b.WriteString(`</Attachments>`)
+		}
 		b.WriteString(`</ApplicationData></Add>`)
 	}
 	b.WriteString(`</Commands></Collection></Collections></Sync>`)
@@ -264,10 +304,10 @@ func renderCalendarSyncXML(syncKey, collectionID string, adds []calendarAdd, wb 
 			fmt.Fprintf(&b, `<Calendar:Location xmlns:Calendar="Calendar:">%s</Calendar:Location>`, xmlEscape(a.Location))
 		}
 		if a.StartTime != "" {
-			fmt.Fprintf(&b, `<Calendar:StartTime xmlns:Calendar="Calendar:">%s</Calendar:StartTime>`, xmlEscape(a.StartTime))
+			fmt.Fprintf(&b, `<Calendar:StartTime xmlns:Calendar="Calendar:">%s</Calendar:StartTime>`, xmlEscape(calendarWireTime(a.StartTime)))
 		}
 		if a.EndTime != "" {
-			fmt.Fprintf(&b, `<Calendar:EndTime xmlns:Calendar="Calendar:">%s</Calendar:EndTime>`, xmlEscape(a.EndTime))
+			fmt.Fprintf(&b, `<Calendar:EndTime xmlns:Calendar="Calendar:">%s</Calendar:EndTime>`, xmlEscape(calendarWireTime(a.EndTime)))
 		}
 		fmt.Fprintf(&b, `<Calendar:UID xmlns:Calendar="Calendar:">%s</Calendar:UID>`, xmlEscape(a.UID))
 		fmt.Fprintf(&b, `<Calendar:AllDayEvent xmlns:Calendar="Calendar:">%d</Calendar:AllDayEvent>`, bool01(a.AllDay))
@@ -434,4 +474,11 @@ func extractClass(body []byte) string {
 		return extractWBXMLTagString(body, "Class")
 	}
 	return extractTag(string(body), "Class")
+}
+
+func calendarWireTime(value string) string {
+	if t := parseASTime(value); t != nil {
+		return t.UTC().Format("20060102T150405Z")
+	}
+	return value
 }

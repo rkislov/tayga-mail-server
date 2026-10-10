@@ -218,6 +218,8 @@ type Driver interface {
 	SetFlowSyncDeviceControl(ctx context.Context, id string, blocked bool, wipe string) error
 	EnsureFlowSyncDevice(ctx context.Context, userID, deviceID, deviceType string) (*FlowSyncDevice, error)
 	SetFlowSyncPolicyKey(ctx context.Context, deviceRowID, policyKey string) error
+	GetFlowSyncState(ctx context.Context, userID, clientID, collectionID string) (string, error)
+	PutFlowSyncState(ctx context.Context, userID, clientID, collectionID, state string) error
 	GetFlowSyncSyncKey(ctx context.Context, deviceRowID, collectionID string) (string, error)
 	SetFlowSyncSyncKey(ctx context.Context, deviceRowID, collectionID, syncKey string) error
 

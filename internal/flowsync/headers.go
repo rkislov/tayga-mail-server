@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/tayga/tms/internal/mailsearch"
 	"github.com/tayga/tms/internal/mailstore"
 )
 
@@ -37,10 +38,10 @@ func readMsgHeaders(ms *mailstore.Store, filePath string) msgHeaders {
 		switch name {
 		case "subject":
 			if v != "" {
-				h.Subject = v
+				h.Subject = mailsearch.DecodeHeader(v)
 			}
 		case "from":
-			h.From = v
+			h.From = mailsearch.DecodeHeader(v)
 		}
 	}
 	for sc.Scan() {

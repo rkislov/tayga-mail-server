@@ -124,3 +124,17 @@ func (s *Store) SetFlowSyncDeviceControl(ctx context.Context, id string, blocked
 	_, err := s.db.ExecContext(ctx, s.rebind(`UPDATE flowsync_devices SET blocked=?,wipe_status=? WHERE id=?`), blocked, wipe, id)
 	return err
 }
+
+// State is scoped to an authenticated user and client, including replay data.
+func (s *Store) GetFlowSyncState(ctx context.Context, userID, clientID, collectionID string) (string, error) {
+	var state string
+	err := s.db.QueryRowContext(ctx, s.rebind(`SELECT state FROM flowsync_states WHERE user_id=? AND client_id=? AND collection_id=?`), userID, clientID, collectionID).Scan(&state)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return state, err
+}
+func (s *Store) PutFlowSyncState(ctx context.Context, userID, clientID, collectionID, state string) error {
+	_, err := s.db.ExecContext(ctx, s.rebind(`INSERT INTO flowsync_states(user_id,client_id,collection_id,state,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(user_id,client_id,collection_id) DO UPDATE SET state=excluded.state,updated_at=excluded.updated_at`), userID, clientID, collectionID, state, time.Now().UTC())
+	return err
+}

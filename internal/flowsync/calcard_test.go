@@ -6,6 +6,7 @@ package flowsync_test
 import (
 	"context"
 	"encoding/base64"
+	"encoding/xml"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -140,7 +141,7 @@ END:VCARD`,
 	if w.Code != http.StatusOK {
 		t.Fatalf("foldersync %d %s", w.Code, w.Body.String())
 	}
-	body := w.Body.String()
+	body := strings.ReplaceAll(w.Body.String(), ` xmlns="FolderHierarchy:"`, "")
 	if strings.Count(body, "<Type>8</Type>") != 1 {
 		t.Fatal("multiple default calendars", body)
 	}
@@ -153,7 +154,7 @@ END:VCARD`,
 
 	// Sync Calendar collection
 	syncBody := `<Sync><Collections><Collection><Class>Calendar</Class><SyncKey>0</SyncKey><CollectionId>` + cal.ID + `</CollectionId></Collection></Collections></Sync>`
-	req2 := httptest.NewRequest(http.MethodPost, "/Microsoft-Server-ActiveSync?Cmd=Sync&DeviceId=d1&DeviceType=Test", strings.NewReader(syncBody))
+	req2 := httptest.NewRequest(http.MethodPost, "/Microsoft-Server-ActiveSync?Cmd=Sync&DeviceId=d1&DeviceType=Test", strings.NewReader(strings.Replace(syncBody, "<SyncKey>0</SyncKey>", "<SyncKey>"+initializeSync(t, mux, authz, cal.ID)+"</SyncKey>", 1)))
 	req2.Header.Set("Authorization", authz)
 	w2 := httptest.NewRecorder()
 	mux.ServeHTTP(w2, req2)
@@ -167,7 +168,7 @@ END:VCARD`,
 
 	// Sync Contacts
 	syncCard := `<Sync><Collections><Collection><Class>Contacts</Class><SyncKey>0</SyncKey><CollectionId>` + ab.ID + `</CollectionId></Collection></Collections></Sync>`
-	req3 := httptest.NewRequest(http.MethodPost, "/Microsoft-Server-ActiveSync?Cmd=Sync&DeviceId=d1&DeviceType=Test", strings.NewReader(syncCard))
+	req3 := httptest.NewRequest(http.MethodPost, "/Microsoft-Server-ActiveSync?Cmd=Sync&DeviceId=d1&DeviceType=Test", strings.NewReader(strings.Replace(syncCard, "<SyncKey>0</SyncKey>", "<SyncKey>"+initializeSync(t, mux, authz, ab.ID)+"</SyncKey>", 1)))
 	req3.Header.Set("Authorization", authz)
 	w3 := httptest.NewRecorder()
 	mux.ServeHTTP(w3, req3)
@@ -213,4 +214,28 @@ END:VCARD`,
 		t.Fatal("policy key changed during provisioning handshake")
 	}
 
+}
+
+func syncResponseKey(body string) string {
+	var response struct {
+		Collections struct {
+			Collection struct {
+				Key string `xml:"SyncKey"`
+			} `xml:"Collection"`
+		} `xml:"Collections"`
+	}
+	xml.Unmarshal([]byte(body), &response)
+	return response.Collections.Collection.Key
+}
+func initializeSync(t *testing.T, h http.Handler, authz, id string) string {
+	t.Helper()
+	r := httptest.NewRequest("POST", "/Microsoft-Server-ActiveSync?Cmd=Sync&DeviceId=d1&DeviceType=Test", strings.NewReader(`<Sync><Collections><Collection><SyncKey>0</SyncKey><CollectionId>`+id+`</CollectionId></Collection></Collections></Sync>`))
+	r.Header.Set("Authorization", authz)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	key := syncResponseKey(w.Body.String())
+	if w.Code != 200 || key == "" || key == "0" {
+		t.Fatalf("initial sync: %d %s", w.Code, w.Body.String())
+	}
+	return key
 }

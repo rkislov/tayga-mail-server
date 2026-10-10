@@ -77,7 +77,7 @@ func TestFlowSyncFolderSyncUsesUUIDs(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status %d body %s", w.Code, w.Body.String())
 	}
-	body := w.Body.String()
+	body := strings.ReplaceAll(w.Body.String(), ` xmlns="FolderHierarchy:"`, "")
 	if !strings.Contains(body, "<ServerId>"+mb.ID+"</ServerId>") {
 		t.Fatalf("expected mailbox UUID in ServerId, body=%s", body)
 	}
