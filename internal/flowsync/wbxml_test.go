@@ -57,3 +57,15 @@ func TestProvisionPolicyWireTokens(t *testing.T) {
 		}
 	}
 }
+
+func TestFolderHierarchyUsesProtocolPageSeven(t *testing.T) {
+	payload := encodeFolderSyncWBXML("1", nil)
+	if !bytes.HasPrefix(payload, []byte{3, 1, 106, 0, 0, 7, 0x56}) {
+		t.Fatalf("wrong FolderHierarchy page: %x", payload)
+	}
+	// A real client sends page 7, independently of server constants.
+	request := []byte{3, 1, 106, 0, 0, 7, 0x56, 0x52, 3, '0', 0, 1, 1}
+	if got := extractWBXMLTagString(request, "SyncKey"); got != "0" {
+		t.Fatalf("cannot read client hierarchy key: %q", got)
+	}
+}
