@@ -186,10 +186,7 @@ func (h *easHandler) folderSync(ctx context.Context, u *storage.User, dev *stora
 		})
 	}
 	for _, cal := range cals {
-		name := cal.DisplayName
-		if name == "" {
-			name = cal.Name
-		}
+		name := calendarClientName(ctx, cal)
 		folders = append(folders, folderChange{
 			ServerID: cal.ID, ParentID: "0", DisplayName: name, Type: defaultFolderType(cal.Name, folderTypeCalendar, 13),
 		})

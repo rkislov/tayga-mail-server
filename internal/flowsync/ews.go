@@ -49,6 +49,9 @@ func (h *ewsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	op := detectEWSOp(string(body))
+	if culture := strings.TrimSpace(extractTag(string(body), "MailboxCulture")); culture != "" {
+		r = r.WithContext(context.WithValue(r.Context(), protocolLanguageKey{}, culture))
+	}
 	if t := traceRequest(r); t != nil {
 		t.Command = boundedLog(op)
 		t.Folders = ewsFolderReferences(body)
@@ -177,10 +180,7 @@ func (h *ewsHandler) findFolder(ctx context.Context, u *storage.User) (string, e
 			xmlEscape(mb.ID), xmlEscape(parent), xmlEscape(mb.Name), len(messages), children, unread)
 	}
 	for _, cal := range cals {
-		name := cal.DisplayName
-		if name == "" {
-			name = cal.Name
-		}
+		name := calendarClientName(ctx, cal)
 		fmt.Fprintf(&b, `<t:CalendarFolder><t:FolderId Id="%s" ChangeKey="0"/><t:ParentFolderId Id="%s"/><t:DisplayName>%s</t:DisplayName><t:FolderClass>IPF.Appointment</t:FolderClass><t:TotalCount>0</t:TotalCount></t:CalendarFolder>`,
 			xmlEscape(cal.ID), xmlEscape("root:"+u.ID), xmlEscape(name))
 	}

@@ -51,6 +51,7 @@ func authMiddleware(authn *auth.Layer, next http.Handler) http.Handler {
 		}
 		ctx, cancel := context.WithCancel(r.Context())
 		defer cancel()
+		ctx = context.WithValue(ctx, protocolLanguageKey{}, r.Header.Get("Accept-Language"))
 		finish := authn.TrackRequest(u, protocol, address, r.UserAgent(), u.ID+"\x00"+address+"\x00"+r.UserAgent(), cancel)
 		defer finish()
 		next.ServeHTTP(w, r.WithContext(withUser(ctx, u)))
