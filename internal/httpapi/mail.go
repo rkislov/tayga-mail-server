@@ -267,7 +267,7 @@ func (s *Server) mailListMessages(w http.ResponseWriter, r *http.Request, au *au
 		}
 		out = append(out, map[string]any{
 			"id": m.ID, "uid": m.UID, "mailbox_id": m.MailboxID,
-			"size": m.Size, "flags": m.Flags,
+			"size": m.Size, "flags": m.Flags, "color": messageColor(m.Flags),
 			"internal_date":   m.InternalDate.UTC().Format(time.RFC3339),
 			"message_id":      m.MessageID,
 			"subject":         subject,
@@ -309,7 +309,7 @@ func (s *Server) mailGetMessage(w http.ResponseWriter, r *http.Request, au *auth
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"id": msg.ID, "mailbox_id": msg.MailboxID, "uid": msg.UID,
-		"size": msg.Size, "flags": msg.Flags,
+		"size": msg.Size, "flags": msg.Flags, "color": messageColor(msg.Flags),
 		"internal_date": msg.InternalDate.UTC().Format(time.RFC3339),
 		"message_id":    msg.MessageID,
 		"subject":       parsed.Subject,
@@ -339,6 +339,7 @@ func (s *Server) mailPatchMessage(w http.ResponseWriter, r *http.Request, au *au
 		Remove  []string  `json:"remove_flags"`
 		Seen    *bool     `json:"seen"`
 		Flagged *bool     `json:"flagged"`
+		Color   *string   `json:"color"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
@@ -365,6 +366,13 @@ func (s *Server) mailPatchMessage(w http.ResponseWriter, r *http.Request, au *au
 		if *req.Flagged {
 			flags = append(flags, `\Flagged`)
 		}
+	}
+	if req.Color != nil {
+		if *req.Color != "" && !mailColors[*req.Color] {
+			writeJSON(w, 400, map[string]string{"error": "invalid color"})
+			return
+		}
+		flags = withMailColor(flags, *req.Color)
 	}
 	flagStr := storage.NormalizeFlags(flags)
 	if err := s.store.UpdateMessageFlags(r.Context(), msg.ID, flagStr); err != nil {

@@ -447,6 +447,7 @@ const I18N = {
     col_location: "Место",
     col_description: "Описание",
     contacts_title: "Контакты",
+contacts_search: "Поиск контактов…",
     address_books: "Книги",
     new_contact: "Контакт",
     select_contact: "Выберите контакт",
@@ -951,6 +952,7 @@ const I18N = {
     col_location: "Location",
     col_description: "Description",
     contacts_title: "Contacts",
+contacts_search: "Search contacts…",
     address_books: "Books",
     new_contact: "Contact",
     select_contact: "Select a contact",
@@ -1357,7 +1359,7 @@ const calState = {
   highlightInvite: "",
   resources: [],
 };
-const contactState = { page:0,pageSize:50,selected:new Set(), bookID: "", cardID: "", books: [], cards: [] };
+const contactState = { searchQ:"", page:0,pageSize:50,selected:new Set(), bookID: "", cardID: "", books: [], cards: [] };
 const notesState = {
   folderID: "", noteID: "", folders: [], notes: [], etag: "", rights: "write",
   shareTarget: null, saveTimer: null, drawing: false, dirty:false, revision:0, attachments:[], etags:{},
@@ -3725,7 +3727,7 @@ async function refreshMailMessages() {
         m.has_attachments ? `<span class="mail-attachment-icon" role="img" aria-label="${lang==='en'?'Attachment':'Вложение'}" title="${lang==='en'?'Contains attachments':'Есть вложения'}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h6"/></svg></span>` : "",
         `<span class="msg-date-val">${escapeHtml(mailDateShort(m.internal_date))}</span>`,
       ].filter(Boolean).join("");
-      return `<li>
+      return `<li data-mail-color="${escapeHtml(mailMessageColor(m))}">
         <button type="button" class="msg-item${!m.seen ? " unread" : ""}${m.id === mailState.messageID ? " is-active" : ""}${q ? " is-search" : ""}" data-msg="${escapeHtml(m.id)}" data-mailbox="${escapeHtml(m.mailbox_id || "")}" title="${escapeHtml((m.mailbox_name ? m.mailbox_name + " · " : "") + (m.from || ""))}">
           <span class="msg-flag" aria-hidden="true"></span>
           <span class="msg-from">${escapeHtml(mailFromDisplay(m.from))}</span>
@@ -3735,6 +3737,7 @@ async function refreshMailMessages() {
       </li>`;
     }).join("");
     renderMailSelection(msgs);
+    mountMailLabels(msgs);
     list.querySelectorAll("[data-msg]").forEach((btn) => {
       btn.addEventListener("click", () => {
         if (btn.dataset.mailbox) {
@@ -4926,7 +4929,7 @@ async function loadContactCards() {
   if (title) title.textContent = book?.display_name || book?.name || t("contacts_title");
   try {
     const cards = await api("/api/v1/contacts/books/" + encodeURIComponent(contactState.bookID) + "/cards");
-    contactState.cards = (cards.cards || []).slice().sort((a, b) => String(a.fn || "").localeCompare(String(b.fn || ""), lang));
+    contactState.cards = cards.cards || [];
     contactState.selected=new Set([...contactState.selected].filter(id=>contactState.cards.some(c=>c.id===id)));
     renderContactCards();
     if (contactState.cardID) openContactCard(contactState.cardID);
@@ -4936,17 +4939,26 @@ async function loadContactCards() {
   }
 }
 
+function contactNameOrder(){try{return localStorage.getItem('tayga.contactNameOrder.'+(state.me?.id||''))||'first'}catch{return 'first'}}
+function contactDisplayName(c){
+ if(!c.first_name&&!c.last_name)return c.fn||'';
+ return (contactNameOrder()==='last'?[c.last_name,c.first_name,c.middle_name]:[c.first_name,c.middle_name,c.last_name]).filter(Boolean).join(' ');
+}
+function setContactNameOrder(order){if(!['first','last'].includes(order))return;try{localStorage.setItem('tayga.contactNameOrder.'+(state.me?.id||''),order)}catch{}contactState.page=0;renderContactCards();}
+$('contact-search')?.addEventListener('input',event=>{contactState.searchQ=event.target.value;contactState.page=0;renderContactCards()});
 function renderContactCards(){
  const list=$('contact-list');if(!list)return;
  const readonly=!!contactState.books.find(b=>b.id===contactState.bookID)?.readonly;
- contactState.page=Math.max(0,Math.min(contactState.page,Math.ceil(contactState.cards.length/contactState.pageSize)-1));
- const start=contactState.page*contactState.pageSize,visible=contactState.cards.slice(start,start+contactState.pageSize);
+ const query=contactState.searchQ.trim().toLocaleLowerCase(lang);
+ const cards=contactState.cards.filter(c=>!query||[c.fn,c.first_name,c.last_name,c.middle_name,c.email,c.tel,c.org].some(value=>String(value||'').toLocaleLowerCase(lang).includes(query))).slice().sort((a,b)=>contactDisplayName(a).localeCompare(contactDisplayName(b),lang));
+ contactState.page=Math.max(0,Math.min(contactState.page,Math.ceil(cards.length/contactState.pageSize)-1));
+ const start=contactState.page*contactState.pageSize,visible=cards.slice(start,start+contactState.pageSize);
  let toolbar=$('contact-list-actions');if(!toolbar){toolbar=document.createElement('div');toolbar.id='contact-list-actions';toolbar.className='contact-list-actions';list.before(toolbar)}
  toolbar.replaceChildren();const select=document.createElement('input');select.type='checkbox';select.title=mailImageText('Выбрать все на странице','Select page');select.setAttribute('aria-label',select.title);select.checked=visible.length>0&&visible.every(c=>contactState.selected.has(c.id));select.indeterminate=visible.some(c=>contactState.selected.has(c.id))&&!select.checked;select.onchange=()=>{visible.forEach(c=>select.checked?contactState.selected.add(c.id):contactState.selected.delete(c.id));renderContactCards()};
  const count=document.createElement('span');count.textContent=mailImageText('Выбрано: ','Selected: ')+contactState.selected.size;toolbar.append(select,count);
  for(const [action,label] of [['export',mailImageText('Экспорт vCard','Export vCard')],['delete',t('delete')]]){const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.innerHTML=designIcon(action==='export'?'download':'delete');button.title=label;button.setAttribute('aria-label',label);button.classList.add('contact-bulk-icon');button.disabled=!contactState.selected.size||(action==='delete'&&readonly);button.onclick=()=>contactBulkAction(action);toolbar.append(button)}
- const pages=document.createElement('div');pages.className='contact-pagination';const prev=document.createElement('button'),next=document.createElement('button'),range=document.createElement('span'),size=document.createElement('select');prev.textContent='‹';next.textContent='›';prev.title=mailImageText('Предыдущая страница','Previous page');next.title=mailImageText('Следующая страница','Next page');for(const button of [prev,next]){button.type='button';button.className='btn-secondary btn-sm';button.setAttribute('aria-label',button.title)}prev.disabled=!contactState.page;next.disabled=start+visible.length>=contactState.cards.length;prev.onclick=()=>{contactState.page--;renderContactCards()};next.onclick=()=>{contactState.page++;renderContactCards()};range.textContent=(visible.length?start+1:0)+'–'+(start+visible.length)+' / '+contactState.cards.length;size.className='field-input field-input-sm';size.setAttribute('aria-label',mailImageText('Контактов на странице','Contacts per page'));for(const n of [25,50,100]){const option=document.createElement('option');option.value=n;option.textContent=n+' '+mailImageText('на странице','per page');size.append(option)}size.value=contactState.pageSize;size.onchange=()=>{contactState.pageSize=Number(size.value);contactState.page=0;renderContactCards()};pages.append(prev,range,next,size);toolbar.append(pages);
- list.innerHTML=visible.map(c=>`<li class="contact-select-row"><input type="checkbox" data-select-card="${escapeHtml(c.id)}" aria-label="${escapeHtml(mailImageText('Выбрать: ','Select: ')+(c.fn||c.email||''))}" ${contactState.selected.has(c.id)?'checked':''}><button type="button" class="msg-item contact-item${c.id===contactState.cardID?' is-active':''}" data-card="${escapeHtml(c.id)}"><span class="msg-from">${escapeHtml(c.fn||'—')}</span><span class="msg-subject">${escapeHtml(c.email||'—')}</span><span class="msg-date">${escapeHtml(c.tel||'—')}</span></button></li>`).join('')||`<li class="meta msg-empty">${escapeHtml(t('empty_contacts'))}</li>`;
+ const pages=document.createElement('div');pages.className='contact-pagination';const prev=document.createElement('button'),next=document.createElement('button'),range=document.createElement('span'),size=document.createElement('select');prev.textContent='‹';next.textContent='›';prev.title=mailImageText('Предыдущая страница','Previous page');next.title=mailImageText('Следующая страница','Next page');for(const button of [prev,next]){button.type='button';button.className='btn-secondary btn-sm';button.setAttribute('aria-label',button.title)}prev.disabled=!contactState.page;next.disabled=start+visible.length>=cards.length;prev.onclick=()=>{contactState.page--;renderContactCards()};next.onclick=()=>{contactState.page++;renderContactCards()};range.textContent=(visible.length?start+1:0)+'–'+(start+visible.length)+' / '+cards.length;size.className='field-input field-input-sm';size.setAttribute('aria-label',mailImageText('Контактов на странице','Contacts per page'));for(const n of [25,50,100]){const option=document.createElement('option');option.value=n;option.textContent=n+' '+mailImageText('на странице','per page');size.append(option)}size.value=contactState.pageSize;size.onchange=()=>{contactState.pageSize=Number(size.value);contactState.page=0;renderContactCards()};pages.append(prev,range,next,size);toolbar.append(pages);
+ list.innerHTML=visible.map(c=>`<li class="contact-select-row"><input type="checkbox" data-select-card="${escapeHtml(c.id)}" aria-label="${escapeHtml(mailImageText('Выбрать: ','Select: ')+(contactDisplayName(c)||c.email||''))}" ${contactState.selected.has(c.id)?'checked':''}><button type="button" class="msg-item contact-item${c.id===contactState.cardID?' is-active':''}" data-card="${escapeHtml(c.id)}"><span class="msg-from">${escapeHtml(contactDisplayName(c)||'—')}</span><span class="msg-subject">${escapeHtml(c.email||'—')}</span><span class="msg-date">${escapeHtml(c.tel||'—')}</span></button></li>`).join('')||`<li class="meta msg-empty">${escapeHtml(t('empty_contacts'))}</li>`;
  list.querySelectorAll('[data-card]').forEach(button=>button.onclick=()=>openContactCard(button.dataset.card));list.querySelectorAll('[data-select-card]').forEach(input=>input.onchange=()=>{input.checked?contactState.selected.add(input.dataset.selectCard):contactState.selected.delete(input.dataset.selectCard);renderContactCards()});
 }
 async function contactBulkAction(action){
@@ -6979,11 +6991,36 @@ function mountContactSettings(){
  const close=()=>{menu.hidden=true;button.setAttribute('aria-expanded','false')};
  const refresh=document.createElement('button');refresh.type='button';refresh.textContent=mailImageText('Обновить адресные книги','Refresh address books');refresh.onclick=()=>{close();refreshContacts()};
  const exportButton=document.createElement('button');exportButton.type='button';exportButton.textContent=mailImageText('Экспорт выбранных контактов','Export selected contacts');exportButton.onclick=()=>{close();contactBulkAction('export')};
- menu.append(refresh,exportButton);button.onclick=()=>{exportButton.disabled=!contactState.selected.size;menu.hidden=!menu.hidden;button.setAttribute('aria-expanded',String(!menu.hidden))};
+ const label=document.createElement('label');label.textContent=mailImageText('Порядок имени','Name order');label.htmlFor='contact-name-order';const order=document.createElement('select');order.id='contact-name-order';order.className='field-input field-input-sm';for(const [value,text] of [['first',mailImageText('Имя Фамилия','First Last')],['last',mailImageText('Фамилия Имя','Last First')]]){const option=document.createElement('option');option.value=value;option.textContent=text;order.append(option)}order.value=contactNameOrder();order.onchange=()=>{setContactNameOrder(order.value);close()};
+ menu.append(label,order,refresh,exportButton);button.onclick=()=>{order.value=contactNameOrder();exportButton.disabled=!contactState.selected.size;menu.hidden=!menu.hidden;button.setAttribute('aria-expanded',String(!menu.hidden))};
+
  root.addEventListener('keydown',event=>{if(event.key==='Escape'){close();button.focus()}});document.addEventListener('click',event=>{if(!root.contains(event.target))close()});root.append(menu,button);$('view-account').append(root);
 }
 mountContactSettings();
 $('btn-contact-add-visible')?.remove();
+
+const mailLabelColors={red:'#d85565',orange:'#dc894b',yellow:'#d0ad35',green:'#47996e',blue:'#568bd0',purple:'#9770c8'};
+function mailMessageColor(message){
+ const color=message.color||String(message.flags||'').split(/\s+/).find(flag=>flag.startsWith('$TaygaColor-'))?.slice(12);
+ return Object.hasOwn(mailLabelColors,color)?color:'';
+}
+function mountMailLabels(messages){
+ for(const message of messages){
+  const row=$('mail-msg-list').querySelector('[data-msg="'+CSS.escape(message.id)+'"]')?.parentElement;if(!row)continue;
+  const flag=document.createElement('button');flag.type='button';flag.className='mail-label-action mail-flag-toggle';
+  const flagged=String(message.flags||'').split(/\s+/).some(value=>value.toLowerCase()==='\\flagged');
+  flag.setAttribute('aria-pressed',String(flagged));flag.title=mailImageText(flagged?'Снять флажок':'Поставить флажок',flagged?'Remove flag':'Flag message');flag.setAttribute('aria-label',flag.title);flag.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V3h12l-2 4 2 4H5"/></svg>';
+  flag.onclick=async()=>{flag.disabled=true;try{await api('/api/v1/mail/messages/'+encodeURIComponent(message.id),{method:'PATCH',body:JSON.stringify({flagged:!flagged})});await refreshMailMessages()}catch(error){setMsg($('mail-msg'),error.message,'err');flag.disabled=false}};
+  const color=document.createElement('button');color.type='button';color.className='mail-label-action mail-color-toggle';color.title=mailImageText('Цвет письма','Message color');color.setAttribute('aria-label',color.title);color.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 12 9-9h8v8l-9 10z"/><circle cx="16" cy="7" r="1"/></svg>';color.onclick=()=>showMailColorPicker(message,color);row.append(flag,color);
+ }
+}
+function showMailColorPicker(message,trigger){
+ const dialog=document.createElement('dialog');dialog.className='mail-color-dialog';dialog.setAttribute('aria-label',mailImageText('Цвет письма','Message color'));
+ const title=document.createElement('strong');title.textContent=mailImageText('Цвет письма','Message color');const colors=document.createElement('div');colors.className='mail-color-options';const status=document.createElement('p');status.setAttribute('role','status');
+ const names={red:['Красный','Red'],orange:['Оранжевый','Orange'],yellow:['Жёлтый','Yellow'],green:['Зелёный','Green'],blue:['Синий','Blue'],purple:['Фиолетовый','Purple'],'':['Без цвета','No color']};
+ for(const key of [...Object.keys(mailLabelColors),'']){const button=document.createElement('button');button.type='button';button.className='mail-color-option';button.title=mailImageText(...names[key]);button.setAttribute('aria-label',button.title);button.setAttribute('aria-pressed',String(mailMessageColor(message)===key));if(key){button.style.setProperty('--swatch',mailLabelColors[key]);button.innerHTML='<span aria-hidden="true"></span>'}else button.textContent='×';button.onclick=async()=>{colors.querySelectorAll('button').forEach(el=>el.disabled=true);try{await api('/api/v1/mail/messages/'+encodeURIComponent(message.id),{method:'PATCH',body:JSON.stringify({color:key})});dialog.close();await refreshMailMessages()}catch(error){status.textContent=error.message;colors.querySelectorAll('button').forEach(el=>el.disabled=false)}};colors.append(button)}
+ const close=document.createElement('button');close.type='button';close.className='btn-secondary btn-sm';close.textContent=mailImageText('Закрыть','Close');close.onclick=()=>dialog.close();dialog.append(title,colors,status,close);dialog.onclose=()=>{dialog.remove();if(trigger.isConnected)trigger.focus()};document.body.append(dialog);dialog.showModal();
+}
 
 function mountSectionSettings(app,title,items){
  const root=document.createElement('div');root.className='mail-settings';root.dataset.app=app;root.hidden=true;

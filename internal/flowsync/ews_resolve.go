@@ -20,6 +20,9 @@ func (h *ewsHandler) resolveEWSFolder(ctx context.Context, u *storage.User, body
 	if email := extractTag(body, "EmailAddress"); email != "" && !strings.EqualFold(email, u.Email) {
 		return "", storage.ErrUnauthorized
 	}
+	if _, ok := ewsSystemFolders[distinguished]; ok {
+		return systemFolderID(u.ID, distinguished), nil
+	}
 	switch distinguished {
 	case "root", "msgfolderroot":
 		return "root:" + u.ID, nil

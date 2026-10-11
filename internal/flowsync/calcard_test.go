@@ -116,7 +116,7 @@ END:VCARD`,
 	flowsync.Mount(mux, cfg, slog.Default(), store, layer, ms)
 	authz := "Basic " + base64.StdEncoding.EncodeToString([]byte("u@ex.com:secret"))
 
-	for _, id := range []string{"inbox", "calendar", "contacts", "msgfolderroot", "missing"} {
+	for _, id := range []string{"inbox", "calendar", "contacts", "msgfolderroot", "tasks", "journal", "searchfolders", "publicfoldersroot", "recipientcache", "missing"} {
 		request := httptest.NewRequest(http.MethodPost, "/EWS/Exchange.asmx", strings.NewReader(`<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"><s:Body><m:GetFolder><m:FolderIds><t:DistinguishedFolderId Id="`+id+`"/></m:FolderIds></m:GetFolder></s:Body></s:Envelope>`))
 		request.Header.Set("Authorization", authz)
 		response := httptest.NewRecorder()

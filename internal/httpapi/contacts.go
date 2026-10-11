@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/emersion/go-vcard"
 	"github.com/tayga/tms/internal/storage"
 )
 
@@ -59,7 +60,7 @@ func (s *Server) handleContacts(w http.ResponseWriter, r *http.Request) {
 			v := parseSimpleVCard(c.Data)
 			out = append(out, map[string]any{
 				"id": c.ID, "book_id": book.ID, "uid": c.UID,
-				"fn": v.FN, "email": v.Email, "tel": v.Tel, "org": v.Org,
+				"fn": v.FN, "first_name": v.FirstName, "last_name": v.LastName, "middle_name": v.MiddleName, "email": v.Email, "tel": v.Tel, "org": v.Org,
 			})
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"cards": out})
@@ -77,7 +78,7 @@ func (s *Server) handleContacts(w http.ResponseWriter, r *http.Request) {
 		v := parseSimpleVCard(c.Data)
 		writeJSON(w, http.StatusOK, map[string]any{
 			"id": c.ID, "book_id": c.AddressBookID, "uid": c.UID,
-			"fn": v.FN, "email": v.Email, "tel": v.Tel, "org": v.Org, "note": v.Note, "vcard": c.Data,
+			"fn": v.FN, "first_name": v.FirstName, "last_name": v.LastName, "middle_name": v.MiddleName, "email": v.Email, "tel": v.Tel, "org": v.Org, "note": v.Note, "vcard": c.Data,
 		})
 
 	case (r.Method == http.MethodPost || r.Method == http.MethodPut) && len(parts) == 3 && parts[0] == "books" && parts[2] == "cards":
@@ -158,11 +159,18 @@ func (s *Server) handleContacts(w http.ResponseWriter, r *http.Request) {
 }
 
 type simpleCard struct {
-	FN, Email, Tel, Org, Note string
+	FN, FirstName, LastName, MiddleName, Email, Tel, Org, Note string
 }
 
 func parseSimpleVCard(data string) simpleCard {
 	c := simpleCard{}
+	if card, err := vcard.NewDecoder(strings.NewReader(data)).Decode(); err == nil {
+		if name := card.Name(); name != nil {
+			c.FirstName = name.GivenName
+			c.LastName = name.FamilyName
+			c.MiddleName = name.AdditionalName
+		}
+	}
 	for _, line := range strings.Split(data, "\n") {
 		line = strings.TrimRight(line, "\r")
 		upper := strings.ToUpper(line)
