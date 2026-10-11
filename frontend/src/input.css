@@ -3474,3 +3474,19 @@ html[data-color-mode="light"] {
 
 .admin-devices-dialog .document-preview-content{padding:1rem}.admin-devices-dialog .device-table{font-size:inherit}.admin-devices-dialog td:last-child{width:144px}.admin-devices-dialog .device-actions .action-icon{width:38px;height:38px;padding:8px}.admin-devices-dialog .device-actions svg{width:20px;height:20px}
 .admin-devices-dialog .device-table td:first-child,.admin-devices-dialog .device-table td:nth-child(3){white-space:nowrap;overflow-wrap:normal}.admin-devices-dialog .device-table td:nth-child(2){min-width:140px}.admin-devices-dialog .device-table td:nth-child(4){min-width:140px}
+/* Contact discovery and persistent message labels. */
+#contact-search {width:min(24rem,50%);min-width:0;}
+#contact-settings-menu label {padding:.25rem .6rem;font-size:.85rem;font-weight:600;}
+#contact-name-order {width:100%;}
+.selectable-mail .msg-item {padding-left:5.8rem;}
+.mail-label-action {position:absolute;top:50%;transform:translateY(-50%);width:1.6rem;height:1.8rem;display:grid;place-items:center;border-radius:.4rem;color:rgba(var(--ui-ink-rgb),.5);z-index:1;}
+.mail-flag-toggle {left:2.15rem;}.mail-color-toggle {left:3.85rem;}
+.mail-label-action svg {width:1.05rem;height:1.05rem;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}
+.mail-flag-toggle[aria-pressed=true] {color:#d18b32;}.mail-flag-toggle[aria-pressed=true] svg {fill:#d18b3240;}
+.mail-label-action:hover {background:rgba(var(--ui-ink-rgb),.1);color:var(--ui-ink);}
+#mail-msg-list [data-mail-color=red] {--mail-label-color:#d85565;}#mail-msg-list [data-mail-color=orange] {--mail-label-color:#dc894b;}#mail-msg-list [data-mail-color=yellow] {--mail-label-color:#d0ad35;}#mail-msg-list [data-mail-color=green] {--mail-label-color:#47996e;}#mail-msg-list [data-mail-color=blue] {--mail-label-color:#568bd0;}#mail-msg-list [data-mail-color=purple] {--mail-label-color:#9770c8;}
+#mail-msg-list [data-mail-color]:not([data-mail-color=""]) {background:color-mix(in srgb,var(--mail-label-color) 14%,transparent);box-shadow:inset 3px 0 var(--mail-label-color);}
+#mail-msg-list [data-mail-color]:not([data-mail-color=""]) .mail-color-toggle {color:var(--mail-label-color);}
+.mail-color-dialog {margin:auto;padding:1.25rem;border-radius:1rem;width:min(25rem,calc(100vw - 2rem));background:var(--panel-bg);color:var(--ui-ink);border:1px solid rgba(var(--ui-ink-rgb),.2);box-shadow:0 1rem 4rem #0004;}
+.mail-color-dialog::backdrop {background:#0006;backdrop-filter:blur(3px);}.mail-color-options {display:flex;gap:.5rem;flex-wrap:wrap;margin:1rem 0;}
+.mail-color-option {width:2.5rem;height:2.5rem;border-radius:50%;display:grid;place-items:center;border:2px solid transparent;font-size:1.5rem;}.mail-color-option span {width:1.5rem;height:1.5rem;border-radius:50%;background:var(--swatch);}.mail-color-option[aria-pressed=true] {border-color:var(--ui-ink);}

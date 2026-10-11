@@ -108,6 +108,17 @@ func TestMailAttachmentOwnershipAndDownload(t *testing.T) {
 		t.Fatalf("corrupt downloaded attachment %q", got)
 	}
 	call("GET", base+"99", "", 404)
+	call("PATCH", "/api/v1/mail/messages/"+msg.ID, `{"flagged":true,"color":"blue"}`, 200)
+	saved, err := st.GetMessageByID(ctx, msg.ID)
+	if err != nil || !storage.HasFlag(saved.Flags, `\Flagged`) || !strings.Contains(saved.Flags, "$TaygaColor-blue") {
+		t.Fatal("labels not persisted", saved, err)
+	}
+	call("PATCH", "/api/v1/mail/messages/"+msg.ID, `{"color":"invalid"}`, 400)
+	call("PATCH", "/api/v1/mail/messages/"+msg.ID, `{"color":""}`, 200)
+	saved, _ = st.GetMessageByID(ctx, msg.ID)
+	if strings.Contains(saved.Flags, "$TaygaColor-") || !storage.HasFlag(saved.Flags, `\Flagged`) {
+		t.Fatal("color clearing modified flags")
+	}
 	st.UpdateMessageFlags(ctx, msg.ID, `\Seen \Flagged`)
 	var filtered struct {
 		Total int `json:"total"`

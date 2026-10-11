@@ -47,6 +47,21 @@ func (h *ewsHandler) getFolder(ctx context.Context, u *storage.User, body string
 			folders[f.ID.Value] = f
 		}
 	}
+	for name := range ewsSystemFolders {
+		raw := systemFolderXML(u, name)
+		decoder := xml.NewDecoder(strings.NewReader(raw))
+		startToken, e := decoder.Token()
+		if e != nil {
+			return "", e
+		}
+		start := startToken.(xml.StartElement)
+		var f folder
+		f.Kind = start.Name
+		if e = decoder.DecodeElement(&f, &start); e != nil {
+			return "", e
+		}
+		folders[f.ID.Value] = f
+	}
 	aliases := map[string]string{"inbox": "INBOX", "sentitems": "Sent", "deleteditems": "Trash", "drafts": "Drafts", "junkemail": "Junk", "outbox": "Outbox"}
 	var out strings.Builder
 	out.WriteString(`<m:GetFolderResponse xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"><m:ResponseMessages>`)
@@ -81,7 +96,9 @@ func (h *ewsHandler) getFolder(ctx context.Context, u *storage.User, body string
 				found = true
 			}
 		} else {
-			if id == "msgfolderroot" || id == "root" {
+			if _, ok := ewsSystemFolders[id]; ok {
+				f, found = folders[systemFolderID(u.ID, id)]
+			} else if id == "msgfolderroot" || id == "root" {
 				f.Kind.Local = "Folder"
 				f.Inner = fmt.Sprintf(`<t:FolderId Id="%s" ChangeKey="0"/><t:DisplayName>Mailbox</t:DisplayName><t:TotalCount>0</t:TotalCount><t:ChildFolderCount>%d</t:ChildFolderCount>`, xmlEscape("root:"+u.ID), len(folders))
 				found = true
@@ -118,7 +135,7 @@ func (h *ewsHandler) getFolder(ctx context.Context, u *storage.User, body string
 		if found {
 			fmt.Fprintf(&out, `<m:GetFolderResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:Folders><t:%s>%s</t:%s></m:Folders></m:GetFolderResponseMessage>`, f.Kind.Local, f.Inner, f.Kind.Local)
 		} else {
-			out.WriteString(`<m:GetFolderResponseMessage ResponseClass="Error"><m:ResponseCode>ErrorFolderNotFound</m:ResponseCode><m:Folders/></m:GetFolderResponseMessage>`)
+			fmt.Fprintf(&out, `<m:GetFolderResponseMessage ResponseClass="Error"><m:MessageText>Folder unavailable: %s</m:MessageText><m:ResponseCode>ErrorFolderNotFound</m:ResponseCode></m:GetFolderResponseMessage>`, xmlEscape(id))
 		}
 	}
 	if count == 0 {

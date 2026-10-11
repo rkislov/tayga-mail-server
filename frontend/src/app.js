@@ -314,7 +314,7 @@ const calState = {
   highlightInvite: "",
   resources: [],
 };
-const contactState = { page:0,pageSize:50,selected:new Set(), bookID: "", cardID: "", books: [], cards: [] };
+const contactState = { searchQ:"", page:0,pageSize:50,selected:new Set(), bookID: "", cardID: "", books: [], cards: [] };
 const notesState = {
   folderID: "", noteID: "", folders: [], notes: [], etag: "", rights: "write",
   shareTarget: null, saveTimer: null, drawing: false, dirty:false, revision:0, attachments:[], etags:{},
@@ -2682,7 +2682,7 @@ async function refreshMailMessages() {
         m.has_attachments ? `<span class="mail-attachment-icon" role="img" aria-label="${lang==='en'?'Attachment':'Вложение'}" title="${lang==='en'?'Contains attachments':'Есть вложения'}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h6"/></svg></span>` : "",
         `<span class="msg-date-val">${escapeHtml(mailDateShort(m.internal_date))}</span>`,
       ].filter(Boolean).join("");
-      return `<li>
+      return `<li data-mail-color="${escapeHtml(mailMessageColor(m))}">
         <button type="button" class="msg-item${!m.seen ? " unread" : ""}${m.id === mailState.messageID ? " is-active" : ""}${q ? " is-search" : ""}" data-msg="${escapeHtml(m.id)}" data-mailbox="${escapeHtml(m.mailbox_id || "")}" title="${escapeHtml((m.mailbox_name ? m.mailbox_name + " · " : "") + (m.from || ""))}">
           <span class="msg-flag" aria-hidden="true"></span>
           <span class="msg-from">${escapeHtml(mailFromDisplay(m.from))}</span>
@@ -2692,6 +2692,7 @@ async function refreshMailMessages() {
       </li>`;
     }).join("");
     renderMailSelection(msgs);
+    mountMailLabels(msgs);
     list.querySelectorAll("[data-msg]").forEach((btn) => {
       btn.addEventListener("click", () => {
         if (btn.dataset.mailbox) {
@@ -3883,7 +3884,7 @@ async function loadContactCards() {
   if (title) title.textContent = book?.display_name || book?.name || t("contacts_title");
   try {
     const cards = await api("/api/v1/contacts/books/" + encodeURIComponent(contactState.bookID) + "/cards");
-    contactState.cards = (cards.cards || []).slice().sort((a, b) => String(a.fn || "").localeCompare(String(b.fn || ""), lang));
+    contactState.cards = cards.cards || [];
     contactState.selected=new Set([...contactState.selected].filter(id=>contactState.cards.some(c=>c.id===id)));
     renderContactCards();
     if (contactState.cardID) openContactCard(contactState.cardID);
@@ -3893,17 +3894,26 @@ async function loadContactCards() {
   }
 }
 
+function contactNameOrder(){try{return localStorage.getItem('tayga.contactNameOrder.'+(state.me?.id||''))||'first'}catch{return 'first'}}
+function contactDisplayName(c){
+ if(!c.first_name&&!c.last_name)return c.fn||'';
+ return (contactNameOrder()==='last'?[c.last_name,c.first_name,c.middle_name]:[c.first_name,c.middle_name,c.last_name]).filter(Boolean).join(' ');
+}
+function setContactNameOrder(order){if(!['first','last'].includes(order))return;try{localStorage.setItem('tayga.contactNameOrder.'+(state.me?.id||''),order)}catch{}contactState.page=0;renderContactCards();}
+$('contact-search')?.addEventListener('input',event=>{contactState.searchQ=event.target.value;contactState.page=0;renderContactCards()});
 function renderContactCards(){
  const list=$('contact-list');if(!list)return;
  const readonly=!!contactState.books.find(b=>b.id===contactState.bookID)?.readonly;
- contactState.page=Math.max(0,Math.min(contactState.page,Math.ceil(contactState.cards.length/contactState.pageSize)-1));
- const start=contactState.page*contactState.pageSize,visible=contactState.cards.slice(start,start+contactState.pageSize);
+ const query=contactState.searchQ.trim().toLocaleLowerCase(lang);
+ const cards=contactState.cards.filter(c=>!query||[c.fn,c.first_name,c.last_name,c.middle_name,c.email,c.tel,c.org].some(value=>String(value||'').toLocaleLowerCase(lang).includes(query))).slice().sort((a,b)=>contactDisplayName(a).localeCompare(contactDisplayName(b),lang));
+ contactState.page=Math.max(0,Math.min(contactState.page,Math.ceil(cards.length/contactState.pageSize)-1));
+ const start=contactState.page*contactState.pageSize,visible=cards.slice(start,start+contactState.pageSize);
  let toolbar=$('contact-list-actions');if(!toolbar){toolbar=document.createElement('div');toolbar.id='contact-list-actions';toolbar.className='contact-list-actions';list.before(toolbar)}
  toolbar.replaceChildren();const select=document.createElement('input');select.type='checkbox';select.title=mailImageText('Выбрать все на странице','Select page');select.setAttribute('aria-label',select.title);select.checked=visible.length>0&&visible.every(c=>contactState.selected.has(c.id));select.indeterminate=visible.some(c=>contactState.selected.has(c.id))&&!select.checked;select.onchange=()=>{visible.forEach(c=>select.checked?contactState.selected.add(c.id):contactState.selected.delete(c.id));renderContactCards()};
  const count=document.createElement('span');count.textContent=mailImageText('Выбрано: ','Selected: ')+contactState.selected.size;toolbar.append(select,count);
  for(const [action,label] of [['export',mailImageText('Экспорт vCard','Export vCard')],['delete',t('delete')]]){const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.innerHTML=designIcon(action==='export'?'download':'delete');button.title=label;button.setAttribute('aria-label',label);button.classList.add('contact-bulk-icon');button.disabled=!contactState.selected.size||(action==='delete'&&readonly);button.onclick=()=>contactBulkAction(action);toolbar.append(button)}
- const pages=document.createElement('div');pages.className='contact-pagination';const prev=document.createElement('button'),next=document.createElement('button'),range=document.createElement('span'),size=document.createElement('select');prev.textContent='‹';next.textContent='›';prev.title=mailImageText('Предыдущая страница','Previous page');next.title=mailImageText('Следующая страница','Next page');for(const button of [prev,next]){button.type='button';button.className='btn-secondary btn-sm';button.setAttribute('aria-label',button.title)}prev.disabled=!contactState.page;next.disabled=start+visible.length>=contactState.cards.length;prev.onclick=()=>{contactState.page--;renderContactCards()};next.onclick=()=>{contactState.page++;renderContactCards()};range.textContent=(visible.length?start+1:0)+'–'+(start+visible.length)+' / '+contactState.cards.length;size.className='field-input field-input-sm';size.setAttribute('aria-label',mailImageText('Контактов на странице','Contacts per page'));for(const n of [25,50,100]){const option=document.createElement('option');option.value=n;option.textContent=n+' '+mailImageText('на странице','per page');size.append(option)}size.value=contactState.pageSize;size.onchange=()=>{contactState.pageSize=Number(size.value);contactState.page=0;renderContactCards()};pages.append(prev,range,next,size);toolbar.append(pages);
- list.innerHTML=visible.map(c=>`<li class="contact-select-row"><input type="checkbox" data-select-card="${escapeHtml(c.id)}" aria-label="${escapeHtml(mailImageText('Выбрать: ','Select: ')+(c.fn||c.email||''))}" ${contactState.selected.has(c.id)?'checked':''}><button type="button" class="msg-item contact-item${c.id===contactState.cardID?' is-active':''}" data-card="${escapeHtml(c.id)}"><span class="msg-from">${escapeHtml(c.fn||'—')}</span><span class="msg-subject">${escapeHtml(c.email||'—')}</span><span class="msg-date">${escapeHtml(c.tel||'—')}</span></button></li>`).join('')||`<li class="meta msg-empty">${escapeHtml(t('empty_contacts'))}</li>`;
+ const pages=document.createElement('div');pages.className='contact-pagination';const prev=document.createElement('button'),next=document.createElement('button'),range=document.createElement('span'),size=document.createElement('select');prev.textContent='‹';next.textContent='›';prev.title=mailImageText('Предыдущая страница','Previous page');next.title=mailImageText('Следующая страница','Next page');for(const button of [prev,next]){button.type='button';button.className='btn-secondary btn-sm';button.setAttribute('aria-label',button.title)}prev.disabled=!contactState.page;next.disabled=start+visible.length>=cards.length;prev.onclick=()=>{contactState.page--;renderContactCards()};next.onclick=()=>{contactState.page++;renderContactCards()};range.textContent=(visible.length?start+1:0)+'–'+(start+visible.length)+' / '+cards.length;size.className='field-input field-input-sm';size.setAttribute('aria-label',mailImageText('Контактов на странице','Contacts per page'));for(const n of [25,50,100]){const option=document.createElement('option');option.value=n;option.textContent=n+' '+mailImageText('на странице','per page');size.append(option)}size.value=contactState.pageSize;size.onchange=()=>{contactState.pageSize=Number(size.value);contactState.page=0;renderContactCards()};pages.append(prev,range,next,size);toolbar.append(pages);
+ list.innerHTML=visible.map(c=>`<li class="contact-select-row"><input type="checkbox" data-select-card="${escapeHtml(c.id)}" aria-label="${escapeHtml(mailImageText('Выбрать: ','Select: ')+(contactDisplayName(c)||c.email||''))}" ${contactState.selected.has(c.id)?'checked':''}><button type="button" class="msg-item contact-item${c.id===contactState.cardID?' is-active':''}" data-card="${escapeHtml(c.id)}"><span class="msg-from">${escapeHtml(contactDisplayName(c)||'—')}</span><span class="msg-subject">${escapeHtml(c.email||'—')}</span><span class="msg-date">${escapeHtml(c.tel||'—')}</span></button></li>`).join('')||`<li class="meta msg-empty">${escapeHtml(t('empty_contacts'))}</li>`;
  list.querySelectorAll('[data-card]').forEach(button=>button.onclick=()=>openContactCard(button.dataset.card));list.querySelectorAll('[data-select-card]').forEach(input=>input.onchange=()=>{input.checked?contactState.selected.add(input.dataset.selectCard):contactState.selected.delete(input.dataset.selectCard);renderContactCards()});
 }
 async function contactBulkAction(action){

@@ -244,11 +244,36 @@ function mountContactSettings(){
  const close=()=>{menu.hidden=true;button.setAttribute('aria-expanded','false')};
  const refresh=document.createElement('button');refresh.type='button';refresh.textContent=mailImageText('Обновить адресные книги','Refresh address books');refresh.onclick=()=>{close();refreshContacts()};
  const exportButton=document.createElement('button');exportButton.type='button';exportButton.textContent=mailImageText('Экспорт выбранных контактов','Export selected contacts');exportButton.onclick=()=>{close();contactBulkAction('export')};
- menu.append(refresh,exportButton);button.onclick=()=>{exportButton.disabled=!contactState.selected.size;menu.hidden=!menu.hidden;button.setAttribute('aria-expanded',String(!menu.hidden))};
+ const label=document.createElement('label');label.textContent=mailImageText('Порядок имени','Name order');label.htmlFor='contact-name-order';const order=document.createElement('select');order.id='contact-name-order';order.className='field-input field-input-sm';for(const [value,text] of [['first',mailImageText('Имя Фамилия','First Last')],['last',mailImageText('Фамилия Имя','Last First')]]){const option=document.createElement('option');option.value=value;option.textContent=text;order.append(option)}order.value=contactNameOrder();order.onchange=()=>{setContactNameOrder(order.value);close()};
+ menu.append(label,order,refresh,exportButton);button.onclick=()=>{order.value=contactNameOrder();exportButton.disabled=!contactState.selected.size;menu.hidden=!menu.hidden;button.setAttribute('aria-expanded',String(!menu.hidden))};
+
  root.addEventListener('keydown',event=>{if(event.key==='Escape'){close();button.focus()}});document.addEventListener('click',event=>{if(!root.contains(event.target))close()});root.append(menu,button);$('view-account').append(root);
 }
 mountContactSettings();
 $('btn-contact-add-visible')?.remove();
+
+const mailLabelColors={red:'#d85565',orange:'#dc894b',yellow:'#d0ad35',green:'#47996e',blue:'#568bd0',purple:'#9770c8'};
+function mailMessageColor(message){
+ const color=message.color||String(message.flags||'').split(/\s+/).find(flag=>flag.startsWith('$TaygaColor-'))?.slice(12);
+ return Object.hasOwn(mailLabelColors,color)?color:'';
+}
+function mountMailLabels(messages){
+ for(const message of messages){
+  const row=$('mail-msg-list').querySelector('[data-msg="'+CSS.escape(message.id)+'"]')?.parentElement;if(!row)continue;
+  const flag=document.createElement('button');flag.type='button';flag.className='mail-label-action mail-flag-toggle';
+  const flagged=String(message.flags||'').split(/\s+/).some(value=>value.toLowerCase()==='\\flagged');
+  flag.setAttribute('aria-pressed',String(flagged));flag.title=mailImageText(flagged?'Снять флажок':'Поставить флажок',flagged?'Remove flag':'Flag message');flag.setAttribute('aria-label',flag.title);flag.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V3h12l-2 4 2 4H5"/></svg>';
+  flag.onclick=async()=>{flag.disabled=true;try{await api('/api/v1/mail/messages/'+encodeURIComponent(message.id),{method:'PATCH',body:JSON.stringify({flagged:!flagged})});await refreshMailMessages()}catch(error){setMsg($('mail-msg'),error.message,'err');flag.disabled=false}};
+  const color=document.createElement('button');color.type='button';color.className='mail-label-action mail-color-toggle';color.title=mailImageText('Цвет письма','Message color');color.setAttribute('aria-label',color.title);color.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 12 9-9h8v8l-9 10z"/><circle cx="16" cy="7" r="1"/></svg>';color.onclick=()=>showMailColorPicker(message,color);row.append(flag,color);
+ }
+}
+function showMailColorPicker(message,trigger){
+ const dialog=document.createElement('dialog');dialog.className='mail-color-dialog';dialog.setAttribute('aria-label',mailImageText('Цвет письма','Message color'));
+ const title=document.createElement('strong');title.textContent=mailImageText('Цвет письма','Message color');const colors=document.createElement('div');colors.className='mail-color-options';const status=document.createElement('p');status.setAttribute('role','status');
+ const names={red:['Красный','Red'],orange:['Оранжевый','Orange'],yellow:['Жёлтый','Yellow'],green:['Зелёный','Green'],blue:['Синий','Blue'],purple:['Фиолетовый','Purple'],'':['Без цвета','No color']};
+ for(const key of [...Object.keys(mailLabelColors),'']){const button=document.createElement('button');button.type='button';button.className='mail-color-option';button.title=mailImageText(...names[key]);button.setAttribute('aria-label',button.title);button.setAttribute('aria-pressed',String(mailMessageColor(message)===key));if(key){button.style.setProperty('--swatch',mailLabelColors[key]);button.innerHTML='<span aria-hidden="true"></span>'}else button.textContent='×';button.onclick=async()=>{colors.querySelectorAll('button').forEach(el=>el.disabled=true);try{await api('/api/v1/mail/messages/'+encodeURIComponent(message.id),{method:'PATCH',body:JSON.stringify({color:key})});dialog.close();await refreshMailMessages()}catch(error){status.textContent=error.message;colors.querySelectorAll('button').forEach(el=>el.disabled=false)}};colors.append(button)}
+ const close=document.createElement('button');close.type='button';close.className='btn-secondary btn-sm';close.textContent=mailImageText('Закрыть','Close');close.onclick=()=>dialog.close();dialog.append(title,colors,status,close);dialog.onclose=()=>{dialog.remove();if(trigger.isConnected)trigger.focus()};document.body.append(dialog);dialog.showModal();
+}
 
 function mountSectionSettings(app,title,items){
  const root=document.createElement('div');root.className='mail-settings';root.dataset.app=app;root.hidden=true;

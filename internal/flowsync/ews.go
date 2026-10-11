@@ -76,7 +76,7 @@ func (h *ewsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "GetFolder":
 		soap, err = h.getFolder(r.Context(), u, string(body))
 	case "FindFolder":
-		soap, err = h.findFolder(r.Context(), u)
+		soap, err = h.findRequestedFolder(r.Context(), u, string(body))
 	default:
 		if t := traceRequest(r); t != nil {
 			t.Result = "unsupported_operation"
@@ -179,6 +179,9 @@ func (h *ewsHandler) findItem(ctx context.Context, u *storage.User, body string)
 		return ewsFault("ErrorFolderNotFound", "folder unavailable"), nil
 	}
 
+	if systemFolderName(u, folderID) != "" {
+		return emptyEWSItems(), nil
+	}
 	if cal, err := h.store.GetCalendarByID(ctx, u.ID, folderID); err == nil {
 		return h.findCalendarItems(ctx, cal.ID)
 	}
@@ -399,7 +402,7 @@ func detectEWSOp(body string) string {
 func soapEnvelope(inner string) string {
 	return `<?xml version="1.0" encoding="utf-8"?>` +
 		`<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">` +
-		`<s:Body>` + inner + `</s:Body></s:Envelope>`
+		`<s:Header><t:ServerVersionInfo xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types" MajorVersion="15" MinorVersion="0" MajorBuildNumber="0" MinorBuildNumber="0" Version="Exchange2013"/></s:Header><s:Body>` + inner + `</s:Body></s:Envelope>`
 }
 
 func ewsFault(code, msg string) string {
@@ -446,7 +449,7 @@ func ewsFolderReferences(body []byte) string {
 				}
 			}
 		}
-		if len(ids) >= 8 {
+		if len(ids) >= 32 {
 			break
 		}
 	}
