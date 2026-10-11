@@ -727,6 +727,20 @@ function renderSparkline(values, color) {
   </svg>`;
 }
 
+function formatUptime(seconds) {
+  let remaining = Math.max(0, Math.floor(Number(seconds) || 0));
+  const ru = lang === "ru";
+  const units = [[86400, ru ? "д" : "d"], [3600, ru ? "ч" : "h"], [60, ru ? "мин" : "m"], [1, ru ? "с" : "s"]];
+  const parts = [];
+  for (const [size, label] of units) {
+    const value = Math.floor(remaining / size);
+    remaining %= size;
+    if (value || (size === 1 && !parts.length)) parts.push(`${value} ${label}`);
+    if (parts.length === 2) break;
+  }
+  return parts.join(" ");
+}
+
 function renderMonitorCharts(d) {
   const ten = d.tenant || {};
   const s = d.server || {};
@@ -750,7 +764,7 @@ function renderMonitorCharts(d) {
     { label: "Outbound", value: s.outbound_queued || 0, display: fmtNum(s.outbound_queued || 0) },
     { label: "Goroutines", value: g.goroutines || 0, display: fmtNum(g.goroutines || 0) },
     { label: "Heap", value: g.heap_alloc || 0, display: fmtBytes(g.heap_alloc || 0) },
-    { label: "Uptime", value: d.uptime_sec || 0, display: fmtNum(d.uptime_sec || 0) + "s" },
+    { label: "Uptime", value: d.uptime_sec || 0, display: formatUptime(d.uptime_sec) },
   ], { color: "#3d8ea8" });
 
   pushHistory(monitorHistory.goroutines, g.goroutines);
@@ -796,7 +810,7 @@ async function refreshMonitor() {
     const g = d.go || {};
     const rows = [
       ["Tenant", ten.tenant_name || "—"],
-      ["Uptime", (d.uptime_sec || 0) + "s"],
+      ["Uptime", formatUptime(d.uptime_sec)],
       ["Users (tenant)", fmtNum(ten.users) + " / " + fmtNum(ten.users_enabled) + " enabled"],
       ["Domains", fmtNum(ten.domains)],
       ["Messages (tenant)", fmtNum(ten.messages)],
