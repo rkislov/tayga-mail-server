@@ -20,6 +20,8 @@ import (
 type ewsHandler struct {
 	sender    *mailSubmission
 	syncMu    sync.Mutex
+	subsMu    sync.Mutex
+	subs      map[string]*ewsSubscription
 	store     storage.Driver
 	ms        *mailstore.Store
 	publicURL string
@@ -55,6 +57,12 @@ func (h *ewsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var soap string
 	var err error
 	switch op {
+	case "Subscribe":
+		soap, err = h.subscribeEWS(r.Context(), u, string(body))
+	case "Unsubscribe":
+		soap = h.unsubscribeEWS(u, string(body))
+	case "GetStreamingEvents":
+		soap, err = h.streamingEventsEWS(r.Context(), u, string(body))
 	case "FindItem":
 		soap, err = h.findItem(r.Context(), u, string(body))
 	case "GetAttachment":
@@ -141,32 +149,56 @@ func (h *ewsHandler) findFolder(ctx context.Context, u *storage.User) (string, e
 	b.WriteString(`<m:FindFolderResponse xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types">`)
 	b.WriteString(`<m:ResponseMessages><m:FindFolderResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:RootFolder IncludesLastItemInRange="true"><t:Folders>`)
 	for _, mb := range mbs {
-		fmt.Fprintf(&b, `<t:Folder><t:FolderId Id="%s" ChangeKey="0"/><t:DisplayName>%s</t:DisplayName><t:FolderClass>IPF.Note</t:FolderClass><t:TotalCount>0</t:TotalCount></t:Folder>`,
-			xmlEscape(mb.ID), xmlEscape(mb.Name))
+		parent := "root:" + u.ID
+		if cut := strings.LastIndex(mb.Name, "/"); cut > 0 {
+			for _, candidate := range mbs {
+				if candidate.Name == mb.Name[:cut] {
+					parent = candidate.ID
+					break
+				}
+			}
+		}
+		messages, e := h.store.ListMessages(ctx, mb.ID)
+		if e != nil {
+			return "", e
+		}
+		unread, children := 0, 0
+		for _, m := range messages {
+			if !storage.HasFlag(m.Flags, `\Seen`) {
+				unread++
+			}
+		}
+		for _, child := range mbs {
+			if strings.HasPrefix(child.Name, mb.Name+"/") && !strings.Contains(strings.TrimPrefix(child.Name, mb.Name+"/"), "/") {
+				children++
+			}
+		}
+		fmt.Fprintf(&b, `<t:Folder><t:FolderId Id="%s" ChangeKey="0"/><t:ParentFolderId Id="%s"/><t:DisplayName>%s</t:DisplayName><t:FolderClass>IPF.Note</t:FolderClass><t:TotalCount>%d</t:TotalCount><t:ChildFolderCount>%d</t:ChildFolderCount><t:UnreadCount>%d</t:UnreadCount></t:Folder>`,
+			xmlEscape(mb.ID), xmlEscape(parent), xmlEscape(mb.Name), len(messages), children, unread)
 	}
 	for _, cal := range cals {
 		name := cal.DisplayName
 		if name == "" {
 			name = cal.Name
 		}
-		fmt.Fprintf(&b, `<t:CalendarFolder><t:FolderId Id="%s" ChangeKey="0"/><t:DisplayName>%s</t:DisplayName><t:FolderClass>IPF.Appointment</t:FolderClass><t:TotalCount>0</t:TotalCount></t:CalendarFolder>`,
-			xmlEscape(cal.ID), xmlEscape(name))
+		fmt.Fprintf(&b, `<t:CalendarFolder><t:FolderId Id="%s" ChangeKey="0"/><t:ParentFolderId Id="%s"/><t:DisplayName>%s</t:DisplayName><t:FolderClass>IPF.Appointment</t:FolderClass><t:TotalCount>0</t:TotalCount></t:CalendarFolder>`,
+			xmlEscape(cal.ID), xmlEscape("root:"+u.ID), xmlEscape(name))
 	}
 	for _, ab := range abs {
 		name := ab.DisplayName
 		if name == "" {
 			name = ab.Name
 		}
-		fmt.Fprintf(&b, `<t:ContactsFolder><t:FolderId Id="%s" ChangeKey="0"/><t:DisplayName>%s</t:DisplayName><t:FolderClass>IPF.Contact</t:FolderClass><t:TotalCount>0</t:TotalCount></t:ContactsFolder>`,
-			xmlEscape(ab.ID), xmlEscape(name))
+		fmt.Fprintf(&b, `<t:ContactsFolder><t:FolderId Id="%s" ChangeKey="0"/><t:ParentFolderId Id="%s"/><t:DisplayName>%s</t:DisplayName><t:FolderClass>IPF.Contact</t:FolderClass><t:TotalCount>0</t:TotalCount></t:ContactsFolder>`,
+			xmlEscape(ab.ID), xmlEscape("root:"+u.ID), xmlEscape(name))
 	}
 	for _, nf := range nfs {
 		name := nf.DisplayName
 		if name == "" {
 			name = nf.Name
 		}
-		fmt.Fprintf(&b, `<t:Folder><t:FolderId Id="%s" ChangeKey="%s"/><t:DisplayName>%s</t:DisplayName><t:FolderClass>IPF.StickyNote</t:FolderClass><t:TotalCount>0</t:TotalCount></t:Folder>`,
-			xmlEscape(nf.ID), xmlEscape(nf.CTag), xmlEscape(name))
+		fmt.Fprintf(&b, `<t:Folder><t:FolderId Id="%s" ChangeKey="%s"/><t:ParentFolderId Id="%s"/><t:DisplayName>%s</t:DisplayName><t:FolderClass>IPF.StickyNote</t:FolderClass><t:TotalCount>0</t:TotalCount></t:Folder>`,
+			xmlEscape(nf.ID), xmlEscape(nf.CTag), xmlEscape("root:"+u.ID), xmlEscape(name))
 	}
 	b.WriteString(`</t:Folders></m:RootFolder></m:FindFolderResponseMessage></m:ResponseMessages></m:FindFolderResponse>`)
 	return b.String(), nil

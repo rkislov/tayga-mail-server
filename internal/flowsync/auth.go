@@ -6,6 +6,7 @@ package flowsync
 import (
 	"context"
 	"encoding/base64"
+	"net"
 	"net/http"
 	"strings"
 
@@ -40,7 +41,19 @@ func authMiddleware(authn *auth.Layer, next http.Handler) http.Handler {
 		if t := traceRequest(r); t != nil {
 			t.User = u.ID
 		}
-		next.ServeHTTP(w, r.WithContext(withUser(r.Context(), u)))
+		protocol := "EWS"
+		if strings.Contains(strings.ToLower(r.URL.Path), "activesync") {
+			protocol = "ActiveSync"
+		}
+		address := r.RemoteAddr
+		if host, _, e := net.SplitHostPort(address); e == nil {
+			address = host
+		}
+		ctx, cancel := context.WithCancel(r.Context())
+		defer cancel()
+		finish := authn.TrackRequest(u, protocol, address, r.UserAgent(), u.ID+"\x00"+address+"\x00"+r.UserAgent(), cancel)
+		defer finish()
+		next.ServeHTTP(w, r.WithContext(withUser(ctx, u)))
 	})
 }
 
