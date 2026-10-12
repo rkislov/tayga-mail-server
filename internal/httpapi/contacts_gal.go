@@ -41,3 +41,8 @@ func (s *Server) handleGAL(w http.ResponseWriter, r *http.Request, au *authUser,
 	}
 	writeJSON(w, 200, map[string]any{"cards": cards, "readonly": true})
 }
+
+func (s *Server) domainXMPPGALEnabled(r *http.Request, domainID string) bool {
+	value, ok, err := s.store.GetSetting(r.Context(), "domain.xmpp_gal."+domainID)
+	return err == nil && ok && value == "true"
+}

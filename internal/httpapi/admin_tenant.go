@@ -36,7 +36,7 @@ func (s *Server) handleAdminTenant(w http.ResponseWriter, r *http.Request) {
 		n, _ := s.store.CountUsersByDomain(r.Context(), d.ID)
 		outDomains = append(outDomains, map[string]any{
 			"id": d.ID, "name": d.Name, "user_count": n,
-			"gal_enabled": s.domainGALEnabled(r, d.ID), "migration_enabled": d.MigrationEnabled, "created_at": d.CreatedAt,
+			"xmpp_gal_enabled": s.domainXMPPGALEnabled(r, d.ID), "gal_enabled": s.domainGALEnabled(r, d.ID), "migration_enabled": d.MigrationEnabled, "created_at": d.CreatedAt,
 		})
 	}
 	users, _ := s.store.ListUsersByTenant(r.Context(), admin.TenantID)
@@ -190,7 +190,7 @@ func (s *Server) handleAdminDomains(w http.ResponseWriter, r *http.Request) {
 			n, _ := s.store.CountUsersByDomain(r.Context(), d.ID)
 			out = append(out, map[string]any{
 				"id": d.ID, "name": d.Name, "tenant_id": d.TenantID, "user_count": n,
-				"gal_enabled": s.domainGALEnabled(r, d.ID), "migration_enabled": d.MigrationEnabled, "created_at": d.CreatedAt,
+				"xmpp_gal_enabled": s.domainXMPPGALEnabled(r, d.ID), "gal_enabled": s.domainGALEnabled(r, d.ID), "migration_enabled": d.MigrationEnabled, "created_at": d.CreatedAt,
 			})
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"domains": out, "tenant_id": tenantID})
@@ -198,6 +198,7 @@ func (s *Server) handleAdminDomains(w http.ResponseWriter, r *http.Request) {
 	case path != "" && r.Method == http.MethodPatch:
 		var req struct {
 			MigrationEnabled *string `json:"migration_enabled"`
+			XMPPGALEnabled   *bool   `json:"xmpp_gal_enabled"`
 			GALEnabled       *bool   `json:"gal_enabled"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -212,6 +213,16 @@ func (s *Server) handleAdminDomains(w http.ResponseWriter, r *http.Request) {
 		if !s.adminCanManageDomain(r, admin, target.ID) {
 			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 			return
+		}
+		if req.XMPPGALEnabled != nil {
+			value := "false"
+			if *req.XMPPGALEnabled {
+				value = "true"
+			}
+			if err := s.store.PutSetting(r.Context(), "domain.xmpp_gal."+target.ID, value); err != nil {
+				writeJSON(w, 500, map[string]string{"error": "cannot save XMPP directory setting"})
+				return
+			}
 		}
 		if req.GALEnabled != nil {
 			value := "false"
