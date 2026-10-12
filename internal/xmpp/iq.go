@@ -117,7 +117,7 @@ func (s *Session) handleRosterIQ(ctx context.Context, id, typ, inner string) err
 	}
 	switch typ {
 	case "get":
-		items, err := s.srv.listRoster(ctx, s.user.ID)
+		items, err := s.srv.effectiveRoster(ctx, s.user.ID)
 		if err != nil {
 			return s.writeString(iqInternalError(id))
 		}

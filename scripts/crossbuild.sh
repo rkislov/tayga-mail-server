@@ -22,7 +22,7 @@ cp internal/flowsync/NOTICE "$PACKAGE_STAGE/docs/FlowSync-NOTICE"
 cp LICENSE NOTICE README.md "$PACKAGE_STAGE/"
 cp configs/tayga.example.yaml "$PACKAGE_STAGE/configs/"
 cp deploy/systemd/tayga.service "$PACKAGE_STAGE/deploy/systemd/"
-cp docs/setup.md docs/migration.md docs/setup-filters.md docs/release-0.9.7.md docs/flowsync-compatibility.md docs/flowsync-debug.md "$PACKAGE_STAGE/docs/"
+cp docs/setup.md docs/migration.md docs/setup-filters.md docs/release-0.9.10.md docs/flowsync-compatibility.md docs/flowsync-debug.md "$PACKAGE_STAGE/docs/"
 archives=()
 
 targets=(

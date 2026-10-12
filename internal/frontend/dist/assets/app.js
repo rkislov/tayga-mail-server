@@ -2152,6 +2152,7 @@ async function refreshTenantDomains() {
             </select>
           </label>
           <label class="field-check" title="${escapeHtml(mailImageText('Общий адресный справочник пользователей этого домена','Global address list for users in this domain'))}"><input type="checkbox" data-domain-gal="${escapeHtml(d.id)}" ${d.gal_enabled?'checked':''}> GAL</label>
+          <label class="field-check" title="${escapeHtml(mailImageText('Коллеги этого домена в XMPP и веб-чате. В XMPP обновится при переподключении.','Domain colleagues in XMPP and web chat. Reconnect XMPP to refresh.'))}"><input type="checkbox" data-domain-xmpp-gal="${escapeHtml(d.id)}" ${d.xmpp_gal_enabled?'checked':''}> ${escapeHtml(mailImageText('Общий список контактов XMPP','XMPP shared contacts'))}</label>
           <button type="button" class="btn-spray" data-open-domain="${escapeHtml(d.id)}" data-name="${escapeHtml(d.name)}">${escapeHtml(t("domains_open"))}</button>
           <button type="button" class="btn-secondary" data-del-domain="${escapeHtml(d.name)}" ${d.user_count > 0 ? "disabled" : ""}>${escapeHtml(t("domains_remove"))}</button>
         </span>
@@ -2175,6 +2176,7 @@ async function refreshTenantDomains() {
         }
       });
     });
+    list.querySelectorAll('[data-domain-xmpp-gal]').forEach(input=>input.addEventListener('change',async()=>{const value=input.checked;input.disabled=true;try{await api('/api/v1/admin/domains/'+encodeURIComponent(input.dataset.domainXmppGal),{method:'PATCH',body:JSON.stringify({xmpp_gal_enabled:value})});}catch(error){input.checked=!value;setMsg($('admin-domains-msg'),error.message,'err')}finally{input.disabled=false}}));
     list.querySelectorAll('[data-domain-gal]').forEach(input=>input.addEventListener('change',async()=>{const value=input.checked;input.disabled=true;try{await api('/api/v1/admin/domains/'+encodeURIComponent(input.dataset.domainGal),{method:'PATCH',body:JSON.stringify({gal_enabled:value})});composeContactsCache=null;}catch(error){input.checked=!value;setMsg($('admin-domains-msg'),error.message,'err')}finally{input.disabled=false}}));
     list.querySelectorAll("[data-dom-mig]").forEach((sel) => {
       sel.addEventListener("change", async () => {

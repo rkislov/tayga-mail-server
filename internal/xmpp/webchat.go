@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -50,28 +51,31 @@ func (h *Hub) subscribeWeb(bare string) (<-chan ChatEvent, func()) {
 	}
 	h.web[bare][sub] = struct{}{}
 	h.mu.Unlock()
+	var once sync.Once
 	unsub := func() {
-		h.mu.Lock()
-		if m := h.web[bare]; m != nil {
-			delete(m, sub)
-			if len(m) == 0 {
-				delete(h.web, bare)
+		once.Do(func() {
+			h.mu.Lock()
+			if m := h.web[bare]; m != nil {
+				delete(m, sub)
+				if len(m) == 0 {
+					delete(h.web, bare)
+				}
 			}
-		}
-		h.mu.Unlock()
-		close(sub.ch)
+			close(sub.ch)
+			h.mu.Unlock()
+		})
 	}
 	return sub.ch, unsub
 }
 
 func (h *Hub) pushWeb(bare string, ev ChatEvent) {
 	h.mu.RLock()
+	defer h.mu.RUnlock()
 	subs := h.web[ParseJID(bare).Bare()]
 	list := make([]*webSub, 0, len(subs))
 	for s := range subs {
 		list = append(list, s)
 	}
-	h.mu.RUnlock()
 	for _, s := range list {
 		select {
 		case s.ch <- ev:
@@ -81,9 +85,39 @@ func (h *Hub) pushWeb(bare string, ev ChatEvent) {
 }
 
 func (s *Server) ListChatRoster(ctx context.Context, userID string) ([]RosterEntry, error) {
-	items, err := s.listRoster(ctx, userID)
+	items, err := s.effectiveRoster(ctx, userID)
 	if err != nil {
 		return nil, err
+	}
+	// Conversations remain visible even when the peer is not a saved contact.
+	user, err := s.store.GetUserByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if s.db != nil {
+		rows, err := s.db.QueryContext(ctx, s.rebind(`SELECT with_bare_jid FROM xmpp_mam WHERE owner_bare_jid = ? GROUP BY with_bare_jid ORDER BY MAX(created_at) DESC`), ParseJID(user.Email).Bare())
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		seen := make(map[string]bool)
+		for _, item := range items {
+			seen[ParseJID(item.JID).Bare()] = true
+		}
+		for rows.Next() {
+			var peer string
+			if err := rows.Scan(&peer); err != nil {
+				return nil, err
+			}
+			peer = ParseJID(peer).Bare()
+			if peer != "" && peer != ParseJID(user.Email).Bare() && !seen[peer] {
+				items = append(items, rosterItem{JID: peer, Subscription: "none"})
+				seen[peer] = true
+			}
+		}
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
 	}
 	out := make([]RosterEntry, 0, len(items))
 	for _, it := range items {

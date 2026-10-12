@@ -44,3 +44,33 @@ func TestWebChatSendHistorySubscribe(t *testing.T) {
 		t.Fatalf("last=%+v", hist[len(hist)-1])
 	}
 }
+
+func TestIncomingConversationVisibleWithoutSavedContact(t *testing.T) {
+	srv, _, user := testServer(t)
+	ctx := context.Background()
+	if _, err := srv.SendChatMessage(ctx, "bob@example.com", user.Email, "incoming"); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		roster, err := srv.ListChatRoster(ctx, user.ID)
+		if err != nil || len(roster) != 1 || roster[0].JID != "bob@example.com" {
+			t.Fatalf("roster=%+v err=%v", roster, err)
+		}
+	}
+	saved, err := srv.listRoster(ctx, user.ID)
+	if err != nil || len(saved) != 0 {
+		t.Fatalf("conversation must not grant a roster subscription: %+v %v", saved, err)
+	}
+}
+
+func TestWebSubscriptionConcurrentClose(t *testing.T) {
+	srv, _, user := testServer(t)
+	for i := 0; i < 100; i++ {
+		_, cancel := srv.SubscribeChat(user.Email)
+		done := make(chan struct{})
+		go func() { defer close(done); srv.hub.pushWeb(user.Email, ChatEvent{Type: "message"}) }()
+		cancel()
+		cancel()
+		<-done
+	}
+}
