@@ -78,6 +78,9 @@ func (s *Server) adminCanManageUser(r *http.Request, admin, target *storage.User
 	if s.isGlobalAdminUser(admin) {
 		return true
 	}
+	if s.isGlobalAdminUser(target) || (storage.HasRole(target.Roles, storage.RoleTenantAdmin) && !storage.HasRole(admin.Roles, storage.RoleTenantAdmin)) {
+		return false
+	}
 	if target.TenantID != admin.TenantID {
 		return false
 	}

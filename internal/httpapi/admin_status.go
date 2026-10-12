@@ -51,6 +51,7 @@ func (s *Server) handleAdminStatus(w http.ResponseWriter, r *http.Request) {
 			"heap_alloc": ms.HeapAlloc,
 		},
 		"protection": metrics.ProtectionSnapshot(),
+		"network":    metrics.NetworkSnapshot(),
 		"server":     global,
 		"tenant":     tenant,
 		"tls":        tls,

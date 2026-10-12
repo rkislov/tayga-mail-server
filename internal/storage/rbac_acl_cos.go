@@ -101,6 +101,13 @@ func (s *Store) UserAdministersDomain(ctx context.Context, userID, domainID stri
 	if IsGlobalAdmin(u.Roles) {
 		return true, nil
 	}
+	if HasRole(u.Roles, RoleTenantAdmin) {
+		domain, err := s.GetDomainByID(ctx, domainID)
+		if err != nil {
+			return false, err
+		}
+		return domain.TenantID == u.TenantID, nil
+	}
 	if !HasRole(u.Roles, RoleDomainAdmin) {
 		return false, nil
 	}

@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"time"
 )
 
@@ -189,4 +190,39 @@ func (s *Store) CountOutbound(ctx context.Context) (int, error) {
 	var n int
 	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM outbound_queue`).Scan(&n)
 	return n, err
+}
+
+// nil domains means global; an empty non-nil slice means no access.
+func (s *Store) ListOutboundScoped(ctx context.Context, domains []string, limit, offset int) ([]*OutboundItem, int64, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	where := ""
+	args := []any{}
+	if domains != nil {
+		if len(domains) == 0 {
+			return []*OutboundItem{}, 0, nil
+		}
+		conditions := []string{}
+		for _, domain := range domains {
+			conditions = append(conditions, "LOWER(SUBSTR(envelope_from, LENGTH(envelope_from) - LENGTH(?) + 1)) = ?")
+			suffix := "@" + strings.ToLower(domain)
+			args = append(args, suffix, suffix)
+		}
+		where = " WHERE (" + strings.Join(conditions, " OR ") + ")"
+	}
+	var total int64
+	if err := s.db.QueryRowContext(ctx, s.rebind("SELECT COUNT(*) FROM outbound_queue"+where), args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	args = append(args, limit, offset)
+	rows, err := s.db.QueryContext(ctx, s.rebind(`SELECT id,envelope_from,envelope_to,message_id,data,attempts,max_attempts,next_attempt_at,last_error,created_at,updated_at FROM outbound_queue`+where+` ORDER BY next_attempt_at,id LIMIT ? OFFSET ?`), args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	items, err := scanOutboundRows(rows)
+	return items, total, err
 }

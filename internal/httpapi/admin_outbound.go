@@ -38,12 +38,34 @@ func (s *Server) listOutbound(w http.ResponseWriter, r *http.Request) {
 			limit = n
 		}
 	}
-	items, err := s.store.ListOutbound(r.Context(), limit)
+	admin, ok := s.requireAdmin(w, r)
+	if !ok {
+		return
+	}
+	var domains []string
+	if !s.isGlobalAdminUser(admin) {
+		domains = []string{}
+		list, err := s.store.ListDomainsByTenant(r.Context(), admin.TenantID)
+		if err != nil {
+			writeJSON(w, 500, map[string]string{"error": "domain lookup failed"})
+			return
+		}
+		for _, domain := range list {
+			if s.adminCanManageDomain(r, admin, domain.ID) {
+				domains = append(domains, domain.Name)
+			}
+		}
+	}
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	if offset < 0 {
+		offset = 0
+	}
+	items, total, err := s.store.ListOutboundScoped(r.Context(), domains, limit, offset)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	total, _ := s.store.CountOutbound(r.Context())
+
 	out := make([]map[string]any, 0, len(items))
 	for _, it := range items {
 		out = append(out, map[string]any{
@@ -64,12 +86,16 @@ func (s *Server) listOutbound(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) deleteOutbound(w http.ResponseWriter, r *http.Request, id string) {
-	if _, err := s.store.GetOutbound(r.Context(), id); err != nil {
+	it, err := s.store.GetOutbound(r.Context(), id)
+	if err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 			return
 		}
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if !s.outboundAllowed(w, r, it) {
 		return
 	}
 	if err := s.store.DeleteOutbound(r.Context(), id); err != nil {
@@ -89,6 +115,9 @@ func (s *Server) retryOutbound(w http.ResponseWriter, r *http.Request, id string
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+	if !s.outboundAllowed(w, r, it) {
+		return
+	}
 	if err := s.store.RescheduleOutbound(r.Context(), it.ID, it.Attempts, time.Now().UTC(), it.LastError); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -99,4 +128,24 @@ func (s *Server) retryOutbound(w http.ResponseWriter, r *http.Request, id string
 	}
 	s.writeMailLog(r.Context(), &storage.User{Email: it.EnvelopeFrom, TenantID: ""}, "queued", "outbound", it.EnvelopeTo, it.MessageID, int64(len(it.Data)), detail)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "queued"})
+}
+
+func (s *Server) outboundAllowed(w http.ResponseWriter, r *http.Request, it *storage.OutboundItem) bool {
+	admin, ok := s.requireAdmin(w, r)
+	if !ok {
+		return false
+	}
+	if s.isGlobalAdminUser(admin) {
+		return true
+	}
+	from := strings.TrimSpace(it.EnvelopeFrom)
+	at := strings.LastIndex(from, "@")
+	if at >= 0 {
+		domain, err := s.store.GetDomainByName(r.Context(), strings.ToLower(from[at+1:]))
+		if err == nil && s.adminCanManageDomain(r, admin, domain.ID) {
+			return true
+		}
+	}
+	writeJSON(w, 404, map[string]string{"error": "not found"})
+	return false
 }

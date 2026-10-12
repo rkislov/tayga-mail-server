@@ -189,8 +189,12 @@ func (h *ewsHandler) findFolder(ctx context.Context, u *storage.User) (string, e
 		if name == "" {
 			name = ab.Name
 		}
-		fmt.Fprintf(&b, `<t:ContactsFolder><t:FolderId Id="%s" ChangeKey="0"/><t:ParentFolderId Id="%s"/><t:DisplayName>%s</t:DisplayName><t:FolderClass>IPF.Contact</t:FolderClass><t:TotalCount>0</t:TotalCount></t:ContactsFolder>`,
-			xmlEscape(ab.ID), xmlEscape("root:"+u.ID), xmlEscape(name))
+		contacts, err := h.store.ListAddressObjects(ctx, ab.ID)
+		if err != nil {
+			return "", err
+		}
+		fmt.Fprintf(&b, `<t:ContactsFolder><t:FolderId Id="%s" ChangeKey="contact-v2"/><t:ParentFolderId Id="%s"/><t:DisplayName>%s</t:DisplayName><t:FolderClass>IPF.Contact</t:FolderClass><t:TotalCount>%d</t:TotalCount></t:ContactsFolder>`,
+			xmlEscape(ab.ID), xmlEscape("root:"+u.ID), xmlEscape(name), len(contacts))
 	}
 	for _, nf := range nfs {
 		name := nf.DisplayName
@@ -285,13 +289,7 @@ func (h *ewsHandler) findContactItems(ctx context.Context, addressBookID string)
 	b.WriteString(`<m:FindItemResponse xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types">`)
 	b.WriteString(`<m:ResponseMessages><m:FindItemResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:RootFolder><t:Items>`)
 	for _, o := range objs {
-		c := parseVCard(o.Data)
-		dn := c.FN
-		if dn == "" {
-			dn = strings.TrimSpace(c.FirstName + " " + c.LastName)
-		}
-		fmt.Fprintf(&b, `<t:Contact><t:ItemId Id="%s" ChangeKey="%s"/><t:DisplayName>%s</t:DisplayName><t:GivenName>%s</t:GivenName><t:Surname>%s</t:Surname><t:EmailAddresses><t:Entry Key="EmailAddress1">%s</t:Entry></t:EmailAddresses></t:Contact>`,
-			xmlEscape(o.ID), xmlEscape(o.ETag), xmlEscape(dn), xmlEscape(c.FirstName), xmlEscape(c.LastName), xmlEscape(c.Email))
+		b.WriteString(ewsContactXML(o))
 	}
 	b.WriteString(`</t:Items></m:RootFolder></m:FindItemResponseMessage></m:ResponseMessages></m:FindItemResponse>`)
 	return b.String(), nil
@@ -331,12 +329,9 @@ func (h *ewsHandler) getItem(ctx context.Context, u *storage.User, body string) 
 			if o.ID != id {
 				continue
 			}
-			c := parseVCard(o.Data)
 			var b strings.Builder
-			b.WriteString(`<m:GetItemResponse xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types">`)
-			b.WriteString(`<m:ResponseMessages><m:GetItemResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:Items>`)
-			fmt.Fprintf(&b, `<t:Contact><t:ItemId Id="%s" ChangeKey="%s"/><t:DisplayName>%s</t:DisplayName><t:GivenName>%s</t:GivenName><t:Surname>%s</t:Surname><t:CompanyName>%s</t:CompanyName><t:JobTitle>%s</t:JobTitle><t:EmailAddresses><t:Entry Key="EmailAddress1">%s</t:Entry></t:EmailAddresses><t:PhoneNumbers><t:Entry Key="MobilePhone">%s</t:Entry></t:PhoneNumbers></t:Contact>`,
-				xmlEscape(o.ID), xmlEscape(o.ETag), xmlEscape(c.FN), xmlEscape(c.FirstName), xmlEscape(c.LastName), xmlEscape(c.Org), xmlEscape(c.Title), xmlEscape(c.Email), xmlEscape(c.Tel))
+			b.WriteString(`<m:GetItemResponse xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"><m:ResponseMessages><m:GetItemResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:Items>`)
+			b.WriteString(ewsContactXML(o))
 			b.WriteString(`</m:Items></m:GetItemResponseMessage></m:ResponseMessages></m:GetItemResponse>`)
 			return b.String(), nil
 		}
@@ -486,4 +481,38 @@ func ewsFolderReferences(body []byte) string {
 		}
 	}
 	return boundedLog(strings.Join(ids, ","))
+}
+
+// Keep base and contact properties in the EWS ContactItemType schema order.
+func ewsContactXML(o *storage.AddressObject) string {
+	c := parseVCard(o.Data)
+	name := c.FN
+	if name == "" {
+		name = c.Email
+	}
+	if name == "" {
+		name = c.Org
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, `<t:Contact><t:ItemId Id="%s" ChangeKey="%s"/><t:ParentFolderId Id="%s"/><t:ItemClass>IPM.Contact</t:ItemClass><t:Subject>%s</t:Subject><t:FileAs>%s</t:FileAs><t:FileAsMapping>None</t:FileAsMapping><t:DisplayName>%s</t:DisplayName><t:GivenName>%s</t:GivenName><t:MiddleName>%s</t:MiddleName><t:CompleteName><t:FirstName>%s</t:FirstName><t:MiddleName>%s</t:MiddleName><t:LastName>%s</t:LastName><t:FullName>%s</t:FullName></t:CompleteName><t:CompanyName>%s</t:CompanyName>`, xmlEscape(o.ID), digest("contact-v2:"+o.ETag), xmlEscape(o.AddressBookID), xmlEscape(name), xmlEscape(name), xmlEscape(name), xmlEscape(c.FirstName), xmlEscape(c.MiddleName), xmlEscape(c.FirstName), xmlEscape(c.MiddleName), xmlEscape(c.LastName), xmlEscape(name), xmlEscape(c.Org))
+	if c.Email != "" || c.Email2 != "" {
+		b.WriteString(`<t:EmailAddresses>`)
+		for i, value := range []string{c.Email, c.Email2} {
+			if value != "" {
+				fmt.Fprintf(&b, `<t:Entry Key="EmailAddress%d">%s</t:Entry>`, i+1, xmlEscape(value))
+			}
+		}
+		b.WriteString(`</t:EmailAddresses>`)
+	}
+	if c.Tel != "" || c.WorkTel != "" || c.HomeTel != "" {
+		b.WriteString(`<t:PhoneNumbers>`)
+		for _, p := range [][2]string{{"MobilePhone", c.Tel}, {"BusinessPhone", c.WorkTel}, {"HomePhone", c.HomeTel}} {
+			if p[1] != "" {
+				fmt.Fprintf(&b, `<t:Entry Key="%s">%s</t:Entry>`, p[0], xmlEscape(p[1]))
+			}
+		}
+		b.WriteString(`</t:PhoneNumbers>`)
+	}
+	fmt.Fprintf(&b, `<t:JobTitle>%s</t:JobTitle><t:Surname>%s</t:Surname></t:Contact>`, xmlEscape(c.Title), xmlEscape(c.LastName))
+	return b.String()
 }

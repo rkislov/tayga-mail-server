@@ -618,8 +618,13 @@ func (s *session) Data(r io.Reader) error {
 	}
 	if len(s.toRemote) > 0 {
 		outData := data
-		if s.backend.dkim != nil {
-			signed, err := s.backend.dkim.Sign(outData)
+		signer, err := domainDKIMSigner(ctx, s.backend.store, s.backend.dkim, normalizeAddr(s.from))
+		if err != nil {
+			return &gosmtp.SMTPError{Code: 451, Message: "DKIM configuration unavailable"}
+		}
+
+		if signer != nil {
+			signed, err := signer.Sign(outData)
 			if err != nil {
 				s.backend.log.Error("dkim sign failed", "err", err)
 				return &gosmtp.SMTPError{Code: 451, EnhancedCode: gosmtp.EnhancedCode{4, 3, 0}, Message: "DKIM signing failed"}

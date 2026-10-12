@@ -3490,3 +3490,12 @@ html[data-color-mode="light"] {
 .mail-color-dialog {margin:auto;padding:1.25rem;border-radius:1rem;width:min(25rem,calc(100vw - 2rem));background:var(--panel-bg);color:var(--ui-ink);border:1px solid rgba(var(--ui-ink-rgb),.2);box-shadow:0 1rem 4rem #0004;}
 .mail-color-dialog::backdrop {background:#0006;backdrop-filter:blur(3px);}.mail-color-options {display:flex;gap:.5rem;flex-wrap:wrap;margin:1rem 0;}
 .mail-color-option {width:2.5rem;height:2.5rem;border-radius:50%;display:grid;place-items:center;border:2px solid transparent;font-size:1.5rem;}.mail-color-option span {width:1.5rem;height:1.5rem;border-radius:50%;background:var(--swatch);}.mail-color-option[aria-pressed=true] {border-color:var(--ui-ink);}
+
+#tenant-level-users .admin-users-table {min-width:960px;}
+#tenant-level-users .admin-users-table td:nth-child(2) {white-space:nowrap;overflow-wrap:normal;}
+#tenant-level-users .admin-users-table td:first-child {min-width:9rem;overflow-wrap:normal;}
+.admin-user-search-field {display:block;max-width:32rem;margin:1rem 0 .3rem;}
+.dkim-domain-form {margin-top:1.2rem;padding-top:1rem;border-top:1px solid var(--ui-text-20);}
+.chart-host svg {color:var(--ui-text-70);width:100%;max-height:260px;}
+
+#chart-sparklines {display:block;}

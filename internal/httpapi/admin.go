@@ -74,12 +74,16 @@ func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
+		search := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
 		out := make([]map[string]any, 0, len(users))
 		for _, u := range users {
 			if u.AuthSource == "resource" {
 				continue // managed via /admin/resources
 			}
 			if !s.adminCanManageUser(r, admin, u) {
+				continue
+			}
+			if search != "" && !strings.Contains(strings.ToLower(u.DisplayName+" "+u.Email), search) {
 				continue
 			}
 			used, _ := s.store.SumMailboxBytes(r.Context(), u.ID)
@@ -93,6 +97,7 @@ func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 				"enabled":           u.Enabled,
 				"auth_source":       u.AuthSource,
 				"roles":             storage.ParseRoles(u.Roles),
+				"is_global_admin":   s.isGlobalAdminUser(u),
 				"domain_ids":        domainIDs,
 				"domain_id":         u.DomainID,
 				"tenant_id":         u.TenantID,
@@ -216,6 +221,14 @@ func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 		}
 		if s.adminTenantUser(w, r, admin, path) == nil {
 			return
+		}
+		if req.Roles != nil {
+			for _, role := range storage.ParseRoles(storage.JoinRoles(req.Roles)) {
+				if role != storage.RoleUser && role != storage.RoleDomainAdmin && role != storage.RoleTenantAdmin && role != storage.RoleGlobalAdmin {
+					writeJSON(w, 400, map[string]string{"error": "unsupported role"})
+					return
+				}
+			}
 		}
 		if req.Enabled != nil {
 			if err := s.store.UpdateUserEnabled(r.Context(), path, *req.Enabled); err != nil {

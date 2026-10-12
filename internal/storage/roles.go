@@ -7,6 +7,7 @@ const (
 	RoleAdmin       = "admin" // legacy; treated as global_admin
 	RoleGlobalAdmin = "global_admin"
 	RoleDomainAdmin = "domain_admin"
+	RoleTenantAdmin = "tenant_admin"
 	RoleUser        = "user"
 )
 
@@ -60,13 +61,16 @@ func IsGlobalAdmin(roles string) bool {
 
 // IsDomainAdmin reports domain or global admin privilege.
 func IsDomainAdmin(roles string) bool {
-	return IsGlobalAdmin(roles) || HasRole(roles, RoleDomainAdmin)
+	return IsGlobalAdmin(roles) || HasRole(roles, RoleDomainAdmin) || HasRole(roles, RoleTenantAdmin)
 }
 
 // AdminScope returns "global", "domain", or "none".
 func AdminScope(roles string) string {
 	if IsGlobalAdmin(roles) {
 		return "global"
+	}
+	if HasRole(roles, RoleTenantAdmin) {
+		return "tenant"
 	}
 	if HasRole(roles, RoleDomainAdmin) {
 		return "domain"

@@ -1,11 +1,14 @@
 package smtp
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/json"
 	"encoding/pem"
+	"github.com/tayga/tms/internal/storage"
 	"os"
 	"path/filepath"
 	"strings"
@@ -137,3 +140,63 @@ type netDNSError struct{ msg string }
 func (e *netDNSError) Error() string   { return e.msg }
 func (e *netDNSError) Timeout() bool   { return false }
 func (e *netDNSError) Temporary() bool { return false }
+
+func TestManagedDKIMDomainSelection(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	store, err := storage.Open(ctx, config.StorageConfig{Driver: "sqlite", SQLite: config.SQLiteConfig{Path: filepath.Join(dir, "db")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "key.pem")
+	if err = os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)}), 0600); err != nil {
+		t.Fatal(err)
+	}
+	binding := storage.DKIMBinding{Domain: "example.com", Selector: "mail", KeyFile: path, Enabled: true}
+	save := func() {
+		raw, _ := json.Marshal(binding)
+		if err := store.PutSetting(ctx, "dkim.domain.example.com", string(raw)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	save()
+	signer, err := domainDKIMSigner(ctx, store, nil, "sender@EXAMPLE.COM")
+	if err != nil || signer == nil {
+		t.Fatal("managed signing unavailable", err)
+	}
+	signed, err := signer.Sign([]byte("From: sender@example.com\r\nTo: recipient@remote.example\r\nSubject: Test\r\n\r\nBody\r\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	public, _ := x509.MarshalPKIXPublicKey(&key.PublicKey)
+	dns := "v=DKIM1; k=rsa; p=" + base64.StdEncoding.EncodeToString(public)
+	policy := &dkimVerifyPolicy{action: "tag", authservID: "mail.example.com", lookupTXT: func(name string) ([]string, error) {
+		if name != "mail._domainkey.example.com" {
+			t.Fatalf("wrong binding %s", name)
+		}
+		return []string{dns}, nil
+	}}
+	_, domains, err := policy.apply(signed)
+	if err != nil || len(domains) != 1 || domains[0] != "example.com" {
+		t.Fatal("signature invalid", err)
+	}
+	if other, err := domainDKIMSigner(ctx, store, signer, "sender@other.example"); err != nil || other != nil {
+		t.Fatal("key leaked across domains")
+	}
+	binding.Enabled = false
+	save()
+	if disabled, err := domainDKIMSigner(ctx, store, signer, "sender@example.com"); err != nil || disabled != nil {
+		t.Fatal("disabled binding used legacy fallback")
+	}
+	binding.Enabled = true
+	binding.KeyFile = filepath.Join(dir, "missing.pem")
+	save()
+	if _, err := domainDKIMSigner(ctx, store, signer, "sender@example.com"); err == nil {
+		t.Fatal("enabled broken binding must fail closed")
+	}
+}
