@@ -132,6 +132,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/admin/backup", s.handleAdminBackup)
 	mux.HandleFunc("/api/v1/admin/backup/restore", s.handleAdminBackupRestore)
 	mux.HandleFunc("/api/v1/admin/dkim/generate", s.handleAdminDKIM)
+	mux.HandleFunc("/api/v1/admin/dkim", s.handleDomainDKIM)
 	mux.HandleFunc("/api/v1/admin/settings", s.handleAdminSettings)
 	mux.HandleFunc("/api/v1/admin/settings/", s.handleAdminSettings)
 	mux.HandleFunc("/api/v1/admin/bots", s.handleAdminBots)

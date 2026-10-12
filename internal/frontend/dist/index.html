@@ -193,6 +193,7 @@
         <button type="button" class="nav-btn" id="nav-migration" data-app="migration"><span class="nav-ico" data-ico="filter" aria-hidden="true"></span><span data-i18n="nav_migration">Миграция</span></button>
         <div id="nav-admin" class="hidden">
           <p class="nav-group" data-i18n="nav_admin">Админ</p>
+          <button type="button" class="nav-btn" data-app="outbound"><span class="nav-ico" data-ico="mail" aria-hidden="true"></span><span>Почтовая очередь</span></button>
           <button type="button" class="nav-btn" data-app="monitor"><span class="nav-ico" data-ico="chart" aria-hidden="true"></span><span data-i18n="nav_monitor">Мониторинг</span></button>
  <button type="button" class="nav-btn" data-app="antispam"><span class="nav-ico" data-ico="lock" aria-hidden="true"></span><span data-i18n="nav_antispam">Антиспам</span></button>
           <button type="button" class="nav-btn" data-app="maillog"><span class="nav-ico" data-ico="mail" aria-hidden="true"></span><span data-i18n="nav_maillog">Лог писем</span></button>
@@ -783,6 +784,7 @@ keep;</textarea>
         </div>
       </div>
 
+      <div id="app-outbound" class="app-page hidden panel-page panel-page-wide"><div class="card"><h3 class="heading">Исходящая почтовая очередь</h3><p class="meta">Письма доменов, которыми вы управляете. Глобальный администратор видит всю очередь.</p><button type="button" class="btn-secondary" onclick="refreshOutbound()">Обновить</button><p id="outbound-msg" role="status"></p><ul class="creds" id="outbound-list"></ul><div id="outbound-pager" class="actions"></div></div></div>
       <!-- ADMIN MONITOR -->
       <div id="app-monitor" class="app-page hidden panel-page panel-page-wide">
         <div class="card" id="card-monitor">
@@ -802,13 +804,13 @@ keep;</textarea>
               <h4 class="chart-title">Очередь и runtime</h4>
               <div id="chart-runtime" class="chart-host"></div>
             </div>
+            <div class="chart-card chart-card-wide"><h4 class="chart-title">Сеть — общая шкала</h4><div id="chart-network" class="chart-host"></div></div>
             <div class="chart-card chart-card-wide">
               <h4 class="chart-title">Живые метрики <span class="meta" id="chart-live-hint">(пока открыт мониторинг)</span></h4>
               <div id="chart-sparklines" class="chart-host chart-sparklines"></div>
             </div>
           </div>
-          <h3 class="heading heading-gap">Исходящая очередь</h3>
-          <ul class="creds" id="outbound-list"></ul>
+
           <div class="chart-card"><h4 class="chart-title">Защита от спама и рассылок</h4><p class="meta">Решения антиспама с запуска сервера, по получателям. Рассылки определяются по заголовку List-Unsubscribe.</p><div id="protection-stats" class="chart-host"></div><button type="button" class="btn-secondary" data-app="antispam" id="monitor-open-antispam">Открыть антиспам</button></div>
           <div class="actions">
             <button type="button" class="btn-secondary" id="btn-monitor-refresh" data-i18n="refresh">Обновить</button>
@@ -888,6 +890,7 @@ keep;</textarea>
               <input class="field-input" id="nu-quota" type="number" min="0" value="0" />
               <div class="actions"><button type="submit" class="btn-spray" data-i18n="users_create">Создать</button></div>
             </form></details>
+            <label class="field admin-user-search-field" for="admin-user-search">Поиск пользователей<input type="search" id="admin-user-search" class="field-input" placeholder="Имя или email" autocomplete="off" /></label><p id="admin-user-search-status" class="meta" role="status"></p>
             <div class="admin-table-scroll"><table class="admin-users-table"><thead><tr><th data-i18n="users_name"></th><th data-i18n="email"></th><th data-i18n="users_status"></th><th data-i18n="users_storage"></th><th data-i18n="nav_cos"></th><th data-i18n="mig_policy"></th><th data-i18n="users_actions"></th></tr></thead><tbody id="admin-user-list"></tbody></table></div>
 
             <h4 class="heading" style="font-size:1rem;margin-top:1.25rem" data-i18n="resources_title">Ресурсы календаря</h4>

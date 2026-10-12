@@ -52,7 +52,7 @@ async function openProtectionMessage(id) {
 function renderProtectionStats(stats) {
   const host=$('protection-stats');if(!host)return;
   const labels={pass:'Пропущено',tag:'Помечено',quarantine:'В спам',reject:'Отклонено',greylist:'Отложено',error:'Ошибки проверки'};
-  renderHBars(host,Object.entries(labels).map(([key,label])=>({label,value:stats?.decisions?.[key]||0,display:fmtNum(stats?.decisions?.[key]||0)})),{color:'#d97706'});
+  renderTimeChart(host,'protection',Object.entries(labels).map(([key,label])=>({label,value:stats?.decisions?.[key]||0})),'Решения с запуска сервера');
   const bulk=document.createElement('p');bulk.className='meta';bulk.textContent='Проверено рассылок: '+fmtNum(stats?.newsletters||0);host.append(bulk);
 }
 document.querySelectorAll('[data-protection-config]').forEach(button=>button.addEventListener('click',async()=>{await refreshSettings();await openAdminConfig(button.dataset.protectionConfig);}));

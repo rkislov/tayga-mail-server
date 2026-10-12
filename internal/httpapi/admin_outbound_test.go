@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -33,6 +34,7 @@ func TestAdminOutboundQueue(t *testing.T) {
 
 	cfg := config.Default()
 	cfg.FlowSync.Enabled = false
+	cfg.Mailstore.Root = filepath.Join(dir, "mail")
 	cfg.HTTP.Admins = []string{"admin@ex.com"}
 	layer := auth.NewLayer(store, config.LDAPConfig{}, cfg.MFA, config.OIDCConfig{})
 	hash, _ := layer.Hasher.Hash("secret")
@@ -63,6 +65,92 @@ func TestAdminOutboundQueue(t *testing.T) {
 		t.Fatal(err)
 	}
 	token := res.Tokens.AccessToken
+
+	// A domain administrator must neither list nor mutate another domain's queue.
+	otherDom, _ := store.CreateDomain(ctx, tenant.ID, "other.example")
+	scopedUser, err := store.CreateUser(ctx, &storage.User{TenantID: tenant.ID, DomainID: otherDom.ID, Email: "scoped@other.example", LocalPart: "scoped", AuthSource: "local", PasswordHash: hash, Enabled: true, Roles: "domain_admin"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = store.SetDomainAdminDomains(ctx, scopedUser.ID, []string{otherDom.ID}); err != nil {
+		t.Fatal(err)
+	}
+	scopedLogin, err := layer.LoginWithPassword(ctx, scopedUser.Email, "secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, check := range []struct {
+		method, path string
+		code         int
+	}{{"GET", "/api/v1/admin/outbound", 200}, {"POST", "/api/v1/admin/outbound/" + it.ID + "/retry", 404}, {"DELETE", "/api/v1/admin/outbound/" + it.ID, 404}} {
+		req := httptest.NewRequest(check.method, check.path, nil)
+		req.Header.Set("Authorization", "Bearer "+scopedLogin.Tokens.AccessToken)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != check.code {
+			t.Fatalf("scoped %s: %d %s", check.path, rec.Code, rec.Body.String())
+		}
+		if check.method == "GET" {
+			var result struct {
+				Total int
+				Items []any
+			}
+			if json.Unmarshal(rec.Body.Bytes(), &result) != nil || result.Total != 0 || len(result.Items) != 0 {
+				t.Fatal("queue leaked outside domain")
+			}
+		}
+	}
+
+	for _, check := range []struct {
+		path, body string
+		code       int
+	}{{"/api/v1/admin/dkim", `{"domain":"ex.com","selector":"mail","generate":true}`, 404}, {"/api/v1/admin/dkim", `{"domain":"other.example","selector":"mail","generate":true}`, 200}} {
+		req := httptest.NewRequest("POST", check.path, strings.NewReader(check.body))
+		req.Header.Set("Authorization", "Bearer "+scopedLogin.Tokens.AccessToken)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != check.code {
+			t.Fatalf("DKIM scope %d %s", rec.Code, rec.Body.String())
+		}
+		if strings.Contains(rec.Body.String(), "PRIVATE KEY") {
+			t.Fatal("private key leaked in metadata")
+		}
+	}
+	binding, err := storage.ReadDKIMBinding(ctx, store, "other.example")
+	if err != nil || binding == nil {
+		t.Fatal("binding missing")
+	}
+	info, err := os.Stat(binding.KeyFile)
+	if err != nil || info.Mode().Perm() != 0600 {
+		t.Fatal("private key permissions")
+	}
+	for _, check := range []struct {
+		path string
+		code int
+	}{{"/api/v1/admin/dkim?domain=ex.com", 404}, {"/api/v1/admin/dkim?domain=other.example", 200}, {"/api/v1/admin/dkim", 200}} {
+		req := httptest.NewRequest("GET", check.path, nil)
+		req.Header.Set("Authorization", "Bearer "+scopedLogin.Tokens.AccessToken)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != check.code {
+			t.Fatalf("DKIM GET scope %d %s", rec.Code, rec.Body.String())
+		}
+		if check.path == "/api/v1/admin/dkim" && (strings.Contains(rec.Body.String(), "ex.com") || strings.Contains(rec.Body.String(), "PRIVATE KEY")) {
+			t.Fatal("DKIM metadata scope leak")
+		}
+	}
+	// A tenant administrator gains domains added to that tenant, never another tenant.
+	if err = store.UpdateUserRoles(ctx, scopedUser.ID, "tenant_admin"); err != nil {
+		t.Fatal(err)
+	}
+	otherTenant, _ := store.CreateTenant(ctx, "outside")
+	outsideDomain, _ := store.CreateDomain(ctx, otherTenant.ID, "outside.example")
+	if allowed, err := store.UserAdministersDomain(ctx, scopedUser.ID, dom.ID); err != nil || !allowed {
+		t.Fatal("tenant domain missing")
+	}
+	if allowed, err := store.UserAdministersDomain(ctx, scopedUser.ID, outsideDomain.ID); err != nil || allowed {
+		t.Fatal("cross-tenant authorization")
+	}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/outbound", nil)
 	req.Header.Set("Authorization", "Bearer "+token)

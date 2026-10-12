@@ -295,7 +295,7 @@ $("color-mode-select")?.addEventListener("change",event=>applyColorMode(event.ta
 const APPS = [
   "mail", "calendar", "contacts", "notes", "files", "chat",
   "profile", "security", "appearance", "filters", "language", "migration",
-  "monitor", "antispam", "maillog", "tenants", "tls", "xmpp", "server", "cos",
+  "monitor", "outbound", "antispam", "maillog", "tenants", "tls", "xmpp", "server", "cos",
 ];
 
 const mailState = { mailboxID: "", messageID: "", mailboxes: [], order: [], searchQ: "", offset: 0, pageSize: 50, request: 0, sort: "date", sortOrder: "desc", filter: "all" };
@@ -346,6 +346,7 @@ const APP_I18N = {
   language: "nav_language",
   migration: "nav_migration",
   monitor: "nav_monitor",
+ outbound: "monitor_queue",
   antispam: "nav_antispam",
   maillog: "nav_maillog",
   tenants: "nav_tenants",
@@ -402,6 +403,7 @@ function showApp(name) {
   if (app === "chat") { refreshChat(); startChatLive(); }
   else stopChatLive();
   if (app === "filters") { refreshSieve(); refreshVacation(); }
+  if(app === "outbound") refreshOutbound();
   if (app === "monitor") { refreshMonitor(); startMonitorLive(); }
   else stopMonitorLive();
   if (app === "antispam") refreshQuarantine();
@@ -461,6 +463,7 @@ function isAuthPublicPath(path) {
 
 function clearSession() {
   state.tokens = null;
+ liveCharts.clear();previousNetwork=null;
   state.challenge = "";
   state.methods = [];
   localStorage.removeItem("tayga.tokens");
@@ -741,49 +744,30 @@ function formatUptime(seconds) {
   return parts.join(" ");
 }
 
+const liveCharts = new Map();
+let monitorStartedAt = '';
+let previousNetwork = null;
+function renderTimeChart(host, key, series, unit='') {
+ if(!host)return;
+ let samples=liveCharts.get(key)||[];const names=series.map(item=>item.label).join('\u0000');if(samples.length&&samples[0].names!==names)samples=[];samples.push({time:Date.now(),names,values:series.map(item=>Number(item.value)||0)});while(samples.length>120)samples.shift();liveCharts.set(key,samples);
+ const w=640,h=210,left=60,right=18,top=16,bottom=36;
+ const max=Math.max(1,...samples.flatMap(sample=>sample.values));const start=samples[0].time,end=samples.at(-1).time,span=Math.max(end-start,5000);
+ const colors=['#36866b','#598ad5','#d48331','#b466b1','#bc5353','#70838d'];let svg='';
+ for(let i=0;i<=4;i++){const v=max*i/4,y=h-bottom-(h-top-bottom)*i/4;svg+=svgEl('line',{x1:left,x2:w-right,y1:y,y2:y,stroke:'currentColor',opacity:0.12})+svgEl('text',{x:left-8,y:y+4,'text-anchor':'end',fill:'currentColor','font-size':11},escapeHtml(fmtNum(v)))}
+ for(let i=0;i<3;i++){const x=left+(w-left-right)*i/2;svg+=svgEl('text',{x,y:h-10,'text-anchor':i===0?'start':i===2?'end':'middle',fill:'currentColor','font-size':11},escapeHtml(new Date(start+(end-start)*i/2).toLocaleTimeString()))}
+ series.forEach((item,index)=>{const points=samples.map(sample=>`${left+(sample.time-start)/span*(w-left-right)},${h-bottom-sample.values[index]/max*(h-top-bottom)}`).join(' ');svg+=svgEl('polyline',{points,fill:'none',stroke:colors[index%colors.length],'stroke-width':2.5});const last=points.split(' ').at(-1).split(',');svg+=svgEl('circle',{cx:last[0],cy:last[1],r:3,fill:colors[index%colors.length]})});
+ host.innerHTML=`<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${escapeHtml(series.map(item=>item.label).join(', '))}"><title>${escapeHtml(unit)}</title>${svg}</svg><div class="chart-legend">${series.map((item,i)=>`<span><i style="background:${colors[i%colors.length]}"></i>${escapeHtml(item.label)}: ${escapeHtml(item.display||fmtNum(item.value))}</span>`).join('')}</div><p class="meta">${escapeHtml(unit)} · Наблюдения с ${escapeHtml(new Date(start).toLocaleTimeString())}. ${samples.length===1?'Накапливаем данные…':''}</p>`;
+}
 function renderMonitorCharts(d) {
-  const ten = d.tenant || {};
-  const s = d.server || {};
-  const g = d.go || {};
-  renderBarGroup($("chart-bars"), [
-    { label: "Users", a: ten.users || 0, b: s.users || 0 },
-    { label: "Msgs", a: ten.messages || 0, b: s.messages || 0 },
-    { label: "Domains", a: ten.domains || 0, b: s.domains || 0 },
-  ], {
-    series: ["a", "b"],
-    seriesLabels: ["Tenant", "Server"],
-    colors: ["#e8b84a", "#5b8def"],
-  });
-  renderHBars($("chart-storage"), [
-    { label: "Tenant", value: ten.bytes_stored || 0, display: fmtBytes(ten.bytes_stored || 0) },
-    { label: "Server", value: s.bytes_stored || 0, display: fmtBytes(s.bytes_stored || 0) },
-    { label: "Enabled", value: ten.users_enabled || 0, display: fmtNum(ten.users_enabled || 0) + " users" },
-    { label: "Mailboxes", value: s.mailboxes || ten.mailboxes || 0, display: fmtNum(s.mailboxes || ten.mailboxes || 0) },
-  ], { color: "#d97706" });
-  renderHBars($("chart-runtime"), [
-    { label: "Outbound", value: s.outbound_queued || 0, display: fmtNum(s.outbound_queued || 0) },
-    { label: "Goroutines", value: g.goroutines || 0, display: fmtNum(g.goroutines || 0) },
-    { label: "Heap", value: g.heap_alloc || 0, display: fmtBytes(g.heap_alloc || 0) },
-    { label: "Uptime", value: d.uptime_sec || 0, display: formatUptime(d.uptime_sec) },
-  ], { color: "#3d8ea8" });
+ if(monitorStartedAt!==d.started_at){liveCharts.clear();previousNetwork=null;monitorStartedAt=d.started_at}
+ const ten=d.tenant||{},server=d.server||{},g=d.go||{};
+ renderTimeChart($('chart-bars'),'messages',[{label:'Тенант',value:ten.messages},{label:'Сервер',value:server.messages}],'Сохранённые письма');
+ renderTimeChart($('chart-storage'),'storage',[{label:'Тенант',value:(ten.bytes_stored||0)/1048576},{label:'Сервер',value:(server.bytes_stored||0)/1048576}],'МиБ');
+ renderTimeChart($('chart-runtime'),'runtime',[{label:'В очереди',value:server.outbound_queued},{label:'Горутины',value:g.goroutines}],'Количество');
+ renderTimeChart($('chart-sparklines'),'heap',[{label:'Память',value:(g.heap_alloc||0)/1048576}],'МиБ');
+ const net=d.network;const host=$('chart-network');
+ if(net?.available){const now=Date.now(),series=[];for(const item of net.interfaces||[]){const old=previousNetwork?.interfaces.find(value=>value.name===item.name);if(!old)continue;const seconds=(now-previousNetwork.time)/1000;if(seconds<=0)continue;for(const [key,label]of [['rx_bytes','Приём'],['tx_bytes','Отправка']])series.push({label:item.name+' · '+label,value:Math.max(0,item[key]-old[key])/seconds/1024})}if(series.length)renderTimeChart(host,'network',series,'КиБ/с');else if(host)host.textContent='Собираем два наблюдения для расчёта скорости…';previousNetwork={time:now,interfaces:net.interfaces||[]}}else if(host)host.textContent='Сетевые счётчики недоступны на этой системе.';
 
-  pushHistory(monitorHistory.goroutines, g.goroutines);
-  pushHistory(monitorHistory.heap, g.heap_alloc);
-  pushHistory(monitorHistory.outbound, s.outbound_queued);
-  const spark = $("chart-sparklines");
-  if (spark) {
-    spark.innerHTML = [
-      { title: "Goroutines", series: monitorHistory.goroutines, color: "#e8b84a", fmt: fmtNum },
-      { title: "Heap", series: monitorHistory.heap, color: "#5b8def", fmt: fmtBytes },
-      { title: "Outbound", series: monitorHistory.outbound, color: "#d97706", fmt: fmtNum },
-    ].map((item) => {
-      const last = item.series[item.series.length - 1] || 0;
-      return `<div class="spark-block">
-        <div class="spark-label"><span>${escapeHtml(item.title)}</span><strong>${escapeHtml(item.fmt(last))}</strong></div>
-        ${renderSparkline(item.series, item.color)}
-      </div>`;
-    }).join("");
-  }
 }
 
 function startMonitorLive() {
@@ -826,7 +810,6 @@ async function refreshMonitor() {
       `<div><span class="meta">${escapeHtml(k)}</span><br/><strong>${escapeHtml(String(v))}</strong></div>`
     ).join("");
     renderMonitorCharts(d);
-    await refreshOutbound();
     renderProtectionStats(d.protection);
   } catch (err) {
     setMsg($("monitor-msg"), err.message, "err");
@@ -890,12 +873,15 @@ $("maillog-q")?.addEventListener("keydown", (e) => {
   }
 });
 
+let outboundOffset=0;
 async function refreshOutbound() {
   const list = $("outbound-list");
   if (!list) return;
   try {
-    const d = await api("/api/v1/admin/outbound?limit=30");
+    const d = await api("/api/v1/admin/outbound?limit=30&offset="+outboundOffset);
     const items = d.items || [];
+    if(!items.length && outboundOffset>0){outboundOffset=Math.max(0,outboundOffset-30);return refreshOutbound()}
+    const pager=$('outbound-pager');if(pager){pager.replaceChildren();const prev=document.createElement('button'),next=document.createElement('button'),count=document.createElement('span');prev.className=next.className='btn-secondary';prev.textContent='Назад';next.textContent='Далее';prev.disabled=outboundOffset===0;next.disabled=outboundOffset+items.length>=d.total;count.textContent=items.length?`${outboundOffset+1}–${outboundOffset+items.length} / ${d.total}`:'0';prev.onclick=()=>{outboundOffset=Math.max(0,outboundOffset-30);refreshOutbound()};next.onclick=()=>{outboundOffset+=30;refreshOutbound()};pager.append(prev,count,next)}
     if (!items.length) {
       list.innerHTML = "<li class=\"meta\">Queue empty.</li>";
       return;
@@ -916,9 +902,9 @@ async function refreshOutbound() {
       btn.addEventListener("click", async () => {
         try {
           await api("/api/v1/admin/outbound/" + btn.getAttribute("data-out-retry") + "/retry", { method: "POST" });
-          setMsg($("monitor-msg"), "Queued for immediate retry.", "ok");
-          refreshMonitor();
-        } catch (err) { setMsg($("monitor-msg"), err.message, "err"); }
+          setMsg($("outbound-msg"), "Queued for immediate retry.", "ok");
+          refreshOutbound();
+        } catch (err) { setMsg($("outbound-msg"), err.message, "err"); }
       });
     });
     list.querySelectorAll("[data-out-del]").forEach((btn) => {
@@ -926,9 +912,9 @@ async function refreshOutbound() {
         if (!await askConfirm("Drop this queued message without DSN?", { danger: true })) return;
         try {
           await api("/api/v1/admin/outbound/" + btn.getAttribute("data-out-del"), { method: "DELETE" });
-          setMsg($("monitor-msg"), "Dropped.", "ok");
-          refreshMonitor();
-        } catch (err) { setMsg($("monitor-msg"), err.message, "err"); }
+          setMsg($("outbound-msg"), "Dropped.", "ok");
+          refreshOutbound();
+        } catch (err) { setMsg($("outbound-msg"), err.message, "err"); }
       });
     });
   } catch (err) {
@@ -1259,7 +1245,11 @@ $("form-create-resource")?.addEventListener("submit", async (e) => {
   }
 });
 
+let adminUserRequest=0;
+let adminSearchTimer;
+$("admin-user-search")?.addEventListener("input",()=>{clearTimeout(adminSearchTimer);adminSearchTimer=setTimeout(refreshAdminUsers,200)});
 async function refreshAdminUsers() {
+ const request=++adminUserRequest;
   setTenantLevel("users");
   const list = $("admin-user-list");
   const meta = $("tenant-meta");
@@ -1273,11 +1263,12 @@ async function refreshAdminUsers() {
       ? "?domain_id=" + encodeURIComponent(tenantNav.domainID)
       : "?tenant_id=" + encodeURIComponent(tenantNav.tenantID);
     const [data, cosData] = await Promise.all([
-      api("/api/v1/admin/users" + q),
+      api("/api/v1/admin/users" + q+"&q="+encodeURIComponent($("admin-user-search")?.value.trim()||"")),
       api("/api/v1/admin/service-classes").catch(() => ({ service_classes: [] })),
     ]);
-    if (!list) return;
+    if (!list || request!==adminUserRequest) return;
     const users = data.users || [];
+ if($("admin-user-search-status"))$("admin-user-search-status").textContent="Найдено: "+users.length;
     const classes = cosData.service_classes || [];
     const cosOptions = (selected) => [
       `<option value="">${escapeHtml(t("cos_none"))}</option>`,
@@ -1285,7 +1276,7 @@ async function refreshAdminUsers() {
         `<option value="${escapeHtml(sc.id)}" ${sc.id === selected ? "selected" : ""}>${escapeHtml(sc.name || sc.id)}</option>`
       ),
     ].join("");
-    list.innerHTML = users.map((u) => `<tr><td>${escapeHtml(u.display_name||"—")}</td><td>${escapeHtml(u.email)}</td><td><span class="badge">${t(u.enabled?"users_active":"users_disabled")}</span><div class="meta">${escapeHtml(u.roles?.includes("global_admin")?mailImageText("Глобальный администратор","Global administrator"):u.roles?.includes("domain_admin")?mailImageText("Администратор домена","Domain administrator"):mailImageText("Пользователь","User"))}</div></td><td>${fmtBytes(u.used_bytes)} / ${u.quota_bytes>0?fmtBytes(u.quota_bytes):"∞"}</td><td>          <label class="mig-policy-label" title="${escapeHtml(t("cos_lede"))}">
+    list.innerHTML = users.map((u) => `<tr><td>${escapeHtml(u.display_name||"—")}</td><td>${escapeHtml(u.email)}</td><td><span class="badge">${t(u.enabled?"users_active":"users_disabled")}</span><div class="meta">${escapeHtml((u.is_global_admin||u.roles?.includes("global_admin"))?mailImageText("Глобальный администратор","Global administrator"):u.roles?.includes("tenant_admin")?mailImageText("Администратор организации","Organization administrator"):u.roles?.includes("domain_admin")?mailImageText("Администратор домена","Domain administrator"):mailImageText("Пользователь","User"))}</div></td><td>${fmtBytes(u.used_bytes)} / ${u.quota_bytes>0?fmtBytes(u.quota_bytes):"∞"}</td><td>          <label class="mig-policy-label" title="${escapeHtml(t("cos_lede"))}">
             <span>${escapeHtml(t("cos_assign"))}</span>
             <select class="field-input" data-user-cos="${escapeHtml(u.id)}" style="max-width:9rem">
               ${cosOptions(u.service_class_id || "")}

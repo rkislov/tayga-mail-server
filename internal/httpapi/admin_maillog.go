@@ -79,6 +79,17 @@ func (s *Server) handleAdminMailLog(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) adminDomainNames(r *http.Request, admin *storage.User) ([]string, error) {
+	if storage.HasRole(admin.Roles, storage.RoleTenantAdmin) {
+		domains, err := s.store.ListDomainsByTenant(r.Context(), admin.TenantID)
+		if err != nil {
+			return nil, err
+		}
+		names := []string{}
+		for _, domain := range domains {
+			names = append(names, domain.Name)
+		}
+		return names, nil
+	}
 	ids, err := s.store.ListDomainAdminDomains(r.Context(), admin.ID)
 	if err != nil {
 		return nil, err

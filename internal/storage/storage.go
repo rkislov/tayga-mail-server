@@ -237,6 +237,7 @@ type Driver interface {
 	EnqueueOutbound(ctx context.Context, item *OutboundItem) (*OutboundItem, error)
 	ClaimOutboundDue(ctx context.Context, limit int) ([]*OutboundItem, error)
 	ListOutbound(ctx context.Context, limit int) ([]*OutboundItem, error)
+	ListOutboundScoped(ctx context.Context, domains []string, limit, offset int) ([]*OutboundItem, int64, error)
 	GetOutbound(ctx context.Context, id string) (*OutboundItem, error)
 	RescheduleOutbound(ctx context.Context, id string, attempts int, nextAttempt time.Time, lastError string) error
 	DeleteOutbound(ctx context.Context, id string) error

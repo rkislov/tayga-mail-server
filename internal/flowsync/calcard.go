@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/emersion/go-vcard"
 	"github.com/tayga/tms/internal/storage"
 )
 
@@ -376,7 +377,7 @@ func parseICalEvent(data string) icalEvent {
 }
 
 type vcardFields struct {
-	FN, FirstName, LastName, Email, Email2, Tel, HomeTel, WorkTel, Org, Title string
+	FN, FirstName, LastName, MiddleName, Email, Email2, Tel, HomeTel, WorkTel, Org, Title string
 }
 
 func parseVCard(data string) vcardFields {
@@ -417,6 +418,18 @@ func parseVCard(data string) vcardFields {
 			}
 		}
 	}
+	if card, err := vcard.NewDecoder(strings.NewReader(data)).Decode(); err == nil {
+		c.FN = card.PreferredValue(vcard.FieldFormattedName)
+		if name := card.Name(); name != nil {
+			c.FirstName = name.GivenName
+			c.LastName = name.FamilyName
+			c.MiddleName = name.AdditionalName
+		}
+	}
+	if c.FN == "" || (c.FN == c.Org && (c.FirstName != "" || c.LastName != "")) {
+		c.FN = strings.TrimSpace(strings.Join(strings.Fields(c.FirstName+" "+c.MiddleName+" "+c.LastName), " "))
+	}
+
 	return c
 }
 

@@ -2,12 +2,14 @@ package smtp
 
 import (
 	"bytes"
+	"context"
 	"crypto"
 	"crypto/ed25519"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"github.com/tayga/tms/internal/storage"
 	"os"
 	"strings"
 
@@ -81,4 +83,26 @@ func (s *dkimSigner) Sign(msg []byte) ([]byte, error) {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+func domainDKIMSigner(ctx context.Context, store storage.Driver, legacy *dkimSigner, from string) (*dkimSigner, error) {
+	at := strings.LastIndex(from, "@")
+	if at < 0 {
+		return nil, nil
+	}
+	domain := strings.ToLower(from[at+1:])
+	binding, err := storage.ReadDKIMBinding(ctx, store, domain)
+	if err != nil {
+		return nil, err
+	}
+	if binding != nil {
+		if !binding.Enabled {
+			return nil, nil
+		}
+		return newDKIMSigner(config.SMTPDKIMConfig{Enabled: true, Domain: domain, Selector: binding.Selector, PrivateKeyFile: binding.KeyFile})
+	}
+	if legacy != nil && legacy.domain == domain {
+		return legacy, nil
+	}
+	return nil, nil
 }
