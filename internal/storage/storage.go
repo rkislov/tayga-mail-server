@@ -16,6 +16,12 @@ var (
 
 // Driver is the storage abstraction shared by protocol handlers.
 type Driver interface {
+	EWSMailMetadata(context.Context, string) (string, error)
+	UpdateEWSMailMetadata(context.Context, string, string, string) error
+	SaveMetricSample(context.Context, string, MetricSample) error
+	MetricHistory(context.Context, string, int64) ([]MetricSample, error)
+	PruneMetricHistory(context.Context, int64) error
+
 	Ping(ctx context.Context) error
 	Close() error
 	Migrate(ctx context.Context) error

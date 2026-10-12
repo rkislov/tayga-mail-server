@@ -170,7 +170,11 @@ func (h *ewsHandler) notificationSnapshot(ctx context.Context, u *storage.User, 
 				return nil, e
 			}
 			for _, v := range items {
-				add(v.ID, digest(fmt.Sprintf("%s/%d/%s", v.Flags, v.Size, v.FilePath)))
+				metadata, e := h.store.EWSMailMetadata(ctx, v.ID)
+				if e != nil {
+					return nil, e
+				}
+				add(v.ID, digest(fmt.Sprintf("%s/%d/%s/%s", v.Flags, v.Size, v.FilePath, metadata)))
 			}
 		}
 	}

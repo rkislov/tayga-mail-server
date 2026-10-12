@@ -79,6 +79,31 @@ func TestAdminOutboundQueue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// History must not disclose server or another tenant samples to scoped admins.
+	for _, scope := range []string{"server", "tenant:" + tenant.ID, "tenant:unrelated"} {
+		if err := store.SaveMetricSample(ctx, scope, storage.MetricSample{At: time.Now().UnixMilli(), Boot: "test", Values: map[string]float64{"messages": 42}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, check := range []struct {
+		token  string
+		global bool
+	}{{token, true}, {scopedLogin.Tokens.AccessToken, false}} {
+		req := httptest.NewRequest("GET", "/api/v1/admin/metrics/history?period=day&scope=tenant:unrelated", nil)
+		req.Header.Set("Authorization", "Bearer "+check.token)
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, req)
+		var result struct {
+			Global         bool
+			Server, Tenant []storage.MetricSample
+		}
+		if rr.Code != 200 || json.Unmarshal(rr.Body.Bytes(), &result) != nil || result.Global != check.global || len(result.Tenant) != 1 {
+			t.Fatalf("history: %s", rr.Body.String())
+		}
+		if (len(result.Server) > 0) != check.global {
+			t.Fatal("global history leaked")
+		}
+	}
 	for _, check := range []struct {
 		method, path string
 		code         int

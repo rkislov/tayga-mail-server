@@ -125,6 +125,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/admin/certs", s.handleAdminCerts)
 	mux.HandleFunc("/api/v1/admin/certs/", s.handleAdminCerts)
 	mux.HandleFunc("/api/v1/admin/status", s.handleAdminStatus)
+	mux.HandleFunc("/api/v1/admin/metrics/history", s.handleAdminMetricHistory)
 	mux.HandleFunc("/api/v1/admin/outbound", s.handleAdminOutbound)
 	mux.HandleFunc("/api/v1/admin/outbound/", s.handleAdminOutbound)
 	mux.HandleFunc("/api/v1/admin/quarantine", s.handleAdminQuarantine)

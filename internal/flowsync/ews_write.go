@@ -163,23 +163,7 @@ func (h *ewsHandler) updateItem(ctx context.Context, u *storage.User, body strin
 		if err := h.ensureMailboxOwned(ctx, u.ID, msg.MailboxID); err != nil {
 			return ewsFault("ErrorAccessDenied", "forbidden"), nil
 		}
-		if extractTag(body, "Subject") != "" || extractTag(body, "Body") != "" || strings.Contains(body, "DeleteItemField") {
-			return ewsFault("ErrorInvalidPropertySet", "Only IsRead updates are supported for mail"), nil
-		}
-		// IsRead via UpdateItem
-		if strings.Contains(body, "IsRead") {
-			flags := storage.ParseFlags(msg.Flags)
-			val := extractTag(body, "IsRead")
-			if strings.EqualFold(val, "true") || val == "1" {
-				flags = addFlag(flags, `\Seen`)
-			} else if val != "" {
-				flags = removeFlag(flags, `\Seen`)
-			}
-			if err := h.store.UpdateMessageFlags(ctx, msg.ID, storage.NormalizeFlags(flags)); err != nil {
-				return "", err
-			}
-		}
-		return ewsUpdateResponse("Message", msg.ID), nil
+		return h.updateMailMetadata(ctx, u, msg, body)
 	}
 
 	if n, err := h.store.GetNoteItemByID(ctx, id); err == nil {

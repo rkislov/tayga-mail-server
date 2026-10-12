@@ -244,8 +244,13 @@ func (h *ewsHandler) findMailItems(ctx context.Context, u *storage.User, mailbox
 	b.WriteString(`<t:Items>`)
 	for _, m := range msgs {
 		hdr := readMsgHeaders(h.ms, m.FilePath)
-		fmt.Fprintf(&b, `<t:Message><t:ItemId Id="%s" ChangeKey="%s"/><t:Subject>%s</t:Subject><t:DateTimeReceived>%s</t:DateTimeReceived><t:IsRead>%t</t:IsRead></t:Message>`,
-			xmlEscape(m.ID), xmlEscape(m.ID), xmlEscape(hdr.Subject), m.InternalDate.UTC().Format("2006-01-02T15:04:05Z"), storage.HasFlag(m.Flags, `\Seen`))
+		metadata, err := h.store.EWSMailMetadata(ctx, m.ID)
+		if err != nil {
+			return "", err
+		}
+		sensitivity, early, extended, flag := metadataFields(metadata, m.Flags)
+		fmt.Fprintf(&b, `<t:Message><t:ItemId Id="%s" ChangeKey="%s"/><t:Subject>%s</t:Subject>%s<t:DateTimeReceived>%s</t:DateTimeReceived>%s%s%s<t:IsRead>%t</t:IsRead></t:Message>`,
+			xmlEscape(m.ID), digest(m.ID+m.Flags+metadata), xmlEscape(hdr.Subject), sensitivity, m.InternalDate.UTC().Format("2006-01-02T15:04:05Z"), early, extended, flag, storage.HasFlag(m.Flags, `\Seen`))
 	}
 	b.WriteString(`</t:Items></m:RootFolder></m:FindItemResponseMessage></m:ResponseMessages></m:FindItemResponse>`)
 	return b.String(), nil
