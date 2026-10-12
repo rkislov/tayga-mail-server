@@ -351,6 +351,10 @@ func run(cfgPath string) error {
 	}
 
 	metrics.Register(store)
+	historyCtx, stopHistory := context.WithCancel(ctx)
+	historyDone := make(chan struct{})
+	go func() { defer close(historyDone); metrics.RunHistory(historyCtx, store, log) }()
+	defer func() { stopHistory(); <-historyDone }()
 
 	authn := auth.NewLayer(store, cfg.LDAP, cfg.MFA, cfg.OIDC)
 	if dir, ok := authn.LDAP.(*auth.Directory); ok {

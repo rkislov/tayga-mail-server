@@ -27,15 +27,16 @@ type Session struct {
 	dec       *xml.Decoder
 	tlsCfg    *tls.Config
 
-	mu       sync.Mutex
-	closed   bool
-	authed   bool
-	bound    bool
-	tlsDone  bool
-	carbons  bool
-	user     *storage.User
-	JID      JID
-	streamID string
+	mu           sync.Mutex
+	closed       bool
+	authed       bool
+	bound        bool
+	tlsDone      bool
+	carbons      bool
+	user         *storage.User
+	JID          JID
+	streamID     string
+	streamDomain string
 }
 
 func newSession(srv *Server, c net.Conn, alreadyTLS bool) *Session {
@@ -116,6 +117,7 @@ func (s *Session) handleStream() error {
 		if domain == "" {
 			domain = s.srv.domain
 		}
+		s.streamDomain = strings.ToLower(strings.TrimSpace(domain))
 		if err := s.openStream(domain); err != nil {
 			return err
 		}
@@ -151,7 +153,7 @@ func (s *Session) writeFeatures() error {
 		}
 		b.WriteString(`</starttls>`)
 	}
-	canAuth := s.tlsDone || !s.srv.cfg.XMPP.RequireTLS || s.tlsCfg == nil
+	canAuth := s.tlsDone || !s.srv.cfg.XMPP.RequireTLS
 	if canAuth && !s.authed {
 		b.WriteString(`<mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'><mechanism>PLAIN</mechanism><mechanism>X-OAUTH2</mechanism></mechanisms>`)
 	}
@@ -220,16 +222,46 @@ func (s *Session) negotiate(domain string) error {
 	return nil
 }
 
-func (s *Session) saslAuth(mech, b64 string) error {
+func (s *Session) saslAuth(mech, b64 string) (authErr error) {
+	defer func() {
+		if authErr != nil {
+			s.log.Warn("xmpp authentication failed", "mechanism", mech, "domain", s.streamDomain, "peer", s.conn.RemoteAddr().String(), "reason", "credentials or SASL policy rejected")
+		}
+	}()
+	if s.srv.cfg.XMPP.RequireTLS && !s.tlsDone {
+		return fmt.Errorf("TLS required")
+	}
+	if s.authed {
+		return fmt.Errorf("already authenticated")
+	}
+
 	data, err := base64.StdEncoding.DecodeString(strings.TrimSpace(b64))
 	if err != nil {
 		return err
 	}
 	parts := strings.Split(string(data), "\x00")
-	if len(parts) < 3 {
+	if len(parts) != 3 {
 		return fmt.Errorf("bad sasl payload")
 	}
 	user, secret := parts[1], parts[2]
+	if user == "" {
+		return fmt.Errorf("empty authentication identity")
+	}
+	if !strings.Contains(user, "@") {
+		if s.streamDomain == "" {
+			return fmt.Errorf("missing stream domain")
+		}
+		user += "@" + s.streamDomain
+	}
+	jid := ParseJID(user)
+	if jid.Local == "" || jid.Domain == "" || jid.Resource != "" {
+		return fmt.Errorf("invalid authentication identity")
+	}
+	user = jid.Bare()
+	if parts[0] != "" && ParseJID(parts[0]).Bare() != user {
+		return fmt.Errorf("authorization identity mismatch")
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
@@ -248,6 +280,7 @@ func (s *Session) saslAuth(mech, b64 string) error {
 	s.user = u
 	s.sessionID = s.srv.authn.TrackSession(u, "XMPP", s.conn.RemoteAddr().String(), "", s.conn.RemoteAddr().String(), true, s.conn.Close)
 	s.JID = ParseJID(u.Email)
+	s.log.Info("xmpp authentication succeeded", "user_id", u.ID, "domain", s.streamDomain, "peer", s.conn.RemoteAddr().String())
 	return nil
 }
 

@@ -1,0 +1,12 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const source=fs.readFileSync('frontend/src/app.js','utf8');
+const hosts=new Map();const context={Date,Map,Set,Number,Math,fmtNum:String,escapeHtml:s=>String(s).replaceAll('<','&lt;'),svgEl:(tag,attrs,text='')=>`<${tag} ${Object.entries(attrs).map(([k,v])=>`${k}="${v}"`).join(' ')}>${text}</${tag}>`,$:id=>{if(!hosts.has(id))hosts.set(id,{addEventListener(){},innerHTML:'',textContent:''});return hosts.get(id)}};
+vm.createContext(context);vm.runInContext(source.slice(source.indexOf('let monitorRequest ='),source.indexOf('\nfunction startMonitorLive()')),context);
+const now=Date.now(),samples=[{at:now-120000,boot:'a',values:{messages:1,bytes:10,heap:12,'network.eth0.rx_bytes':100}},{at:now-60000,boot:'a',values:{messages:2,bytes:20,heap:24,'network.eth0.rx_bytes':200}},{at:now,boot:'b',values:{messages:3,bytes:30,heap:32,'network.eth0.rx_bytes':10}}];
+context.renderMonitorHistory({global:true,from:now-86400000,to:now,server:samples,tenant:samples});
+for(const host of hosts.values())assert.ok(!host.innerHTML.includes('NaN'));
+assert.equal((hosts.get('chart-sparklines').innerHTML.match(/<polyline /g)||[]).length,2,'restart must break the curve');
+assert.ok(hosts.get('chart-network').innerHTML.includes('eth0'));
+context.renderMonitorHistory({global:false,from:now-3600000,to:now,tenant:samples,server:[]});assert.ok(hosts.get('chart-network').textContent.includes('глобальному'));
+context.renderMonitorHistory({global:true,server:[],tenant:[]});assert.ok(hosts.get('chart-bars').textContent.includes('не накоплена'));
+console.log('Metric history: hour/day ranges, restart gaps, missing samples and scoped rendering — OK');

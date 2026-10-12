@@ -47,12 +47,17 @@ func (h *ewsHandler) getMailItem(ctx context.Context, u *storage.User, msg *stor
 	if kind == "Text" && body == "" && content.HTML != "" {
 		body = mailsearch.ExtractHTMLText(content.HTML)
 	}
+	metadata, err := h.store.EWSMailMetadata(ctx, msg.ID)
+	if err != nil {
+		return "", err
+	}
+	sensitivity, early, extended, flag := metadataFields(metadata, msg.Flags)
 	var out strings.Builder
 	out.WriteString(`<m:GetItemResponse xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"><m:ResponseMessages><m:GetItemResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:Items><t:Message>`)
 	if strings.EqualFold(extractTag(request, "IncludeMimeContent"), "true") {
 		fmt.Fprintf(&out, `<t:MimeContent CharacterSet="UTF-8">%s</t:MimeContent>`, base64.StdEncoding.EncodeToString(raw))
 	}
-	fmt.Fprintf(&out, `<t:ItemId Id="%s" ChangeKey="%s"/><t:ItemClass>IPM.Note</t:ItemClass><t:Subject>%s</t:Subject><t:Body BodyType="%s">%s</t:Body>`, xmlEscape(msg.ID), digest(msg.ID+msg.Flags), xmlEscape(content.Subject), kind, xmlEscape(body))
+	fmt.Fprintf(&out, `<t:ItemId Id="%s" ChangeKey="%s"/><t:ItemClass>IPM.Note</t:ItemClass><t:Subject>%s</t:Subject>%s<t:Body BodyType="%s">%s</t:Body>`, xmlEscape(msg.ID), digest(msg.ID+msg.Flags+metadata), xmlEscape(content.Subject), sensitivity, kind, xmlEscape(body))
 	if len(content.Attachments) > 0 {
 		out.WriteString(`<t:Attachments>`)
 		for i, a := range content.Attachments {
@@ -60,7 +65,7 @@ func (h *ewsHandler) getMailItem(ctx context.Context, u *storage.User, msg *stor
 		}
 		out.WriteString(`</t:Attachments>`)
 	}
-	fmt.Fprintf(&out, `<t:DateTimeReceived>%s</t:DateTimeReceived><t:Size>%d</t:Size><t:HasAttachments>%t</t:HasAttachments>`, msg.InternalDate.UTC().Format("2006-01-02T15:04:05Z"), msg.Size, len(content.Attachments) > 0)
+	fmt.Fprintf(&out, `<t:DateTimeReceived>%s</t:DateTimeReceived><t:Size>%d</t:Size>%s<t:HasAttachments>%t</t:HasAttachments>%s%s`, msg.InternalDate.UTC().Format("2006-01-02T15:04:05Z"), msg.Size, early, len(content.Attachments) > 0, extended, flag)
 	out.WriteString(ewsAddress("ToRecipients", content.To))
 	out.WriteString(ewsAddress("CcRecipients", content.Cc))
 	out.WriteString(ewsAddress("From", content.From))

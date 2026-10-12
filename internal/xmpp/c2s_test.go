@@ -59,6 +59,22 @@ func TestC2SAuthBindRosterPEP(t *testing.T) {
 	}
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	srv := New(cfg, log, store, layer, nil)
+	for _, check := range []struct {
+		identity, authz        string
+		tls, required, success bool
+	}{{"alice", "", true, true, true}, {"alice@example.com", "alice@example.com", true, true, true}, {"alice", "other@example.com", true, true, false}, {"alice", "", false, true, false}} {
+		cfg.XMPP.RequireTLS = check.required
+		c1, c2 := net.Pipe()
+		sess := newSession(srv, c1, check.tls)
+		sess.streamDomain = "example.com"
+		err := sess.saslAuth("PLAIN", base64.StdEncoding.EncodeToString([]byte(check.authz+"\x00"+check.identity+"\x00secret")))
+		if (err == nil) != check.success {
+			t.Errorf("identity=%s tls=%t err=%v", check.identity, check.tls, err)
+		}
+		sess.Close()
+		c2.Close()
+	}
+	cfg.XMPP.RequireTLS = false
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -105,7 +121,7 @@ func TestC2SAuthBindRosterPEP(t *testing.T) {
 		t.Fatalf("features: %s", feat)
 	}
 
-	plain := base64.StdEncoding.EncodeToString([]byte("\x00alice@example.com\x00secret"))
+	plain := base64.StdEncoding.EncodeToString([]byte("\x00alice\x00secret"))
 	mustWrite(fmt.Sprintf(`<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' mechanism='PLAIN'>%s</auth>`, plain))
 	readUntil("success")
 

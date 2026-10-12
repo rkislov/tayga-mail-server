@@ -789,7 +789,8 @@ keep;</textarea>
       <div id="app-monitor" class="app-page hidden panel-page panel-page-wide">
         <div class="card" id="card-monitor">
           <h3 class="heading" data-i18n="nav_monitor">Мониторинг</h3>
-          <p class="meta">Prometheus: <code>/metrics</code> · графики обновляются на этой странице</p>
+          <p class="meta">Prometheus: <code>/metrics</code> · история сохраняется сервером каждую минуту, даже когда страница закрыта. Пропуски означают отсутствие наблюдений.</p>
+          <label class="field-label" for="monitor-period">Период графиков</label><select id="monitor-period" class="field-input"><option value="hour">Последний час</option><option value="day">Последние 24 часа</option></select>
           <div id="monitor-grid" class="meta monitor-grid"></div>
           <div class="monitor-charts" id="monitor-charts">
             <div class="chart-card">
@@ -806,7 +807,7 @@ keep;</textarea>
             </div>
             <div class="chart-card chart-card-wide"><h4 class="chart-title">Сеть — общая шкала</h4><div id="chart-network" class="chart-host"></div></div>
             <div class="chart-card chart-card-wide">
-              <h4 class="chart-title">Живые метрики <span class="meta" id="chart-live-hint">(пока открыт мониторинг)</span></h4>
+              <h4 class="chart-title">Память — история на сервере</h4>
               <div id="chart-sparklines" class="chart-host chart-sparklines"></div>
             </div>
           </div>

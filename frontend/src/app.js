@@ -463,7 +463,7 @@ function isAuthPublicPath(path) {
 
 function clearSession() {
   state.tokens = null;
- liveCharts.clear();previousNetwork=null;
+ monitorRequest++;
   state.challenge = "";
   state.methods = [];
   localStorage.removeItem("tayga.tokens");
@@ -744,31 +744,36 @@ function formatUptime(seconds) {
   return parts.join(" ");
 }
 
-const liveCharts = new Map();
-let monitorStartedAt = '';
-let previousNetwork = null;
-function renderTimeChart(host, key, series, unit='') {
+let monitorRequest = 0;
+function renderTimeChart(host, key, series, unit='', supplied=null, range=null) {
  if(!host)return;
- let samples=liveCharts.get(key)||[];const names=series.map(item=>item.label).join('\u0000');if(samples.length&&samples[0].names!==names)samples=[];samples.push({time:Date.now(),names,values:series.map(item=>Number(item.value)||0)});while(samples.length>120)samples.shift();liveCharts.set(key,samples);
+ const samples=supplied||[];
+ if(!samples.length){host.textContent='История пока не накоплена. Сервер сохраняет метрики раз в минуту.';return}
  const w=640,h=210,left=60,right=18,top=16,bottom=36;
- const max=Math.max(1,...samples.flatMap(sample=>sample.values));const start=samples[0].time,end=samples.at(-1).time,span=Math.max(end-start,5000);
+ const max=Math.max(1,...samples.flatMap(sample=>sample.values.filter(value=>Number.isFinite(value))));
+ const start=range?.from||samples[0].time,end=range?.to||samples.at(-1).time,span=Math.max(end-start,60000);
  const colors=['#36866b','#598ad5','#d48331','#b466b1','#bc5353','#70838d'];let svg='';
  for(let i=0;i<=4;i++){const v=max*i/4,y=h-bottom-(h-top-bottom)*i/4;svg+=svgEl('line',{x1:left,x2:w-right,y1:y,y2:y,stroke:'currentColor',opacity:0.12})+svgEl('text',{x:left-8,y:y+4,'text-anchor':'end',fill:'currentColor','font-size':11},escapeHtml(fmtNum(v)))}
- for(let i=0;i<3;i++){const x=left+(w-left-right)*i/2;svg+=svgEl('text',{x,y:h-10,'text-anchor':i===0?'start':i===2?'end':'middle',fill:'currentColor','font-size':11},escapeHtml(new Date(start+(end-start)*i/2).toLocaleTimeString()))}
- series.forEach((item,index)=>{const points=samples.map(sample=>`${left+(sample.time-start)/span*(w-left-right)},${h-bottom-sample.values[index]/max*(h-top-bottom)}`).join(' ');svg+=svgEl('polyline',{points,fill:'none',stroke:colors[index%colors.length],'stroke-width':2.5});const last=points.split(' ').at(-1).split(',');svg+=svgEl('circle',{cx:last[0],cy:last[1],r:3,fill:colors[index%colors.length]})});
- host.innerHTML=`<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${escapeHtml(series.map(item=>item.label).join(', '))}"><title>${escapeHtml(unit)}</title>${svg}</svg><div class="chart-legend">${series.map((item,i)=>`<span><i style="background:${colors[i%colors.length]}"></i>${escapeHtml(item.label)}: ${escapeHtml(item.display||fmtNum(item.value))}</span>`).join('')}</div><p class="meta">${escapeHtml(unit)} · Наблюдения с ${escapeHtml(new Date(start).toLocaleTimeString())}. ${samples.length===1?'Накапливаем данные…':''}</p>`;
+ for(let i=0;i<3;i++){const x=left+(w-left-right)*i/2;svg+=svgEl('text',{x,y:h-10,'text-anchor':i===0?'start':i===2?'end':'middle',fill:'currentColor','font-size':11},escapeHtml(new Date(start+(end-start)*i/2).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})))}
+ series.forEach((item,index)=>{let points=[];const flush=()=>{if(points.length)svg+=svgEl('polyline',{points:points.join(' '),fill:'none',stroke:colors[index%colors.length],'stroke-width':2.5});points=[]};let previous=null,last=null;for(const sample of samples){const value=sample.values[index];if(!Number.isFinite(value)){flush();previous=sample;continue}if(previous&&(sample.time-previous.time>150000||sample.boot!==previous.boot))flush();last=[left+(sample.time-start)/span*(w-left-right),h-bottom-value/max*(h-top-bottom)];points.push(last.join(','));previous=sample}flush();if(last)svg+=svgEl('circle',{cx:last[0],cy:last[1],r:3,fill:colors[index%colors.length]})});
+ host.innerHTML=`<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${escapeHtml(series.map(item=>item.label).join(', '))}"><title>${escapeHtml(unit)}</title>${svg}</svg><div class="chart-legend">${series.map((item,i)=>`<span><i style="background:${colors[i%colors.length]}"></i>${escapeHtml(item.label)}: ${Number.isFinite(item.value)?escapeHtml(fmtNum(item.value)):'—'}</span>`).join('')}</div><p class="meta">${escapeHtml(unit)} · ${samples.length} наблюдений · с ${escapeHtml(new Date(samples[0].time).toLocaleString())}</p>`;
 }
-function renderMonitorCharts(d) {
- if(monitorStartedAt!==d.started_at){liveCharts.clear();previousNetwork=null;monitorStartedAt=d.started_at}
- const ten=d.tenant||{},server=d.server||{},g=d.go||{};
- renderTimeChart($('chart-bars'),'messages',[{label:'Тенант',value:ten.messages},{label:'Сервер',value:server.messages}],'Сохранённые письма');
- renderTimeChart($('chart-storage'),'storage',[{label:'Тенант',value:(ten.bytes_stored||0)/1048576},{label:'Сервер',value:(server.bytes_stored||0)/1048576}],'МиБ');
- renderTimeChart($('chart-runtime'),'runtime',[{label:'В очереди',value:server.outbound_queued},{label:'Горутины',value:g.goroutines}],'Количество');
- renderTimeChart($('chart-sparklines'),'heap',[{label:'Память',value:(g.heap_alloc||0)/1048576}],'МиБ');
- const net=d.network;const host=$('chart-network');
- if(net?.available){const now=Date.now(),series=[];for(const item of net.interfaces||[]){const old=previousNetwork?.interfaces.find(value=>value.name===item.name);if(!old)continue;const seconds=(now-previousNetwork.time)/1000;if(seconds<=0)continue;for(const [key,label]of [['rx_bytes','Приём'],['tx_bytes','Отправка']])series.push({label:item.name+' · '+label,value:Math.max(0,item[key]-old[key])/seconds/1024})}if(series.length)renderTimeChart(host,'network',series,'КиБ/с');else if(host)host.textContent='Собираем два наблюдения для расчёта скорости…';previousNetwork={time:now,interfaces:net.interfaces||[]}}else if(host)host.textContent='Сетевые счётчики недоступны на этой системе.';
-
+function renderMonitorHistory(history){
+ const server=history.server||[],tenant=history.tenant||[];
+ const draw=(id,key,rows,definitions,unit)=>{const points=rows.map(row=>({time:row.at,boot:row.boot,values:definitions.map(item=>{const value=row.values[item.key];return typeof value==='number'?value/(item.divisor||1):null})}));const series=definitions.map((item,i)=>({label:item.label,value:points.at(-1)?.values[i]}));renderTimeChart($(id),key,series,unit,points,history)};
+ const combined=tenant.map(row=>({...row,values:{...row.values}})),byTime=new Map(combined.map(row=>[row.at,row]));for(const row of server){let point=byTime.get(row.at);if(!point){point={...row,values:{}};combined.push(point)}point.values.server_messages=row.values.messages;point.values.server_bytes=row.values.bytes}combined.sort((a,b)=>a.at-b.at);
+ draw('chart-bars','messages',combined,[{key:'messages',label:'Тенант'},...(history.global?[{key:'server_messages',label:'Сервер'}]:[])],'Сохранённые письма');
+ draw('chart-storage','storage',combined,[{key:'bytes',label:'Тенант',divisor:1048576},...(history.global?[{key:'server_bytes',label:'Сервер',divisor:1048576}]:[])],'МиБ');
+ if(!history.global){for(const id of ['chart-runtime','chart-sparklines','chart-network','protection-stats'])$(id).textContent='Метрики сервера доступны глобальному администратору.';return}
+ draw('chart-runtime','runtime',server,[{key:'queue',label:'В очереди'},{key:'goroutines',label:'Горутины'}],'Количество');
+ draw('chart-sparklines','heap',server,[{key:'heap',label:'Память',divisor:1048576}],'МиБ');
+ const keys=[...new Set(server.flatMap(row=>Object.keys(row.values).filter(key=>key.startsWith('network.'))))].sort();
+ const rates=server.map((row,i)=>{const old=server[i-1],seconds=old?(row.at-old.at)/1000:0,values={};for(const key of keys){if(old&&old.boot===row.boot&&seconds>0&&seconds<=150&&typeof row.values[key]==='number'&&typeof old.values[key]==='number'&&row.values[key]>=old.values[key])values[key]=(row.values[key]-old.values[key])/seconds/1024}return {...row,values}});
+ if(keys.length)draw('chart-network','network',rates,keys.map(key=>({key,label:key.slice(8).replace('.rx_bytes',' · Приём').replace('.tx_bytes',' · Отправка')})),'КиБ/с');else $('chart-network').textContent='Сетевые счётчики недоступны на этой системе.';
+ const labels={pass:'Пропущено',tag:'Помечено',quarantine:'В спам',reject:'Отклонено',greylist:'Отложено',error:'Ошибки проверки'};
+ draw('protection-stats','protection',server.map(row=>({...row,values:{...Object.fromEntries(Object.keys(labels).map(key=>['protection.'+key,0])),...row.values}})),Object.entries(labels).map(([key,label])=>({key:'protection.'+key,label})),'Решения с запуска сервера');
 }
+$('monitor-period')?.addEventListener('change',()=>refreshMonitor());
 
 function startMonitorLive() {
   stopMonitorLive();
@@ -788,7 +793,9 @@ function stopMonitorLive() {
 
 async function refreshMonitor() {
   try {
-    const d = await api("/api/v1/admin/status");
+    const request=++monitorRequest;
+    const [d,history] = await Promise.all([api("/api/v1/admin/status"),api("/api/v1/admin/metrics/history?period="+($('monitor-period')?.value||'hour'))]);
+    if(request!==monitorRequest)return;
     const ten = d.tenant || {};
     const s = d.server || {};
     const g = d.go || {};
@@ -809,8 +816,8 @@ async function refreshMonitor() {
     $("monitor-grid").innerHTML = rows.map(([k, v]) =>
       `<div><span class="meta">${escapeHtml(k)}</span><br/><strong>${escapeHtml(String(v))}</strong></div>`
     ).join("");
-    renderMonitorCharts(d);
-    renderProtectionStats(d.protection);
+    renderMonitorHistory(history);
+    setMsg($("monitor-msg"), "", "");
   } catch (err) {
     setMsg($("monitor-msg"), err.message, "err");
   }
