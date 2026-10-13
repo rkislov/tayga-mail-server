@@ -82,6 +82,52 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch {
+	case path == "omemo":
+		bridge, ok := s.xmpp.(interface {
+			ReadWebOMEMO(context.Context, string, string) ([]xmpp.OMEMOItem, error)
+			PublishWebOMEMO(context.Context, string, string, string) error
+			SendWebOMEMO(context.Context, string, string, string) (xmpp.ChatEvent, error)
+		})
+		if !ok {
+			writeJSON(w, 503, map[string]string{"error": "OMEMO unavailable"})
+			return
+		}
+		if r.Method == http.MethodGet {
+			items, e := bridge.ReadWebOMEMO(r.Context(), r.URL.Query().Get("owner"), r.URL.Query().Get("node"))
+			if e != nil {
+				writeJSON(w, 400, map[string]string{"error": e.Error()})
+				return
+			}
+			writeJSON(w, 200, map[string]any{"items": items})
+			return
+		}
+		var req struct {
+			Node string `json:"node"`
+			XML  string `json:"xml"`
+			To   string `json:"to"`
+		}
+		if json.NewDecoder(http.MaxBytesReader(w, r.Body, 512*1024)).Decode(&req) != nil {
+			writeJSON(w, 400, map[string]string{"error": "invalid OMEMO request"})
+			return
+		}
+		if r.Method == http.MethodPut {
+			if e := bridge.PublishWebOMEMO(r.Context(), au.Email, req.Node, req.XML); e != nil {
+				writeJSON(w, 400, map[string]string{"error": e.Error()})
+				return
+			}
+			writeJSON(w, 200, map[string]bool{"ok": true})
+			return
+		}
+		if r.Method == http.MethodPost {
+			ev, e := bridge.SendWebOMEMO(r.Context(), au.Email, req.To, req.XML)
+			if e != nil {
+				writeJSON(w, 400, map[string]string{"error": e.Error()})
+				return
+			}
+			writeJSON(w, 200, ev)
+			return
+		}
+		writeJSON(w, 405, map[string]string{"error": "method not allowed"})
 	case path == "presence" && r.Method == http.MethodPost:
 		var req struct {
 			State  string `json:"state"`

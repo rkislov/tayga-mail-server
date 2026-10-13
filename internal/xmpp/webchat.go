@@ -10,6 +10,7 @@ import (
 
 // ChatEvent is pushed to web clients over SSE.
 type ChatEvent struct {
+	OMEMO      string          `json:"omemo,omitempty"`
 	Room       string          `json:"room,omitempty"`
 	Attachment *ChatAttachment `json:"attachment,omitempty"`
 	Encrypted  bool            `json:"encrypted,omitempty"`
@@ -33,6 +34,7 @@ type RosterEntry struct {
 
 // HistoryMsg is a decoded MAM / chat history item.
 type HistoryMsg struct {
+	OMEMO      string          `json:"omemo,omitempty"`
 	Attachment *ChatAttachment `json:"attachment,omitempty"`
 	Encrypted  bool            `json:"encrypted,omitempty"`
 	ID         string          `json:"id"`
@@ -210,7 +212,7 @@ func (s *Server) ChatHistory(ctx context.Context, ownerBare, withBare string, li
 		from, to := parseMessageAddrs(r.Stanza)
 		attachment, encrypted := stanzaAttachment(r.Stanza)
 		out = append(out, HistoryMsg{
-			ID: r.StanzaID, From: from, To: to, Body: extractBody(r.Stanza),
+			ID: r.StanzaID, From: from, To: to, Body: extractBody(r.Stanza), OMEMO: encryptedElement(r.Stanza),
 			At: r.CreatedAt, Stanza: r.Stanza, Attachment: attachment, Encrypted: encrypted,
 		})
 	}
@@ -254,6 +256,7 @@ func (s *Server) SendChatMessage(ctx context.Context, fromEmail, to, body string
 
 	ev := ChatEvent{Type: "message", ID: id, From: fromFull, To: toJ.Bare(), Body: body, At: time.Now().UTC()}
 	ev.Attachment, ev.Encrypted = stanzaAttachment(stanza)
+	ev.OMEMO = encryptedElement(stanza)
 	s.hub.pushWeb(from, ev)
 	s.hub.pushWeb(toJ.Bare(), ev)
 	return ev, nil
@@ -316,6 +319,7 @@ func (s *Server) notifyWebFromStanza(stanza, fallbackTo string) {
 		At:   time.Now().UTC(),
 	}
 	ev.Attachment, ev.Encrypted = stanzaAttachment(stanza)
+	ev.OMEMO = encryptedElement(stanza)
 	if ev.Body == "" && ev.Attachment == nil && !ev.Encrypted {
 		return
 	}

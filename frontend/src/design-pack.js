@@ -13,7 +13,7 @@ function documentPreviewType(name) {
   const ext=String(name||'').split('.').pop().toLowerCase();
   return ({png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',gif:'image/gif',webp:'image/webp',avif:'image/avif',pdf:'application/pdf'})[ext]||'';
 }
-async function openDocumentPreview({url,name,size}) {
+async function openDocumentPreview({url,name,size,blob:suppliedBlob}) {
   const focus=document.activeElement,dialog=document.createElement('dialog');dialog.className='document-preview';dialog.setAttribute('aria-label',name);
   const header=document.createElement('header'),title=document.createElement('strong');title.textContent=name;
   const download=document.createElement('button');download.type='button';download.className='btn-secondary btn-sm';download.textContent=t('download');download.disabled=true;
@@ -22,9 +22,11 @@ async function openDocumentPreview({url,name,size}) {
   const controller=new AbortController();let objectURL='',pdfDocument=null,renderTask=null;dialog.addEventListener('close',()=>{dialog.remove();controller.abort();if(objectURL)URL.revokeObjectURL(objectURL);try{renderTask?.cancel();pdfDocument?.destroy()?.catch(()=>{})}catch{}if(focus?.isConnected)focus.focus()},{once:true});
   try {
     if(size>64*1024*1024)throw new Error(mailImageText('Файл больше 64 МиБ. Используйте скачивание.','File exceeds 64 MiB. Use download.'));
-    const headers={};if(new URL(url,location.href).origin===location.origin&&state.tokens?.access_token)headers.Authorization='Bearer '+state.tokens.access_token;
+    let blob=suppliedBlob;
+    if(!blob){const headers={};if(new URL(url,location.href).origin===location.origin&&state.tokens?.access_token)headers.Authorization='Bearer '+state.tokens.access_token;
     const response=await fetch(url,{headers,signal:controller.signal});if(!response.ok)throw new Error(mailImageText('Не удалось открыть файл','Unable to open file'));
-    const blob=await boundedPreviewBlob(response,64*1024*1024);if(!dialog.open)return;if(blob.size>64*1024*1024)throw new Error(mailImageText("Файл больше 64 МиБ","File exceeds 64 MiB"));
+    blob=await boundedPreviewBlob(response,64*1024*1024);}
+    if(!dialog.open)return;if(blob.size>64*1024*1024)throw new Error(mailImageText("Файл больше 64 МиБ","File exceeds 64 MiB"));
     const type=documentPreviewType(name);objectURL=URL.createObjectURL(type?new Blob([blob],{type}):blob);download.disabled=false;
     download.onclick=()=>{const link=document.createElement('a');link.href=objectURL;link.download=name;link.click()};
     if(type.startsWith('image/')){const image=document.createElement('img');image.alt=name;image.src=objectURL;image.onerror=()=>{content.textContent=mailImageText('Изображение не удалось прочитать.','Unable to decode image.')};content.replaceChildren(image)}

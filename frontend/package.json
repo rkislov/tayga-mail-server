@@ -4,7 +4,7 @@
   "version": "0.9.11",
   "description": "Tayga Mail web UI (Tailwind) embedded via go:embed",
   "scripts": {
-    "build": "node build-pdfjs.cjs && tailwindcss -i ./src/input.css -o ../internal/frontend/dist/assets/app.css --minify && cat ./src/i18n.js ./src/app.js ./src/admin-config.js ./src/mail-images.js ./src/reader-actions.js ./src/protection.js ./src/travel.js ./src/rule-builder.js ./src/design-pack.js > ../internal/frontend/dist/assets/app.js",
+    "build": "node build-omemo.cjs && node build-pdfjs.cjs && tailwindcss -i ./src/input.css -o ../internal/frontend/dist/assets/app.css --minify && cat ./src/i18n.js ./src/app.js ./src/admin-config.js ./src/mail-images.js ./src/reader-actions.js ./src/protection.js ./src/travel.js ./src/rule-builder.js ./src/design-pack.js ./src/omemo.js > ../internal/frontend/dist/assets/app.js",
     "watch": "tailwindcss -i ./src/input.css -o ../internal/frontend/dist/assets/app.css --watch"
   },
   "devDependencies": {
@@ -12,6 +12,8 @@
     "tailwindcss": "^4.1.14"
   },
   "dependencies": {
+    "libomemo.js": "3.0.0",
     "pdfjs-dist": "^6.4.299"
-  }
+  },
+  "license": "GPL-3.0-only"
 }

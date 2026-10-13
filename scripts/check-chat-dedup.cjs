@@ -3,7 +3,7 @@ const source=fs.readFileSync('frontend/src/app.js','utf8');
 const box={children:[],querySelector:()=>null,appendChild(x){this.children.push(x)}};
 let submit,requests=0,resolveRequest;
 const input={value:'hello'},button={disabled:false};
-const context={chatState:{roster:[],peer:'bob@example.com',me:'alice@example.com',sending:false},state:{},document:{createElement:()=>({dataset:{}})},Array,JSON,Date,escapeHtml:x=>x,chatBare:x=>String(x||'').split('/')[0].toLowerCase(),$:id=>id==='chat-messages'?box:id==='chat-body'?input:id==='form-chat-send'?{addEventListener:(_,fn)=>submit=fn}:null,api:()=>{requests++;return new Promise(resolve=>resolveRequest=resolve)},setMsg:()=>{},scrollChatBottom:()=>{}};
+const context={chatState:{roster:[],peer:'bob@example.com',me:'alice@example.com',sending:false},state:{},document:{createElement:()=>({dataset:{}})},Array,JSON,Date,escapeHtml:x=>x,chatBare:x=>String(x||'').split('/')[0].toLowerCase(),$:id=>id==='chat-messages'?box:id==='chat-body'?input:id==='form-chat-send'?{addEventListener:(_,fn)=>submit=fn}:null,api:()=>{requests++;return new Promise(resolve=>resolveRequest=resolve)},omemoEnabled:async()=>false,setMsg:()=>{},scrollChatBottom:()=>{}};
 vm.createContext(context);
 vm.runInContext(source.slice(source.indexOf('function appendChatBubble'),source.indexOf('function scrollChatBottom')),context);
 vm.runInContext(source.slice(source.indexOf('$("form-chat-send")?.addEventListener'),source.indexOf('function filesGoUp')),context);

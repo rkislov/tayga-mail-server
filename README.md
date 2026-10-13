@@ -3,7 +3,7 @@
 Corporate-class multi-domain / multi-tenant mail server in Go.
 
 **Author:** Кислов Роман Сергеевич (Roman Sergeyevich Kislov)  
-**License:** [Apache License 2.0](LICENSE)
+**License:** server [Apache License 2.0](LICENSE); web client with OMEMO [GPL-3.0](frontend/LICENSE)
 
 See [docs/architecture.md](docs/architecture.md) and `configs/tayga.example.yaml` (minimal bootstrap YAML). Mail policies and most options are edited in **Admin → Server settings** (`/api/v1/admin/settings`).
 
@@ -81,6 +81,6 @@ Seed: `admin@example.com` / `changeme`. TLS: `tls.auto_generate` or `scripts/gen
 
 ## License
 
-Copyright © Кислов Роман Сергеевич. Licensed under the Apache License, Version 2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
+Copyright © Кислов Роман Сергеевич. Server Go code and FlowSync: Apache License 2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE). Web client (`frontend/src` and generated browser assets): GPL-3.0 — see [frontend/LICENSE](frontend/LICENSE). Third-party assets retain their respective licenses. See [web OMEMO setup and limitations](docs/web-omemo.md).
 
 UI backdrop art (tayga / cosmos / city / kalyazin / temple) © Алиса Кислова; `moscow` (Москва-Сити) — generated backdrop.
