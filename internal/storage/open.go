@@ -32,6 +32,13 @@ func Open(ctx context.Context, cfg config.StorageConfig) (Driver, error) {
 			return nil, fmt.Errorf("enable foreign_keys: %w", err)
 		}
 		db.SetMaxOpenConns(1)
+		// Readers (including online backups) must not block writer commits.
+		for _, pragma := range []string{"PRAGMA busy_timeout = 5000", "PRAGMA journal_mode = WAL"} {
+			if _, err := db.ExecContext(ctx, pragma); err != nil {
+				_ = db.Close()
+				return nil, fmt.Errorf("configure sqlite: %w", err)
+			}
+		}
 		dialect = DialectSQLite
 	case "postgres":
 		db, err = sql.Open("postgres", cfg.Postgres.DSN)
