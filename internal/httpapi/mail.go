@@ -654,6 +654,9 @@ func (s *Server) mailSend(w http.ResponseWriter, r *http.Request, au *authUser) 
 			mailsearch.ApplyHeaders(im, raw)
 			if inserted, ierr := s.store.InsertMessage(r.Context(), im); ierr == nil {
 				_ = mailsearch.Index(r.Context(), s.store, inserted.ID, raw)
+				if s.notify != nil {
+					s.notify.PublishMail(ru.ID, "INBOX", req.Subject, user.Email)
+				}
 			}
 			s.writeMailLog(r.Context(), user, "delivered", "inbound", rcpt, msgid, size, "web")
 		} else {
