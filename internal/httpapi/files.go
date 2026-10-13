@@ -142,16 +142,12 @@ func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
-		data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 64<<20))
+		size, err := streamUpload(w, r, abs)
 		if err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "file exceeds 64 MiB or could not be read"})
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
-		if err := os.WriteFile(abs, data, 0o640); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"path": cleanRel(rel), "size": len(data)})
+		writeJSON(w, http.StatusOK, map[string]any{"path": cleanRel(rel), "size": size})
 
 	case r.Method == http.MethodPost && path == "mkdir":
 		var req struct {
@@ -238,6 +234,9 @@ func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request) {
 func (s *Server) filesRoot(userID string) (string, error) {
 	root := filepath.Join(s.ms.Root, "files", userID)
 	if err := os.MkdirAll(root, 0o750); err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(filepath.Join(root, "chat"), 0o750); err != nil {
 		return "", err
 	}
 	return root, nil
