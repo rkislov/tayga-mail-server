@@ -22,10 +22,16 @@ console.log('Chat: HTTP/SSE deduplication, repeated submit and identical text wi
 // Incoming SSE events notify once; the sender's own echo stays silent.
 {
  const toasts=[];let onMessage;
- const c={state:{tokens:{access_token:'test'},email:'alice@example.com'},chatState:{me:'alice@example.com',peer:'',roster:[{jid:'bob@example.com',name:'Bob'},{jid:'team@web-groups.example.com',name:'Team',group:true}]},EventSource:class{addEventListener(_,fn){onMessage=fn}},stopChatLive(){},chatBare:x=>String(x||'').split('/')[0].toLowerCase(),showToast:e=>toasts.push(e),renderChatRoster(){},refreshChat(){},JSON,encodeURIComponent};
+ const c={state:{tokens:{access_token:'test'},email:'alice@example.com'},chatState:{me:'alice@example.com',peer:'',roster:[{jid:'bob@example.com',name:'Bob'},{jid:'team@web-groups.example.com',name:'Team',group:true}]},EventSource:class{addEventListener(type,fn){if(type==='message')onMessage=fn}},stopChatLive(){},chatBare:x=>String(x||'').split('/')[0].toLowerCase(),showToast:e=>toasts.push(e),renderChatRoster(){},refreshChat(){},JSON,encodeURIComponent};
  vm.createContext(c);vm.runInContext(source.slice(source.indexOf('function startChatLive()'),source.indexOf('function appendChatBubble')),c);c.startChatLive();
  onMessage({data:JSON.stringify({type:'message',id:'1',from:'bob@example.com/mobile',to:'alice@example.com',body:'hello'})});
  onMessage({data:JSON.stringify({type:'message',id:'2',from:'alice@example.com/web',to:'bob@example.com',body:'reply'})});
  onMessage({data:JSON.stringify({type:'message',id:'3',from:'bob@example.com',to:'team@web-groups.example.com',room:'team@web-groups.example.com',body:'team'})});
  assert.equal(toasts.length,2);assert.equal(toasts[1].title,'Team');assert.match(toasts[1].href,/chat\?peer=/);console.log('Chat: incoming direct/group notifications and silent own echo — OK');
 }
+
+(async()=>{
+ let onOpen;
+ const c={state:{tokens:{access_token:'test'}},chatState:{roster:[{jid:'bob@example.com',subscription_request:true}]},EventSource:class {addEventListener(type,fn){if(type==='open')onOpen=fn}},stopChatLive(){},api:async()=>({roster:[{jid:'bob@example.com',subscription:'both',subscription_request:false}]}),renderChatRoster(){},encodeURIComponent};
+ vm.createContext(c);vm.runInContext(source.slice(source.indexOf('function startChatLive()'),source.indexOf('function appendChatBubble')),c);c.startChatLive();await onOpen();assert.equal(c.chatState.roster[0].subscription_request,false);console.log('Chat: reconnect refreshes accepted presence requests — OK');
+})().catch(e=>{console.error(e);process.exitCode=1});

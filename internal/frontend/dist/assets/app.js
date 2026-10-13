@@ -5126,6 +5126,17 @@ function startChatLive() {
   if (!tok || typeof EventSource === "undefined") return;
   const es = new EventSource("/api/v1/chat/events?access_token=" + encodeURIComponent(tok));
   chatState.es = es;
+  // Events missed while disconnected are not replayed: reload consent state.
+  es.addEventListener("open", async () => {
+    try {
+      const data = await api("/api/v1/chat/roster");
+      if (chatState.es !== es) return;
+      chatState.roster = data.roster || [];
+      renderChatRoster();
+    } catch (err) {
+      if (chatState.es === es) setMsg($("chat-roster-msg"), err.message, "err");
+    }
+  });
   es.addEventListener("message", (ev) => {
     let data;
     try { data = JSON.parse(ev.data); } catch { return; }
