@@ -78,6 +78,8 @@ func (h *ewsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		soap, err = h.createItem(r.Context(), u, string(body))
 	case "UpdateItem":
 		soap, err = h.batchItems(r.Context(), u, "UpdateItem", string(body), h.updateItem)
+	case "MoveItem":
+		soap, err = h.batchItems(r.Context(), u, "MoveItem", string(body), h.moveItem)
 	case "DeleteItem":
 		soap, err = h.batchItems(r.Context(), u, "DeleteItem", string(body), h.deleteItem)
 	case "SyncFolderHierarchy":
