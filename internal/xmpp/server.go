@@ -19,15 +19,17 @@ import (
 
 // Server is the Stage-1 XMPP C2S listener (TMS-XMPP-001).
 type Server struct {
-	cfg    *config.Config
-	log    *slog.Logger
-	store  storage.Driver
-	authn  *auth.Layer
-	tls    *tlsutil.Manager
-	tlsCfg *tls.Config
-	hub    *Hub
-	domain string
-	db     *sql.DB
+	upload   UploadHandler
+	uploadMu sync.RWMutex
+	cfg      *config.Config
+	log      *slog.Logger
+	store    storage.Driver
+	authn    *auth.Layer
+	tls      *tlsutil.Manager
+	tlsCfg   *tls.Config
+	hub      *Hub
+	domain   string
+	db       *sql.DB
 
 	webPresenceMu sync.Mutex
 	presence      map[string]map[string]presenceState

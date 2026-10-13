@@ -16,7 +16,7 @@ async function openDocumentPreview({url,name,size}) {
   const controller=new AbortController();let objectURL='',pdfDocument=null,renderTask=null;dialog.addEventListener('close',()=>{dialog.remove();controller.abort();if(objectURL)URL.revokeObjectURL(objectURL);try{renderTask?.cancel();pdfDocument?.destroy()?.catch(()=>{})}catch{}if(focus?.isConnected)focus.focus()},{once:true});
   try {
     if(size>64*1024*1024)throw new Error(mailImageText('Файл больше 64 МиБ. Используйте скачивание.','File exceeds 64 MiB. Use download.'));
-    const headers={};if(state.tokens?.access_token)headers.Authorization='Bearer '+state.tokens.access_token;
+    const headers={};if(new URL(url,location.href).origin===location.origin&&state.tokens?.access_token)headers.Authorization='Bearer '+state.tokens.access_token;
     const response=await fetch(url,{headers,signal:controller.signal});if(!response.ok)throw new Error(mailImageText('Не удалось открыть файл','Unable to open file'));
     const blob=await response.blob();if(!dialog.open)return;if(blob.size>64*1024*1024)throw new Error(mailImageText("Файл больше 64 МиБ","File exceeds 64 MiB"));
     const type=documentPreviewType(name);objectURL=URL.createObjectURL(type?new Blob([blob],{type}):blob);download.disabled=false;

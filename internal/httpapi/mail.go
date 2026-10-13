@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"mime"
 	"net/http"
 	"net/mail"
 	"sort"
@@ -777,17 +778,16 @@ func buildOutgoingMIME(fromEmail, fromName string, to, cc, bcc []string, subject
 	var b strings.Builder
 	from := fromEmail
 	if fromName != "" {
-		from = fmt.Sprintf("%s <%s>", fromName, fromEmail)
+		from = (&mail.Address{Name: strings.NewReplacer("\r", "", "\n", "").Replace(fromName), Address: fromEmail}).String()
 	}
 	fmt.Fprintf(&b, "From: %s\r\n", from)
 	fmt.Fprintf(&b, "To: %s\r\n", strings.Join(to, ", "))
 	if len(cc) > 0 {
 		fmt.Fprintf(&b, "Cc: %s\r\n", strings.Join(cc, ", "))
 	}
-	if len(bcc) > 0 {
-		fmt.Fprintf(&b, "Bcc: %s\r\n", strings.Join(bcc, ", "))
-	}
-	fmt.Fprintf(&b, "Subject: %s\r\n", subject)
+	// Bcc belongs only to the envelope, never to the delivered headers.
+	subject = strings.NewReplacer("\r", "", "\n", "").Replace(subject)
+	fmt.Fprintf(&b, "Subject: %s\r\n", mime.QEncoding.Encode("utf-8", subject))
 	fmt.Fprintf(&b, "Date: %s\r\n", time.Now().UTC().Format(time.RFC1123Z))
 	fmt.Fprintf(&b, "Message-ID: %s\r\n", msgid)
 	fmt.Fprintf(&b, "MIME-Version: 1.0\r\n")

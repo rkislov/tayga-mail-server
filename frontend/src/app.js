@@ -4097,6 +4097,7 @@ function startChatLive() {
 function appendChatBubble(m) {
   const box = $("chat-messages");
   if (!box) return;
+  if(!m.body&&!m.attachment&&!m.encrypted)return;
   const messageKey=m.id?JSON.stringify([chatBare(m.from),String(m.id)]):'';
   if(messageKey && Array.from(box.children).some(el=>el.dataset.messageKey===messageKey))return;
   box.querySelector('.chat-empty-hint')?.remove();
@@ -4106,13 +4107,14 @@ function appendChatBubble(m) {
   if(messageKey)div.dataset.messageKey=messageKey;
   div.className = "chat-bubble" + (mine ? " is-mine" : "");
   div.innerHTML = `<p>${escapeHtml(m.body || "")}</p><time>${escapeHtml(m.at ? new Date(m.at).toLocaleString() : "")}</time>`;
-  const attachment=chatAttachment(m.body);
-  if(attachment){const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.textContent=mailImageText('Открыть файл: ','Open file: ')+attachment.name;button.onclick=()=>openDocumentPreview(attachment);div.append(button)}
+  const attachment=m.attachment||chatAttachment(m.body);
+  if(m.encrypted)div.querySelector("p").textContent=mailImageText("Зашифрованное сообщение OMEMO. Откройте его в Conversations.","Encrypted OMEMO message. Open in Conversations.");
+  if(attachment){if(m.body===attachment.url)div.querySelector("p").textContent=attachment.name;const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.textContent=mailImageText('Открыть файл: ','Open file: ')+attachment.name;button.onclick=()=>{try{const u=new URL(attachment.url,location.href);if(u.protocol!=='https:'||u.username||u.password)return;if(u.origin===location.origin)openDocumentPreview(attachment);else window.open(u.href,'_blank','noopener,noreferrer')}catch{}};div.append(button)}
   box.appendChild(div);
 }
 
 function chatAttachment(body) {
- const lines=String(body||'').split('\n');if(lines.length!==2)return null;
+ const lines=String(body||'').split('\n');if(lines.length===1){try{const u=new URL(lines[0]);if(u.protocol==='https:'&&!u.username&&!u.password)return {name:decodeURIComponent(u.pathname.split('/').pop())||'file',url:u.href}}catch{} }if(lines.length!==2)return null;
  try {const url=new URL(lines[1]);if(url.origin!==location.origin||!/^\/s\/[A-Za-z0-9_-]+$/.test(url.pathname)||url.search||url.hash)return null;return {name:lines[0],url:url.href}}catch{return null}
 }
 
@@ -5101,7 +5103,7 @@ $('chat-request-presence')?.addEventListener('click',()=>{if(chatState.peer)chat
 
 $('chat-attach')?.addEventListener('click',()=>{
  if(!chatState.peer||chatState.sending)return;
- setMsg($('chat-msg'),mailImageText('Файл будет доступен по ссылке 7 дней. Ссылку можно отозвать в разделе «Файлы».','The file link is valid for 7 days. Revoke it in Files.'));
+ setMsg($('chat-msg'),mailImageText('Вложение доступно 7 дней; файл сохранится в папке chat.','Attachment available for 7 days; file stays in chat folder.'));
  $('chat-file').click();
 });
 $('chat-file')?.addEventListener('change',async e=>{
@@ -5110,9 +5112,11 @@ $('chat-file')?.addEventListener('change',async e=>{
  chatState.sending=true;$('chat-attach').disabled=true;
  const name=file.name.replace(/[\/\\\r\n]/g,'_'),path='chat/'+crypto.randomUUID()+'/'+name;let share;
  try {
-  await new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest();xhr.open('PUT','/api/v1/files/content?path='+encodeURIComponent(path));xhr.setRequestHeader('Authorization','Bearer '+state.tokens.access_token);xhr.timeout=0;xhr.upload.onprogress=ev=>{if(ev.lengthComputable)setMsg($('chat-msg'),Math.round(ev.loaded/ev.total*100)+'%')};xhr.onerror=xhr.ontimeout=()=>reject(new Error(mailImageText('Ошибка загрузки','Upload failed')));xhr.onload=()=>xhr.status>=200&&xhr.status<300?resolve():reject(new Error(mailImageText('Не удалось загрузить файл','Unable to upload file')));xhr.send(file)});
-  share=await api('/api/v1/files/shares',{method:'POST',body:JSON.stringify({path,rights:'read',ttl_hours:168})});
-  const ev=await api('/api/v1/chat/send',{method:'POST',body:JSON.stringify({to:peer,body:name+'\n'+share.url})});
+  const linkMode=$('chat-file-mode')?.value==='link';
+  const slot=linkMode?null:await api('/api/v1/chat/upload',{method:'POST',body:JSON.stringify({name,size:file.size,type:file.type})});
+  await new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest();xhr.open('PUT',slot?slot.put:'/api/v1/files/content?path='+encodeURIComponent(path));if(!slot)xhr.setRequestHeader('Authorization','Bearer '+state.tokens.access_token);xhr.timeout=0;xhr.upload.onprogress=ev=>{if(ev.lengthComputable)setMsg($('chat-msg'),Math.round(ev.loaded/ev.total*100)+'%')};xhr.onerror=xhr.ontimeout=()=>reject(new Error(mailImageText('Ошибка загрузки','Upload failed')));xhr.onload=()=>xhr.status>=200&&xhr.status<300?resolve():reject(new Error(mailImageText('Не удалось загрузить файл','Unable to upload file')));xhr.send(file)});
+  share=slot?{url:slot.get}:await api('/api/v1/files/shares',{method:'POST',body:JSON.stringify({path,rights:'read',ttl_hours:168})});
+  const ev=await api('/api/v1/chat/send',{method:'POST',body:JSON.stringify({to:peer,body:linkMode?name+'\n'+share.url:share.url})});
   if(chatBare(chatState.peer)===chatBare(peer)){appendChatBubble(ev);scrollChatBottom()}
   setMsg($('chat-msg'),mailImageText('Файл отправлен. Ссылка действует 7 дней.','File sent. Link valid for 7 days.'),'ok');
  }catch(err){setMsg($('chat-msg'),err.message,'err')}
@@ -5122,3 +5126,5 @@ $('chat-file')?.addEventListener('change',async e=>{
 function directoryMatches(tenant,domain,query) {
  return (String(tenant||'')+' '+String(domain||'')).toLocaleLowerCase().includes(String(query||'').trim().toLocaleLowerCase());
 }
+
+{const attach=$('chat-attach');if(attach){const mode=document.createElement('select');mode.id='chat-file-mode';mode.setAttribute('aria-label','Способ отправки файла');mode.style.cssText='width:130px;flex:0 0 130px;min-height:40px;font-size:12px';mode.innerHTML='<option value="attachment">Вложение</option><option value="link">Ссылка</option>';attach.before(mode)}}

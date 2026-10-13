@@ -4,9 +4,11 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -22,6 +24,7 @@ func TestFilesArchiveMoveAndIsolation(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 	cfg := config.Default()
+	cfg.HTTP.PublicURL = "https://mail.example.com"
 	st, err := storage.Open(ctx, config.StorageConfig{Driver: "sqlite", SQLite: config.SQLiteConfig{Path: filepath.Join(dir, "db")}})
 	if err != nil {
 		t.Fatal(err)
@@ -51,6 +54,31 @@ func TestFilesArchiveMoveAndIsolation(t *testing.T) {
 			t.Fatalf("%s %s: %d %s", method, path, w.Code, w.Body.String())
 		}
 		return w
+	}
+	unauth := httptest.NewRecorder()
+	handler.ServeHTTP(unauth, httptest.NewRequest("POST", "/api/v1/chat/upload", bytes.NewBufferString(`{"name":"x","size":1}`)))
+	if unauth.Code != 401 {
+		t.Fatal("anonymous slot permitted")
+	}
+	call("POST", "/api/v1/chat/upload", `{"name":"../escape","size":1}`, 400)
+	call("POST", "/api/v1/chat/upload", `{"name":"huge","size":10737418241}`, 400)
+	slotResponse := call("POST", "/api/v1/chat/upload", `{"name":"photo.jpg","size":1300000,"type":"image/jpeg"}`, 201)
+	var slot struct{ Put, Get string }
+	if err := json.Unmarshal(slotResponse.Body.Bytes(), &slot); err != nil {
+		t.Fatal(err)
+	}
+	putURL, _ := url.Parse(slot.Put)
+	getURL, _ := url.Parse(slot.Get)
+	content := bytes.Repeat([]byte("x"), 1300000)
+	call("PUT", putURL.RequestURI(), "short", 400)
+	call("PUT", putURL.RequestURI(), string(content), 201)
+	if got := call("GET", getURL.RequestURI(), "", 200); !bytes.Equal(got.Body.Bytes(), content) {
+		t.Fatal("upload corrupted")
+	}
+	call("PUT", putURL.RequestURI(), string(content), 404)
+	entries, _ := filepath.Glob(filepath.Join(ms.Root, "files", u.ID, "chat", "*", "photo.jpg"))
+	if len(entries) != 1 {
+		t.Fatal("file missing from personal chat folder")
 	}
 	call("POST", "/api/v1/files/mkdir", `{"path":"folder/empty"}`, 200)
 	call("PUT", "/api/v1/files/content?path=folder/nested/doc.txt", "archived body", 200)
