@@ -1062,6 +1062,14 @@ async function refreshTenantNav() {
     if (!list) return;
     if(meta)meta.textContent=mailImageText('Организации и домены · выберите строку для управления пользователями','Organizations and domains · select a row to manage users');
     list.innerHTML=`<div class="directory-table-wrap"><table class="directory-table"><thead><tr><th>${escapeHtml(mailImageText('Организация / тенант','Organization / tenant'))}</th><th>${escapeHtml(mailImageText('Домен','Domain'))}</th><th>${escapeHtml(t('users_title'))}</th><th>${escapeHtml(mailImageText('Действия','Actions'))}</th></tr></thead><tbody>${rows.map(({tenant,domain},i)=>`<tr data-directory-row="${i}" tabindex="0"><td>${escapeHtml(tenant.name)}</td><td>${escapeHtml(domain?.name||'—')}</td><td><span class="badge">${Number(domain?.user_count||0)}</span></td><td><div class="user-action-icons"><button type="button" class="btn-secondary user-action-icon" data-directory-settings="${i}" title="${escapeHtml(mailImageText('Настройки доменов','Domain settings'))}" aria-label="${escapeHtml(mailImageText('Настройки доменов','Domain settings'))}">${designIcon('settings')}</button>${tenantNav.global?`<button type="button" class="btn-secondary user-action-icon" data-directory-delete="${i}" ${domain?.user_count>0?'disabled':''} title="${escapeHtml(domain?.user_count>0?mailImageText('Сначала удалите пользователей домена','Remove domain users first'):mailImageText('Удалить','Delete'))}" aria-label="${escapeHtml(mailImageText('Удалить','Delete'))}">${designIcon('delete')}</button>`:''}</div></td></tr>`).join('')||`<tr><td colspan="4">${escapeHtml(t('tenants_empty'))}</td></tr>`}</tbody></table></div>`;
+    const filterRows=()=>{
+      const query=String($('directory-search')?.value||'').trim().toLocaleLowerCase();let visible=0;
+      list.querySelectorAll('[data-directory-row]').forEach(row=>{const {tenant,domain}=rows[row.dataset.directoryRow];row.hidden=!directoryMatches(tenant.name,domain?.name,query);if(!row.hidden)visible++});
+      if($('directory-count'))$('directory-count').textContent=visible+' / '+rows.length;
+      if($('directory-empty')){$('directory-empty').hidden=visible>0;$('directory-empty').textContent=mailImageText('Ничего не найдено','No matches')}
+    };
+    if($('directory-search')){$('directory-search').oninput=filterRows;$('directory-search').placeholder=mailImageText('Поиск организации или домена…','Search organization or domain…')}
+    filterRows();
     const select = i => {const {tenant,domain}=rows[i];tenantNav.tenantID=tenant.id;tenantNav.tenantName=tenant.name;tenantNav.domainID=domain?.id||'';tenantNav.domainName=domain?.name||'';return domain?refreshAdminUsers():refreshTenantDomains()};
     list.querySelectorAll('[data-directory-row]').forEach(row=>{row.onclick=e=>{if(!e.target.closest('button,input,select,a'))select(row.dataset.directoryRow)};row.onkeydown=e=>{if(e.target===row&&(e.key==='Enter'||e.key===' ')){e.preventDefault();select(row.dataset.directoryRow)}}});
     list.querySelectorAll('[data-directory-settings]').forEach(button=>button.onclick=()=>{const {tenant}=rows[button.dataset.directorySettings];tenantNav.tenantID=tenant.id;tenantNav.tenantName=tenant.name;refreshTenantDomains()});
@@ -5106,3 +5114,7 @@ $('chat-file')?.addEventListener('change',async e=>{
  }catch(err){setMsg($('chat-msg'),err.message,'err')}
  finally{chatState.sending=false;$('chat-attach').disabled=false}
 });
+
+function directoryMatches(tenant,domain,query) {
+ return (String(tenant||'')+' '+String(domain||'')).toLocaleLowerCase().includes(String(query||'').trim().toLocaleLowerCase());
+}
