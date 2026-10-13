@@ -50,7 +50,7 @@ archives:
       - frontend/LICENSE
       - frontend/package*.json
       - frontend/build-*.cjs
-      - frontend/src/**/*
+      - frontend/src/*
       - internal/frontend/dist/assets/libomemo-LICENSE.txt
       - docs/release-*.md
       - internal/flowsync/LICENSE

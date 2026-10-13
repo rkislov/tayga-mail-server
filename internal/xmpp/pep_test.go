@@ -114,3 +114,16 @@ func TestOMEMONotificationsConfigurationAndPersistence(t *testing.T) {
 		t.Fatalf("%+v %v", roster, err)
 	}
 }
+
+func TestMissingOMEMONodeReturnsItemNotFound(t *testing.T) {
+	srv, _, user := testServer(t)
+	var out bytes.Buffer
+	session := &Session{srv: srv, user: user, JID: ParseJID(user.Email + "/phone"), bw: bufio.NewWriter(&out)}
+	err := session.handlePubSubIQ(context.Background(), "missing", "get", user.Email, `<pubsub xmlns='http://jabber.org/protocol/pubsub'><items node='eu.siacs.conversations.axolotl.bundles:1151778467'/></pubsub>`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "item-not-found") {
+		t.Fatal(out.String())
+	}
+}
