@@ -3517,3 +3517,9 @@ html[data-color-mode="light"] {
 #card-admin .admin-directory-nav button {border-radius:10px;padding:.55rem .8rem;font-size:.9rem;}
 #card-admin .user-action-icon {width:36px;height:36px;min-height:36px;padding:8px;border-radius:10px;}
 #card-admin .directory-table td {padding:10px 16px;}
+
+/* Reserve viewport space for floating actions on desktop and mobile. */
+#app-chat .chat-thread-pane {padding-bottom:96px;}
+#app-chat .chat-roster-pane {padding-bottom:96px;}
+#chat-attach {flex:0 0 40px;width:40px;height:40px;min-height:40px;padding:8px;}
+#app-chat .chat-compose {flex-shrink:0;}
