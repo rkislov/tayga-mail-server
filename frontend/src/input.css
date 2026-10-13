@@ -3507,3 +3507,13 @@ html[data-color-mode="light"] {
 .directory-table tbody tr {cursor:pointer;transition:background .16s ease;}
 .directory-table tbody tr:hover,.directory-table tbody tr:focus-visible {background:color-mix(in srgb,var(--ui-accent,#356550) 12%,transparent);outline:2px solid var(--ui-accent,#356550);outline-offset:-2px;}
 .directory-table tbody tr:last-child td {border-bottom:0;}
+
+/* Compact administration workspace, retaining the selected Tayga theme. */
+#card-admin .heading {font-family:inherit;font-size:1.3rem;line-height:1.4;}
+.directory-toolbar {display:flex;align-items:center;gap:1rem;margin:1rem 0;}
+.directory-toolbar .field-input {max-width:34rem;min-height:40px;padding:.55rem .8rem;border-radius:10px;}
+.directory-toolbar .meta {margin-left:auto;white-space:nowrap;font-variant-numeric:tabular-nums;}
+#card-admin .admin-directory-nav {gap:.3rem;border-bottom:1px solid var(--ui-border,#d9dfdc);padding-bottom:.7rem;}
+#card-admin .admin-directory-nav button {border-radius:10px;padding:.55rem .8rem;font-size:.9rem;}
+#card-admin .user-action-icon {width:36px;height:36px;min-height:36px;padding:8px;border-radius:10px;}
+#card-admin .directory-table td {padding:10px 16px;}
