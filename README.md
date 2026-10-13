@@ -9,6 +9,8 @@ See [docs/architecture.md](docs/architecture.md) and `configs/tayga.example.yaml
 
 **Первоначальная настройка (RU):** [docs/setup.md](docs/setup.md) — bootstrap, seed-админ, DNS, TLS, исходящая почта, чеклист.
 
+**Сравнение решений (RU):** [Tayga, CommuniGate Pro, RuPost и TEGU — функции, компоненты и ограничения](docs/product-comparison.md).
+
 ## Quick start
 
 ```bash
