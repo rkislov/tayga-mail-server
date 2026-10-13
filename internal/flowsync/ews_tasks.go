@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/tayga/tms/internal/storage"
+	"log/slog"
 	"sort"
 	"strconv"
 	"strings"
@@ -120,6 +121,7 @@ func (h *ewsHandler) writeTask(ctx context.Context, u *storage.User, body string
 				field = "item:" + c.Name.Local
 			}
 			if !applyTaskField(t, field, c.Text) {
+				slog.Warn("flowsync unsupported task field", "field", field)
 				return ewsFault("ErrorInvalidPropertySet", "unsupported task field: "+field), nil
 			}
 		}
@@ -161,6 +163,14 @@ func (h *ewsHandler) writeTask(ctx context.Context, u *storage.User, body string
 			if len(parts) != 2 {
 				return ewsFault("ErrorInvalidPropertySet", "missing task FieldURI"), nil
 			}
+			// Outlook clears optional fields even when this server never stored them.
+			if deleting {
+				switch field {
+				case "item:ReminderDueBy", "item:ReminderIsSet", "item:ReminderMinutesBeforeStart", "task:BillingInformation", "task:Companies", "task:Contacts", "task:Mileage", "task:ActualWork", "task:TotalWork":
+					delete(props, field)
+					continue
+				}
+			}
 			value := ""
 			var n *protocolNode
 			if !deleting {
@@ -197,6 +207,7 @@ func (h *ewsHandler) writeTask(ctx context.Context, u *storage.User, body string
 				props[field] = metadataXML(n)
 			default:
 				if !applyTaskField(t, field, value) {
+					slog.Warn("flowsync unsupported task field", "field", field)
 					return ewsFault("ErrorInvalidPropertySet", "unsupported task field: "+field), nil
 				}
 			}
