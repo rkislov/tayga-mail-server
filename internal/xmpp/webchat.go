@@ -10,6 +10,7 @@ import (
 
 // ChatEvent is pushed to web clients over SSE.
 type ChatEvent struct {
+	Room       string          `json:"room,omitempty"`
 	Attachment *ChatAttachment `json:"attachment,omitempty"`
 	Encrypted  bool            `json:"encrypted,omitempty"`
 	Type       string          `json:"type"`
@@ -22,6 +23,7 @@ type ChatEvent struct {
 
 // RosterEntry is a roster row for the web messenger.
 type RosterEntry struct {
+	Group               bool   `json:"group,omitempty"`
 	JID                 string `json:"jid"`
 	Name                string `json:"name"`
 	Subscription        string `json:"subscription"`
@@ -163,6 +165,13 @@ func (s *Server) ListChatRoster(ctx context.Context, userID string) ([]RosterEnt
 		}
 		out = append(out, RosterEntry{JID: it.JID, Name: name, Subscription: it.Subscription, Presence: presence, SubscriptionRequest: requests[it.JID]})
 	}
+	rooms, err := s.ListChatRooms(ctx, user.Email)
+	if err != nil {
+		return nil, err
+	}
+	for _, room := range rooms {
+		out = append(out, RosterEntry{JID: room.JID, Name: room.Name, Group: true})
+	}
 	return out, nil
 }
 
@@ -189,6 +198,9 @@ func (s *Server) UpsertChatRoster(ctx context.Context, userID, jid, name string)
 }
 
 func (s *Server) ChatHistory(ctx context.Context, ownerBare, withBare string, limit int) ([]HistoryMsg, error) {
+	if s.isWebRoom(withBare) {
+		return s.roomHistory(ctx, ownerBare, withBare, limit)
+	}
 	rows, err := s.queryMAM(ctx, ParseJID(ownerBare).Bare(), ParseJID(withBare).Bare(), limit)
 	if err != nil {
 		return nil, err
@@ -206,6 +218,9 @@ func (s *Server) ChatHistory(ctx context.Context, ownerBare, withBare string, li
 }
 
 func (s *Server) SendChatMessage(ctx context.Context, fromEmail, to, body string) (ChatEvent, error) {
+	if s.isWebRoom(to) {
+		return s.sendRoomMessage(ctx, fromEmail, to, body)
+	}
 	from := ParseJID(fromEmail).Bare()
 	toJ := ParseJID(to)
 	if toJ.Bare() == "" {

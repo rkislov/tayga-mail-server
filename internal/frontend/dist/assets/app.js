@@ -125,7 +125,7 @@ const I18N = {
     note_empty_list: "Нет заметок",
     note_revoke: "Отозвать",
     chat_title: "Чат",
-    chat_new: "Диалог",
+    chat_new: "Диалог", chat_group_new: "Групповой чат",
     chat_select: "Выберите диалог",
     chat_placeholder: "Сообщение…",
     chat_peer_jid: "Email / JID",
@@ -633,7 +633,7 @@ contacts_search: "Поиск контактов…",
     note_empty_list: "No notes",
     note_revoke: "Revoke",
     chat_title: "Chat",
-    chat_new: "Conversation",
+    chat_new: "Conversation", chat_group_new: "Group chat",
     chat_select: "Select a conversation",
     chat_placeholder: "Message…",
     chat_peer_jid: "Email / JID",
@@ -3360,6 +3360,7 @@ function showToast(ev) {
 
 function openNotifyHref(href) {
   if (!href) return;
+  if(href.startsWith("chat?peer=")){showApp("chat");openChatPeer(decodeURIComponent(href.slice(10)));return;}
   if (href === "mail" || href.startsWith("mail")) {
     showApp("mail");
     return;
@@ -5134,12 +5135,14 @@ function startChatLive() {
     const from = chatBare(data.from);
     const to = chatBare(data.to);
     const me = chatBare(chatState.me || state.email);
-    const peer = from === me ? to : from;
+    const peer = data.room || (from === me ? to : from);
     if (!peer) return;
     if (!chatState.roster.some((r) => chatBare(r.jid) === peer)) {
-      chatState.roster.unshift({ jid: peer, name: "", subscription: "both" });
+      chatState.roster.unshift({ jid: peer, name: "", subscription: "none", group: !!data.room });
+      if(data.room) refreshChat();
       renderChatRoster();
     }
+    if(from!==me) showToast({id:data.id,kind:"chat",title:chatState.roster.find(r=>r.jid===peer)?.name||from,body:data.encrypted?"OMEMO":data.body||data.attachment?.name||"",href:"chat?peer="+encodeURIComponent(peer)});
     if (chatBare(chatState.peer) === peer) {
       appendChatBubble(data);
       scrollChatBottom();
@@ -5160,9 +5163,10 @@ function appendChatBubble(m) {
   if(messageKey)div.dataset.messageKey=messageKey;
   div.className = "chat-bubble" + (mine ? " is-mine" : "");
   div.innerHTML = `<p>${escapeHtml(m.body || "")}</p><time>${escapeHtml(m.at ? new Date(m.at).toLocaleString() : "")}</time>`;
+  if(chatState.roster.find(r=>r.jid===chatState.peer)?.group){const author=document.createElement("strong");author.textContent=chatState.roster.find(r=>r.jid===chatBare(m.from))?.name||chatBare(m.from);div.prepend(author)}
   const attachment=m.attachment||chatAttachment(m.body);
   if(m.encrypted)div.querySelector("p").textContent=mailImageText("Зашифрованное сообщение OMEMO. Откройте его в Conversations.","Encrypted OMEMO message. Open in Conversations.");
-  if(attachment){if(m.body===attachment.url)div.querySelector("p").textContent=attachment.name;const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.textContent=mailImageText('Открыть файл: ','Open file: ')+attachment.name;button.onclick=()=>{try{const u=new URL(attachment.url,location.href);if(u.protocol!=='https:'||u.username||u.password)return;if(u.origin===location.origin)openDocumentPreview(attachment);else window.open(u.href,'_blank','noopener,noreferrer')}catch{}};div.append(button)}
+  if(attachment){if(m.body===attachment.url)div.querySelector("p").textContent=attachment.name;const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.textContent=mailImageText('Открыть файл: ','Open file: ')+attachment.name;button.onclick=()=>{try{const u=new URL(attachment.url,location.href);if(u.protocol!=='https:'||u.username||u.password)return;if(u.origin===location.origin)openDocumentPreview(attachment);else window.open(u.href,'_blank','noopener,noreferrer')}catch{}};div.append(button);addChatInlinePreview(div,attachment,button)}
   box.appendChild(div);
 }
 
@@ -5176,18 +5180,29 @@ function scrollChatBottom() {
   if (box) box.scrollTop = box.scrollHeight;
 }
 
+function renderChatPeerPresence() {
+ const button=$('chat-request-presence');if(!button)return;
+ let label=$('chat-peer-presence');if(!label){label=document.createElement('span');label.id='chat-peer-presence';label.className='meta';label.setAttribute('role','status');button.after(label)}
+ const peer=chatState.roster.find(r=>chatBare(r.jid)===chatBare(chatState.peer));
+ const allowed=peer&&(peer.subscription==='to'||peer.subscription==='both'||(peer.presence&&peer.presence!=='unknown'));
+ button.hidden=!!allowed||!chatState.peer||!!peer?.group;
+ label.hidden=!allowed&&!peer?.group;label.textContent=peer?.group?mailImageText('Групповой чат','Group chat'):(allowed?t('presence_'+(peer.presence||'offline')):'');
+}
+
 function renderChatRoster() {
+ renderChatPeerPresence();
+  renderChatGroupButton();
   const list = $("chat-roster");
   if (!list) return;
   const peer = chatBare(chatState.peer);
   list.innerHTML = chatState.roster.map((r) => {
     const jid = chatBare(r.jid);
     const label = r.name || jid;
- const presence=t("presence_"+(r.presence||"unknown"));
+ const presence=r.group?mailImageText("Группа","Group"):t("presence_"+(r.presence||"unknown"));
     return `<li>
       <button type="button" class="msg-item${jid === peer ? " is-active" : ""}" data-jid="${escapeHtml(jid)}">
         <span class="msg-subject">${escapeHtml(label)}</span>
-        <span class="msg-date">${escapeHtml(jid)} · ${escapeHtml(presence)}</span>
+        <span class="msg-date">${r.group?"":escapeHtml(jid)+" · "}${escapeHtml(presence)}</span>
       </button>${r.subscription_request?`<div class="actions"><span>${escapeHtml(t('presence_request'))}</span><button class="btn-secondary btn-sm" data-sub-action="accept" data-peer="${escapeHtml(jid)}">${escapeHtml(t('presence_accept'))}</button><button class="btn-secondary btn-sm" data-sub-action="reject" data-peer="${escapeHtml(jid)}">${escapeHtml(t('presence_reject'))}</button></div>`:''}
     </li>`;
   }).join("") || `<li class="meta msg-empty">${escapeHtml(t("chat_select"))}</li>`;
@@ -6181,6 +6196,20 @@ function directoryMatches(tenant,domain,query) {
 }
 
 {const attach=$('chat-attach');if(attach){const mode=document.createElement('select');mode.id='chat-file-mode';mode.setAttribute('aria-label','Способ отправки файла');mode.style.cssText='width:130px;flex:0 0 130px;min-height:40px;font-size:12px';mode.innerHTML='<option value="attachment">Вложение</option><option value="link">Ссылка</option>';attach.before(mode)}}
+
+function addChatInlinePreview(container,attachment,button) {
+ let url;try{url=new URL(attachment.url,location.href)}catch{return}
+ if(url.origin!==location.origin||!/^\/(?:s|chat-download)\//.test(url.pathname))return;
+ const type=documentPreviewType(attachment.name);if(!type)return;
+ const preview=document.createElement('button');preview.type='button';preview.className='chat-attachment-preview';preview.setAttribute('aria-label',mailImageText('Открыть: ','Open: ')+attachment.name);preview.textContent=mailImageText('Загрузка предпросмотра…','Loading preview…');preview.onclick=()=>button.click();container.insertBefore(preview,button);
+ const load=async()=>{try{
+  const response=await fetch(url.href,{credentials:'omit',referrerPolicy:'no-referrer'});if(!response.ok)throw Error('unavailable');
+  const blob=await boundedPreviewBlob(response,16*1024*1024);if(!preview.isConnected)return;
+  if(type.startsWith('image/')){const objectURL=URL.createObjectURL(new Blob([blob],{type}));const image=document.createElement('img');image.alt=attachment.name;image.onload=()=>URL.revokeObjectURL(objectURL);image.onerror=()=>{URL.revokeObjectURL(objectURL);preview.remove()};image.src=objectURL;preview.replaceChildren(image)}
+  else if(type==='application/pdf'){const pdfjs=await import('/assets/pdfjs/pdf.mjs');pdfjs.GlobalWorkerOptions.workerSrc='/assets/pdfjs/pdf.worker.mjs';const pdf=await pdfjs.getDocument({data:new Uint8Array(await blob.arrayBuffer()),isEvalSupported:false}).promise;try{const page=await pdf.getPage(1);const original=page.getViewport({scale:1});const viewport=page.getViewport({scale:Math.min(1,280/original.width,320/original.height)});const canvas=document.createElement('canvas');canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;if(preview.isConnected)preview.replaceChildren(canvas)}finally{await pdf.destroy()}}
+ }catch{preview.remove()}};
+ const observer=new IntersectionObserver(entries=>{if(entries.some(e=>e.isIntersecting)){observer.disconnect();load()}},{rootMargin:'100px'});observer.observe(preview);
+}
 /* Typed configuration forms follow the schema exposed by the server. */
 const CONFIG_GROUPS = [
   { title: ["Почта и клиенты", "Mail and clients"], icon: "mail", sections: ["smtp", "imap", "pop3", "managesieve", "flowsync", "xmpp"] },
@@ -6836,6 +6865,12 @@ function mountVisualRuleBuilder(){
  const original=$('sieve-body')?.closest('.card');if(original){const details=document.createElement('details');details.className='advanced-sieve';const summary=document.createElement('summary');summary.textContent=mailImageText('Расширенный редактор Sieve и сохранённые скрипты','Advanced Sieve editor and saved scripts');original.before(details);details.append(summary,original)}renderVisualRules();
 }
 mountVisualRuleBuilder();
+async function boundedPreviewBlob(response,limit) {
+ if(Number(response.headers.get('Content-Length'))>limit){await response.body?.cancel();throw new Error('Файл слишком велик для предпросмотра')}
+ const reader=response.body.getReader(),chunks=[];let size=0;
+ try{for(;;){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>limit){await reader.cancel();throw new Error('Файл слишком велик для предпросмотра')}chunks.push(value)}}finally{reader.releaseLock()}
+ return new Blob(chunks,{type:response.headers.get('Content-Type')||'application/octet-stream'});
+}
 // Shared stroke language for reader actions and document previews.
 function designIcon(name) {
   const paths={settings:'M9 3h6l1 4 4 1v6l-4 1-1 4H9l-1-4-4-1V8l4-1zM9 11a3 3 0 1 0 6 0 3 3 0 0 0-6 0',key:'M15 7a5 5 0 1 0-7 7l-5 5v3h3v-3h3l3-3M15 7h.01',shield:'M12 3 3 7v5c0 5 9 9 9 9s9-4 9-9V7zM9 12l2 2 4-4',refresh:'M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-1l2 6M4 12l2 6a7 7 0 0 0 12-1',disconnect:'M9 5H4v14h5M12 12h9m-4-4 4 4-4 4',reply:'M9 5 3 11l6 6M3 11h9a8 8 0 0 1 8 8','reply-all':'m8 4-6 6 6 6m5-12-6 6 6 6M7 10h6a8 8 0 0 1 8 8',trip:'M8 2h8v4H8zM5 6h14v15H5zM9 10v6m6-6v6',spam:'m7 3-4 4v10l4 4h10l4-4V7l-4-4zM12 7v6m0 4h.01',archive:'M3 3h18v5H3zM5 8v13h14V8M9 12h6',delete:'M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7',download:'M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4',close:'m6 6 12 12M18 6 6 18'};
@@ -6856,7 +6891,7 @@ async function openDocumentPreview({url,name,size}) {
     if(size>64*1024*1024)throw new Error(mailImageText('Файл больше 64 МиБ. Используйте скачивание.','File exceeds 64 MiB. Use download.'));
     const headers={};if(new URL(url,location.href).origin===location.origin&&state.tokens?.access_token)headers.Authorization='Bearer '+state.tokens.access_token;
     const response=await fetch(url,{headers,signal:controller.signal});if(!response.ok)throw new Error(mailImageText('Не удалось открыть файл','Unable to open file'));
-    const blob=await response.blob();if(!dialog.open)return;if(blob.size>64*1024*1024)throw new Error(mailImageText("Файл больше 64 МиБ","File exceeds 64 MiB"));
+    const blob=await boundedPreviewBlob(response,64*1024*1024);if(!dialog.open)return;if(blob.size>64*1024*1024)throw new Error(mailImageText("Файл больше 64 МиБ","File exceeds 64 MiB"));
     const type=documentPreviewType(name);objectURL=URL.createObjectURL(type?new Blob([blob],{type}):blob);download.disabled=false;
     download.onclick=()=>{const link=document.createElement('a');link.href=objectURL;link.download=name;link.click()};
     if(type.startsWith('image/')){const image=document.createElement('img');image.alt=name;image.src=objectURL;image.onerror=()=>{content.textContent=mailImageText('Изображение не удалось прочитать.','Unable to decode image.')};content.replaceChildren(image)}
@@ -6991,9 +7026,9 @@ function updateCreateButton(app) {
  const actions={mail:['compose','btn-compose'],calendar:['new_event','btn-cal-new'],contacts:['new_contact','btn-contact-new'],notes:['note_new','btn-note-new'],tasks:['tasks_new','tasks-new'],chat:['chat_new','btn-chat-new'],filters:['rules_new','btn-rule-new'],tenants:['users_create','btn-directory-create'],files:['upload','files-upload']};
  const action=actions[app];root.hidden=!action;if(!action)return;if(app==='tenants'&&tenantNav.level==='tenants'&&!state.me?.is_global_admin){root.hidden=true;return;}
  const button=document.createElement('button');button.type='button';button.className='create-fab';button.textContent='+';button.title=t(action[0]);button.setAttribute('aria-label',t(action[0]));if(app==='files')button.disabled=!!filesState.ownerID&&filesState.sharedRights!=='write';root.append(button);
- if(app==='files'||(app==='tenants'&&tenantNav.level==='users')){
+ if(app==='chat'||app==='files'||(app==='tenants'&&tenantNav.level==='users')){
   const menu=document.createElement('div');menu.className='create-fab-menu';menu.hidden=true;menu.id='create-file-menu';
-  for(const [key,id] of (app==='files'?[['upload','files-upload'],['mkdir','btn-files-mkdir'],['files_upload_folder','files-upload-folder']]:[['users_create','btn-directory-create'],['resources_add','btn-directory-resource']])){const item=document.createElement('button');item.type='button';item.textContent=t(key);item.onclick=()=>{menu.hidden=true;button.setAttribute('aria-expanded','false');document.getElementById(id)?.click();};menu.append(item);}
+  for(const [key,id] of (app==='chat'?[['chat_new','btn-chat-new'],['chat_group_new','btn-chat-group-new']]:app==='files'?[['upload','files-upload'],['mkdir','btn-files-mkdir'],['files_upload_folder','files-upload-folder']]:[['users_create','btn-directory-create'],['resources_add','btn-directory-resource']])){const item=document.createElement('button');item.type='button';item.textContent=t(key);item.onclick=()=>{menu.hidden=true;button.setAttribute('aria-expanded','false');document.getElementById(id)?.click();};menu.append(item);}
   root.prepend(menu);button.setAttribute('aria-controls',menu.id);button.setAttribute('aria-expanded','false');button.onclick=()=>{menu.hidden=!menu.hidden;button.setAttribute('aria-expanded',String(!menu.hidden));};root.onkeydown=e=>{if(e.key==='Escape'){menu.hidden=true;button.setAttribute('aria-expanded','false');button.focus();}};
  }else button.onclick=()=>{const target=document.getElementById(action[1]);if(target&&!target.disabled){button.classList.remove('is-activated');void button.offsetWidth;button.classList.add('is-activated');button.addEventListener('animationend',()=>button.classList.remove('is-activated'),{once:true});target.click();}};
 }
@@ -7181,3 +7216,21 @@ async function openRolesDirectory(){
  try{const tenants=await api('/api/v1/admin/tenants');const hint=document.createElement('p');hint.className='meta';hint.textContent='В текущей модели организация — это тенант. Администратор организации управляет всеми её доменами, администратор домена — выбранными доменами, глобальный — всем сервером. Назначения меняет глобальный администратор.';body.append(hint);for(const tenant of tenants.tenants||[]){const heading=document.createElement('h3');heading.textContent=tenant.name;body.append(heading);const data=await api('/api/v1/admin/users?tenant_id='+encodeURIComponent(tenant.id));const table=document.createElement('table');table.className='admin-users-table';body.append(table);for(const user of data.users||[]){const row=document.createElement('tr');for(const value of [user.email,(user.roles||[]).join(', ')||'user']){const cell=document.createElement('td');cell.textContent=value;row.append(cell)}const cell=document.createElement('td'),button=document.createElement('button');button.className='btn-secondary action-icon';button.innerHTML=designIcon('shield');button.title='Назначить роль и область доступа';button.setAttribute('aria-label',button.title+' — '+user.email);button.disabled=!state.me?.is_global_admin;button.onclick=()=>openUserRole(user);cell.append(button);row.append(cell);table.append(row)}}}catch(error){const p=document.createElement('p');p.textContent=error.message;body.append(p)}
 }
 const rolesNav=document.createElement('button');rolesNav.type='button';rolesNav.className='nav-btn';rolesNav.textContent='Роли и права';rolesNav.onclick=()=>{setNavOpen(false);openRolesDirectory()};$('nav-admin')?.append(rolesNav);
+
+const groupCreateButton=document.createElement('button');groupCreateButton.id='btn-chat-group-new';groupCreateButton.hidden=true;document.body.append(groupCreateButton);
+groupCreateButton.onclick=()=>openChatGroupDialog();
+async function openChatGroupDialog(){
+ const dialog=document.createElement('dialog');dialog.className='document-preview chat-group-dialog';
+ dialog.innerHTML='<header><strong></strong><button type="button" class="btn-secondary" aria-label="Close">×</button></header><form class="stack-gap"><label class="field"><span></span><input class="field-input" name="name" required maxlength="100"></label><label class="field"><span></span><textarea class="field-input" name="members" required rows="3" placeholder="user@example.com"></textarea></label><p class="meta"></p><p role="status"></p><button class="btn-spray" type="submit"></button></form>';
+ dialog.querySelector('strong').textContent=mailImageText('Новая группа','New group');dialog.querySelector('header button').onclick=()=>dialog.close();
+ const form=dialog.querySelector('form'),labels=form.querySelectorAll('label span');labels[0].textContent=mailImageText('Название','Name');labels[1].textContent=mailImageText('Участники — email через запятую','Participants — comma-separated emails');
+ form.querySelector('.meta').textContent=mailImageText('Группа в веб-чате для пользователей вашей организации. До 100 участников. История доступна всем участникам. Подключение через Conversations и OMEMO для групп пока не поддерживаются.','Web group for your organization, up to 100 members. All members can read the history. Conversations and group OMEMO are not supported yet.');
+ const submit=form.querySelector('[type=submit]');submit.textContent=mailImageText('Создать группу','Create group');
+ form.onsubmit=async e=>{e.preventDefault();submit.disabled=true;try{const room=await api('/api/v1/chat/rooms',{method:'POST',body:JSON.stringify({name:form.elements.name.value,members:form.elements.members.value.split(/[,;\s]+/).filter(Boolean)})});dialog.close();await refreshChat();await openChatPeer(room.jid)}catch(error){form.querySelector('[role=status]').textContent=error.message}finally{submit.disabled=false}};
+ document.body.append(dialog);dialog.addEventListener('close',()=>dialog.remove(),{once:true});dialog.showModal();form.elements.name.focus();
+}
+function renderChatGroupButton(){
+ let button=$('chat-group-info');if(!button){button=document.createElement('button');button.id='chat-group-info';button.type='button';button.className='btn-secondary btn-sm';$('chat-peer')?.after(button)}
+ button.hidden=!chatState.roster.find(r=>r.jid===chatState.peer)?.group;button.textContent=mailImageText('Участники','Members');
+ button.onclick=async()=>{const jid=chatState.peer;try{const {rooms}=await api('/api/v1/chat/rooms');const room=rooms.find(r=>r.jid===jid);if(!room)return;const dialog=document.createElement('dialog');dialog.className='document-preview chat-group-dialog';const header=document.createElement('header'),title=document.createElement('strong'),close=document.createElement('button');title.textContent=room.name;close.className='btn-secondary';close.textContent='×';close.onclick=()=>dialog.close();header.append(title,close);const body=document.createElement('div');body.className='stack-gap';for(const email of room.members){const p=document.createElement('p');p.textContent=email;body.append(p)}const leave=document.createElement('button');leave.className='btn-secondary';leave.textContent=mailImageText('Выйти из группы','Leave group');leave.onclick=async()=>{if(!confirm(mailImageText('Выйти из этой группы? Доступ к истории будет закрыт.','Leave this group? You will lose access to its history.')))return;try{await api('/api/v1/chat/rooms/'+encodeURIComponent(jid),{method:'DELETE'});dialog.close();chatState.peer='';$('chat-thread').classList.add('hidden');$('chat-empty').classList.remove('hidden');await refreshChat()}catch(error){setMsg($('chat-msg'),error.message,'err')}};body.append(leave);dialog.append(header,body);document.body.append(dialog);dialog.onclose=()=>dialog.remove();dialog.showModal()}catch(error){setMsg($('chat-msg'),error.message,'err')}};
+}

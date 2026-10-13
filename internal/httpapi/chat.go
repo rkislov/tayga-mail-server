@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/tayga/tms/internal/auth"
+	"github.com/tayga/tms/internal/xmpp"
 )
 
 func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
@@ -35,6 +37,50 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/v1/chat"), "/")
+	if path == "rooms" || strings.HasPrefix(path, "rooms/") {
+		groups, ok := s.xmpp.(interface {
+			CreateChatRoom(context.Context, string, string, []string) (xmpp.ChatRoom, error)
+			ListChatRooms(context.Context, string) ([]xmpp.ChatRoom, error)
+			LeaveChatRoom(context.Context, string, string) error
+		})
+		if !ok {
+			writeJSON(w, 503, map[string]string{"error": "groups unavailable"})
+			return
+		}
+		switch {
+		case path == "rooms" && r.Method == http.MethodGet:
+			rooms, e := groups.ListChatRooms(r.Context(), au.Email)
+			if e != nil {
+				writeJSON(w, 500, map[string]string{"error": e.Error()})
+				return
+			}
+			writeJSON(w, 200, map[string]any{"rooms": rooms})
+		case path == "rooms" && r.Method == http.MethodPost:
+			var req struct {
+				Name    string   `json:"name"`
+				Members []string `json:"members"`
+			}
+			if json.NewDecoder(http.MaxBytesReader(w, r.Body, 16384)).Decode(&req) != nil {
+				writeJSON(w, 400, map[string]string{"error": "invalid group"})
+				return
+			}
+			room, e := groups.CreateChatRoom(r.Context(), au.Email, req.Name, req.Members)
+			if e != nil {
+				writeJSON(w, 400, map[string]string{"error": e.Error()})
+				return
+			}
+			writeJSON(w, 201, room)
+		case strings.HasPrefix(path, "rooms/") && r.Method == http.MethodDelete:
+			if e := groups.LeaveChatRoom(r.Context(), au.Email, strings.TrimPrefix(path, "rooms/")); e != nil {
+				writeJSON(w, 403, map[string]string{"error": e.Error()})
+				return
+			}
+			writeJSON(w, 200, map[string]bool{"ok": true})
+		default:
+			writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+		}
+		return
+	}
 	switch {
 	case path == "presence" && r.Method == http.MethodPost:
 		var req struct {
@@ -112,7 +158,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 			To   string `json:"to"`
 			Body string `json:"body"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.To == "" {
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 131072)).Decode(&req); err != nil || req.To == "" {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "to required"})
 			return
 		}
@@ -121,7 +167,9 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
-		_ = s.xmpp.UpsertChatRoster(r.Context(), au.ID, req.To, "")
+		if ev.Room == "" {
+			_ = s.xmpp.UpsertChatRoster(r.Context(), au.ID, req.To, "")
+		}
 		writeJSON(w, http.StatusOK, ev)
 	case path == "events" && r.Method == http.MethodGet:
 		s.handleChatSSE(w, r, au.Email)

@@ -2307,6 +2307,7 @@ function showToast(ev) {
 
 function openNotifyHref(href) {
   if (!href) return;
+  if(href.startsWith("chat?peer=")){showApp("chat");openChatPeer(decodeURIComponent(href.slice(10)));return;}
   if (href === "mail" || href.startsWith("mail")) {
     showApp("mail");
     return;
@@ -4081,12 +4082,14 @@ function startChatLive() {
     const from = chatBare(data.from);
     const to = chatBare(data.to);
     const me = chatBare(chatState.me || state.email);
-    const peer = from === me ? to : from;
+    const peer = data.room || (from === me ? to : from);
     if (!peer) return;
     if (!chatState.roster.some((r) => chatBare(r.jid) === peer)) {
-      chatState.roster.unshift({ jid: peer, name: "", subscription: "both" });
+      chatState.roster.unshift({ jid: peer, name: "", subscription: "none", group: !!data.room });
+      if(data.room) refreshChat();
       renderChatRoster();
     }
+    if(from!==me) showToast({id:data.id,kind:"chat",title:chatState.roster.find(r=>r.jid===peer)?.name||from,body:data.encrypted?"OMEMO":data.body||data.attachment?.name||"",href:"chat?peer="+encodeURIComponent(peer)});
     if (chatBare(chatState.peer) === peer) {
       appendChatBubble(data);
       scrollChatBottom();
@@ -4107,9 +4110,10 @@ function appendChatBubble(m) {
   if(messageKey)div.dataset.messageKey=messageKey;
   div.className = "chat-bubble" + (mine ? " is-mine" : "");
   div.innerHTML = `<p>${escapeHtml(m.body || "")}</p><time>${escapeHtml(m.at ? new Date(m.at).toLocaleString() : "")}</time>`;
+  if(chatState.roster.find(r=>r.jid===chatState.peer)?.group){const author=document.createElement("strong");author.textContent=chatState.roster.find(r=>r.jid===chatBare(m.from))?.name||chatBare(m.from);div.prepend(author)}
   const attachment=m.attachment||chatAttachment(m.body);
   if(m.encrypted)div.querySelector("p").textContent=mailImageText("Зашифрованное сообщение OMEMO. Откройте его в Conversations.","Encrypted OMEMO message. Open in Conversations.");
-  if(attachment){if(m.body===attachment.url)div.querySelector("p").textContent=attachment.name;const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.textContent=mailImageText('Открыть файл: ','Open file: ')+attachment.name;button.onclick=()=>{try{const u=new URL(attachment.url,location.href);if(u.protocol!=='https:'||u.username||u.password)return;if(u.origin===location.origin)openDocumentPreview(attachment);else window.open(u.href,'_blank','noopener,noreferrer')}catch{}};div.append(button)}
+  if(attachment){if(m.body===attachment.url)div.querySelector("p").textContent=attachment.name;const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.textContent=mailImageText('Открыть файл: ','Open file: ')+attachment.name;button.onclick=()=>{try{const u=new URL(attachment.url,location.href);if(u.protocol!=='https:'||u.username||u.password)return;if(u.origin===location.origin)openDocumentPreview(attachment);else window.open(u.href,'_blank','noopener,noreferrer')}catch{}};div.append(button);addChatInlinePreview(div,attachment,button)}
   box.appendChild(div);
 }
 
@@ -4123,18 +4127,29 @@ function scrollChatBottom() {
   if (box) box.scrollTop = box.scrollHeight;
 }
 
+function renderChatPeerPresence() {
+ const button=$('chat-request-presence');if(!button)return;
+ let label=$('chat-peer-presence');if(!label){label=document.createElement('span');label.id='chat-peer-presence';label.className='meta';label.setAttribute('role','status');button.after(label)}
+ const peer=chatState.roster.find(r=>chatBare(r.jid)===chatBare(chatState.peer));
+ const allowed=peer&&(peer.subscription==='to'||peer.subscription==='both'||(peer.presence&&peer.presence!=='unknown'));
+ button.hidden=!!allowed||!chatState.peer||!!peer?.group;
+ label.hidden=!allowed&&!peer?.group;label.textContent=peer?.group?mailImageText('Групповой чат','Group chat'):(allowed?t('presence_'+(peer.presence||'offline')):'');
+}
+
 function renderChatRoster() {
+ renderChatPeerPresence();
+  renderChatGroupButton();
   const list = $("chat-roster");
   if (!list) return;
   const peer = chatBare(chatState.peer);
   list.innerHTML = chatState.roster.map((r) => {
     const jid = chatBare(r.jid);
     const label = r.name || jid;
- const presence=t("presence_"+(r.presence||"unknown"));
+ const presence=r.group?mailImageText("Группа","Group"):t("presence_"+(r.presence||"unknown"));
     return `<li>
       <button type="button" class="msg-item${jid === peer ? " is-active" : ""}" data-jid="${escapeHtml(jid)}">
         <span class="msg-subject">${escapeHtml(label)}</span>
-        <span class="msg-date">${escapeHtml(jid)} · ${escapeHtml(presence)}</span>
+        <span class="msg-date">${r.group?"":escapeHtml(jid)+" · "}${escapeHtml(presence)}</span>
       </button>${r.subscription_request?`<div class="actions"><span>${escapeHtml(t('presence_request'))}</span><button class="btn-secondary btn-sm" data-sub-action="accept" data-peer="${escapeHtml(jid)}">${escapeHtml(t('presence_accept'))}</button><button class="btn-secondary btn-sm" data-sub-action="reject" data-peer="${escapeHtml(jid)}">${escapeHtml(t('presence_reject'))}</button></div>`:''}
     </li>`;
   }).join("") || `<li class="meta msg-empty">${escapeHtml(t("chat_select"))}</li>`;
@@ -5128,3 +5143,17 @@ function directoryMatches(tenant,domain,query) {
 }
 
 {const attach=$('chat-attach');if(attach){const mode=document.createElement('select');mode.id='chat-file-mode';mode.setAttribute('aria-label','Способ отправки файла');mode.style.cssText='width:130px;flex:0 0 130px;min-height:40px;font-size:12px';mode.innerHTML='<option value="attachment">Вложение</option><option value="link">Ссылка</option>';attach.before(mode)}}
+
+function addChatInlinePreview(container,attachment,button) {
+ let url;try{url=new URL(attachment.url,location.href)}catch{return}
+ if(url.origin!==location.origin||!/^\/(?:s|chat-download)\//.test(url.pathname))return;
+ const type=documentPreviewType(attachment.name);if(!type)return;
+ const preview=document.createElement('button');preview.type='button';preview.className='chat-attachment-preview';preview.setAttribute('aria-label',mailImageText('Открыть: ','Open: ')+attachment.name);preview.textContent=mailImageText('Загрузка предпросмотра…','Loading preview…');preview.onclick=()=>button.click();container.insertBefore(preview,button);
+ const load=async()=>{try{
+  const response=await fetch(url.href,{credentials:'omit',referrerPolicy:'no-referrer'});if(!response.ok)throw Error('unavailable');
+  const blob=await boundedPreviewBlob(response,16*1024*1024);if(!preview.isConnected)return;
+  if(type.startsWith('image/')){const objectURL=URL.createObjectURL(new Blob([blob],{type}));const image=document.createElement('img');image.alt=attachment.name;image.onload=()=>URL.revokeObjectURL(objectURL);image.onerror=()=>{URL.revokeObjectURL(objectURL);preview.remove()};image.src=objectURL;preview.replaceChildren(image)}
+  else if(type==='application/pdf'){const pdfjs=await import('/assets/pdfjs/pdf.mjs');pdfjs.GlobalWorkerOptions.workerSrc='/assets/pdfjs/pdf.worker.mjs';const pdf=await pdfjs.getDocument({data:new Uint8Array(await blob.arrayBuffer()),isEvalSupported:false}).promise;try{const page=await pdf.getPage(1);const original=page.getViewport({scale:1});const viewport=page.getViewport({scale:Math.min(1,280/original.width,320/original.height)});const canvas=document.createElement('canvas');canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;if(preview.isConnected)preview.replaceChildren(canvas)}finally{await pdf.destroy()}}
+ }catch{preview.remove()}};
+ const observer=new IntersectionObserver(entries=>{if(entries.some(e=>e.isIntersecting)){observer.disconnect();load()}},{rootMargin:'100px'});observer.observe(preview);
+}
