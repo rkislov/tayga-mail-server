@@ -126,6 +126,15 @@ func TestOutlookTaskCommonAndExtendedUpdates(t *testing.T) {
 			t.Fatal(out)
 		}
 	}
+	web := *saved
+	web.EWSProperties = ""
+	if err := store.SaveTask(ctx, user.ID, &web); err != nil {
+		t.Fatal(err)
+	}
+	saved, _ = h.getTask(ctx, user, task.ID)
+	if !strings.Contains(saved.EWSProperties, "34072") {
+		t.Fatal("web update lost EWS properties")
+	}
 	revision := saved.Revision
 	if out := run(`<SetItemField><FieldURI FieldURI="item:Subject"/><Item><Subject>Should roll back</Subject></Item></SetItemField><SetItemField><FieldURI FieldURI="task:Status"/><Task><Subject>Completed</Subject></Task></SetItemField>`); !strings.Contains(out, "ErrorInvalidPropertySet") {
 		t.Fatal(out)

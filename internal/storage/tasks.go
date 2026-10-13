@@ -79,7 +79,7 @@ func (s *Store) ListTasks(ctx context.Context, user string) ([]Task, error) {
 }
 
 func (s *Store) SaveTask(ctx context.Context, user string, t *Task) error {
-	if t.EWSProperties == "" {
+	if t.ID == "" && t.EWSProperties == "" {
 		t.EWSProperties = "{}"
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -100,7 +100,7 @@ func (s *Store) SaveTask(ctx context.Context, user string, t *Task) error {
 		if err != nil {
 			return err
 		}
-		res, e := tx.ExecContext(ctx, s.rebind(`UPDATE tasks SET title=?,body=?,completed=?,due=?,ews_properties=?,revision=revision+1 WHERE id=? AND user_id=? AND revision=?`), t.Title, t.Body, t.Completed, t.Due, t.EWSProperties, t.ID, user, t.Revision)
+		res, e := tx.ExecContext(ctx, s.rebind(`UPDATE tasks SET title=?,body=?,completed=?,due=?,ews_properties=COALESCE(NULLIF(?,''),ews_properties),revision=revision+1 WHERE id=? AND user_id=? AND revision=?`), t.Title, t.Body, t.Completed, t.Due, t.EWSProperties, t.ID, user, t.Revision)
 		if e != nil {
 			return e
 		}
