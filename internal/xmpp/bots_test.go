@@ -79,7 +79,7 @@ func TestRewriteComponentFrom(t *testing.T) {
 }
 
 func TestExtractBody(t *testing.T) {
-	if got := extractBody(`<body>hi &amp;</body>`); got != "hi &amp;" {
+	if got := extractBody(`<body>hi &amp;</body>`); got != "hi &" {
 		t.Fatalf("got %q", got)
 	}
 }

@@ -38,3 +38,16 @@ func TestStreamUploadLimitPreservesDestination(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestOutgoingUnicodeHeadersAreEncoded(t *testing.T) {
+	raw := buildOutgoingMIME("sender@example.com", "Роман Кислов", []string{"user@example.com"}, nil, []string{"hidden@example.com"}, "Тема письма", "Текст", "", "<test@example.com>")
+	head := bytes.SplitN(raw, []byte("\r\n\r\n"), 2)[0]
+	for _, b := range head {
+		if b > 127 {
+			t.Fatalf("raw UTF-8 header: %s", head)
+		}
+	}
+	if bytes.Contains(head, []byte("Bcc:")) || bytes.Contains(head, []byte("hidden@example.com")) {
+		t.Fatal("Bcc leaked")
+	}
+}

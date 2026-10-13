@@ -13,6 +13,9 @@ import (
 
 func (s *Server) SetXMPP(gw xmpp.Gateway) {
 	s.xmpp = gw
+	if uploader, ok := gw.(interface{ SetUploadHandler(xmpp.UploadHandler) }); ok {
+		uploader.SetUploadHandler(s.createChatUpload)
+	}
 }
 
 func (s *Server) handleAdminBots(w http.ResponseWriter, r *http.Request) {

@@ -301,22 +301,20 @@ func rewriteComponentFrom(from, componentDomain string) string {
 }
 
 func extractBody(inner string) string {
-	const open = "<body"
-	i := strings.Index(strings.ToLower(inner), open)
-	if i < 0 {
-		return ""
+	d := xml.NewDecoder(strings.NewReader("<root>" + inner + "</root>"))
+	for {
+		tok, err := d.Token()
+		if err != nil {
+			return ""
+		}
+		if se, ok := tok.(xml.StartElement); ok && se.Name.Local == "body" && (se.Name.Space == "" || se.Name.Space == "jabber:client") {
+			var body string
+			if d.DecodeElement(&body, &se) == nil {
+				return body
+			}
+			return ""
+		}
 	}
-	rest := inner[i:]
-	gt := strings.IndexByte(rest, '>')
-	if gt < 0 {
-		return ""
-	}
-	rest = rest[gt+1:]
-	end := strings.Index(strings.ToLower(rest), "</body>")
-	if end < 0 {
-		return ""
-	}
-	return rest[:end]
 }
 
 // ComponentHandshakeDigest is exported for tests (SHA-1 of streamID+secret).

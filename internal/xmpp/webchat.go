@@ -10,12 +10,14 @@ import (
 
 // ChatEvent is pushed to web clients over SSE.
 type ChatEvent struct {
-	Type string    `json:"type"`
-	ID   string    `json:"id,omitempty"`
-	From string    `json:"from"`
-	To   string    `json:"to"`
-	Body string    `json:"body"`
-	At   time.Time `json:"at"`
+	Attachment *ChatAttachment `json:"attachment,omitempty"`
+	Encrypted  bool            `json:"encrypted,omitempty"`
+	Type       string          `json:"type"`
+	ID         string          `json:"id,omitempty"`
+	From       string          `json:"from"`
+	To         string          `json:"to"`
+	Body       string          `json:"body"`
+	At         time.Time       `json:"at"`
 }
 
 // RosterEntry is a roster row for the web messenger.
@@ -29,12 +31,14 @@ type RosterEntry struct {
 
 // HistoryMsg is a decoded MAM / chat history item.
 type HistoryMsg struct {
-	ID     string    `json:"id"`
-	From   string    `json:"from"`
-	To     string    `json:"to"`
-	Body   string    `json:"body"`
-	At     time.Time `json:"at"`
-	Stanza string    `json:"-"`
+	Attachment *ChatAttachment `json:"attachment,omitempty"`
+	Encrypted  bool            `json:"encrypted,omitempty"`
+	ID         string          `json:"id"`
+	From       string          `json:"from"`
+	To         string          `json:"to"`
+	Body       string          `json:"body"`
+	At         time.Time       `json:"at"`
+	Stanza     string          `json:"-"`
 }
 
 type webSub struct {
@@ -192,9 +196,10 @@ func (s *Server) ChatHistory(ctx context.Context, ownerBare, withBare string, li
 	out := make([]HistoryMsg, 0, len(rows))
 	for _, r := range rows {
 		from, to := parseMessageAddrs(r.Stanza)
+		attachment, encrypted := stanzaAttachment(r.Stanza)
 		out = append(out, HistoryMsg{
 			ID: r.StanzaID, From: from, To: to, Body: extractBody(r.Stanza),
-			At: r.CreatedAt, Stanza: r.Stanza,
+			At: r.CreatedAt, Stanza: r.Stanza, Attachment: attachment, Encrypted: encrypted,
 		})
 	}
 	return out, nil
@@ -210,6 +215,9 @@ func (s *Server) SendChatMessage(ctx context.Context, fromEmail, to, body string
 	bodyXML := ""
 	if body != "" {
 		bodyXML = `<body>` + xmlEscape(body) + `</body>`
+	}
+	if attachment, _ := stanzaAttachment("<message>" + bodyXML + "</message>"); attachment != nil {
+		bodyXML += `<x xmlns="jabber:x:oob"><url>` + xmlEscape(attachment.URL) + `</url></x>`
 	}
 	resource := "web"
 	fromFull := from + "/" + resource
@@ -230,6 +238,7 @@ func (s *Server) SendChatMessage(ctx context.Context, fromEmail, to, body string
 	_ = s.archiveMAM(ctx, toJ.Bare(), from, id, string(b))
 
 	ev := ChatEvent{Type: "message", ID: id, From: fromFull, To: toJ.Bare(), Body: body, At: time.Now().UTC()}
+	ev.Attachment, ev.Encrypted = stanzaAttachment(stanza)
 	s.hub.pushWeb(from, ev)
 	s.hub.pushWeb(toJ.Bare(), ev)
 	return ev, nil
@@ -290,6 +299,10 @@ func (s *Server) notifyWebFromStanza(stanza, fallbackTo string) {
 		To:   ParseJID(to).Bare(),
 		Body: extractBody(stanza),
 		At:   time.Now().UTC(),
+	}
+	ev.Attachment, ev.Encrypted = stanzaAttachment(stanza)
+	if ev.Body == "" && ev.Attachment == nil && !ev.Encrypted {
+		return
 	}
 	if ev.To != "" {
 		s.hub.pushWeb(ev.To, ev)

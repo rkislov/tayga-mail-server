@@ -34,6 +34,9 @@ func (s *Session) handleIQ(se xml.StartElement) error {
 	if err != nil {
 		return err
 	}
+	if handled, err := s.uploadIQ(id, typ, to, inner); handled {
+		return err
+	}
 	ctx := context.Background()
 
 	switch {
