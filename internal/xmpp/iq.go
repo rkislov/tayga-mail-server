@@ -65,7 +65,7 @@ func (s *Session) handleIQ(se xml.StartElement) error {
 	case typ == "get" && strings.Contains(inner, "urn:xmpp:ping"):
 		return s.writeString(fmt.Sprintf(
 			`<iq type='result' id='%s' from='%s' to='%s'/>`,
-			xmlEscape(id), xmlEscape(s.srv.domain), xmlEscape(s.JID.Full()),
+			xmlEscape(id), xmlEscape(s.iqResponder(to)), xmlEscape(s.JID.Full()),
 		))
 
 	case typ == "get" && strings.Contains(inner, "http://jabber.org/protocol/disco#info"):
@@ -92,11 +92,20 @@ func (s *Session) handleIQ(se xml.StartElement) error {
 	return nil
 }
 
-func (s *Session) writeDiscoInfo(id, to string) error {
-	from := s.srv.domain
-	if to != "" && ParseJID(to).Bare() == s.JID.Bare() {
-		from = s.JID.Bare()
+// iqResponder keeps domain discovery replies bound to the queried virtual host.
+// Account domains may differ from the physical server hostname.
+func (s *Session) iqResponder(to string) string {
+	if to == s.JID.Domain || to == s.JID.Bare() || to == s.srv.domain {
+		return to
 	}
+	if to == "" && s.JID.Domain != "" {
+		return s.JID.Domain
+	}
+	return s.srv.domain
+}
+
+func (s *Session) writeDiscoInfo(id, to string) error {
+	from := s.iqResponder(to)
 	return s.writeString(fmt.Sprintf(
 		`<iq type='result' id='%s' from='%s' to='%s'><query xmlns='http://jabber.org/protocol/disco#info'>`+
 			`<identity category='server' type='im' name='Tayga XMPP'/>`+

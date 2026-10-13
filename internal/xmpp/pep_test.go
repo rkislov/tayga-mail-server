@@ -127,3 +127,31 @@ func TestMissingOMEMONodeReturnsItemNotFound(t *testing.T) {
 		t.Fatal(out.String())
 	}
 }
+
+func TestDiscoveryUsesAccountDomainInsteadOfHostname(t *testing.T) {
+	srv, _, user := testServer(t)
+	srv.domain = "mail.example.com"
+	for _, to := range []string{"example.com", "", user.Email, "mail.example.com"} {
+		var out bytes.Buffer
+		session := &Session{srv: srv, user: user, JID: ParseJID(user.Email + "/phone"), bw: bufio.NewWriter(&out)}
+		if err := session.writeDiscoInfo("disco", to); err != nil {
+			t.Fatal(err)
+		}
+		var reply struct {
+			From string `xml:"from,attr"`
+		}
+		if err := xml.Unmarshal(out.Bytes(), &reply); err != nil {
+			t.Fatal(err)
+		}
+		want := to
+		if want == "" {
+			want = session.JID.Domain
+		}
+		if reply.From != want {
+			t.Fatalf("query %q: from=%q, want %q", to, reply.From, want)
+		}
+		if !strings.Contains(out.String(), "pubsub#publish-options") {
+			t.Fatal("PEP capabilities missing")
+		}
+	}
+}
