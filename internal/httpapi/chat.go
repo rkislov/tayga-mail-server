@@ -36,13 +36,50 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	}
 	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/v1/chat"), "/")
 	switch {
+	case path == "presence" && r.Method == http.MethodPost:
+		var req struct {
+			State  string `json:"state"`
+			Status string `json:"status"`
+		}
+		if json.NewDecoder(http.MaxBytesReader(w, r.Body, 2048)).Decode(&req) != nil {
+			writeJSON(w, 400, map[string]string{"error": "invalid presence"})
+			return
+		}
+		if err := s.xmpp.SetChatPresence(r.Context(), au.ID, req.State, req.Status); err != nil {
+			writeJSON(w, 400, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, 200, map[string]string{"state": req.State})
+	case path == "subscription" && r.Method == http.MethodPost:
+		var req struct {
+			JID    string `json:"jid"`
+			Action string `json:"action"`
+		}
+		if json.NewDecoder(http.MaxBytesReader(w, r.Body, 2048)).Decode(&req) != nil {
+			writeJSON(w, 400, map[string]string{"error": "invalid subscription"})
+			return
+		}
+		if err := s.xmpp.ChatSubscription(r.Context(), au.ID, req.JID, req.Action); err != nil {
+			writeJSON(w, 400, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, 200, map[string]bool{"ok": true})
 	case path == "roster" && r.Method == http.MethodGet:
 		list, err := s.xmpp.ListChatRoster(r.Context(), au.ID)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"roster": list, "me": au.Email})
+		presence := "online"
+		if raw, ok, e := s.store.GetSetting(r.Context(), "xmpp.presence."+au.ID); e == nil && ok {
+			var saved struct {
+				State string `json:"state"`
+			}
+			if json.Unmarshal([]byte(raw), &saved) == nil {
+				presence = saved.State
+			}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"roster": list, "me": au.Email, "presence": presence})
 	case path == "roster" && r.Method == http.MethodPost:
 		var req struct {
 			JID  string `json:"jid"`

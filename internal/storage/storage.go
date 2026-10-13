@@ -16,6 +16,10 @@ var (
 
 // Driver is the storage abstraction shared by protocol handlers.
 type Driver interface {
+	ListTasks(context.Context, string) ([]Task, error)
+	SaveTask(context.Context, string, *Task) error
+	DeleteTask(context.Context, string, string) error
+
 	EWSMailMetadata(context.Context, string) (string, error)
 	UpdateEWSMailMetadata(context.Context, string, string, string) error
 	SaveMetricSample(context.Context, string, MetricSample) error
@@ -30,6 +34,7 @@ type Driver interface {
 	InsertTenant(ctx context.Context, t *Tenant) (*Tenant, error)
 	GetTenantByName(ctx context.Context, name string) (*Tenant, error)
 	GetTenantByID(ctx context.Context, id string) (*Tenant, error)
+	DeleteTenant(ctx context.Context, id string) error
 	ListTenants(ctx context.Context) ([]*Tenant, error)
 
 	CreateDomain(ctx context.Context, tenantID, name string) (*Domain, error)

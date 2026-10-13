@@ -94,6 +94,9 @@ func migrate(ctx context.Context, db *sql.DB, dialect Dialect) error {
 			"030_flowsync_state.sqlite.sql",
 			"031_metric_history.sqlite.sql",
 			"032_ews_mail_metadata.sqlite.sql",
+			"033_tasks.sqlite.sql",
+			"034_pep_config.sqlite.sql",
+			"035_xmpp_presence_requests.sqlite.sql",
 		}
 	case DialectPostgres:
 		files = []string{
@@ -129,6 +132,9 @@ func migrate(ctx context.Context, db *sql.DB, dialect Dialect) error {
 			"030_flowsync_state.postgres.sql",
 			"031_metric_history.postgres.sql",
 			"032_ews_mail_metadata.postgres.sql",
+			"033_tasks.postgres.sql",
+			"034_pep_config.postgres.sql",
+			"035_xmpp_presence_requests.postgres.sql",
 		}
 	default:
 		return fmt.Errorf("unsupported dialect")

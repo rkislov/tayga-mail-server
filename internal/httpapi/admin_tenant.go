@@ -58,6 +58,16 @@ func (s *Server) handleAdminTenants(w http.ResponseWriter, r *http.Request) {
 	path = strings.Trim(path, "/")
 
 	switch {
+	case path != "" && !strings.Contains(path, "/") && r.Method == http.MethodDelete:
+		if !s.isGlobalAdminUser(admin) {
+			writeJSON(w, 403, map[string]string{"error": "global admin required"})
+			return
+		}
+		if err := s.store.DeleteTenant(r.Context(), path); err != nil {
+			writeJSON(w, 409, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, 200, map[string]string{"status": "deleted"})
 	case path == "" && r.Method == http.MethodGet:
 		s.listAdminTenants(w, r, admin)
 	case path == "" && r.Method == http.MethodPost:

@@ -293,7 +293,7 @@ $("color-mode-select")?.addEventListener("change",event=>applyColorMode(event.ta
 })();
 
 const APPS = [
-  "mail", "calendar", "contacts", "notes", "files", "chat",
+  "mail", "calendar", "contacts", "notes", "tasks", "files", "chat",
   "profile", "security", "appearance", "filters", "language", "migration",
   "monitor", "outbound", "antispam", "maillog", "tenants", "tls", "xmpp", "server", "cos",
 ];
@@ -320,7 +320,7 @@ const notesState = {
   shareTarget: null, saveTimer: null, drawing: false, dirty:false, revision:0, attachments:[], etags:{},
 };
 const filesState = { sharedRights:"write",listTarget:"",ownerID:"",sharedRoot:"", path: "", selected: null, entries: [] };
-const chatState = { peer: "", roster: [], messages: [], es: null, me: "" };
+const chatState = { peer: "", roster: [], messages: [], es: null, me: "", sending: false };
 
 function show(id) {
   const account = id === "view-account";
@@ -337,6 +337,7 @@ const APP_I18N = {
   calendar: "nav_calendar",
   contacts: "nav_contacts",
   notes: "nav_notes",
+ tasks: "nav_tasks",
   files: "nav_files",
   chat: "nav_chat",
   profile: "nav_profile",
@@ -399,9 +400,10 @@ function showApp(name) {
   if (app === "calendar") refreshCalendar();
   if (app === "contacts") refreshContacts();
   if (app === "notes") refreshNotes();
+ if (app === "tasks") refreshTasks();
   if (app === "files") refreshFiles();
-  if (app === "chat") { refreshChat(); startChatLive(); }
-  else stopChatLive();
+  if (app === "chat") refreshChat();
+  if (state.tokens?.access_token && !chatState.es) startChatLive();
   if (app === "filters") { refreshSieve(); refreshVacation(); }
   if(app === "outbound") refreshOutbound();
   if (app === "monitor") { refreshMonitor(); startMonitorLive(); }
@@ -462,6 +464,7 @@ function isAuthPublicPath(path) {
 }
 
 function clearSession() {
+  stopChatLive();
   state.tokens = null;
  monitorRequest++;
   state.challenge = "";
@@ -1050,36 +1053,20 @@ async function refreshTenantNav() {
   setTenantLevel("tenants");
   const list = $("admin-tenant-list");
   const meta = $("tenant-meta");
-  if (meta) meta.textContent = t("tenants_lede");
   try {
     const data = await api("/api/v1/admin/tenants");
     tenantNav.global = !!data.scope?.global;
     $("form-create-tenant")?.classList.toggle("hidden", !tenantNav.global);
-    const items = data.tenants || [];
+    const groups = await Promise.all((data.tenants || []).map(async tenant => ({tenant, domains:(await api('/api/v1/admin/domains?tenant_id='+encodeURIComponent(tenant.id))).domains||[]})));
+    const rows = groups.flatMap(({tenant,domains}) => (domains.length?domains:[null]).map(domain=>({tenant,domain})));
     if (!list) return;
-    list.innerHTML = items.map((ten) => `
-      <li>
-        <span>
-          <strong>${escapeHtml(ten.name)}</strong><br/>
-          <span class="meta">${ten.domain_count || 0} ${escapeHtml(t("domains_title").toLowerCase())} · ${ten.user_count || 0} ${escapeHtml(t("users_title").toLowerCase())}</span>
-        </span>
-        <span class="actions">
-          <button type="button" class="btn-spray" data-open-tenant="${escapeHtml(ten.id)}" data-name="${escapeHtml(ten.name)}">${escapeHtml(t("tenants_open"))}</button>
-        </span>
-      </li>`).join("") || `<li><span class="meta">${escapeHtml(t("tenants_empty"))}</span></li>`;
-    list.querySelectorAll("[data-open-tenant]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        tenantNav.tenantID = btn.dataset.openTenant;
-        tenantNav.tenantName = btn.dataset.name || "";
-        tenantNav.domainID = "";
-        tenantNav.domainName = "";
-        refreshTenantDomains();
-      });
-    });
-  } catch (err) {
-    if (meta) meta.textContent = err.message;
-    if (list) list.innerHTML = "";
-  }
+    if(meta)meta.textContent=mailImageText('Организации и домены · выберите строку для управления пользователями','Organizations and domains · select a row to manage users');
+    list.innerHTML=`<div class="directory-table-wrap"><table class="directory-table"><thead><tr><th>${escapeHtml(mailImageText('Организация / тенант','Organization / tenant'))}</th><th>${escapeHtml(mailImageText('Домен','Domain'))}</th><th>${escapeHtml(t('users_title'))}</th><th>${escapeHtml(mailImageText('Действия','Actions'))}</th></tr></thead><tbody>${rows.map(({tenant,domain},i)=>`<tr data-directory-row="${i}" tabindex="0"><td>${escapeHtml(tenant.name)}</td><td>${escapeHtml(domain?.name||'—')}</td><td><span class="badge">${Number(domain?.user_count||0)}</span></td><td><div class="user-action-icons"><button type="button" class="btn-secondary user-action-icon" data-directory-settings="${i}" title="${escapeHtml(mailImageText('Настройки доменов','Domain settings'))}" aria-label="${escapeHtml(mailImageText('Настройки доменов','Domain settings'))}">${designIcon('settings')}</button>${tenantNav.global?`<button type="button" class="btn-secondary user-action-icon" data-directory-delete="${i}" ${domain?.user_count>0?'disabled':''} title="${escapeHtml(domain?.user_count>0?mailImageText('Сначала удалите пользователей домена','Remove domain users first'):mailImageText('Удалить','Delete'))}" aria-label="${escapeHtml(mailImageText('Удалить','Delete'))}">${designIcon('delete')}</button>`:''}</div></td></tr>`).join('')||`<tr><td colspan="4">${escapeHtml(t('tenants_empty'))}</td></tr>`}</tbody></table></div>`;
+    const select = i => {const {tenant,domain}=rows[i];tenantNav.tenantID=tenant.id;tenantNav.tenantName=tenant.name;tenantNav.domainID=domain?.id||'';tenantNav.domainName=domain?.name||'';return domain?refreshAdminUsers():refreshTenantDomains()};
+    list.querySelectorAll('[data-directory-row]').forEach(row=>{row.onclick=e=>{if(!e.target.closest('button,input,select,a'))select(row.dataset.directoryRow)};row.onkeydown=e=>{if(e.target===row&&(e.key==='Enter'||e.key===' ')){e.preventDefault();select(row.dataset.directoryRow)}}});
+    list.querySelectorAll('[data-directory-settings]').forEach(button=>button.onclick=()=>{const {tenant}=rows[button.dataset.directorySettings];tenantNav.tenantID=tenant.id;tenantNav.tenantName=tenant.name;refreshTenantDomains()});
+    list.querySelectorAll('[data-directory-delete]').forEach(button=>button.onclick=async()=>{const {tenant,domain}=rows[button.dataset.directoryDelete];const name=domain?.name||tenant.name;if(!await askConfirm(mailImageText('Удалить ','Delete ')+name+'?',{danger:true}))return;button.disabled=true;try{await api('/api/v1/admin/'+(domain?'domains/'+encodeURIComponent(domain.id):'tenants/'+encodeURIComponent(tenant.id)),{method:'DELETE'});await refreshTenantNav()}catch(err){setMsg($('admin-msg'),err.message,'err');button.disabled=false}});
+  } catch(err) {if(meta)meta.textContent=err.message;if(list)list.innerHTML='';}
 }
 
 async function refreshTenantDomains() {
@@ -1300,8 +1287,9 @@ async function refreshAdminUsers() {
             </select>
           </label>
 </td><td><div class="user-action-icons">
- ${[['quota','download',t('users_quota_action')],['toggle','disconnect',t(u.enabled?'users_disable':'users_enable')],['pass','key',t('users_reset_pw')],...(state.me?.is_global_admin?[['user-role','shield',mailImageText('Роль и права пользователя','User role and permissions')]]:[]),['mail-access','reply',mailImageText('Доступ к ящику','Mailbox access')]].map(([action,icon,label])=>`<button type="button" class="btn-secondary user-action-icon" data-${action}="${escapeHtml(u.id)}" data-enabled="${u.enabled?'1':'0'}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${designIcon(icon)}</button>`).join('')}
+ ${[['quota','download',t('users_quota_action')],['toggle','disconnect',t(u.enabled?'users_disable':'users_enable')],['pass','key',t('users_reset_pw')],...(state.me?.is_global_admin?[['user-role','shield',mailImageText('Роль и права пользователя','User role and permissions')]]:[]),['mail-access','reply',mailImageText('Доступ к ящику','Mailbox access')],...((u.id!==state.me?.id&&!u.is_global_admin)?[['delete-user','delete',mailImageText('Удалить пользователя','Delete user')]]:[])].map(([action,icon,label])=>`<button type="button" class="btn-secondary user-action-icon" data-${action}="${escapeHtml(u.id)}" data-enabled="${u.enabled?'1':'0'}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${designIcon(icon)}</button>`).join('')}
  </div></td></tr>`).join("") || `<tr><td colspan="7" class="meta">${t("users_empty")}</td></tr>`;
+    list.querySelectorAll('[data-delete-user]').forEach(button=>button.onclick=async()=>{const user=users.find(u=>u.id===button.dataset.deleteUser);if(!await askConfirm(mailImageText('Удалить пользователя и его данные: ','Delete user and their data: ')+user.email+'?',{danger:true}))return;button.disabled=true;try{await api('/api/v1/admin/users/'+encodeURIComponent(user.id),{method:'DELETE'});await refreshAdminUsers()}catch(err){setMsg($('admin-msg'),err.message,'err');button.disabled=false}});
     list.querySelectorAll("[data-mail-access]").forEach(button=>button.onclick=()=>openMailboxAccess(button.dataset.mailAccess));list.querySelectorAll("[data-user-role]").forEach(button=>button.onclick=()=>openUserRole(users.find(u=>u.id===button.dataset.userRole)));
     list.querySelectorAll("[data-user-mig]").forEach((sel) => {
       sel.addEventListener("change", async () => {
@@ -4075,6 +4063,8 @@ function startChatLive() {
   es.addEventListener("message", (ev) => {
     let data;
     try { data = JSON.parse(ev.data); } catch { return; }
+    if(data.type==='presence'){const contact=chatState.roster.find(r=>chatBare(r.jid)===chatBare(data.from));if(contact){contact.presence=data.body;renderChatRoster()}return}
+    if(data.type==='roster'){refreshChat();return}
     if (data.type !== "message" && !data.body) return;
     const from = chatBare(data.from);
     const to = chatBare(data.to);
@@ -4095,12 +4085,23 @@ function startChatLive() {
 function appendChatBubble(m) {
   const box = $("chat-messages");
   if (!box) return;
+  const messageKey=m.id?JSON.stringify([chatBare(m.from),String(m.id)]):'';
+  if(messageKey && Array.from(box.children).some(el=>el.dataset.messageKey===messageKey))return;
+  box.querySelector('.chat-empty-hint')?.remove();
   const me = chatBare(chatState.me || state.email);
   const mine = chatBare(m.from) === me;
   const div = document.createElement("div");
+  if(messageKey)div.dataset.messageKey=messageKey;
   div.className = "chat-bubble" + (mine ? " is-mine" : "");
   div.innerHTML = `<p>${escapeHtml(m.body || "")}</p><time>${escapeHtml(m.at ? new Date(m.at).toLocaleString() : "")}</time>`;
+  const attachment=chatAttachment(m.body);
+  if(attachment){const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.textContent=mailImageText('Открыть файл: ','Open file: ')+attachment.name;button.onclick=()=>openDocumentPreview(attachment);div.append(button)}
   box.appendChild(div);
+}
+
+function chatAttachment(body) {
+ const lines=String(body||'').split('\n');if(lines.length!==2)return null;
+ try {const url=new URL(lines[1]);if(url.origin!==location.origin||!/^\/s\/[A-Za-z0-9_-]+$/.test(url.pathname)||url.search||url.hash)return null;return {name:lines[0],url:url.href}}catch{return null}
 }
 
 function scrollChatBottom() {
@@ -4115,16 +4116,19 @@ function renderChatRoster() {
   list.innerHTML = chatState.roster.map((r) => {
     const jid = chatBare(r.jid);
     const label = r.name || jid;
+ const presence=t("presence_"+(r.presence||"unknown"));
     return `<li>
       <button type="button" class="msg-item${jid === peer ? " is-active" : ""}" data-jid="${escapeHtml(jid)}">
         <span class="msg-subject">${escapeHtml(label)}</span>
-        <span class="msg-date">${escapeHtml(jid)}</span>
-      </button>
+        <span class="msg-date">${escapeHtml(jid)} · ${escapeHtml(presence)}</span>
+      </button>${r.subscription_request?`<div class="actions"><span>${escapeHtml(t('presence_request'))}</span><button class="btn-secondary btn-sm" data-sub-action="accept" data-peer="${escapeHtml(jid)}">${escapeHtml(t('presence_accept'))}</button><button class="btn-secondary btn-sm" data-sub-action="reject" data-peer="${escapeHtml(jid)}">${escapeHtml(t('presence_reject'))}</button></div>`:''}
     </li>`;
   }).join("") || `<li class="meta msg-empty">${escapeHtml(t("chat_select"))}</li>`;
   list.querySelectorAll("[data-jid]").forEach((btn) => {
     btn.addEventListener("click", () => openChatPeer(btn.dataset.jid));
   });
+ list.querySelectorAll('[data-sub-action]').forEach(b=>b.onclick=()=>chatSubscription(b.dataset.peer,b.dataset.subAction));
+
 }
 
 async function refreshChat() {
@@ -4132,6 +4136,7 @@ async function refreshChat() {
     const data = await api("/api/v1/chat/roster");
     chatState.roster = data.roster || [];
     chatState.me = data.me || state.email;
+    if ($('chat-presence')) $('chat-presence').value = data.presence || 'online';
     renderChatRoster();
     if (chatState.peer) await openChatPeer(chatState.peer, true);
   } catch (err) {
@@ -4144,7 +4149,7 @@ async function openChatPeer(jid, keepPane) {
   renderChatRoster();
   $("chat-empty")?.classList.add("hidden");
   $("chat-thread")?.classList.remove("hidden");
-  if ($("chat-peer")) $("chat-peer").textContent = chatState.peer;
+  if ($("chat-peer")) $("chat-peer").textContent = chatState.roster.find(r=>chatBare(r.jid)===chatState.peer)?.name||chatState.peer;
   const box = $("chat-messages");
   if (box) box.innerHTML = "";
   try {
@@ -4182,19 +4187,18 @@ $("btn-chat-start")?.addEventListener("click", async () => {
 });
 $("form-chat-send")?.addEventListener("submit", async (e) => {
   e.preventDefault();
-  const body = ($("chat-body")?.value || "").trim();
-  if (!body || !chatState.peer) return;
+  const input=$("chat-body"),draft=input?.value||'',body=draft.trim(),peer=chatState.peer;
+  if (!body || !peer || chatState.sending) return;
+  chatState.sending=true;
+  const button=e.currentTarget.querySelector('[type=submit]');if(button)button.disabled=true;
   try {
-    const ev = await api("/api/v1/chat/send", {
-      method: "POST",
-      body: JSON.stringify({ to: chatState.peer, body }),
-    });
-    if ($("chat-body")) $("chat-body").value = "";
-    appendChatBubble(ev);
-    scrollChatBottom();
-  } catch (err) {
-    setMsg($("chat-msg"), err.message, "err");
-  }
+    const ev=await api('/api/v1/chat/send',{method:'POST',body:JSON.stringify({to:peer,body})});
+    if(chatBare(chatState.peer)===chatBare(peer)){
+      if(input && input.value===draft)input.value='';
+      appendChatBubble(ev);scrollChatBottom();
+    }
+  } catch(err){setMsg($('chat-msg'),err.message,'err')}
+  finally {chatState.sending=false;if(button)button.disabled=false;}
 });
 
 function filesGoUp() {
@@ -5059,3 +5063,46 @@ $('profile-signature')?.addEventListener('input',renderSignaturePreview);
 $('signature-form')?.addEventListener('submit',async event=>{event.preventDefault();try{const data=await api('/api/v1/mail/signature',{method:'PUT',body:JSON.stringify({text:$('profile-signature').value,new_messages:$('signature-new').checked,replies:$('signature-reply').checked})});Object.assign(signatureState,data);setMsg($('signature-msg'),t('saved'),'ok');}catch(err){setMsg($('signature-msg'),err.message,'err');}});
 document.addEventListener('click',event=>{if(!$('topbar-language')?.contains(event.target))$('topbar-language').open=false;});
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&$('topbar-language')?.open){$('topbar-language').open=false;$('topbar-language').querySelector('summary').focus();}});
+
+let taskRows = [];
+async function refreshTasks() {
+ try {
+  const data=await api('/api/v1/tasks');taskRows=data.tasks||[];
+  const showDone=$('tasks-completed').checked;
+  $('tasks-list').innerHTML=taskRows.filter(x=>showDone||!x.completed).map(x=>`<li class="list-row" style="display:flex;align-items:center;gap:12px;padding:12px;${x.completed?'opacity:.65':''}"><input type="checkbox" data-task-toggle="${escapeHtml(x.id)}" ${x.completed?'checked':''} aria-label="${escapeHtml(t('task_complete'))}"><button class="btn-secondary" style="flex:1;text-align:left;${x.completed?'text-decoration:line-through':''}" data-task-edit="${escapeHtml(x.id)}">${escapeHtml(x.title)}${x.due?` <span class="meta">${escapeHtml(new Date(x.due).toLocaleDateString())}</span>`:''}${x.source_message_id?' <span aria-label="Mail">✉</span>':''}</button><button class="btn-secondary btn-ico" data-task-delete="${escapeHtml(x.id)}" title="${escapeHtml(t('delete'))}" aria-label="${escapeHtml(t('delete'))}">×</button></li>`).join('')||`<li class="meta" style="padding:16px">${escapeHtml(t('tasks_empty'))}</li>`;
+  $('tasks-list').querySelectorAll('[data-task-toggle]').forEach(el=>el.onchange=async()=>{el.disabled=true;const task=taskRows.find(x=>x.id===el.dataset.taskToggle);try{await api('/api/v1/tasks/'+encodeURIComponent(task.id),{method:'PUT',body:JSON.stringify({...task,completed:el.checked})});await refreshTasks()}catch(e){el.checked=!el.checked;setMsg($('tasks-msg'),e.message,'err')}finally{el.disabled=false}});
+  $('tasks-list').querySelectorAll('[data-task-edit]').forEach(el=>el.onclick=()=>editTask(taskRows.find(x=>x.id===el.dataset.taskEdit)));
+  $('tasks-list').querySelectorAll('[data-task-delete]').forEach(el=>el.onclick=async()=>{if(!confirm(t('task_delete_confirm')))return;try{await api('/api/v1/tasks/'+encodeURIComponent(el.dataset.taskDelete),{method:'DELETE'});await refreshTasks()}catch(e){setMsg($('tasks-msg'),e.message,'err')}});
+ }catch(e){setMsg($('tasks-msg'),e.message,'err')}
+}
+let editingTask=null;
+function editTask(task=null){editingTask=task;$('task-title').value=task?.title||'';$('task-body').value=task?.body||'';$('task-due').value=task?.due?task.due.slice(0,10):'';$('task-dialog').showModal();$('task-title').focus()}
+$('tasks-new')?.addEventListener('click',()=>editTask());
+$('tasks-refresh')?.addEventListener('click',refreshTasks);
+$('tasks-completed')?.addEventListener('change',refreshTasks);
+$('task-cancel')?.addEventListener('click',()=>$('task-dialog').close());
+$('task-form')?.addEventListener('submit',async e=>{e.preventDefault();const button=$('task-save');button.disabled=true;try{await api('/api/v1/tasks'+(editingTask?'/'+encodeURIComponent(editingTask.id):''),{method:editingTask?'PUT':'POST',body:JSON.stringify({...editingTask,title:$('task-title').value,body:$('task-body').value,due:$('task-due').value?$('task-due').value+'T12:00:00Z':''})});$('task-dialog').close();await refreshTasks()}catch(err){setMsg($('task-edit-msg'),err.message,'err')}finally{button.disabled=false}});
+
+async function chatSubscription(jid,action){try{await api('/api/v1/chat/subscription',{method:'POST',body:JSON.stringify({jid,action})});await refreshChat()}catch(e){setMsg($('chat-roster-msg'),e.message,'err')}}
+$('chat-presence')?.addEventListener('change',async e=>{try{await api('/api/v1/chat/presence',{method:'POST',body:JSON.stringify({state:e.target.value})})}catch(err){setMsg($('chat-roster-msg'),err.message,'err')}});
+$('chat-request-presence')?.addEventListener('click',()=>{if(chatState.peer)chatSubscription(chatState.peer,'request')});
+
+$('chat-attach')?.addEventListener('click',()=>{
+ if(!chatState.peer||chatState.sending)return;
+ setMsg($('chat-msg'),mailImageText('Файл будет доступен по ссылке 7 дней. Ссылку можно отозвать в разделе «Файлы».','The file link is valid for 7 days. Revoke it in Files.'));
+ $('chat-file').click();
+});
+$('chat-file')?.addEventListener('change',async e=>{
+ const file=e.target.files?.[0],peer=chatState.peer;e.target.value='';if(!file||!peer||chatState.sending)return;
+ if(file.size>64*1024*1024){setMsg($('chat-msg'),mailImageText('Максимум 64 МиБ','Maximum 64 MiB'),'err');return}
+ chatState.sending=true;$('chat-attach').disabled=true;
+ const name=file.name.replace(/[\/\\\r\n]/g,'_'),path='Chat/'+crypto.randomUUID()+'/'+name;let share;
+ try {
+  await new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest();xhr.open('PUT','/api/v1/files/content?path='+encodeURIComponent(path));xhr.setRequestHeader('Authorization','Bearer '+state.tokens.access_token);xhr.timeout=120000;xhr.upload.onprogress=ev=>{if(ev.lengthComputable)setMsg($('chat-msg'),Math.round(ev.loaded/ev.total*100)+'%')};xhr.onerror=xhr.ontimeout=()=>reject(new Error(mailImageText('Ошибка загрузки','Upload failed')));xhr.onload=()=>xhr.status>=200&&xhr.status<300?resolve():reject(new Error(mailImageText('Не удалось загрузить файл','Unable to upload file')));xhr.send(file)});
+  share=await api('/api/v1/files/shares',{method:'POST',body:JSON.stringify({path,rights:'read',ttl_hours:168})});
+  const ev=await api('/api/v1/chat/send',{method:'POST',body:JSON.stringify({to:peer,body:name+'\n'+share.url})});
+  if(chatBare(chatState.peer)===chatBare(peer)){appendChatBubble(ev);scrollChatBottom()}
+  setMsg($('chat-msg'),mailImageText('Файл отправлен. Ссылка действует 7 дней.','File sent. Link valid for 7 days.'),'ok');
+ }catch(err){setMsg($('chat-msg'),err.message,'err')}
+ finally{chatState.sending=false;$('chat-attach').disabled=false}
+});

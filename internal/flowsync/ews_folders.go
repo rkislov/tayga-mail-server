@@ -38,7 +38,7 @@ func (h *ewsHandler) getFolder(ctx context.Context, u *storage.User, body string
 		if e != nil {
 			return "", e
 		}
-		if start, ok := token.(xml.StartElement); ok && (start.Name.Local == "Folder" || start.Name.Local == "CalendarFolder" || start.Name.Local == "ContactsFolder") {
+		if start, ok := token.(xml.StartElement); ok && (start.Name.Local == "Folder" || start.Name.Local == "CalendarFolder" || start.Name.Local == "ContactsFolder" || start.Name.Local == "TasksFolder") {
 			var f folder
 			f.Kind = start.Name
 			if e = decoder.DecodeElement(&f, &start); e != nil {
@@ -49,6 +49,13 @@ func (h *ewsHandler) getFolder(ctx context.Context, u *storage.User, body string
 	}
 	for name := range ewsSystemFolders {
 		raw := systemFolderXML(u, name)
+		if name == "tasks" || name == "todosearch" {
+			var err error
+			raw, err = h.taskFolderXML(ctx, u, name)
+			if err != nil {
+				return "", err
+			}
+		}
 		decoder := xml.NewDecoder(strings.NewReader(raw))
 		startToken, e := decoder.Token()
 		if e != nil {

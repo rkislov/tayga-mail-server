@@ -65,6 +65,7 @@ func (s *Session) Close() {
 	s.srv.authn.ForgetSession(s.sessionID)
 	s.mu.Unlock()
 	if s.bound {
+		s.srv.recordPresence(context.Background(), s.JID.Full(), "offline", "")
 		s.srv.hub.Unregister(s)
 	}
 	_ = s.conn.Close()
@@ -449,17 +450,36 @@ func (s *Session) handlePresence(se xml.StartElement) error {
 			(typ == "subscribe" || typ == "subscribed" || typ == "unsubscribe" || typ == "unsubscribed") {
 			_ = s.srv.storeOffline(context.Background(), toJID.Bare(), stanza)
 		}
-		// auto-update roster subscription hints for local users
-		if s.user != nil && (typ == "subscribed" || typ == "unsubscribed") {
-			sub := "to"
-			if typ == "unsubscribed" {
-				sub = "none"
+		if s.user != nil {
+			ctx := context.Background()
+			switch typ {
+			case "subscribe":
+				_ = s.srv.pendingSubscription(ctx, toJID.Bare(), s.JID.Bare())
+			case "subscribed":
+				s.srv.clearPresenceRequest(ctx, s.JID.Bare(), toJID.Bare())
+				_ = s.srv.changeSubscription(ctx, s.JID.Bare(), toJID.Bare(), false, true)
+				_ = s.srv.changeSubscription(ctx, toJID.Bare(), s.JID.Bare(), true, true)
+			case "unsubscribed":
+				s.srv.clearPresenceRequest(ctx, s.JID.Bare(), toJID.Bare())
+				_ = s.srv.changeSubscription(ctx, s.JID.Bare(), toJID.Bare(), false, false)
+				_ = s.srv.changeSubscription(ctx, toJID.Bare(), s.JID.Bare(), true, false)
+			case "unsubscribe":
+				_ = s.srv.changeSubscription(ctx, s.JID.Bare(), toJID.Bare(), true, false)
+				_ = s.srv.changeSubscription(ctx, toJID.Bare(), s.JID.Bare(), false, false)
 			}
-			_ = s.srv.upsertRoster(context.Background(), s.user.ID, rosterItem{
-				JID: toJID.Bare(), Subscription: sub, GroupsJSON: "[]",
-			})
 		}
+
 		return nil
+	}
+	if typ == "" || typ == "unavailable" {
+		state := extractPresenceShow(inner)
+		if typ == "unavailable" {
+			state = "offline"
+		}
+		s.srv.recordPresence(context.Background(), s.JID.Full(), state, "")
+	}
+	if typ == "" {
+		s.sendCurrentDeviceLists(context.Background())
 	}
 	stanza := fmt.Sprintf(`<presence from='%s'%s>%s</presence>`, xmlEscape(from), attrIf("type", typ), inner)
 	for _, other := range s.srv.hub.Sessions(s.JID.Bare()) {

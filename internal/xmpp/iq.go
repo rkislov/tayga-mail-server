@@ -105,7 +105,11 @@ func (s *Session) writeDiscoInfo(id, to string) error {
 			`<feature var='urn:xmpp:carbons:2'/>`+
 			`<feature var='http://jabber.org/protocol/pubsub'/>`+
 			`<feature var='http://jabber.org/protocol/pubsub#publish'/>`+
-			`<feature var='urn:xmpp:omemo:2'/>`+
+			`<feature var='http://jabber.org/protocol/pubsub#persistent-items'/>`+
+			` <feature var='http://jabber.org/protocol/pubsub#publish-options'/>`+
+			`<feature var='http://jabber.org/protocol/pubsub#access-open'/>`+
+			`<feature var='http://jabber.org/protocol/pubsub#auto-create'/>`+
+			`<feature var='http://jabber.org/protocol/pubsub#retrieve-items'/>`+
 			`</query></iq>`,
 		xmlEscape(id), xmlEscape(from), xmlEscape(s.JID.Full()),
 	))
@@ -150,11 +154,17 @@ func (s *Session) handleRosterIQ(ctx context.Context, id, typ, inner string) err
 			return s.pushRosterPush(ParseJID(jid).Bare(), "remove", "", "none", nil)
 		}
 		name := firstSubmatch(reRosterName, inner)
-		sub := firstSubmatch(reRosterSub, inner)
-		if sub == "" {
-			sub = "none"
+		// Subscription grants are server-owned; roster edits cannot grant presence access.
+		sub, ask := "none", ""
+		items, err := s.srv.listRoster(ctx, s.user.ID)
+		if err != nil {
+			return s.writeString(iqInternalError(id))
 		}
-		ask := firstSubmatch(reRosterAsk, inner)
+		for _, old := range items {
+			if old.JID == ParseJID(jid).Bare() {
+				sub, ask = old.Subscription, old.Ask
+			}
+		}
 		var groups []string
 		for _, m := range reGroup.FindAllStringSubmatch(inner, -1) {
 			groups = append(groups, m[1])
@@ -179,8 +189,8 @@ func (s *Session) pushRosterPush(jid, subscriptionOverride, name, sub string, gr
 	}
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf(
-		`<iq type='set'><query xmlns='jabber:iq:roster'><item jid='%s' name='%s' subscription='%s'>`,
-		xmlEscape(jid), xmlEscape(name), xmlEscape(sub),
+		`<iq type='set' id='%s'><query xmlns='jabber:iq:roster'><item jid='%s' name='%s' subscription='%s'>`,
+		xmlEscape(randomID()), xmlEscape(jid), xmlEscape(name), xmlEscape(sub),
 	))
 	for _, g := range groups {
 		b.WriteString(`<group>` + xmlEscape(g) + `</group>`)
@@ -191,80 +201,6 @@ func (s *Session) pushRosterPush(jid, subscriptionOverride, name, sub string, gr
 		sess.SendRaw(raw)
 	}
 	return nil
-}
-
-func (s *Session) handlePubSubIQ(ctx context.Context, id, typ, to, inner string) error {
-	owner := s.JID.Bare()
-	if to != "" {
-		owner = ParseJID(to).Bare()
-	}
-	node := firstSubmatch(rePubsubNode, inner)
-
-	switch {
-	case typ == "set" && strings.Contains(inner, "<publish"):
-		if owner != s.JID.Bare() {
-			return s.writeString(iqForbidden(id))
-		}
-		if node == "" {
-			return s.writeString(iqBadRequest(id))
-		}
-		itemID := firstSubmatch(reItemID, inner)
-		if itemID == "" {
-			itemID = "current"
-		}
-		payload := extractItemPayload(inner)
-		if err := s.srv.publishPEP(ctx, owner, node, itemID, payload); err != nil {
-			s.log.Debug("pep publish", "err", err, "node", node)
-			return s.writeString(iqInternalError(id))
-		}
-		// notify other own resources (PEP event)
-		event := fmt.Sprintf(
-			`<message from='%s' to='%s'><event xmlns='http://jabber.org/protocol/pubsub#event'>`+
-				`<items node='%s'><item id='%s'>%s</item></items></event></message>`,
-			xmlEscape(owner), xmlEscape(s.JID.Full()), xmlEscape(node), xmlEscape(itemID), payload,
-		)
-		for _, sess := range s.srv.hub.Sessions(owner) {
-			if sess != s {
-				sess.SendRaw([]byte(event))
-			}
-		}
-		return s.writeString(fmt.Sprintf(
-			`<iq type='result' id='%s'><pubsub xmlns='http://jabber.org/protocol/pubsub'><publish node='%s'><item id='%s'/></publish></pubsub></iq>`,
-			xmlEscape(id), xmlEscape(node), xmlEscape(itemID),
-		))
-
-	case typ == "get" && (strings.Contains(inner, "<items") || strings.Contains(inner, "<item")):
-		if node == "" {
-			return s.writeString(iqBadRequest(id))
-		}
-		items, err := s.srv.getPEPItems(ctx, owner, node)
-		if err != nil {
-			return s.writeString(iqInternalError(id))
-		}
-		var b strings.Builder
-		b.WriteString(fmt.Sprintf(
-			`<iq type='result' id='%s' from='%s' to='%s'><pubsub xmlns='http://jabber.org/protocol/pubsub'><items node='%s'>`,
-			xmlEscape(id), xmlEscape(owner), xmlEscape(s.JID.Full()), xmlEscape(node),
-		))
-		for _, it := range items {
-			b.WriteString(fmt.Sprintf(`<item id='%s'>%s</item>`, xmlEscape(it.ItemID), it.Payload))
-		}
-		b.WriteString(`</items></pubsub></iq>`)
-		return s.writeString(b.String())
-
-	case typ == "set" && strings.Contains(inner, "<delete"):
-		if owner != s.JID.Bare() {
-			return s.writeString(iqForbidden(id))
-		}
-		node = firstSubmatch(reDeleteNode, inner)
-		_ = s.srv.deletePEPNode(ctx, owner, node)
-		return s.writeString(fmt.Sprintf(`<iq type='result' id='%s'/>`, xmlEscape(id)))
-	}
-
-	return s.writeString(fmt.Sprintf(
-		`<iq type='error' id='%s'><error type='cancel'><feature-not-implemented xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/></error></iq>`,
-		xmlEscape(id),
-	))
 }
 
 func (s *Session) handleMAMIQ(ctx context.Context, id, typ, inner string) error {

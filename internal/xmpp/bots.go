@@ -54,6 +54,8 @@ type Gateway interface {
 	ComponentDomains() []string
 	Status() Status
 
+	SetChatPresence(context.Context, string, string, string) error
+	ChatSubscription(context.Context, string, string, string) error
 	ListChatRoster(ctx context.Context, userID string) ([]RosterEntry, error)
 	UpsertChatRoster(ctx context.Context, userID, jid, name string) error
 	ChatHistory(ctx context.Context, ownerBare, withBare string, limit int) ([]HistoryMsg, error)

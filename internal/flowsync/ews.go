@@ -204,6 +204,12 @@ func (h *ewsHandler) findFolder(ctx context.Context, u *storage.User) (string, e
 		fmt.Fprintf(&b, `<t:Folder><t:FolderId Id="%s" ChangeKey="%s"/><t:ParentFolderId Id="%s"/><t:DisplayName>%s</t:DisplayName><t:FolderClass>IPF.StickyNote</t:FolderClass><t:TotalCount>0</t:TotalCount></t:Folder>`,
 			xmlEscape(nf.ID), xmlEscape(nf.CTag), xmlEscape("root:"+u.ID), xmlEscape(name))
 	}
+	taskFolder, err := h.taskFolderXML(ctx, u, "tasks")
+	if err != nil {
+		return "", err
+	}
+	b.WriteString(taskFolder)
+
 	b.WriteString(`</t:Folders></m:RootFolder></m:FindFolderResponseMessage></m:ResponseMessages></m:FindFolderResponse>`)
 	return b.String(), nil
 }
@@ -215,6 +221,9 @@ func (h *ewsHandler) findItem(ctx context.Context, u *storage.User, body string)
 		return ewsFault("ErrorFolderNotFound", "folder unavailable"), nil
 	}
 
+	if name := systemFolderName(u, folderID); name == "tasks" || name == "todosearch" {
+		return h.findTasks(ctx, u)
+	}
 	if systemFolderName(u, folderID) != "" {
 		return emptyEWSItems(), nil
 	}
@@ -304,6 +313,13 @@ func (h *ewsHandler) getItem(ctx context.Context, u *storage.User, body string) 
 	id := extractAttr(body, "ItemId", "Id")
 	if id == "" {
 		return ewsFault("ErrorInvalidId", "missing ItemId"), nil
+	}
+	if taskID(id) {
+		t, err := h.getTask(ctx, u, id)
+		if err != nil {
+			return ewsFault("ErrorItemNotFound", "task unavailable"), nil
+		}
+		return ewsNotificationSuccess("GetItem", "<m:Items>"+taskXML(*t, u.ID)+"</m:Items>"), nil
 	}
 	// Try mail first, then calendar object / contact by scanning user collections.
 	if msg, err := h.store.GetMessageByID(ctx, id); err == nil {

@@ -34,5 +34,8 @@ func (s *Store) UpdateEWSMailMetadata(ctx context.Context, id, flags, data strin
 	if err != nil {
 		return err
 	}
+	if err = s.syncMessageTask(ctx, tx, id, flags); err != nil {
+		return err
+	}
 	return tx.Commit()
 }

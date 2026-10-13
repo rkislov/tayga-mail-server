@@ -276,6 +276,8 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		uid := req.UID
+		sequence := 0
+		var previous *calutil.Event
 		if req.ID != "" {
 			old, e := s.store.GetCalendarObjectByID(r.Context(), req.ID)
 			if e != nil || old.CalendarID != cal.ID {
@@ -283,6 +285,17 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			uid = old.UID
+			parsed, parseErr := calutil.ParseICS(old.Data)
+			if parseErr != nil {
+				writeJSON(w, 409, map[string]string{"error": "invalid stored event"})
+				return
+			}
+			previous = &parsed.Event
+			if parsed.Organizer.Email != "" && !strings.EqualFold(parsed.Organizer.Email, au.Email) {
+				writeJSON(w, 403, map[string]string{"error": "only the organizer can update a meeting"})
+				return
+			}
+			sequence = parsed.Sequence + 1
 		}
 		if uid == "" {
 			uid = storage.NewID()
@@ -297,7 +310,7 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 		}
 		ev := calutil.Event{
 			UID: uid, Summary: req.Summary, Location: req.Location, Geo: req.Geo, Description: req.Description,
-			Start: start, End: end, AllDay: req.AllDay, Sequence: 0, Status: "CONFIRMED",
+			Start: start, End: end, AllDay: req.AllDay, Sequence: sequence, Status: "CONFIRMED",
 			Organizer: calutil.Attendee{Email: user.Email, Name: user.DisplayName},
 		}
 		seenAtt := map[string]struct{}{}
@@ -356,6 +369,17 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
+		if previous != nil && strings.EqualFold(previous.Organizer.Email, user.Email) {
+			removed := *previous
+			removed.Sequence = sequence
+			removed.Attendees = nil
+			for _, attendee := range previous.Attendees {
+				if _, remains := seenAtt[strings.ToLower(attendee.Email)]; !remains {
+					removed.Attendees = append(removed.Attendees, attendee)
+				}
+			}
+			s.sendMeetingCancellation(r, user, removed)
+		}
 		if len(ev.Attendees) > 0 {
 			s.fanOutMeetingInvites(r, user, saved, ev)
 		}
@@ -380,6 +404,14 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 		if err := s.store.DeleteCalendarObject(r.Context(), o.CalendarID, o.HrefName); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
+		}
+		if parsed, e := calutil.ParseICS(o.Data); e == nil {
+			organizer, e := s.store.GetUserByID(r.Context(), au.ID)
+			if e == nil && strings.EqualFold(parsed.Organizer.Email, organizer.Email) {
+				ev := parsed.Event
+				ev.Sequence++
+				s.sendMeetingCancellation(r, organizer, ev)
+			}
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 
@@ -993,4 +1025,31 @@ func calendarEventJSON(o *storage.CalendarObject, ev calutil.ParseResult, cal *s
 		item["busy_only"] = true
 	}
 	return item
+}
+
+func (s *Server) sendMeetingCancellation(r *http.Request, organizer *storage.User, ev calutil.Event) {
+	if len(ev.Attendees) == 0 {
+		return
+	}
+	ics, err := calutil.BuildCancelICS(ev)
+	if err != nil {
+		return
+	}
+	seen := map[string]bool{}
+	for _, a := range ev.Attendees {
+		email := strings.ToLower(strings.TrimSpace(a.Email))
+		if email == "" || seen[email] || strings.EqualFold(email, organizer.Email) {
+			continue
+		}
+		seen[email] = true
+		subject := "Cancelled: " + ev.Summary
+		raw := buildIMIPMIME(organizer.Email, organizer.DisplayName, []string{email}, subject, "This meeting has been cancelled.", ics, "CANCEL")
+		if user, err := s.store.ResolveRecipient(r.Context(), email); err == nil && user != nil {
+			s.deliverLocalMail(r, organizer, user, subject, raw)
+		} else {
+			if _, err := s.store.EnqueueOutbound(r.Context(), &storage.OutboundItem{EnvelopeFrom: organizer.Email, EnvelopeTo: email, MessageID: fmt.Sprintf("<%s@tayga>", storage.NewID()), Data: raw, MaxAttempts: 8}); err != nil {
+				s.log.Error("calendar cancellation enqueue failed", "error", err)
+			}
+		}
+	}
 }

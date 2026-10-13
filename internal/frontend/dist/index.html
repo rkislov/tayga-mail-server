@@ -182,6 +182,7 @@
         <button type="button" class="nav-btn is-active" data-app="mail"><span class="nav-ico" data-ico="mail" aria-hidden="true"></span><span data-i18n="nav_mail">Почта</span></button>
         <button type="button" class="nav-btn" data-app="calendar"><span class="nav-ico" data-ico="cal" aria-hidden="true"></span><span data-i18n="nav_calendar">Календарь</span></button>
         <button type="button" class="nav-btn" data-app="contacts"><span class="nav-ico" data-ico="people" aria-hidden="true"></span><span data-i18n="nav_contacts">Контакты</span></button>
+        <button type="button" class="nav-btn" data-app="tasks"><span aria-hidden="true">✓</span><span data-i18n="nav_tasks">Задачи</span></button>
         <button type="button" class="nav-btn" data-app="notes"><span class="nav-ico" data-ico="notes" aria-hidden="true"></span><span data-i18n="nav_notes">Заметки</span></button>
         <button type="button" class="nav-btn" data-app="files"><span class="nav-ico" data-ico="files" aria-hidden="true"></span><span data-i18n="nav_files">Файлы</span></button>
         <button type="button" class="nav-btn" data-app="chat"><span class="nav-ico" data-ico="chat" aria-hidden="true"></span><span data-i18n="nav_chat">Чат</span></button>
@@ -460,6 +461,17 @@
       </div>
 
       <!-- NOTES -->
+      <section id="app-tasks" class="app-page hidden panel-pane" style="max-width:960px;margin:auto;padding:24px;width:100%">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><h2 data-i18n="nav_tasks" style="flex:1">Задачи</h2><button id="tasks-new" class="btn-spray hidden" data-i18n="tasks_new">Новая задача</button><button id="tasks-refresh" class="btn-secondary" data-i18n="refresh">Обновить</button></div>
+        <label class="field-check"><input id="tasks-completed" type="checkbox"><span data-i18n="tasks_completed">Показывать завершённые</span></label>
+        <p id="tasks-msg" role="status"></p><ul id="tasks-list"></ul>
+      </section>
+      <dialog id="task-dialog" style="margin:auto;width:min(560px,92vw);border:0;border-radius:20px;padding:24px;max-height:90vh">
+        <form id="task-form"><h2 data-i18n="nav_tasks">Задачи</h2><label class="field-label" for="task-title" data-i18n="task_title">Название</label><input id="task-title" class="field-input" required maxlength="1024">
+        <label class="field-label" for="task-body" data-i18n="task_body">Описание</label><textarea id="task-body" class="field-input" rows="4" maxlength="65536"></textarea>
+        <label class="field-label" for="task-due" data-i18n="task_due">Срок</label><input id="task-due" type="date" class="field-input"><p id="task-edit-msg" role="status"></p>
+        <div class="actions"><button id="task-save" type="submit" class="btn-spray" data-i18n="save">Сохранить</button><button id="task-cancel" type="button" class="btn-secondary" data-i18n="cancel">Отмена</button></div></form>
+      </dialog>
       <div id="app-notes" class="app-page hidden mail-layout notes-layout">
         <div class="mail-folders panel-pane">
           <div class="pane-head">
@@ -594,6 +606,7 @@
             <strong data-i18n="chat_title">Чат</strong>
             <button type="button" class="btn-spray btn-sm btn-ico" id="btn-chat-new" data-i18n-title="chat_new" title="Диалог" aria-label="Диалог"><span class="ico" data-ico="chat" aria-hidden="true"></span></button>
           </div>
+          <label class="field-label" for="chat-presence" data-i18n="presence_label">Мой статус</label><select id="chat-presence" class="field-input"><option value="online" data-i18n="presence_online">В сети</option><option value="away" data-i18n="presence_away">Отошёл</option><option value="dnd" data-i18n="presence_dnd">Не беспокоить</option><option value="offline" data-i18n="presence_offline">Не в сети</option></select>
           <ul id="chat-roster" class="msg-list"></ul>
           <p id="chat-roster-msg" class="msg files-msg"></p>
         </div>
@@ -602,10 +615,11 @@
           <div id="chat-thread" class="hidden chat-thread">
             <div class="reader-actions chat-thread-head">
               <button type="button" class="btn-secondary btn-sm btn-ico mobile-only" data-pane-back data-i18n-title="back_list" title="К списку" aria-label="К списку"><span class="ico" data-ico="back" aria-hidden="true"></span></button>
-              <h2 class="heading reader-subject" id="chat-peer"></h2>
+              <h2 class="heading reader-subject" id="chat-peer"></h2><button id="chat-request-presence" class="btn-secondary btn-sm" data-i18n="presence_request_action">Запросить статус</button>
             </div>
             <div class="chat-messages" id="chat-messages"></div>
             <form id="form-chat-send" class="chat-compose">
+              <button type="button" id="chat-attach" class="btn-secondary btn-ico" title="Прикрепить файл" aria-label="Прикрепить файл">📎</button><input type="file" id="chat-file" hidden />
               <input class="field-input" id="chat-body" data-i18n-placeholder="chat_placeholder" placeholder="Сообщение…" autocomplete="off" />
               <button type="submit" class="btn-spray btn-ico" data-i18n-title="send" title="Отправить" aria-label="Отправить"><span class="ico" data-ico="send" aria-hidden="true"></span></button>
             </form>
@@ -867,7 +881,7 @@ keep;</textarea>
               <input class="field-input" id="nt-name" type="text" required placeholder="acme" />
               <div class="actions"><button type="submit" class="btn-spray" data-i18n="tenants_add">Добавить</button></div>
             </form></details>
-            <ul class="creds" id="admin-tenant-list"></ul>
+            <div id="admin-tenant-list"></div>
           </div>
 
           <div id="tenant-level-domains" class="hidden">

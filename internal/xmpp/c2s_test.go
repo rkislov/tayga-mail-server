@@ -150,7 +150,7 @@ func TestC2SAuthBindRosterPEP(t *testing.T) {
 
 	mustWrite(`<iq type='get' id='p2' to='alice@example.com'><pubsub xmlns='http://jabber.org/protocol/pubsub'>` +
 		`<items node='urn:xmpp:omemo:2:devices'/></pubsub></iq>`)
-	pep := readUntil("device id='99'")
+	pep := readUntil("id='99'")
 	if !strings.Contains(pep, "urn:xmpp:omemo:2:devices") {
 		t.Fatalf("pep: %s", pep)
 	}

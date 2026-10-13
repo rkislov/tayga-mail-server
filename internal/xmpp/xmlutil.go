@@ -81,20 +81,21 @@ func readInnerXML(dec *xml.Decoder, start xml.StartElement) (string, error) {
 func writeStart(b *strings.Builder, t xml.StartElement) {
 	b.WriteByte('<')
 	b.WriteString(t.Name.Local)
+	// Decoder resolves prefixes to namespace URIs. Preserve that URI even when
+	// its declaration was inherited from the enclosing stanza.
+	b.WriteString(" xmlns='")
+	b.WriteString(xmlEscape(t.Name.Space))
+	b.WriteByte('\'')
 	for _, a := range t.Attr {
-		b.WriteByte(' ')
-		switch {
-		case a.Name.Space == "" && a.Name.Local == "xmlns":
-			b.WriteString("xmlns")
-		case a.Name.Space == "xmlns":
-			b.WriteString("xmlns:")
-			b.WriteString(a.Name.Local)
-		case a.Name.Space == "":
-			b.WriteString(a.Name.Local)
-		default:
-			b.WriteString(a.Name.Local)
+		if a.Name.Space == "xmlns" || (a.Name.Space == "" && a.Name.Local == "xmlns") {
+			continue
 		}
-		b.WriteString(`='`)
+		b.WriteByte(' ')
+		if a.Name.Space == "http://www.w3.org/XML/1998/namespace" {
+			b.WriteString("xml:")
+		}
+		b.WriteString(a.Name.Local)
+		b.WriteString("='")
 		b.WriteString(xmlEscape(a.Value))
 		b.WriteByte('\'')
 	}
