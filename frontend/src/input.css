@@ -3566,3 +3566,9 @@ button:focus-visible,a:focus-visible{outline:3px solid var(--md-primary);outline
 .toast{background:var(--md-container-high);border:1px solid var(--md-outline);color:var(--md-text);border-radius:16px;box-shadow:0 4px 16px #0003}
 @media(prefers-reduced-motion:reduce){.btn,.btn-spray,.btn-secondary,.create-fab,.mail-settings-toggle{transition:none!important;animation:none!important}}
 .chat-group-dialog{height:fit-content;overflow:auto}.chat-group-dialog form{gap:16px}.chat-group-dialog .stack-gap>*+*{margin-top:12px}
+
+/* Keep subscription consent visibly attached to its sender. */
+.chat-presence-request {margin:0 12px 12px;padding:14px;border:1px solid var(--md-outline-variant,currentColor);border-radius:16px;display:flex;flex-direction:column;gap:6px;overflow-wrap:anywhere;}
+.chat-presence-request p {margin:4px 0;}
+.chat-presence-request-actions {display:flex;flex-wrap:wrap;gap:8px;}
+.chat-presence-request-actions button {flex:1 1 auto;white-space:nowrap;}
