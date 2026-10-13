@@ -91,3 +91,54 @@ func TestFlaggedMailTasksLifecycle(t *testing.T) {
 		t.Fatal(tasks)
 	}
 }
+
+func TestOutlookTaskCommonAndExtendedUpdates(t *testing.T) {
+	ctx, store, user, eas, _, _ := syncFixture(t)
+	h := &ewsHandler{store: store, ms: eas.ms}
+	task := &storage.Task{Title: "Original"}
+	if err := store.SaveTask(ctx, user.ID, task); err != nil {
+		t.Fatal(err)
+	}
+	extended := `<ExtendedFieldURI DistinguishedPropertySetId="Common" PropertyId="34072" PropertyType="Integer"/>`
+	updates := `<SetItemField><FieldURI FieldURI="item:Subject"/><Item><Subject>Outlook title</Subject></Item></SetItemField><SetItemField><FieldURI FieldURI="item:Importance"/><Item><Importance>High</Importance></Item></SetItemField><SetItemField><FieldURI FieldURI="item:Sensitivity"/><Item><Sensitivity>Private</Sensitivity></Item></SetItemField><SetItemField><FieldURI FieldURI="task:Status"/><Task><Status>Completed</Status></Task></SetItemField><SetItemField><FieldURI FieldURI="task:CompleteDate"/><Task><CompleteDate>2026-10-13T14:13:00Z</CompleteDate></Task></SetItemField><SetItemField>` + extended + `<Task><ExtendedProperty>` + extended + `<Value>1</Value></ExtendedProperty></Task></SetItemField>`
+	run := func(updates string) string {
+		t.Helper()
+		out, err := h.updateItem(ctx, user, `<UpdateItem><ItemChanges><ItemChange><ItemId Id="`+task.ID+`"/><Updates>`+updates+`</Updates></ItemChange></ItemChanges></UpdateItem>`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	if out := run(updates); !strings.Contains(out, "NoError") {
+		t.Fatal(out)
+	}
+	saved, err := h.getTask(ctx, user, task.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.Title != "Outlook title" || !saved.Completed {
+		t.Fatal(saved)
+	}
+	out := taskXML(*saved, user.ID)
+	requireXML(t, out)
+	for _, want := range []string{"High", "Private", "2026-10-13T14:13:00Z", "34072"} {
+		if !strings.Contains(out, want) {
+			t.Fatal(out)
+		}
+	}
+	revision := saved.Revision
+	if out := run(`<SetItemField><FieldURI FieldURI="item:Subject"/><Item><Subject>Should roll back</Subject></Item></SetItemField><SetItemField><FieldURI FieldURI="task:Status"/><Task><Subject>Completed</Subject></Task></SetItemField>`); !strings.Contains(out, "ErrorInvalidPropertySet") {
+		t.Fatal(out)
+	}
+	saved, _ = h.getTask(ctx, user, task.ID)
+	if saved.Title != "Outlook title" || saved.Revision != revision {
+		t.Fatal("partial update persisted", saved)
+	}
+	if out := run(`<DeleteItemField><FieldURI FieldURI="task:CompleteDate"/></DeleteItemField><DeleteItemField>` + extended + `</DeleteItemField>`); !strings.Contains(out, "NoError") {
+		t.Fatal(out)
+	}
+	saved, _ = h.getTask(ctx, user, task.ID)
+	if strings.Contains(saved.EWSProperties, "34072") || strings.Contains(saved.EWSProperties, "CompleteDate") {
+		t.Fatal(saved.EWSProperties)
+	}
+}

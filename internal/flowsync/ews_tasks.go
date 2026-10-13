@@ -3,8 +3,10 @@ package flowsync
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/tayga/tms/internal/storage"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -22,7 +24,19 @@ func taskXML(t storage.Task, user string) string {
 	if t.Due != "" {
 		due = "<t:DueDate>" + xmlEscape(t.Due) + "</t:DueDate>"
 	}
-	return fmt.Sprintf(`<t:Task><t:ItemId Id="%s" ChangeKey="%d"/><t:ParentFolderId Id="%s"/><t:ItemClass>IPM.Task</t:ItemClass><t:Subject>%s</t:Subject><t:Body BodyType="Text">%s</t:Body><t:Status>%s</t:Status><t:PercentComplete>%s</t:PercentComplete><t:IsComplete>%t</t:IsComplete>%s</t:Task>`, xmlEscape(t.ID), t.Revision, xmlEscape(systemFolderID(user, "tasks")), xmlEscape(t.Title), xmlEscape(t.Body), status, percent, t.Completed, due)
+	raw := fmt.Sprintf(`<t:Task><t:ItemId Id="%s" ChangeKey="%d"/><t:ParentFolderId Id="%s"/><t:ItemClass>IPM.Task</t:ItemClass><t:Subject>%s</t:Subject><t:Body BodyType="Text">%s</t:Body><t:Status>%s</t:Status><t:PercentComplete>%s</t:PercentComplete><t:IsComplete>%t</t:IsComplete>%s</t:Task>`, xmlEscape(t.ID), t.Revision, xmlEscape(systemFolderID(user, "tasks")), xmlEscape(t.Title), xmlEscape(t.Body), status, percent, t.Completed, due)
+	props := map[string]string{}
+	_ = json.Unmarshal([]byte(t.EWSProperties), &props)
+	keys := []string{}
+	for k := range props {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var extra strings.Builder
+	for _, k := range keys {
+		extra.WriteString(props[k])
+	}
+	return strings.Replace(raw, "</t:Task>", extra.String()+"</t:Task>", 1)
 }
 func (h *ewsHandler) findTasks(ctx context.Context, u *storage.User) (string, error) {
 	tasks, err := h.store.ListTasks(ctx, u.ID)
@@ -114,31 +128,85 @@ func (h *ewsHandler) writeTask(ctx context.Context, u *storage.User, body string
 		if updates == nil {
 			return ewsFault("ErrorInvalidRequest", "missing updates"), nil
 		}
-		for _, up := range updates.Children {
-			uri := up.find("FieldURI")
-			if uri == nil {
-				return ewsFault("ErrorInvalidPropertySet", "missing FieldURI"), nil
-			}
-			field := ""
-			for _, a := range uri.Attr {
-				if a.Name.Local == "FieldURI" {
-					field = a.Value
-				}
-			}
-			value := ""
-			if up.Name.Local == "SetItemField" {
-				n := up.find("Task")
-				if n == nil || len(n.Children) != 1 {
-					return ewsFault("ErrorInvalidPropertySet", "invalid Task update"), nil
-				}
-				value = n.Children[0].Text
-			} else if up.Name.Local != "DeleteItemField" {
-				return ewsFault("ErrorInvalidPropertySet", "unsupported operation"), nil
-			}
-			if !applyTaskField(t, field, value) {
-				return ewsFault("ErrorInvalidPropertySet", "unsupported task field: "+field), nil
+		props := map[string]string{}
+		if t.EWSProperties != "" {
+			if err := json.Unmarshal([]byte(t.EWSProperties), &props); err != nil {
+				return "", err
 			}
 		}
+		for _, up := range updates.Children {
+			deleting := up.Name.Local == "DeleteItemField"
+			if !deleting && up.Name.Local != "SetItemField" {
+				return ewsFault("ErrorInvalidPropertySet", "unsupported task operation"), nil
+			}
+			field := nodeAttr(up.child("FieldURI"), "FieldURI")
+			extended := up.child("ExtendedFieldURI")
+			if extended != nil {
+				key := extendedKey(extended)
+				if nodeAttr(extended, "PropertyType") == "" || len(key) > 1024 {
+					return ewsFault("ErrorInvalidPropertySet", "invalid task extended property"), nil
+				}
+				if deleting {
+					delete(props, key)
+					continue
+				}
+				n := up.find("ExtendedProperty")
+				if n == nil || extendedKey(n.child("ExtendedFieldURI")) != key || len(n.render()) > 16384 {
+					return ewsFault("ErrorInvalidPropertySet", "invalid task extended property"), nil
+				}
+				props[key] = metadataXML(n)
+				continue
+			}
+			parts := strings.Split(field, ":")
+			if len(parts) != 2 {
+				return ewsFault("ErrorInvalidPropertySet", "missing task FieldURI"), nil
+			}
+			value := ""
+			var n *protocolNode
+			if !deleting {
+				container := up.child("Task")
+				if container == nil && parts[0] == "item" {
+					container = up.child("Item")
+				}
+				if container == nil || len(container.Children) != 1 || container.Children[0].Name.Local != parts[1] {
+					return ewsFault("ErrorInvalidPropertySet", "task value does not match "+field), nil
+				}
+				n = container.Children[0]
+				value = n.Text
+			}
+			switch field {
+			case "item:Importance", "item:Sensitivity", "item:Categories", "task:StartDate", "task:CompleteDate":
+				if deleting {
+					delete(props, field)
+					continue
+				}
+				if field == "item:Importance" && value != "Low" && value != "Normal" && value != "High" {
+					return ewsFault("ErrorInvalidPropertySet", "invalid importance"), nil
+				}
+				if field == "item:Sensitivity" && value != "Normal" && value != "Personal" && value != "Private" && value != "Confidential" {
+					return ewsFault("ErrorInvalidPropertySet", "invalid sensitivity"), nil
+				}
+				if strings.HasPrefix(field, "task:") {
+					if _, err := time.Parse(time.RFC3339, value); err != nil {
+						return ewsFault("ErrorInvalidPropertySet", "invalid task date"), nil
+					}
+				}
+				if len(n.render()) > 16384 {
+					return ewsFault("ErrorInvalidPropertySet", "task property too large"), nil
+				}
+				props[field] = metadataXML(n)
+			default:
+				if !applyTaskField(t, field, value) {
+					return ewsFault("ErrorInvalidPropertySet", "unsupported task field: "+field), nil
+				}
+			}
+		}
+		encoded, err := json.Marshal(props)
+		if err != nil {
+			return "", err
+		}
+		t.EWSProperties = string(encoded)
+
 	}
 	if strings.TrimSpace(t.Title) == "" {
 		t.Title = "Task"

@@ -7,6 +7,7 @@ import (
 )
 
 type Task struct {
+	EWSProperties   string `json:"-"`
 	ID              string `json:"id"`
 	UserID          string `json:"-"`
 	SourceMessageID string `json:"source_message_id,omitempty"`
@@ -61,7 +62,7 @@ func (s *Store) ListTasks(ctx context.Context, user string) ([]Task, error) {
 	if err = tx.Commit(); err != nil {
 		return nil, err
 	}
-	rows, err = s.db.QueryContext(ctx, s.rebind(`SELECT id,user_id,COALESCE(source_message_id,''),title,body,completed,due,revision FROM tasks WHERE user_id=? ORDER BY completed,due,title,id`), user)
+	rows, err = s.db.QueryContext(ctx, s.rebind(`SELECT id,user_id,COALESCE(source_message_id,''),title,body,completed,due,revision,ews_properties FROM tasks WHERE user_id=? ORDER BY completed,due,title,id`), user)
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +70,7 @@ func (s *Store) ListTasks(ctx context.Context, user string) ([]Task, error) {
 	out := []Task{}
 	for rows.Next() {
 		var t Task
-		if err = rows.Scan(&t.ID, &t.UserID, &t.SourceMessageID, &t.Title, &t.Body, &t.Completed, &t.Due, &t.Revision); err != nil {
+		if err = rows.Scan(&t.ID, &t.UserID, &t.SourceMessageID, &t.Title, &t.Body, &t.Completed, &t.Due, &t.Revision, &t.EWSProperties); err != nil {
 			return nil, err
 		}
 		out = append(out, t)
@@ -78,6 +79,9 @@ func (s *Store) ListTasks(ctx context.Context, user string) ([]Task, error) {
 }
 
 func (s *Store) SaveTask(ctx context.Context, user string, t *Task) error {
+	if t.EWSProperties == "" {
+		t.EWSProperties = "{}"
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -86,7 +90,7 @@ func (s *Store) SaveTask(ctx context.Context, user string, t *Task) error {
 	if t.ID == "" {
 		t.ID = "task:" + NewID()
 		t.Revision = 1
-		_, err = tx.ExecContext(ctx, s.rebind(`INSERT INTO tasks(id,user_id,title,body,completed,due) VALUES(?,?,?,?,?,?)`), t.ID, user, t.Title, t.Body, t.Completed, t.Due)
+		_, err = tx.ExecContext(ctx, s.rebind(`INSERT INTO tasks(id,user_id,title,body,completed,due,ews_properties) VALUES(?,?,?,?,?,?,?)`), t.ID, user, t.Title, t.Body, t.Completed, t.Due, t.EWSProperties)
 	} else {
 		var source sql.NullString
 		err = tx.QueryRowContext(ctx, s.rebind(`SELECT source_message_id FROM tasks WHERE id=? AND user_id=?`), t.ID, user).Scan(&source)
@@ -96,7 +100,7 @@ func (s *Store) SaveTask(ctx context.Context, user string, t *Task) error {
 		if err != nil {
 			return err
 		}
-		res, e := tx.ExecContext(ctx, s.rebind(`UPDATE tasks SET title=?,body=?,completed=?,due=?,revision=revision+1 WHERE id=? AND user_id=? AND revision=?`), t.Title, t.Body, t.Completed, t.Due, t.ID, user, t.Revision)
+		res, e := tx.ExecContext(ctx, s.rebind(`UPDATE tasks SET title=?,body=?,completed=?,due=?,ews_properties=?,revision=revision+1 WHERE id=? AND user_id=? AND revision=?`), t.Title, t.Body, t.Completed, t.Due, t.EWSProperties, t.ID, user, t.Revision)
 		if e != nil {
 			return e
 		}
