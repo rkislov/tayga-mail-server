@@ -42,6 +42,20 @@ func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 	path = strings.Trim(path, "/")
 
 	switch {
+	case r.Method == http.MethodDelete && path != "" && !strings.Contains(path, "/"):
+		target := s.adminTenantUser(w, r, admin, path)
+		if target == nil {
+			return
+		}
+		if target.ID == admin.ID || s.isGlobalAdminUser(target) {
+			writeJSON(w, 409, map[string]string{"error": "cannot delete yourself or a global administrator"})
+			return
+		}
+		if err := s.store.DeleteUser(r.Context(), target.ID); err != nil {
+			writeJSON(w, 409, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, 200, map[string]string{"status": "deleted"})
 	case r.Method == http.MethodGet && path == "":
 		domainID := strings.TrimSpace(r.URL.Query().Get("domain_id"))
 		tenantID := strings.TrimSpace(r.URL.Query().Get("tenant_id"))

@@ -1,5 +1,9 @@
 const I18N = {
   ru: {
+"presence_label":"Мой статус","presence_online":"В сети","presence_away":"Отошёл","presence_dnd":"Не беспокоить","presence_offline":"Не в сети","presence_unknown":"Статус недоступен","presence_request":"Запрашивает ваш статус","presence_accept":"Разрешить","presence_reject":"Отклонить","presence_request_action":"Запросить статус",
+
+"nav_tasks":"Задачи","task_complete":"Завершить задачу","tasks_empty":"Нет задач. Отметьте письмо флажком или создайте задачу.","task_delete_confirm":"Удалить задачу? Флажок связанного письма будет снят.","tasks_new":"Новая задача","tasks_completed":"Показывать завершённые","task_title":"Название","task_body":"Описание","task_due":"Срок",
+
     rules_new: "Создать правило",
  mig_history: "История миграций", mig_previous: "Назад", mig_next: "Далее",
  mig_skip_tls: "Не проверять сертификат старого сервера", mig_skip_tls_hint: "Только для этой задачи. Для доверенного сервера с самоподписанным сертификатом.",
@@ -504,6 +508,10 @@ contacts_search: "Поиск контактов…",
     save: "Сохранить",
   },
   en: {
+"presence_label":"My status","presence_online":"Online","presence_away":"Away","presence_dnd":"Do not disturb","presence_offline":"Offline","presence_unknown":"Status unavailable","presence_request":"Requests your presence","presence_accept":"Allow","presence_reject":"Decline","presence_request_action":"Request presence",
+
+"nav_tasks":"Tasks","task_complete":"Complete task","tasks_empty":"No tasks. Flag a message or create a task.","task_delete_confirm":"Delete task? The linked message will be unflagged.","tasks_new":"New task","tasks_completed":"Show completed","task_title":"Title","task_body":"Description","task_due":"Due date",
+
     rules_new: "Create rule",
  mig_history: "Migration history", mig_previous: "Previous", mig_next: "Next",
  mig_skip_tls: "Skip source server certificate verification", mig_skip_tls_hint: "This migration only. Use for a trusted server with a self-signed certificate.",

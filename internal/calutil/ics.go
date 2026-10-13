@@ -427,3 +427,13 @@ func FormatWhen(start, end *time.Time) string {
 	}
 	return s
 }
+
+// BuildCancelICS preserves the meeting UID and version for recipient calendars.
+func BuildCancelICS(ev Event) (string, error) {
+	ev.Status = "CANCELLED"
+	cal, err := buildCalendar("CANCEL", ev)
+	if err != nil {
+		return "", err
+	}
+	return encode(cal)
+}

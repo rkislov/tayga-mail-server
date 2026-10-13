@@ -13,6 +13,9 @@ import (
 )
 
 func (h *ewsHandler) createItem(ctx context.Context, u *storage.User, body string) (string, error) {
+	if doc, e := parseProtocolXML([]byte(body)); e == nil && doc.find("Task") != nil {
+		return h.writeTask(ctx, u, body, true)
+	}
 	doc, parseErr := parseProtocolXML([]byte(body))
 	if parseErr != nil {
 		return "", parseErr
@@ -112,6 +115,10 @@ func (h *ewsHandler) updateItem(ctx context.Context, u *storage.User, body strin
 		return ewsFault("ErrorInvalidId", "missing ItemId"), nil
 	}
 
+	if taskID(id) {
+		return h.writeTask(ctx, u, body, false)
+	}
+
 	if o, err := h.store.GetCalendarObjectByID(ctx, id); err == nil {
 		if err := h.ensureCalendarOwned(ctx, u.ID, o.CalendarID); err != nil {
 			return ewsFault("ErrorAccessDenied", "forbidden"), nil
@@ -193,6 +200,13 @@ func (h *ewsHandler) deleteItem(ctx context.Context, u *storage.User, body strin
 	if id == "" {
 		return ewsFault("ErrorInvalidId", "missing ItemId"), nil
 	}
+	if taskID(id) {
+		if err := h.store.DeleteTask(ctx, u.ID, id); err != nil {
+			return ewsFault("ErrorItemNotFound", "task unavailable"), nil
+		}
+		return ewsDeleteResponse(), nil
+	}
+
 	if o, err := h.store.GetCalendarObjectByID(ctx, id); err == nil {
 		if err := h.ensureCalendarOwned(ctx, u.ID, o.CalendarID); err != nil {
 			return ewsFault("ErrorAccessDenied", "forbidden"), nil

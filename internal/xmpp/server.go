@@ -29,9 +29,11 @@ type Server struct {
 	domain string
 	db     *sql.DB
 
-	mu     sync.Mutex
-	ln     []net.Listener
-	closed bool
+	webPresenceMu sync.Mutex
+	presence      map[string]map[string]presenceState
+	mu            sync.Mutex
+	ln            []net.Listener
+	closed        bool
 }
 
 func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth.Layer, tlsMgr *tlsutil.Manager) *Server {

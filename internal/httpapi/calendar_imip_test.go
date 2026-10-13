@@ -30,3 +30,18 @@ func TestBuildIMIPMIMEContainsMethodRequest(t *testing.T) {
 		t.Fatalf("missing METHOD:REQUEST body:\n%s", raw)
 	}
 }
+
+func TestCancellationKeepsUIDAndSequence(t *testing.T) {
+	ics, err := calutil.BuildCancelICS(calutil.Event{UID: "meeting-1", Summary: "Cancelled meeting", Sequence: 3, Organizer: calutil.Attendee{Email: "organizer@example.com"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := calutil.ParseICS(ics)
+	if err != nil || parsed.Method != "CANCEL" || parsed.Status != "CANCELLED" || parsed.Sequence != 3 || parsed.UID != "meeting-1" {
+		t.Fatalf("cancel: %+v %v", parsed, err)
+	}
+	raw := string(buildIMIPMIME("organizer@example.com", "Organizer", []string{"attendee@example.com"}, "Cancelled", "Cancelled", ics, "CANCEL"))
+	if !strings.Contains(raw, "method=CANCEL") {
+		t.Fatal("missing MIME cancellation method")
+	}
+}

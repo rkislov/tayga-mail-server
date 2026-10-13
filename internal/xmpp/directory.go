@@ -16,6 +16,9 @@ func (s *Server) effectiveRoster(ctx context.Context, userID string) ([]rosterIt
 	if err != nil {
 		return nil, err
 	}
+	for i := range items {
+		items[i].Name = s.rosterDisplayName(ctx, userID, items[i].JID, items[i].Name)
+	}
 	enabled, _, err := s.store.GetSetting(ctx, "domain.xmpp_gal."+user.DomainID)
 	if err != nil {
 		return nil, err

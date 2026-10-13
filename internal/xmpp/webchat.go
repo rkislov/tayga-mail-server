@@ -20,9 +20,11 @@ type ChatEvent struct {
 
 // RosterEntry is a roster row for the web messenger.
 type RosterEntry struct {
-	JID          string `json:"jid"`
-	Name         string `json:"name"`
-	Subscription string `json:"subscription"`
+	JID                 string `json:"jid"`
+	Name                string `json:"name"`
+	Subscription        string `json:"subscription"`
+	Presence            string `json:"presence"`
+	SubscriptionRequest bool   `json:"subscription_request"`
 }
 
 // HistoryMsg is a decoded MAM / chat history item.
@@ -119,17 +121,67 @@ func (s *Server) ListChatRoster(ctx context.Context, userID string) ([]RosterEnt
 			return nil, err
 		}
 	}
+	requests := map[string]bool{}
+	if s.db != nil {
+		rows, err := s.db.QueryContext(ctx, s.rebind(`SELECT from_bare_jid FROM xmpp_presence_requests WHERE owner_bare_jid=?`), user.Email)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var peer string
+			if err = rows.Scan(&peer); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			requests[peer] = true
+			found := false
+			for _, item := range items {
+				if item.JID == peer {
+					found = true
+				}
+			}
+			if !found {
+				items = append(items, rosterItem{JID: peer, Subscription: "none"})
+			}
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return nil, err
+		}
+	}
 	out := make([]RosterEntry, 0, len(items))
 	for _, it := range items {
-		out = append(out, RosterEntry{JID: it.JID, Name: it.Name, Subscription: it.Subscription})
+		name := s.rosterDisplayName(ctx, userID, it.JID, it.Name)
+		presence := "unknown"
+		if it.Subscription == "to" || it.Subscription == "both" {
+			presence = s.presenceFor(it.JID).State
+		}
+		out = append(out, RosterEntry{JID: it.JID, Name: name, Subscription: it.Subscription, Presence: presence, SubscriptionRequest: requests[it.JID]})
 	}
 	return out, nil
 }
 
 func (s *Server) UpsertChatRoster(ctx context.Context, userID, jid, name string) error {
-	return s.upsertRoster(ctx, userID, rosterItem{
-		JID: ParseJID(jid).Bare(), Name: name, Subscription: "both", GroupsJSON: "[]",
-	})
+	peer := ParseJID(jid)
+	if peer.Local == "" || peer.Domain == "" {
+		return fmt.Errorf("invalid JID")
+	}
+	items, err := s.listRoster(ctx, userID)
+	if err != nil {
+		return err
+	}
+	item := rosterItem{JID: peer.Bare(), Subscription: "none", GroupsJSON: "[]"}
+	for _, existing := range items {
+		if existing.JID == peer.Bare() {
+			item = existing
+			break
+		}
+	}
+	if name != "" {
+		item.Name = name
+	}
+	return s.upsertRoster(ctx, userID, item)
 }
 
 func (s *Server) ChatHistory(ctx context.Context, ownerBare, withBare string, limit int) ([]HistoryMsg, error) {
@@ -184,7 +236,22 @@ func (s *Server) SendChatMessage(ctx context.Context, fromEmail, to, body string
 }
 
 func (s *Server) SubscribeChat(bare string) (<-chan ChatEvent, func()) {
-	return s.hub.subscribeWeb(bare)
+	s.webPresenceMu.Lock()
+	defer s.webPresenceMu.Unlock()
+	p := s.savedWebPresence(context.Background(), bare)
+	s.recordPresence(context.Background(), bare+"/web", p.State, p.Status)
+	ch, cancel := s.hub.subscribeWeb(bare)
+	return ch, func() {
+		s.webPresenceMu.Lock()
+		defer s.webPresenceMu.Unlock()
+		cancel()
+		s.hub.mu.RLock()
+		n := len(s.hub.web[ParseJID(bare).Bare()])
+		s.hub.mu.RUnlock()
+		if n == 0 {
+			s.recordPresence(context.Background(), bare+"/web", "offline", "")
+		}
+	}
 }
 
 func parseMessageAddrs(stanza string) (from, to string) {

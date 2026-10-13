@@ -129,9 +129,13 @@ func (s *Server) ensurePEPNode(ctx context.Context, ownerBare, node string) (str
 	}
 	id = storage.NewID()
 	_, err = s.db.ExecContext(ctx, s.rebind(
-		`INSERT INTO xmpp_pep_nodes (id, owner_bare_jid, node, access_model, updated_at) VALUES (?, ?, ?, 'presence', ?)`),
+		`INSERT INTO xmpp_pep_nodes (id, owner_bare_jid, node, access_model, updated_at) VALUES (?, ?, ?, 'presence', ?) ON CONFLICT(owner_bare_jid,node) DO NOTHING`),
 		id, ownerBare, node, time.Now().UTC(),
 	)
+	if err != nil {
+		return "", err
+	}
+	err = s.db.QueryRowContext(ctx, s.rebind(`SELECT id FROM xmpp_pep_nodes WHERE owner_bare_jid=? AND node=?`), ownerBare, node).Scan(&id)
 	return id, err
 }
 
@@ -143,8 +147,17 @@ func (s *Server) publishPEP(ctx context.Context, ownerBare, node, itemID, payloa
 	if itemID == "" {
 		itemID = "current"
 	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var max int
+	if err = tx.QueryRowContext(ctx, s.rebind(`SELECT max_items FROM xmpp_pep_nodes WHERE id=?`), nodeID).Scan(&max); err != nil {
+		return err
+	}
 	id := storage.NewID()
-	_, err = s.db.ExecContext(ctx, s.rebind(`
+	_, err = tx.ExecContext(ctx, s.rebind(`
 		INSERT INTO xmpp_pep_items (id, node_id, item_id, payload, updated_at)
 		VALUES (?, ?, ?, ?, ?)
 		ON CONFLICT(node_id, item_id) DO UPDATE SET
@@ -152,7 +165,15 @@ func (s *Server) publishPEP(ctx context.Context, ownerBare, node, itemID, payloa
 			updated_at = excluded.updated_at`),
 		id, nodeID, itemID, payload, time.Now().UTC(),
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	if max == 1 {
+		if _, err = tx.ExecContext(ctx, s.rebind(`DELETE FROM xmpp_pep_items WHERE node_id=? AND item_id<>?`), nodeID, itemID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 func (s *Server) getPEPItems(ctx context.Context, ownerBare, node string) ([]pepItem, error) {

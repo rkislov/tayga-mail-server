@@ -150,8 +150,12 @@ func (s *Store) ListMessages(ctx context.Context, mailboxID string) ([]*Message,
 }
 
 func (s *Store) UpdateMessageFlags(ctx context.Context, messageID, flags string) error {
-	q := s.rebind(`UPDATE messages SET flags = ? WHERE id = ?`)
-	res, err := s.db.ExecContext(ctx, q, flags, messageID)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx, s.rebind(`UPDATE messages SET flags=? WHERE id=?`), flags, messageID)
 	if err != nil {
 		return err
 	}
@@ -162,7 +166,10 @@ func (s *Store) UpdateMessageFlags(ctx context.Context, messageID, flags string)
 	if n == 0 {
 		return ErrNotFound
 	}
-	return nil
+	if err = s.syncMessageTask(ctx, tx, messageID, flags); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) UpdateMessagePath(ctx context.Context, messageID, filePath string) error {

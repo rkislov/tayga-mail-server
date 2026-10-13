@@ -1,0 +1,20 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert');
+const source=fs.readFileSync('frontend/src/app.js','utf8');
+const box={children:[],querySelector:()=>null,appendChild(x){this.children.push(x)}};
+let submit,requests=0,resolveRequest;
+const input={value:'hello'},button={disabled:false};
+const context={chatState:{peer:'bob@example.com',me:'alice@example.com',sending:false},state:{},document:{createElement:()=>({dataset:{}})},Array,JSON,Date,escapeHtml:x=>x,chatBare:x=>String(x||'').split('/')[0].toLowerCase(),$:id=>id==='chat-messages'?box:id==='chat-body'?input:id==='form-chat-send'?{addEventListener:(_,fn)=>submit=fn}:null,api:()=>{requests++;return new Promise(resolve=>resolveRequest=resolve)},setMsg:()=>{},scrollChatBottom:()=>{}};
+vm.createContext(context);
+vm.runInContext(source.slice(source.indexOf('function appendChatBubble'),source.indexOf('function scrollChatBottom')),context);
+vm.runInContext(source.slice(source.indexOf('$("form-chat-send")?.addEventListener'),source.indexOf('function filesGoUp')),context);
+(async()=>{
+const e={preventDefault(){},currentTarget:{querySelector:()=>button}};
+const ev={id:'one',from:'alice@example.com/web',to:'bob@example.com',body:'hello'};
+const pending=submit(e);await submit(e);assert.equal(requests,1);
+context.appendChatBubble(ev);resolveRequest(ev);await pending;assert.equal(box.children.length,1);
+context.appendChatBubble(ev);assert.equal(box.children.length,1);
+context.appendChatBubble({...ev,id:'two'});assert.equal(box.children.length,2);
+context.appendChatBubble({...ev,from:'bob@example.com'});assert.equal(box.children.length,3);
+box.children=[];context.appendChatBubble(ev);assert.equal(box.children.length,1);
+console.log('Chat: HTTP/SSE deduplication, repeated submit and identical text with distinct IDs — OK');
+})().catch(e=>{console.error(e);process.exitCode=1});

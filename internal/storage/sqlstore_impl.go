@@ -219,15 +219,20 @@ func (s *Store) CountUsersByDomain(ctx context.Context, domainID string) (int, e
 }
 
 func (s *Store) DeleteDomain(ctx context.Context, tenantID, domainID string) error {
-	n, err := s.CountUsersByDomain(ctx, domainID)
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
-	if n > 0 {
-		return fmt.Errorf("domain still has %d users", n)
+	defer tx.Rollback()
+	if s.dialect == DialectPostgres {
+		var locked string
+		if err := tx.QueryRowContext(ctx, s.rebind(`SELECT id FROM domains WHERE id = ? AND tenant_id = ? FOR UPDATE`), domainID, tenantID).Scan(&locked); err != nil {
+			return mapErr(err)
+		}
 	}
-	q := s.rebind(`DELETE FROM domains WHERE id = ? AND tenant_id = ?`)
-	res, err := s.db.ExecContext(ctx, q, domainID, tenantID)
+
+	q := s.rebind(`DELETE FROM domains WHERE id = ? AND tenant_id = ? AND NOT EXISTS (SELECT 1 FROM users WHERE domain_id = domains.id)`)
+	res, err := tx.ExecContext(ctx, q, domainID, tenantID)
 	if err != nil {
 		return mapErr(err)
 	}
@@ -235,7 +240,34 @@ func (s *Store) DeleteDomain(ctx context.Context, tenantID, domainID string) err
 	if aff == 0 {
 		return ErrNotFound
 	}
-	return nil
+	return tx.Commit()
+}
+
+func (s *Store) DeleteTenant(ctx context.Context, id string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if s.dialect == DialectPostgres {
+		var locked string
+		if err := tx.QueryRowContext(ctx, s.rebind(`SELECT id FROM tenants WHERE id = ? FOR UPDATE`), id).Scan(&locked); err != nil {
+			return mapErr(err)
+		}
+	}
+
+	res, err := tx.ExecContext(ctx, s.rebind(`DELETE FROM tenants WHERE id=? AND NOT EXISTS (SELECT 1 FROM domains WHERE tenant_id=tenants.id) AND NOT EXISTS (SELECT 1 FROM users WHERE tenant_id=tenants.id)`), id)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return fmt.Errorf("organization is not empty or not found")
+	}
+	return tx.Commit()
 }
 
 func (s *Store) CreateUser(ctx context.Context, u *User) (*User, error) {

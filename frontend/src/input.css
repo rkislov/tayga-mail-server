@@ -3499,3 +3499,11 @@ html[data-color-mode="light"] {
 .chart-host svg {color:var(--ui-text-70);width:100%;max-height:260px;}
 
 #chart-sparklines {display:block;}
+
+.directory-table-wrap {overflow-x:auto;border:1px solid var(--ui-border,#d9dfdc);border-radius:18px;}
+.directory-table {width:100%;border-collapse:collapse;text-align:left;font-size:.9rem;}
+.directory-table th {font-size:.75rem;letter-spacing:.04em;color:var(--ui-muted,#61726a);background:var(--ui-surface,#f2f5f3);}
+.directory-table th,.directory-table td {padding:14px 18px;border-bottom:1px solid var(--ui-border,#d9dfdc);}
+.directory-table tbody tr {cursor:pointer;transition:background .16s ease;}
+.directory-table tbody tr:hover,.directory-table tbody tr:focus-visible {background:color-mix(in srgb,var(--ui-accent,#356550) 12%,transparent);outline:2px solid var(--ui-accent,#356550);outline-offset:-2px;}
+.directory-table tbody tr:last-child td {border-bottom:0;}
