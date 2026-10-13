@@ -166,7 +166,7 @@ func (h *ewsHandler) writeTask(ctx context.Context, u *storage.User, body string
 			// Outlook clears optional fields even when this server never stored them.
 			if deleting {
 				switch field {
-				case "item:ReminderDueBy", "item:ReminderIsSet", "item:ReminderMinutesBeforeStart", "task:BillingInformation", "task:Companies", "task:Contacts", "task:Mileage", "task:ActualWork", "task:TotalWork":
+				case "task:Recurrence", "item:ReminderDueBy", "item:ReminderIsSet", "item:ReminderMinutesBeforeStart", "task:BillingInformation", "task:Companies", "task:Contacts", "task:Mileage", "task:ActualWork", "task:TotalWork":
 					delete(props, field)
 					continue
 				}
