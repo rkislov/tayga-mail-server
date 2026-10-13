@@ -5207,7 +5207,7 @@ function renderChatRoster() {
       <button type="button" class="msg-item${jid === peer ? " is-active" : ""}" data-jid="${escapeHtml(jid)}">
         <span class="msg-subject">${escapeHtml(label)}</span>
         <span class="msg-date">${r.group?"":escapeHtml(jid)+" · "}${escapeHtml(presence)}</span>
-      </button>${r.subscription_request?`<div class="actions"><span>${escapeHtml(t('presence_request'))}</span><button class="btn-secondary btn-sm" data-sub-action="accept" data-peer="${escapeHtml(jid)}">${escapeHtml(t('presence_accept'))}</button><button class="btn-secondary btn-sm" data-sub-action="reject" data-peer="${escapeHtml(jid)}">${escapeHtml(t('presence_reject'))}</button></div>`:''}
+      </button>${r.subscription_request?`<section class="chat-presence-request" aria-label="${escapeHtml(t('presence_request'))}"><strong>${escapeHtml(label)}</strong><span class="meta">${escapeHtml(jid)}</span><p>${escapeHtml(t('presence_request'))}</p><div class="chat-presence-request-actions"><button type="button" class="btn-secondary btn-sm" data-sub-action="accept" data-peer="${escapeHtml(jid)}">${escapeHtml(t('presence_accept'))}</button><button type="button" class="btn-secondary btn-sm" data-sub-action="reject" data-peer="${escapeHtml(jid)}">${escapeHtml(t('presence_reject'))}</button></div></section>`:''}
     </li>`;
   }).join("") || `<li class="meta msg-empty">${escapeHtml(t("chat_select"))}</li>`;
   list.querySelectorAll("[data-jid]").forEach((btn) => {
