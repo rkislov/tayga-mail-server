@@ -59,6 +59,9 @@ func (s *Session) handlePubSubIQ(ctx context.Context, id, typ, to, inner string)
 		return s.writeString(iqBadRequest(id))
 	}
 	node := op.Node
+	if s.srv.log != nil && omemoNode(node) {
+		s.srv.log.Info("xmpp OMEMO PEP request", "user_id", s.user.ID, "operation", op.XMLName.Local, "type", typ, "node", node)
+	}
 	if typ == "set" && owner != s.JID.Bare() {
 		return s.writeString(iqForbidden(id))
 	}
@@ -176,6 +179,14 @@ func (s *Session) handlePubSubIQ(ctx context.Context, id, typ, to, inner string)
 			return s.writeString(iqBadRequest(id))
 		}
 		items, err := s.srv.getPEPItems(ctx, owner, node)
+		if err != nil {
+			return s.writeString(iqInternalError(id))
+		}
+		var nodeID string
+		err = s.srv.db.QueryRowContext(ctx, s.srv.rebind(`SELECT id FROM xmpp_pep_nodes WHERE owner_bare_jid=? AND node=?`), owner, node).Scan(&nodeID)
+		if err == sql.ErrNoRows {
+			return s.writeString(fmt.Sprintf(`<iq type='error' id='%s' from='%s' to='%s'><error type='cancel'><item-not-found xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/></error></iq>`, xmlEscape(id), xmlEscape(owner), xmlEscape(s.JID.Full())))
+		}
 		if err != nil {
 			return s.writeString(iqInternalError(id))
 		}
