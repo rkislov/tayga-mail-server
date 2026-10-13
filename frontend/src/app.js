@@ -422,6 +422,7 @@ function showApp(name) {
 }
 
 const LARGE_ATTACH_BYTES = 10 * 1024 * 1024;
+const WEB_UPLOAD_BYTES = 10 * 1024 * 1024 * 1024;
 
 function isMobilePane() {
   return window.matchMedia && window.matchMedia("(max-width: 900px)").matches;
@@ -436,6 +437,7 @@ function setMobilePane(mode) {
 }
 
 async function uploadLargeAttach(file) {
+  if(file.size>WEB_UPLOAD_BYTES) throw new Error("Максимальный размер файла — 10 ГиБ");
   const path = "mail-out/" + Date.now() + "-" + file.name.replace(/[^\w.\-]+/g, "_");
   const headers = { "Content-Type": "application/octet-stream" };
   if (state.tokens?.access_token) headers.Authorization = "Bearer " + state.tokens.access_token;
@@ -2961,19 +2963,21 @@ $("btn-compose-send")?.addEventListener("click", async () => {
     let text = getComposeText();
     let html = getComposeHTML();
     const file = $("compose-attach")?.files?.[0];
+    let attachments = [];
     if (file && file.size >= LARGE_ATTACH_BYTES) {
       setMsg($("compose-msg"), "Uploading…");
       const url = await uploadLargeAttach(file);
       text += `\n\n${file.name}: ${url}\n`;
       html += `<p><a href="${escapeHtml(url)}">${escapeHtml(file.name)}</a></p>`;
     } else if (file && file.size > 0) {
-      setMsg($("compose-msg"), "large attachments only via link (≥10 MiB); smaller files: use Files app", "err");
-      return;
+      const data = await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=()=>reject(new Error('Не удалось прочитать файл'));reader.readAsDataURL(file)});
+      attachments = [{name:file.name,data}];
     }
     const payload = {
       to,
       cc: ($("compose-cc")?.value || "").split(/[,;]/).map(value=>value.trim()).filter(Boolean),
       subject: $("compose-subject").value,
+      attachments,
       text,
     };
     if (html && /<[a-z][\s\S]*>/i.test(html)) payload.html = html;
@@ -5102,11 +5106,11 @@ $('chat-attach')?.addEventListener('click',()=>{
 });
 $('chat-file')?.addEventListener('change',async e=>{
  const file=e.target.files?.[0],peer=chatState.peer;e.target.value='';if(!file||!peer||chatState.sending)return;
- if(file.size>64*1024*1024){setMsg($('chat-msg'),mailImageText('Максимум 64 МиБ','Maximum 64 MiB'),'err');return}
+ if(file.size>WEB_UPLOAD_BYTES){setMsg($('chat-msg'),mailImageText('Максимум 10 ГиБ','Maximum 10 GiB'),'err');return}
  chatState.sending=true;$('chat-attach').disabled=true;
- const name=file.name.replace(/[\/\\\r\n]/g,'_'),path='Chat/'+crypto.randomUUID()+'/'+name;let share;
+ const name=file.name.replace(/[\/\\\r\n]/g,'_'),path='chat/'+crypto.randomUUID()+'/'+name;let share;
  try {
-  await new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest();xhr.open('PUT','/api/v1/files/content?path='+encodeURIComponent(path));xhr.setRequestHeader('Authorization','Bearer '+state.tokens.access_token);xhr.timeout=120000;xhr.upload.onprogress=ev=>{if(ev.lengthComputable)setMsg($('chat-msg'),Math.round(ev.loaded/ev.total*100)+'%')};xhr.onerror=xhr.ontimeout=()=>reject(new Error(mailImageText('Ошибка загрузки','Upload failed')));xhr.onload=()=>xhr.status>=200&&xhr.status<300?resolve():reject(new Error(mailImageText('Не удалось загрузить файл','Unable to upload file')));xhr.send(file)});
+  await new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest();xhr.open('PUT','/api/v1/files/content?path='+encodeURIComponent(path));xhr.setRequestHeader('Authorization','Bearer '+state.tokens.access_token);xhr.timeout=0;xhr.upload.onprogress=ev=>{if(ev.lengthComputable)setMsg($('chat-msg'),Math.round(ev.loaded/ev.total*100)+'%')};xhr.onerror=xhr.ontimeout=()=>reject(new Error(mailImageText('Ошибка загрузки','Upload failed')));xhr.onload=()=>xhr.status>=200&&xhr.status<300?resolve():reject(new Error(mailImageText('Не удалось загрузить файл','Unable to upload file')));xhr.send(file)});
   share=await api('/api/v1/files/shares',{method:'POST',body:JSON.stringify({path,rights:'read',ttl_hours:168})});
   const ev=await api('/api/v1/chat/send',{method:'POST',body:JSON.stringify({to:peer,body:name+'\n'+share.url})});
   if(chatBare(chatState.peer)===chatBare(peer)){appendChatBubble(ev);scrollChatBottom()}

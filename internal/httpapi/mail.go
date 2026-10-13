@@ -574,14 +574,15 @@ func (s *Server) mailDeleteMessage(w http.ResponseWriter, r *http.Request, au *a
 
 func (s *Server) mailSend(w http.ResponseWriter, r *http.Request, au *authUser) {
 	var req struct {
-		To      []string `json:"to"`
-		Cc      []string `json:"cc"`
-		Bcc     []string `json:"bcc"`
-		Subject string   `json:"subject"`
-		Text    string   `json:"text"`
-		HTML    string   `json:"html"`
+		To          []string             `json:"to"`
+		Cc          []string             `json:"cc"`
+		Bcc         []string             `json:"bcc"`
+		Subject     string               `json:"subject"`
+		Text        string               `json:"text"`
+		HTML        string               `json:"html"`
+		Attachments []outgoingAttachment `json:"attachments"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<20)).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
 		return
 	}
@@ -599,6 +600,12 @@ func (s *Server) mailSend(w http.ResponseWriter, r *http.Request, au *authUser) 
 	}
 	msgid := fmt.Sprintf("<%d.%s@tayga>", time.Now().UnixNano(), strings.ReplaceAll(au.ID, "-", "")[:8])
 	raw := buildOutgoingMIME(user.Email, user.DisplayName, to, cc, bcc, req.Subject, req.Text, req.HTML, msgid)
+
+	raw, err = attachOutgoingFiles(raw, req.Attachments)
+	if err != nil {
+		writeJSON(w, 400, map[string]string{"error": err.Error()})
+		return
+	}
 
 	// Save copy to Sent
 	sentPath, _ := s.ms.EnsureFolder(user.Email, "Sent")
