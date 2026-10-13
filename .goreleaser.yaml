@@ -46,6 +46,12 @@ archives:
       - deploy/systemd/tayga.service
       - docs/setup.md
       - docs/setup-filters.md
+      - docs/web-omemo.md
+      - frontend/LICENSE
+      - frontend/package*.json
+      - frontend/build-*.cjs
+      - frontend/src/**/*
+      - internal/frontend/dist/assets/libomemo-LICENSE.txt
       - docs/release-*.md
       - internal/flowsync/LICENSE
       - internal/flowsync/NOTICE
