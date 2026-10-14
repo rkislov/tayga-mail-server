@@ -9,13 +9,14 @@ import (
 	"github.com/tayga/tms/internal/storage"
 )
 
-// ReminderLoop scans calendars for events starting soon and notifies online users.
+// ReminderLoop scans calendars for events starting soon and notifies online users and registered background recipients.
 type ReminderLoop struct {
-	Hub    *Hub
-	Store  storage.Driver
-	Log    *slog.Logger
-	Lead   time.Duration // how far ahead to remind (default 15m)
-	Poll   time.Duration // scan interval (default 1m)
+	AdditionalUsers func(context.Context) ([]string, error)
+	Hub             *Hub
+	Store           storage.Driver
+	Log             *slog.Logger
+	Lead            time.Duration // how far ahead to remind (default 15m)
+	Poll            time.Duration // scan interval (default 1m)
 
 	mu    sync.Mutex
 	fired map[string]time.Time // key userID|objectID → fired at
@@ -54,7 +55,7 @@ func (r *ReminderLoop) loop(ctx context.Context) {
 }
 
 func (r *ReminderLoop) tick(ctx context.Context) {
-	ids := r.Hub.OnlineUserIDs()
+	ids := r.recipientIDs(ctx)
 	if len(ids) == 0 {
 		return
 	}
@@ -140,4 +141,29 @@ func icsSummary(data string) string {
 		}
 	}
 	return ""
+}
+
+func (r *ReminderLoop) recipientIDs(ctx context.Context) []string {
+	ids := r.Hub.OnlineUserIDs()
+	if r.AdditionalUsers == nil {
+		return ids
+	}
+	additional, err := r.AdditionalUsers(ctx)
+	if err != nil {
+		if r.Log != nil {
+			r.Log.Warn("list reminder recipients", "error", err)
+		}
+		return ids
+	}
+	seen := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		seen[id] = true
+	}
+	for _, id := range additional {
+		if id != "" && !seen[id] {
+			seen[id] = true
+			ids = append(ids, id)
+		}
+	}
+	return ids
 }

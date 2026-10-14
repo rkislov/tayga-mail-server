@@ -408,7 +408,11 @@ func run(cfgPath string) error {
 			return u.ID
 		},
 	}
-	(&notify.ReminderLoop{Hub: notifyHub, Store: store, Log: log}).Start(ctx)
+	reminders := &notify.ReminderLoop{Hub: notifyHub, Store: store, Log: log}
+	if pushService != nil {
+		reminders.AdditionalUsers = pushService.UserIDs
+	}
+	reminders.Start(ctx)
 
 	if cfg.Storage.Driver == "postgres" {
 		if sqlStore, ok := store.(*storage.Store); ok {

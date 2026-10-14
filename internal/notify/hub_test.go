@@ -1,6 +1,7 @@
 package notify
 
 import (
+	"context"
 	"testing"
 	"time"
 )
@@ -38,5 +39,23 @@ func TestConcurrentPublishUnsubscribe(t *testing.T) {
 		unsub()
 		unsub()
 		<-done
+	}
+}
+
+func TestReminderRecipientsIncludeOfflinePushSubscribers(t *testing.T) {
+	h := NewHub()
+	_, unsub := h.Subscribe("online")
+	defer unsub()
+	r := &ReminderLoop{Hub: h, AdditionalUsers: func(context.Context) ([]string, error) { return []string{"offline", "online", "offline", ""}, nil }}
+	ids := r.recipientIDs(context.Background())
+	if len(ids) != 2 {
+		t.Fatalf("recipients=%v", ids)
+	}
+	found := false
+	for _, id := range ids {
+		found = found || id == "offline"
+	}
+	if !found {
+		t.Fatal("offline subscriber missing")
 	}
 }

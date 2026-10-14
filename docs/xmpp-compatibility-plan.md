@@ -60,3 +60,9 @@ Validation: subscription ownership, persistent keys, payload privacy, deduplicat
 ## Archive preferences
 
 MAM preferences use [XEP-0441](https://xmpp.org/extensions/xep-0441.html), separated from XEP-0313. IQ get/set persists each authenticated owner’s default (`always`, `never`, `roster`) and always/never JID exceptions. Resource-specific exceptions match the original stanza addresses. The default remains `always`; changing preferences affects future archive writes only. The protocol is optional and XEP-0441 cautions that disabling archiving can interfere with offline synchronization. Tests cover owner isolation, invalid values, normalized JIDs and roster/resource matching.
+
+## Multi-device message copies
+
+Carbons now use a shared path for C2S, web plaintext, web OMEMO and bot outgoing messages. Direct full-JID delivery also sends received copies to other Carbons-enabled resources without duplicating the original on the selected resource. Forwarded message/body namespaces are explicit, and private/no-copy hints and already wrapped carbon messages suppress copying. Invalid enable/disable commands are rejected. Expanded `urn:xmpp:carbons:rules:0` is deliberately not advertised: full MUC eligibility and error-response tracking remain incomplete. Component replacement also closes the previous connection outside the hub lock to prevent recursive unregister deadlocks.
+
+References: [Message Carbons](https://xmpp.org/extensions/xep-0280.html), [MAM Preferences](https://xmpp.org/extensions/xep-0441.html).

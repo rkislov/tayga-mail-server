@@ -85,7 +85,10 @@ func (s *Session) handleIQ(se xml.StartElement) error {
 		}
 		return s.handleMAMIQ(ctx, id, typ, inner)
 
-	case strings.Contains(inner, "urn:xmpp:carbons:2"):
+	case request.XMLName.Space == "urn:xmpp:carbons:2":
+		if to != "" && to != s.JID.Bare() && to != s.JID.Domain && to != s.srv.domain {
+			return s.writeString(iqForbidden(id))
+		}
 		return s.handleCarbonsIQ(id, typ, inner)
 
 	case typ == "get" || typ == "set":
@@ -325,17 +328,17 @@ func (s *Session) handleMAMIQ(ctx context.Context, id, typ, inner string) error 
 }
 
 func (s *Session) handleCarbonsIQ(id, typ, inner string) error {
-	if typ != "set" {
+	var request struct {
+		XMLName xml.Name
+		Inner   string `xml:",innerxml"`
+	}
+	if typ != "set" || xml.Unmarshal([]byte(inner), &request) != nil || request.XMLName.Space != "urn:xmpp:carbons:2" || (request.XMLName.Local != "enable" && request.XMLName.Local != "disable") || strings.TrimSpace(request.Inner) != "" {
 		return s.writeString(iqBadRequest(id))
 	}
 	s.mu.Lock()
-	if strings.Contains(inner, "<enable") {
-		s.carbons = true
-	} else if strings.Contains(inner, "<disable") {
-		s.carbons = false
-	}
+	s.carbons = request.XMLName.Local == "enable"
 	s.mu.Unlock()
-	return s.writeString(fmt.Sprintf(`<iq type='result' id='%s'/>`, xmlEscape(id)))
+	return s.writeString(fmt.Sprintf(`<iq type='result' id='%s' from='%s' to='%s'/>`, xmlEscape(id), xmlEscape(s.JID.Bare()), xmlEscape(s.JID.Full())))
 }
 
 func extractItemPayload(inner string) string {

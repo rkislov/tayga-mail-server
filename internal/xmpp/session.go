@@ -472,24 +472,7 @@ func (s *Session) handleMessage(se xml.StartElement) error {
 }
 
 func (s *Session) fanoutCarbon(kind, forwardedMessage string) {
-	for _, other := range s.srv.hub.Sessions(s.JID.Bare()) {
-		if other == s {
-			continue
-		}
-		other.mu.Lock()
-		on := other.carbons
-		other.mu.Unlock()
-		if !on {
-			continue
-		}
-		msg := fmt.Sprintf(
-			`<message from='%s' to='%s' type='chat'>`+
-				`<%s xmlns='urn:xmpp:carbons:2'><forwarded xmlns='urn:xmpp:forward:0'>%s</forwarded></%s>`+
-				`</message>`,
-			xmlEscape(s.JID.Bare()), xmlEscape(other.JID.Full()), kind, forwardedMessage, kind,
-		)
-		other.SendRaw([]byte(msg))
-	}
+	s.srv.hub.fanoutCarbon(s.JID, kind, forwardedMessage)
 }
 
 func (s *Session) handlePresence(se xml.StartElement) error {
