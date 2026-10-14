@@ -466,6 +466,7 @@ function isAuthPublicPath(path) {
 }
 
 function clearSession() {
+  disableWebPush().catch(() => {});
   stopChatLive();
   state.tokens = null;
  monitorRequest++;
@@ -2290,7 +2291,7 @@ function showToast(ev) {
   host.appendChild(el);
   setTimeout(() => el.remove(), 8000);
 
-  if (typeof Notification !== "undefined" && Notification.permission === "granted" && document.hidden) {
+  if (typeof Notification !== "undefined" && Notification.permission === "granted" && document.hidden && !webPushEnabled) {
     try {
       const n = new Notification(ev.title || t("notify_mail"), {
         body: ev.body || "",
@@ -2307,6 +2308,7 @@ function showToast(ev) {
 
 function openNotifyHref(href) {
   if (!href) return;
+  if (href === "chat") { showApp("chat"); return; }
   if(href.startsWith("chat?peer=")){showApp("chat");openChatPeer(decodeURIComponent(href.slice(10)));return;}
   if (href === "mail" || href.startsWith("mail")) {
     showApp("mail");
@@ -2321,6 +2323,15 @@ function openNotifyHref(href) {
 }
 
 function startNotifyLive() {
+  if ('serviceWorker' in navigator) navigator.serviceWorker.getRegistration('/').then(async registration => {
+    webPushEnabled = !!(await registration?.pushManager.getSubscription());
+    updatePushButton();
+  }).catch(() => {});
+  const notificationRoute = new URL(location.href).searchParams.get('notification');
+  if (['mail','calendar','chat'].includes(notificationRoute)) {
+    const url = new URL(location.href); url.searchParams.delete('notification'); history.replaceState(null,'',url);
+    setTimeout(() => openNotifyHref(notificationRoute), 0);
+  }
   stopNotifyLive();
   const tok = state.tokens?.access_token;
   if (!tok || typeof EventSource === "undefined") return;
@@ -2336,16 +2347,44 @@ function startNotifyLive() {
   };
 }
 
-$("btn-notify-perm")?.addEventListener("click", async () => {
-  if (typeof Notification === "undefined") return;
+let webPushEnabled = false;
+function updatePushButton() {
+ const button = $('btn-notify-perm');
+ if (button) { button.setAttribute('aria-pressed', String(webPushEnabled)); button.title = webPushEnabled ? 'Отключить фоновые уведомления' : 'Включить фоновые уведомления'; }
+}
+async function enableWebPush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) throw new Error('Web Push недоступен в этом браузере. На iOS откройте сайт с домашнего экрана.');
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') throw new Error(t('notify_perm_denied'));
+  const config = await api('/api/v1/push');
+  await navigator.serviceWorker.register('/sw.js');
+  const registration = await navigator.serviceWorker.ready;
+  let subscription = await registration.pushManager.getSubscription();
+  if (!subscription) subscription = await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64urlToBuf(config.public_key)});
+  await api('/api/v1/push', {method:'POST',body:JSON.stringify(subscription)});
+  webPushEnabled = true;
+  updatePushButton();
+}
+async function disableWebPush() {
+  const token = state.tokens?.access_token;
+  webPushEnabled = false;
+  updatePushButton();
+  if (!('serviceWorker' in navigator)) return;
+  const registration = await navigator.serviceWorker.getRegistration('/');
+  const subscription = await registration?.pushManager.getSubscription();
+  if (!subscription) return;
+  // Capture credentials before clearSession clears state.
+  if (token) await fetch('/api/v1/push', {method:'DELETE',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(subscription),signal:AbortSignal.timeout(5000)}).catch(() => {});
+  await subscription.unsubscribe();
+}
+$('btn-notify-perm')?.addEventListener('click', async () => {
   try {
-    const perm = await Notification.requestPermission();
-    if (perm === "granted") {
-      showToast({ kind: "system", title: t("notify_perm_ok"), body: "" });
-    } else {
-      showToast({ kind: "system", title: t("notify_perm_denied"), body: "" });
-    }
-  } catch (_) {}
+    if (webPushEnabled) { await disableWebPush(); showToast({kind:'system',title:'Фоновые уведомления отключены'}); }
+    else { await enableWebPush(); showToast({kind:'system',title:t('notify_perm_ok')}); }
+  } catch (error) { showToast({kind:'system',title:'Уведомления',body:error.message}); }
+});
+navigator.serviceWorker?.addEventListener('message', event => {
+  if (event.data?.type === 'tayga-notification' && state.tokens?.access_token) openNotifyHref(event.data.href);
 });
 
 $("form-login").addEventListener("submit", async (e) => {

@@ -33,6 +33,7 @@ import (
 	"github.com/tayga/tms/internal/storage"
 	"github.com/tayga/tms/internal/tlsutil"
 	"github.com/tayga/tms/internal/version"
+	"github.com/tayga/tms/internal/webpush"
 	"github.com/tayga/tms/internal/xmpp"
 )
 
@@ -382,6 +383,19 @@ func run(cfgPath string) error {
 	}
 	imapHub := imapserver.NewHub(store)
 	notifyHub := notify.NewHub()
+	var pushService *webpush.Service
+	if sqlStore, ok := store.(*storage.Store); ok {
+		pushService, err = webpush.New(ctx, sqlStore, cfg.Server.Hostname)
+		if err != nil {
+			return fmt.Errorf("initialize web push: %w", err)
+		}
+		notifyHub.SetSink(func(user string, event notify.Event) {
+			if err := pushService.Enqueue(user, event); err != nil {
+				log.Warn("queue web push", "error", err)
+			}
+		})
+		pushService.Start(ctx)
+	}
 	sieveEng := sieve.New(store, ms, log)
 	sieveEng.Notifier = notify.Fanout{
 		Idle: imapHub,
@@ -480,6 +494,20 @@ func run(cfgPath string) error {
 	}
 
 	xmppSrv := xmpp.New(cfg, log, store, authn, tlsMgr)
+	xmppSrv.SetNotificationSink(func(recipient string, event xmpp.ChatEvent) {
+		user, err := store.GetUserByEmail(ctx, recipient)
+		if err == nil && user != nil {
+			if pushService != nil {
+				id := event.ID
+				if id == "" {
+					id = storage.NewID()
+				}
+				if err := pushService.Enqueue(user.ID, notify.Event{ID: id, Kind: "chat", Href: "chat"}); err != nil {
+					log.Warn("queue chat push", "error", err)
+				}
+			}
+		}
+	})
 	if err := xmppSrv.Start(ctx); err != nil {
 		return fmt.Errorf("xmpp: %w", err)
 	}
@@ -497,6 +525,7 @@ func run(cfgPath string) error {
 	httpSrv.SetXMPP(xmppSrv)
 	httpSrv.SetMigrate(migSvc)
 	httpSrv.SetNotify(notifyHub)
+	httpSrv.SetWebPush(pushService)
 	httpSrv.SetSIEM(siemExp)
 	if err := httpSrv.Start(ctx); err != nil {
 		return fmt.Errorf("http: %w", err)

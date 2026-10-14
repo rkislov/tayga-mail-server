@@ -23,6 +23,7 @@ import (
 	"github.com/tayga/tms/internal/siem"
 	"github.com/tayga/tms/internal/storage"
 	"github.com/tayga/tms/internal/tlsutil"
+	"github.com/tayga/tms/internal/webpush"
 	"github.com/tayga/tms/internal/xmpp"
 )
 
@@ -39,6 +40,7 @@ type Server struct {
 	xmpp       xmpp.Gateway
 	migrate    *migrate.Service
 	notify     *notify.Hub
+	webpush    *webpush.Service
 	siem       *siem.Exporter
 	servers    []*http.Server
 }
@@ -151,6 +153,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/migration/", s.handleMigration)
 	mux.HandleFunc("/api/v1/admin/migration", s.handleAdminMigration)
 	mux.HandleFunc("/api/v1/admin/mail-log", s.handleAdminMailLog)
+	mux.HandleFunc("/api/v1/push", s.handleWebPush)
 	mux.HandleFunc("/api/v1/notifications", s.handleNotifications)
 	mux.HandleFunc("/api/v1/notifications/", s.handleNotifications)
 

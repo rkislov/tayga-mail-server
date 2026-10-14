@@ -74,3 +74,23 @@ func TestWebSubscriptionConcurrentClose(t *testing.T) {
 		<-done
 	}
 }
+
+func TestNotificationSinkIncludesOfflineRecipientsOnly(t *testing.T) {
+	srv, _, user := testServer(t)
+	var recipients []string
+	srv.SetNotificationSink(func(recipient string, event ChatEvent) {
+		// Must be outside hub lock: notification delivery can inspect online sessions.
+		_ = srv.hub.Sessions(recipient)
+		recipients = append(recipients, recipient)
+	})
+	if _, err := srv.SendChatMessage(context.Background(), user.Email, "bob@example.com", "hello"); err != nil {
+		t.Fatal(err)
+	}
+	if len(recipients) != 1 || recipients[0] != "bob@example.com" {
+		t.Fatalf("recipients=%v", recipients)
+	}
+	srv.hub.pushWeb(user.Email, ChatEvent{Type: "presence", From: "bob@example.com"})
+	if len(recipients) != 1 {
+		t.Fatal("presence must not notify")
+	}
+}

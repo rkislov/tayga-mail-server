@@ -80,7 +80,6 @@ func (h *Hub) subscribeWeb(bare string) (<-chan ChatEvent, func()) {
 
 func (h *Hub) pushWeb(bare string, ev ChatEvent) {
 	h.mu.RLock()
-	defer h.mu.RUnlock()
 	subs := h.web[ParseJID(bare).Bare()]
 	list := make([]*webSub, 0, len(subs))
 	for s := range subs {
@@ -92,6 +91,12 @@ func (h *Hub) pushWeb(bare string, ev ChatEvent) {
 		default:
 		}
 	}
+	sink := h.notificationSink
+	h.mu.RUnlock()
+	if sink != nil && ev.Type == "message" && ParseJID(ev.From).Bare() != ParseJID(bare).Bare() {
+		sink(ParseJID(bare).Bare(), ev)
+	}
+
 }
 
 func (s *Server) ListChatRoster(ctx context.Context, userID string) ([]RosterEntry, error) {
@@ -333,3 +338,9 @@ func (s *Server) notifyWebFromStanza(stanza, fallbackTo string) {
 
 // Ensure Gateway still compiles with chat methods.
 var _ Gateway = (*Server)(nil)
+
+func (s *Server) SetNotificationSink(sink func(string, ChatEvent)) {
+	s.hub.mu.Lock()
+	s.hub.notificationSink = sink
+	s.hub.mu.Unlock()
+}

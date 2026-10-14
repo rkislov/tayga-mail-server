@@ -23,3 +23,20 @@ func TestHubPublishSubscribe(t *testing.T) {
 		t.Fatalf("recent=%d", len(recent))
 	}
 }
+
+func TestConcurrentPublishUnsubscribe(t *testing.T) {
+	h := NewHub()
+	for i := 0; i < 200; i++ {
+		_, unsub := h.Subscribe("user")
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			for n := 0; n < 20; n++ {
+				h.Publish("user", Event{Title: "test"})
+			}
+		}()
+		unsub()
+		unsub()
+		<-done
+	}
+}

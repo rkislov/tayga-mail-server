@@ -189,11 +189,15 @@ func (s *Server) archiveMAM(ctx context.Context, ownerBare, withBare, stanzaID, 
 	if s.db == nil {
 		return nil
 	}
+	allowed, err := s.shouldArchive(ctx, ownerBare, withBare, stanza)
+	if err != nil || !allowed {
+		return err
+	}
 	if stanzaID == "" {
 		stanzaID = randomID()
 	}
 	id := storage.NewID()
-	_, err := s.db.ExecContext(ctx, s.rebind(
+	_, err = s.db.ExecContext(ctx, s.rebind(
 		`INSERT INTO xmpp_mam (id, owner_bare_jid, with_bare_jid, stanza_id, stanza, created_at)
 		 VALUES (?, ?, ?, ?, ?, ?)`),
 		id, ownerBare, withBare, stanzaID, stanza, time.Now().UTC(),

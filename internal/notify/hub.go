@@ -31,6 +31,7 @@ type sub struct {
 
 // Hub fans in-process notifications to online web sessions.
 type Hub struct {
+	sink func(string, Event)
 	mu   sync.Mutex
 	subs map[string]map[*sub]struct{} // userID → set
 	ring map[string][]Event           // recent per user
@@ -57,16 +58,19 @@ func (h *Hub) Subscribe(userID string) (<-chan Event, func()) {
 	}
 	h.subs[userID][s] = struct{}{}
 	h.mu.Unlock()
+	var once sync.Once
 	return s.ch, func() {
-		h.mu.Lock()
-		defer h.mu.Unlock()
-		if set := h.subs[userID]; set != nil {
-			delete(set, s)
-			if len(set) == 0 {
-				delete(h.subs, userID)
+		once.Do(func() {
+			h.mu.Lock()
+			defer h.mu.Unlock()
+			if set := h.subs[userID]; set != nil {
+				delete(set, s)
+				if len(set) == 0 {
+					delete(h.subs, userID)
+				}
 			}
-		}
-		close(s.ch)
+			close(s.ch)
+		})
 	}
 }
 
@@ -123,18 +127,18 @@ func (h *Hub) Publish(userID string, ev Event) {
 		ring = ring[len(ring)-40:]
 	}
 	h.ring[userID] = ring
-	subs := make([]*sub, 0, len(h.subs[userID]))
-	for s := range h.subs[userID] {
-		subs = append(subs, s)
-	}
-	h.mu.Unlock()
-	for _, s := range subs {
+	for sub := range h.subs[userID] {
 		select {
-		case s.ch <- ev:
+		case sub.ch <- ev:
 		default:
-			// drop if slow consumer
 		}
 	}
+	sink := h.sink
+	h.mu.Unlock()
+	if sink != nil {
+		sink(userID, ev)
+	}
+
 }
 
 // PublishMail notifies about a newly delivered message.
@@ -177,3 +181,6 @@ func Marshal(ev Event) []byte {
 	b, _ := json.Marshal(ev)
 	return b
 }
+
+// SetSink connects durable delivery. The sink runs outside the hub lock.
+func (h *Hub) SetSink(sink func(string, Event)) { h.mu.Lock(); h.sink = sink; h.mu.Unlock() }
