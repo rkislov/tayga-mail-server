@@ -3,6 +3,7 @@ module github.com/tayga/tms
 go 1.26.0
 
 require (
+	github.com/SherClockHolmes/webpush-go v1.4.0
 	blitiri.com.ar/go/spf v1.6.0
 	github.com/emersion/go-ical v0.0.0-20250609112844-439c63cef608
 	github.com/emersion/go-imap v1.2.1

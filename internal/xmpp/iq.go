@@ -79,7 +79,10 @@ func (s *Session) handleIQ(se xml.StartElement) error {
 	case strings.Contains(inner, "http://jabber.org/protocol/pubsub"):
 		return s.handlePubSubIQ(ctx, id, typ, to, inner)
 
-	case strings.Contains(inner, "urn:xmpp:mam:2"):
+	case request.XMLName.Space == "urn:xmpp:mam:2":
+		if to != "" && to != s.JID.Bare() && to != s.JID.Domain && to != s.srv.domain {
+			return s.writeString(iqForbidden(id))
+		}
 		return s.handleMAMIQ(ctx, id, typ, inner)
 
 	case strings.Contains(inner, "urn:xmpp:carbons:2"):
@@ -218,6 +221,13 @@ func (s *Session) pushRosterPush(jid, subscriptionOverride, name, sub string, gr
 }
 
 func (s *Session) handleMAMIQ(ctx context.Context, id, typ, inner string) error {
+	var root struct{ XMLName xml.Name }
+	if xml.Unmarshal([]byte(inner), &root) != nil || root.XMLName.Space != "urn:xmpp:mam:2" {
+		return s.writeString(iqBadRequest(id))
+	}
+	if root.XMLName.Local == "prefs" {
+		return s.handleMAMPreferences(ctx, id, typ, inner)
+	}
 	if typ == "get" {
 		var root struct{ XMLName xml.Name }
 		if xml.Unmarshal([]byte(inner), &root) != nil || root.XMLName.Local != "query" {
