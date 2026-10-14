@@ -11,6 +11,10 @@ const smNamespace = "urn:xmpp:sm:3"
 
 // Counters wrap modulo 2^32 as specified by XEP-0198. All access is under mu.
 type streamManagement struct {
+	resumable    bool
+	token        string
+	pending      []string
+	bytes        int
 	enabled      bool
 	received     uint32
 	sent         uint32
@@ -31,17 +35,28 @@ func isCountedStanza(raw string) bool {
 }
 
 // writeLocked serializes stanza accounting with socket writes. SM elements are
-// never counted. Resumption is deliberately not offered until replay is available.
+// never counted; replay writes bypass this function to preserve sequence numbers.
 func (s *Session) writeLocked(raw string) error {
 	counted := s.sm.enabled && isCountedStanza(raw)
 	if counted && s.sm.sent-s.sm.acknowledged >= 1024 {
+		s.sm.resumable = false
 		return fmt.Errorf("stream management: acknowledgement window exhausted")
+	}
+	if counted && s.sm.resumable {
+		if s.sm.bytes+len(raw) > 1<<20 {
+			s.sm.resumable = false
+			return fmt.Errorf("stream management: replay budget exhausted")
+		}
+		s.sm.pending = append(s.sm.pending, raw)
+		s.sm.bytes += len(raw)
+	}
+	if counted {
+		s.sm.sent++
 	}
 	if _, err := s.bw.WriteString(raw); err != nil {
 		return err
 	}
 	if counted {
-		s.sm.sent++
 		if _, err := s.bw.WriteString(`<r xmlns='urn:xmpp:sm:3'/>`); err != nil {
 			return err
 		}
@@ -52,6 +67,9 @@ func (s *Session) writeLocked(raw string) error {
 func (s *Session) handleStreamManagement(start xml.StartElement) error {
 	if err := s.dec.Skip(); err != nil {
 		return err
+	}
+	if start.Name.Local == "resume" {
+		return s.resumeStream(start)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -71,6 +89,11 @@ func (s *Session) handleStreamManagement(start xml.StartElement) error {
 			return fail("bad-request")
 		}
 		s.sm = streamManagement{enabled: true}
+		if (resume == "true" || resume == "1") && s.srv != nil && s.user != nil {
+			s.sm.resumable = true
+			s.sm.token = randomID()
+			return s.writeLocked(fmt.Sprintf(`<enabled xmlns="urn:xmpp:sm:3" resume="true" id="%s" max="120"/>`, xmlEscape(s.sm.token)))
+		}
 		return s.writeLocked(`<enabled xmlns='urn:xmpp:sm:3' resume='false'/>`)
 	case "resume":
 		return fail("item-not-found")
@@ -85,10 +108,11 @@ func (s *Session) handleStreamManagement(start xml.StartElement) error {
 		}
 		h, err := strconv.ParseUint(attr(start, "h"), 10, 32)
 		if err != nil || uint32(h)-s.sm.acknowledged > s.sm.sent-s.sm.acknowledged {
+			s.sm.resumable = false
 			_ = s.writeLocked(`<stream:error><policy-violation xmlns='urn:ietf:params:xml:ns:xmpp-streams'/></stream:error>`)
 			return fmt.Errorf("stream management: invalid acknowledgement")
 		}
-		s.sm.acknowledged = uint32(h)
+		s.sm.ack(uint32(h))
 		return nil
 	default:
 		return fail("bad-request")
