@@ -30,15 +30,17 @@ func NewHub() *Hub {
 
 func (h *Hub) Register(s *Session) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	bare := s.JID.Bare()
 	if h.byBare[bare] == nil {
 		h.byBare[bare] = make(map[string]*Session)
 	}
-	if old := h.byBare[bare][s.JID.Resource]; old != nil && old != s {
+	old := h.byBare[bare][s.JID.Resource]
+	h.byBare[bare][s.JID.Resource] = s
+	h.mu.Unlock()
+	// Close unregisters the previous session and must run outside the hub lock.
+	if old != nil && old != s {
 		old.Close()
 	}
-	h.byBare[bare][s.JID.Resource] = s
 }
 
 func (h *Hub) Unregister(s *Session) {
@@ -122,6 +124,9 @@ func (h *Hub) Route(to string, stanza []byte) bool {
 
 	sessions := h.Sessions(j.Bare())
 	for _, s := range sessions {
+		if j.IsFull() && s.JID.Resource != j.Resource {
+			continue
+		}
 		s.SendRaw(stanza)
 		delivered = true
 	}

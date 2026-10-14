@@ -21,8 +21,6 @@ var (
 	reRosterSub  = regexp.MustCompile(`\bsubscription=['"]([^'"]+)['"]`)
 	reRosterAsk  = regexp.MustCompile(`\bask=['"]([^'"]+)['"]`)
 	reGroup      = regexp.MustCompile(`<group[^>]*>([^<]*)</group>`)
-	reMAMWith    = regexp.MustCompile(`<field[^>]*var=['"]with['"][^>]*>\s*<value>([^<]+)</value>`)
-	reMAMMax     = regexp.MustCompile(`<max[^>]*>(\d+)</max>|<field[^>]*var=['"]max['"][^>]*>\s*<value>(\d+)</value>`)
 	reDeleteNode = regexp.MustCompile(`node=['"]([^'"]+)['"]`)
 )
 
@@ -223,29 +221,68 @@ func (s *Session) handleMAMIQ(ctx context.Context, id, typ, inner string) error 
 	if typ != "set" {
 		return s.writeString(iqBadRequest(id))
 	}
-	withBare := ""
-	if m := reMAMWith.FindStringSubmatch(inner); len(m) > 1 {
-		withBare = ParseJID(m[1]).Bare()
+	var query struct {
+		XMLName xml.Name
+		QueryID string `xml:"queryid,attr"`
+		Form    struct {
+			Fields []struct {
+				Var   string `xml:"var,attr"`
+				Value string `xml:"value"`
+			} `xml:"field"`
+		} `xml:"jabber:x:data x"`
+		Set struct {
+			Max    *string `xml:"max"`
+			After  *string `xml:"after"`
+			Before *string `xml:"before"`
+		} `xml:"http://jabber.org/protocol/rsm set"`
 	}
-	limit := 50
-	if m := reMAMMax.FindStringSubmatch(inner); len(m) > 0 {
-		for _, g := range m[1:] {
-			if g != "" {
-				if n, err := strconv.Atoi(g); err == nil {
-					limit = n
-				}
+	if err := xml.Unmarshal([]byte(inner), &query); err != nil || query.XMLName.Local != "query" {
+		return s.writeString(iqBadRequest(id))
+	}
+	f := mamFilter{Limit: 50, After: query.Set.After, Before: query.Set.Before}
+	if f.After != nil && (f.Before != nil || *f.After == "") {
+		return s.writeString(iqBadRequest(id))
+	}
+	if query.Set.Max != nil {
+		n, err := strconv.Atoi(*query.Set.Max)
+		if err != nil || n < 0 {
+			return s.writeString(iqBadRequest(id))
+		}
+		if n > 100 {
+			n = 100
+		}
+		f.Limit = n
+	}
+	for _, field := range query.Form.Fields {
+		switch field.Var {
+		case "FORM_TYPE":
+			if field.Value != "urn:xmpp:mam:2" {
+				return s.writeString(iqBadRequest(id))
+			}
+		case "with":
+			f.With = ParseJID(field.Value).Bare()
+		case "start", "end":
+			stamp, err := time.Parse(time.RFC3339Nano, field.Value)
+			if err != nil {
+				return s.writeString(iqBadRequest(id))
+			}
+			stamp = stamp.UTC()
+			if field.Var == "start" {
+				f.Start = &stamp
+			} else {
+				f.End = &stamp
 			}
 		}
 	}
-	rows, err := s.srv.queryMAM(ctx, s.JID.Bare(), withBare, limit)
+	if f.Start != nil && f.End != nil && f.Start.After(*f.End) {
+		return s.writeString(iqBadRequest(id))
+	}
+	rows, total, complete, err := s.srv.mamPage(ctx, s.JID.Bare(), f)
+	if err == errMAMCursor {
+		return s.writeString(fmt.Sprintf(`<iq type='error' id='%s'><error type='cancel'><item-not-found xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/></error></iq>`, xmlEscape(id)))
+	}
 	if err != nil {
 		return s.writeString(iqInternalError(id))
-	}
-	var query struct {
-		QueryID string `xml:"queryid,attr"`
-	}
-	if err := xml.Unmarshal([]byte(inner), &query); err != nil {
-		return s.writeString(iqBadRequest(id))
 	}
 	queryID := query.QueryID
 	for _, r := range rows {
@@ -259,10 +296,14 @@ func (s *Session) handleMAMIQ(ctx context.Context, id, typ, inner string) error 
 		)
 		s.SendRaw([]byte(msg))
 	}
+	bounds := ""
+	if len(rows) > 0 {
+		bounds = fmt.Sprintf("<first>%s</first><last>%s</last>", xmlEscape(rows[0].StanzaID), xmlEscape(rows[len(rows)-1].StanzaID))
+	}
 	return s.writeString(fmt.Sprintf(
-		`<iq type='result' id='%s' from='%s' to='%s'><fin xmlns='urn:xmpp:mam:2' complete='true'>`+
-			`<set xmlns='http://jabber.org/protocol/rsm'><count>%d</count></set></fin></iq>`,
-		xmlEscape(id), xmlEscape(s.JID.Bare()), xmlEscape(s.JID.Full()), len(rows),
+		`<iq type='result' id='%s' from='%s' to='%s'><fin xmlns='urn:xmpp:mam:2' complete='%t'>`+
+			`<set xmlns='http://jabber.org/protocol/rsm'>%s<count>%d</count></set></fin></iq>`,
+		xmlEscape(id), xmlEscape(s.JID.Bare()), xmlEscape(s.JID.Full()), complete, bounds, total,
 	))
 }
 
