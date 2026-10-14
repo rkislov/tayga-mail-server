@@ -176,7 +176,7 @@ func (s *Session) negotiate(domain string) error {
 			continue
 		}
 		switch {
-		case se.Name.Local == "starttls":
+		case se.Name.Local == "starttls" && se.Name.Space == "urn:ietf:params:xml:ns:xmpp-tls":
 			_ = s.dec.Skip()
 			if s.tlsCfg == nil {
 				_ = s.writeString(`<failure xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>`)
@@ -196,7 +196,7 @@ func (s *Session) negotiate(domain string) error {
 			s.tlsDone = true
 			s.streamID = randomID()
 			return s.handleStream()
-		case se.Name.Local == "auth":
+		case se.Name.Local == "auth" && se.Name.Space == "urn:ietf:params:xml:ns:xmpp-sasl":
 			mech := attr(se, "mechanism")
 			raw, err := readElementText(s.dec, se)
 			if err != nil {
@@ -300,9 +300,9 @@ func (s *Session) handleBindOrSessionIQ(se xml.StartElement, domain string) erro
 		case xml.StartElement:
 			depth++
 			switch {
-			case t.Name.Local == "bind":
+			case t.Name.Local == "bind" && t.Name.Space == "urn:ietf:params:xml:ns:xmpp-bind":
 				kind = "bind"
-			case t.Name.Local == "session":
+			case t.Name.Local == "session" && t.Name.Space == "urn:ietf:params:xml:ns:xmpp-session":
 				kind = "session"
 			case t.Name.Local == "resource":
 				r, err := readElementText(s.dec, t)
@@ -318,6 +318,12 @@ func (s *Session) handleBindOrSessionIQ(se xml.StartElement, domain string) erro
 	}
 	if typ != "set" {
 		return nil
+	}
+	if !s.authed || s.user == nil {
+		return s.writeString(iqAuthError(id))
+	}
+	if kind != "bind" && kind != "session" {
+		return s.writeString(iqBadRequest(id))
 	}
 	if kind == "session" {
 		return s.writeString(fmt.Sprintf(`<iq type='result' id='%s'/>`, xmlEscape(id)))
