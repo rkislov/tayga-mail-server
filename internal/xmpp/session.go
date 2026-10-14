@@ -97,7 +97,7 @@ func (s *Session) serve() {
 	defer s.Close()
 	_ = s.conn.SetDeadline(time.Now().Add(5 * time.Minute))
 	if err := s.handleStream(); err != nil && err != io.EOF {
-		s.log.Debug("xmpp session ended", "err", err, "jid", s.JID.Full())
+		s.log.Info("xmpp session ended", "err", err, "jid", s.JID.Full(), "authenticated", s.authed, "bound", s.bound)
 	}
 }
 
@@ -329,6 +329,7 @@ func (s *Session) handleBindOrSessionIQ(se xml.StartElement, domain string) erro
 	if s.JID.Domain == "" {
 		s.JID.Domain = domain
 	}
+	s.log.Info("xmpp resource bound", "jid", s.JID.Full())
 	s.bound = true
 	s.srv.hub.Register(s)
 	if err := s.writeString(fmt.Sprintf(

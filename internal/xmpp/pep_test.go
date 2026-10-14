@@ -155,3 +155,21 @@ func TestDiscoveryUsesAccountDomainInsteadOfHostname(t *testing.T) {
 		}
 	}
 }
+
+func TestMAMResponseCorrelation(t *testing.T) {
+	srv, _, user := testServer(t)
+	ctx := context.Background()
+	if err := srv.archiveMAM(ctx, user.Email, "bob@example.com", "msg1", `<message xmlns='jabber:client'><body>test</body></message>`); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	session := &Session{srv: srv, user: user, JID: ParseJID(user.Email + "/phone"), bw: bufio.NewWriter(&out)}
+	if err := session.handleMAMIQ(ctx, "iq1", "set", `<query xmlns='urn:xmpp:mam:2' queryid='client-query'/>`); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"queryid='client-query'", "from='" + user.Email + "'", "id='iq1'", "<fin"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("missing %s: %s", want, out.String())
+		}
+	}
+}
