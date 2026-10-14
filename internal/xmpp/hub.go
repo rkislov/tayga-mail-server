@@ -63,14 +63,13 @@ func (h *Hub) Unregister(s *Session) {
 
 func (h *Hub) RegisterComponent(c *ComponentConn) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	dom := strings.ToLower(c.Domain)
-	if old := h.components[dom]; old != nil && old != c {
-		if old.Close != nil {
-			old.Close()
-		}
-	}
+	old := h.components[dom]
 	h.components[dom] = c
+	h.mu.Unlock()
+	if old != nil && old != c && old.Close != nil {
+		old.Close()
+	}
 }
 
 func (h *Hub) UnregisterComponent(domain string, c *ComponentConn) {
@@ -131,6 +130,9 @@ func (h *Hub) Route(to string, stanza []byte) bool {
 		}
 		s.SendRaw(stanza)
 		delivered = true
+	}
+	if delivered && j.IsFull() {
+		h.fanoutCarbon(j, "received", string(stanza))
 	}
 	return delivered
 }

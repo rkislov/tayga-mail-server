@@ -262,6 +262,7 @@ func (s *Server) SendChatMessage(ctx context.Context, fromEmail, to, body string
 	ev := ChatEvent{Type: "message", ID: id, From: fromFull, To: toJ.Bare(), Body: body, At: time.Now().UTC()}
 	ev.Attachment, ev.Encrypted = stanzaAttachment(stanza)
 	ev.OMEMO = encryptedElement(stanza)
+	s.hub.fanoutCarbon(ParseJID(fromFull), "sent", stanza)
 	s.hub.pushWeb(from, ev)
 	s.hub.pushWeb(toJ.Bare(), ev)
 	return ev, nil

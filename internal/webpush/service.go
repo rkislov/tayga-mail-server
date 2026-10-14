@@ -199,3 +199,21 @@ func (s *Service) deliver(ctx context.Context) {
 		}
 	}
 }
+
+// UserIDs includes subscribed users even when no browser tab is open.
+func (s *Service) UserIDs(ctx context.Context) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, "SELECT DISTINCT user_id FROM webpush_subscriptions")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var users []string
+	for rows.Next() {
+		var user string
+		if err := rows.Scan(&user); err != nil {
+			return nil, err
+		}
+		users = append(users, user)
+	}
+	return users, rows.Err()
+}

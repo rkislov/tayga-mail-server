@@ -221,6 +221,7 @@ func (s *Server) SendBotMessage(ctx context.Context, botUserEmail, to, body, msg
 	}
 	_ = s.archiveMAM(ctx, from, toJ.Bare(), id, string(b))
 	_ = s.archiveMAM(ctx, toJ.Bare(), from, id, string(b))
+	s.hub.fanoutCarbon(ParseJID(from), "sent", stanza)
 	s.notifyWebFromStanza(stanza, toJ.Bare())
 	return nil
 }
