@@ -90,3 +90,16 @@ func TestMAMNamespacedFormFilters(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+func TestMAMQueryFormDiscovery(t *testing.T) {
+	var out bytes.Buffer
+	s := &Session{JID: ParseJID("alice@example.com/phone"), bw: bufio.NewWriter(&out)}
+	if err := s.handleMAMIQ(context.Background(), "discover", "get", `<query xmlns="urn:xmpp:mam:2"/>`); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"type='result'", "type='form'", "var='with'", "var='start'", "var='end'"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatal(out.String())
+		}
+	}
+}

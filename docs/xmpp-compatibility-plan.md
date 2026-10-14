@@ -18,7 +18,9 @@ Updated 2026-10-14. This is an implementation checklist, not a claim of complete
 - [x] XEP-0198 stanza acknowledgements, modulo counters and bounded outstanding window.
 - [x] Reject acknowledgements beyond the sent count; SM control elements do not affect counters.
 - [x] Normalize authentication and binding JIDs using PRECIS/IDNA and validate length/characters.
-- [ ] XEP-0198 resumption and replay: currently explicitly returns resume=false. This is not complete resumable-session support.
+- [x] XEP-0198 resumption after reauthentication, owner-bound tokens, acknowledged-prefix removal and replay without recounting.
+- [x] Bound replay storage: 120 seconds, 1 MiB per session, 4 retained sessions per user, 256 globally and 16 MiB aggregate.
+- [ ] Real-client network-switch/background interop verification. Retained streams are in-memory and do not survive a server restart; offline messages remain database-backed.
 - [ ] Existing-identity normalization collision audit before any stored identity migration.
 
 ## Next batches

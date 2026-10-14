@@ -218,6 +218,13 @@ func (s *Session) pushRosterPush(jid, subscriptionOverride, name, sub string, gr
 }
 
 func (s *Session) handleMAMIQ(ctx context.Context, id, typ, inner string) error {
+	if typ == "get" {
+		var root struct{ XMLName xml.Name }
+		if xml.Unmarshal([]byte(inner), &root) != nil || root.XMLName.Local != "query" {
+			return s.writeString(iqBadRequest(id))
+		}
+		return s.writeString(fmt.Sprintf(`<iq type='result' id='%s' from='%s' to='%s'><query xmlns='urn:xmpp:mam:2'><x xmlns='jabber:x:data' type='form'><field var='FORM_TYPE' type='hidden'><value>urn:xmpp:mam:2</value></field><field var='with' type='jid-single'/><field var='start' type='text-single'/><field var='end' type='text-single'/></x></query></iq>`, xmlEscape(id), xmlEscape(s.JID.Bare()), xmlEscape(s.JID.Full())))
+	}
 	if typ != "set" {
 		return s.writeString(iqBadRequest(id))
 	}

@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -18,6 +19,7 @@ import (
 )
 
 type Session struct {
+	csi       clientState
 	sessionID string
 	srv       *Server
 	log       *slog.Logger
@@ -34,6 +36,7 @@ type Session struct {
 	bound        bool
 	tlsDone      bool
 	carbons      bool
+	lastPresence *ChatPresence
 	user         *storage.User
 	JID          JID
 	streamID     string
@@ -78,6 +81,9 @@ func (s *Session) SendRaw(b []byte) {
 	if s.closed {
 		return
 	}
+	if s.redundantPresence(string(b)) {
+		return
+	}
 	if err := s.writeLocked(string(b)); err != nil && s.conn != nil {
 		_ = s.conn.Close()
 	}
@@ -95,7 +101,13 @@ func (s *Session) writeString(str string) error {
 func (s *Session) serve() {
 	defer s.Close()
 	_ = s.conn.SetDeadline(time.Now().Add(5 * time.Minute))
-	if err := s.handleStream(); err != nil && err != io.EOF {
+	err := s.handleStream()
+	var netErr net.Error
+	if errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed) || errors.As(err, &netErr) {
+		s.Close()
+		s.retainStream()
+	}
+	if err != nil && err != io.EOF {
 		s.log.Info("xmpp session ended", "err", err, "jid", s.JID.Full(), "authenticated", s.authed, "bound", s.bound)
 	}
 }
@@ -158,7 +170,7 @@ func (s *Session) writeFeatures() error {
 		b.WriteString(`<mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'><mechanism>PLAIN</mechanism><mechanism>X-OAUTH2</mechanism></mechanisms>`)
 	}
 	if canAuth && s.authed && !s.bound {
-		b.WriteString(`<sm xmlns="urn:xmpp:sm:3"/>`)
+		b.WriteString(`<sm xmlns="urn:xmpp:sm:3"/><csi xmlns="urn:xmpp:csi:0"/>`)
 		b.WriteString(`<bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'/><session xmlns='urn:ietf:params:xml:ns:xmpp-session'/>`)
 	}
 	b.WriteString(`</stream:features>`)
@@ -369,6 +381,12 @@ func (s *Session) stanzaLoop() error {
 		}
 		switch t := tok.(type) {
 		case xml.StartElement:
+			if t.Name.Space == csiNamespace {
+				if err := s.handleClientState(t); err != nil {
+					return err
+				}
+				continue
+			}
 			if t.Name.Space == smNamespace {
 				if err := s.handleStreamManagement(t); err != nil {
 					return err
@@ -406,6 +424,9 @@ func (s *Session) stanzaLoop() error {
 			}
 		case xml.EndElement:
 			if t.Name.Local == "stream" {
+				s.mu.Lock()
+				s.sm.resumable = false
+				s.mu.Unlock()
 				_ = s.writeString(`</stream:stream>`)
 				return io.EOF
 			}
@@ -513,6 +534,9 @@ func (s *Session) handlePresence(se xml.StartElement) error {
 		if typ == "unavailable" {
 			state = "offline"
 		}
+		s.mu.Lock()
+		s.lastPresence = &ChatPresence{State: state}
+		s.mu.Unlock()
 		s.srv.recordPresence(context.Background(), s.JID.Full(), state, "")
 	}
 	if typ == "" {
