@@ -34,6 +34,10 @@ func (s *Session) handleIQ(se xml.StartElement) error {
 	if err != nil {
 		return err
 	}
+	var request struct{ XMLName xml.Name }
+	if xml.Unmarshal([]byte(inner), &request) == nil && s.log != nil {
+		s.log.Info("xmpp IQ request", "type", typ, "element", request.XMLName.Local, "namespace", request.XMLName.Space, "to", to)
+	}
 	if handled, err := s.uploadIQ(id, typ, to, inner); handled {
 		return err
 	}
@@ -237,22 +241,28 @@ func (s *Session) handleMAMIQ(ctx context.Context, id, typ, inner string) error 
 	if err != nil {
 		return s.writeString(iqInternalError(id))
 	}
-	queryID := randomID()[:12]
+	var query struct {
+		QueryID string `xml:"queryid,attr"`
+	}
+	if err := xml.Unmarshal([]byte(inner), &query); err != nil {
+		return s.writeString(iqBadRequest(id))
+	}
+	queryID := query.QueryID
 	for _, r := range rows {
 		stamp := r.CreatedAt.UTC().Format(time.RFC3339)
 		msg := fmt.Sprintf(
-			`<message to='%s'><result xmlns='urn:xmpp:mam:2' queryid='%s' id='%s'>`+
+			`<message from='%s' to='%s'><result xmlns='urn:xmpp:mam:2' queryid='%s' id='%s'>`+
 				`<forwarded xmlns='urn:xmpp:forward:0'><delay xmlns='urn:xmpp:delay' stamp='%s'/>%s</forwarded>`+
 				`</result></message>`,
-			xmlEscape(s.JID.Full()), xmlEscape(queryID), xmlEscape(r.StanzaID),
+			xmlEscape(s.JID.Bare()), xmlEscape(s.JID.Full()), xmlEscape(queryID), xmlEscape(r.StanzaID),
 			xmlEscape(stamp), r.Stanza,
 		)
 		s.SendRaw([]byte(msg))
 	}
 	return s.writeString(fmt.Sprintf(
-		`<iq type='result' id='%s'><fin xmlns='urn:xmpp:mam:2' complete='true'>`+
+		`<iq type='result' id='%s' from='%s' to='%s'><fin xmlns='urn:xmpp:mam:2' complete='true'>`+
 			`<set xmlns='http://jabber.org/protocol/rsm'><count>%d</count></set></fin></iq>`,
-		xmlEscape(id), len(rows),
+		xmlEscape(id), xmlEscape(s.JID.Bare()), xmlEscape(s.JID.Full()), len(rows),
 	))
 }
 
