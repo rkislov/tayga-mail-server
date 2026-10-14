@@ -27,6 +27,7 @@ type Session struct {
 	dec       *xml.Decoder
 	tlsCfg    *tls.Config
 
+	sm           streamManagement
 	mu           sync.Mutex
 	closed       bool
 	authed       bool
@@ -77,8 +78,9 @@ func (s *Session) SendRaw(b []byte) {
 	if s.closed {
 		return
 	}
-	_, _ = s.bw.Write(b)
-	_ = s.bw.Flush()
+	if err := s.writeLocked(string(b)); err != nil && s.conn != nil {
+		_ = s.conn.Close()
+	}
 }
 
 func (s *Session) writeString(str string) error {
@@ -87,10 +89,7 @@ func (s *Session) writeString(str string) error {
 	if s.closed {
 		return net.ErrClosed
 	}
-	if _, err := s.bw.WriteString(str); err != nil {
-		return err
-	}
-	return s.bw.Flush()
+	return s.writeLocked(str)
 }
 
 func (s *Session) serve() {
@@ -159,6 +158,7 @@ func (s *Session) writeFeatures() error {
 		b.WriteString(`<mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'><mechanism>PLAIN</mechanism><mechanism>X-OAUTH2</mechanism></mechanisms>`)
 	}
 	if canAuth && s.authed && !s.bound {
+		b.WriteString(`<sm xmlns="urn:xmpp:sm:3"/>`)
 		b.WriteString(`<bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'/><session xmlns='urn:ietf:params:xml:ns:xmpp-session'/>`)
 	}
 	b.WriteString(`</stream:features>`)
@@ -176,6 +176,10 @@ func (s *Session) negotiate(domain string) error {
 			continue
 		}
 		switch {
+		case se.Name.Space == smNamespace:
+			if err := s.handleStreamManagement(se); err != nil {
+				return err
+			}
 		case se.Name.Local == "starttls" && se.Name.Space == "urn:ietf:params:xml:ns:xmpp-tls":
 			_ = s.dec.Skip()
 			if s.tlsCfg == nil {
@@ -212,7 +216,7 @@ func (s *Session) negotiate(domain string) error {
 			s.authed = true
 			s.streamID = randomID()
 			return s.handleStream()
-		case se.Name.Local == "iq":
+		case se.Name.Local == "iq" && (se.Name.Space == "jabber:client" || se.Name.Space == ""):
 			if err := s.handleBindOrSessionIQ(se, domain); err != nil {
 				return err
 			}
@@ -254,7 +258,10 @@ func (s *Session) saslAuth(mech, b64 string) (authErr error) {
 		}
 		user += "@" + s.streamDomain
 	}
-	jid := ParseJID(user)
+	jid, jidErr := NormalizeJID(user)
+	if jidErr != nil {
+		return jidErr
+	}
 	if jid.Local == "" || jid.Domain == "" || jid.Resource != "" {
 		return fmt.Errorf("invalid authentication identity")
 	}
@@ -310,7 +317,7 @@ func (s *Session) handleBindOrSessionIQ(se xml.StartElement, domain string) erro
 					return err
 				}
 				depth--
-				resource = strings.TrimSpace(r)
+				resource = r
 			}
 		case xml.EndElement:
 			depth--
@@ -331,7 +338,11 @@ func (s *Session) handleBindOrSessionIQ(se xml.StartElement, domain string) erro
 	if resource == "" {
 		resource = randomID()[:8]
 	}
-	s.JID.Resource = resource
+	normalized, err := NormalizeJID(s.JID.Bare() + "/" + resource)
+	if err != nil {
+		return s.writeString(iqBadRequest(id))
+	}
+	s.JID.Resource = normalized.Resource
 	if s.JID.Domain == "" {
 		s.JID.Domain = domain
 	}
@@ -358,6 +369,18 @@ func (s *Session) stanzaLoop() error {
 		}
 		switch t := tok.(type) {
 		case xml.StartElement:
+			if t.Name.Space == smNamespace {
+				if err := s.handleStreamManagement(t); err != nil {
+					return err
+				}
+				continue
+			}
+			if t.Name.Space != "" && t.Name.Space != "jabber:client" {
+				if err := s.dec.Skip(); err != nil {
+					return err
+				}
+				continue
+			}
 			switch t.Name.Local {
 			case "message":
 				if err := s.handleMessage(t); err != nil {
@@ -373,6 +396,13 @@ func (s *Session) stanzaLoop() error {
 				}
 			default:
 				_ = s.dec.Skip()
+			}
+			if t.Name.Local == "message" || t.Name.Local == "presence" || t.Name.Local == "iq" {
+				s.mu.Lock()
+				if s.sm.enabled {
+					s.sm.received++
+				}
+				s.mu.Unlock()
 			}
 		case xml.EndElement:
 			if t.Name.Local == "stream" {

@@ -13,6 +13,14 @@ Updated 2026-10-14. This is an implementation checklist, not a claim of complete
 - [x] Add date/peer filters, bounded page sizes, count-only requests, first/last IDs and accurate completion.
 - [x] Regression tests for replacement, resource routing, binding and stable cursor traversal.
 
+## Additional work in progress
+
+- [x] XEP-0198 stanza acknowledgements, modulo counters and bounded outstanding window.
+- [x] Reject acknowledgements beyond the sent count; SM control elements do not affect counters.
+- [x] Normalize authentication and binding JIDs using PRECIS/IDNA and validate length/characters.
+- [ ] XEP-0198 resumption and replay: currently explicitly returns resume=false. This is not complete resumable-session support.
+- [ ] Existing-identity normalization collision audit before any stored identity migration.
+
 ## Next batches
 
 - [ ] RFC 6120/6121: complete stream-state/error checks, IQ routing, presence priority/probes and roster transition tests.
