@@ -73,7 +73,8 @@ func (m *MFAService) Disable(ctx context.Context, userID, code string) error {
 	return m.Store.UpsertUserMFA(ctx, mfa)
 }
 
-// IsEnabled reports whether the user has TOTP and/or WebAuthn credentials.
+// IsEnabled reports whether web login requires TOTP and/or WebAuthn credentials.
+// Protocol password authentication uses the separate TOTP policy in Authenticate.
 func (m *MFAService) IsEnabled(ctx context.Context, userID string) bool {
 	if mfa, err := m.Store.GetUserMFA(ctx, userID); err == nil && mfa.TOTPEnabled {
 		return true

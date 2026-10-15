@@ -491,6 +491,8 @@ contacts_search: "Поиск контактов…",
     type_file: "Файл",
     profile_title: "Профиль",
     security_title: "Безопасность",
+    passkey_web_only: "Passkey используется только для входа в веб-интерфейс. Добавление ключа не меняет вход по паролю в FlowSync (ActiveSync/EWS), почтовых, календарных и XMPP-клиентах. Для TOTP действует отдельная политика администратора.",
+    passkey_registered: "Passkey добавлен для входа в веб-интерфейс.",
     appearance_title: "Внешний вид",
     appearance_hint: "Выберите фон рабочего стола — превью обновляется сразу.",
     theme: "Тема",
@@ -1000,6 +1002,8 @@ contacts_search: "Search contacts…",
     type_file: "File",
     profile_title: "Profile",
     security_title: "Security",
+    passkey_web_only: "Passkeys protect web sign-in only. Adding a key does not change password sign-in in FlowSync (ActiveSync/EWS), mail, calendar or XMPP clients. TOTP follows a separate administrator policy.",
+    passkey_registered: "Passkey registered for web sign-in.",
     appearance_title: "Appearance",
     theme: "Theme",
     language_title: "Language",
@@ -3600,7 +3604,7 @@ $("btn-passkey-add").addEventListener("click", async () => {
         credential: credentialToJSON(cred),
       }),
     });
-    setMsg($("passkey-msg"), "Passkey registered.", "ok");
+    setMsg($("passkey-msg"), t("passkey_registered"), "ok");
     refreshPasskeys();
   } catch (err) {
     setMsg($("passkey-msg"), err.message, "err");

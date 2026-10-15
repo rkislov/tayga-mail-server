@@ -65,7 +65,7 @@ Seed: `admin@example.com` / `changeme`. TLS: `tls.auto_generate` or `scripts/gen
 - DMARC ARC trust: `dmarc.arc_trust` softens fail when ARC `cv=pass`
 - ARC: `arc.enabled` verify/seal (RFC 8617) on inbound MX
 - Quarantine admin: filters, spam/virus meta, preview (`/api/v1/admin/quarantine`)
-- WebAuthn MFA: `/api/v1/auth/webauthn/*` (passkeys; UUID credential/session IDs)
+- WebAuthn MFA: `/api/v1/auth/webauthn/*` (passkeys; UUID credential/session IDs). Passkeys protect **web sign-in only**: adding a key does not disable password authentication in FlowSync (ActiveSync/EWS), IMAP/SMTP/POP3, DAV, ManageSieve or XMPP. The separate `mfa.require_token_for_mfa_users` policy still requires protocol access tokens for users with enabled **TOTP**.
 - Account API: `GET /api/v1/me`; admin: `/api/v1/admin/users` (`http.admins`)
 - Web apps: `/api/v1/mail`, `/api/v1/calendar`, `/api/v1/contacts`, `/api/v1/files`, `/api/v1/chat` + embedded UI (ru/en)
 - Archive mailbox (gzip on disk) + FTS mail search — [docs/mail-archive-search.md](docs/mail-archive-search.md) (RU), [architecture.md](docs/architecture.md#archive-mailbox) (EN)

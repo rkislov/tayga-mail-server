@@ -516,12 +516,12 @@
     "description": "Время на завершение второго фактора. Пример: 5m."
   },
   "require_token_for_mfa_users": {
-    "label": "Токены для пользователей MFA",
-    "description": "Запрещает вход по обычному паролю в IMAP/SMTP пользователям с TOTP или WebAuthn; требуется OAuth-токен."
+    "label": "Токены для пользователей TOTP",
+    "description": "Требует OAuth-токен вместо пароля для FlowSync (ActiveSync/EWS), IMAP/SMTP и других протоколов при включённом TOTP. Passkey защищает только вход в веб-интерфейс и не включает это ограничение."
   },
   "webauthn": {
     "label": "Ключи доступа WebAuthn",
-    "description": "Параметры входа с passkey и аппаратными ключами безопасности."
+    "description": "Passkey и аппаратные ключи защищают только вход в веб-интерфейс. Добавление ключа не меняет вход по паролю в FlowSync и других клиентах."
   },
   "rp_display_name": {
     "label": "Название сервиса WebAuthn",

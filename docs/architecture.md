@@ -41,6 +41,7 @@ Secrets are redacted on GET (`***`); PUT with empty/`***` keeps the previous val
 
 - Local Argon2id; LDAP hybrid; OIDC; TOTP + WebAuthn (passkeys) MFA; opaque Bearer tokens for IMAP/SMTP/DAV/FlowSync.
 - WebAuthn credential rows and ceremony sessions use **UUID** primary keys; user handle is the user’s UUID (16 bytes).
+- WebAuthn/passkeys apply only to web login. Protocol password authentication ignores passkey enrollment; `mfa.require_token_for_mfa_users` gates protocol passwords only for enabled TOTP. Web login continues to require the enrolled second factor.
 
 ## CalDAV / CardDAV
 

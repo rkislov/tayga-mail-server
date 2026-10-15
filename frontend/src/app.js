@@ -2547,7 +2547,7 @@ $("btn-passkey-add").addEventListener("click", async () => {
         credential: credentialToJSON(cred),
       }),
     });
-    setMsg($("passkey-msg"), "Passkey registered.", "ok");
+    setMsg($("passkey-msg"), t("passkey_registered"), "ok");
     refreshPasskeys();
   } catch (err) {
     setMsg($("passkey-msg"), err.message, "err");
