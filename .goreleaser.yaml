@@ -47,6 +47,7 @@ archives:
       - docs/setup.md
       - docs/setup-filters.md
       - docs/web-omemo.md
+      - docs/xmpp-compatibility-plan.md
       - frontend/LICENSE
       - frontend/package*.json
       - frontend/build-*.cjs
