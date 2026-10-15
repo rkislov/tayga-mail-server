@@ -484,10 +484,17 @@ func (s *Session) handlePresence(se xml.StartElement) error {
 	to := attr(se, "to")
 	from := s.JID.Full()
 	if to != "" {
-		toJID := ParseJID(to)
+		toJID, err := NormalizeJID(to)
+		if err != nil {
+			return nil
+		}
+		if typ == "probe" {
+			s.srv.currentPresence(context.Background(), toJID, s.JID, s.SendRaw)
+			return nil
+		}
 		stanza := fmt.Sprintf(`<presence from='%s' to='%s'%s>%s</presence>`,
 			xmlEscape(from), xmlEscape(to), attrIf("type", typ), inner)
-		if !s.srv.hub.Route(toJID.Bare(), []byte(stanza)) &&
+		if !s.srv.hub.Route(toJID.Full(), []byte(stanza)) &&
 			(typ == "subscribe" || typ == "subscribed" || typ == "unsubscribe" || typ == "unsubscribed") {
 			_ = s.srv.storeOffline(context.Background(), toJID.Bare(), stanza)
 		}
@@ -517,10 +524,18 @@ func (s *Session) handlePresence(se xml.StartElement) error {
 		if typ == "unavailable" {
 			state = "offline"
 		}
+		var payload struct {
+			Status string `xml:"status"`
+		}
+		_ = xml.Unmarshal([]byte("<presence>"+inner+"</presence>"), &payload)
 		s.mu.Lock()
-		s.lastPresence = &ChatPresence{State: state}
+		initial := s.lastPresence == nil || s.lastPresence.State == "offline"
+		s.lastPresence = &ChatPresence{State: state, Status: payload.Status}
 		s.mu.Unlock()
-		s.srv.recordPresence(context.Background(), s.JID.Full(), state, "")
+		s.srv.recordPresencePayload(context.Background(), s.JID.Full(), state, payload.Status, inner, attr(se, "id"))
+		if initial && typ == "" {
+			s.sendRosterPresence(context.Background())
+		}
 	}
 	if typ == "" {
 		s.sendCurrentDeviceLists(context.Background())

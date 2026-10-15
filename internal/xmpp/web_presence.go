@@ -15,7 +15,9 @@ type ChatPresence struct {
 }
 type presenceState struct {
 	ChatPresence
-	Seen time.Time
+	Seen    time.Time
+	Payload string
+	ID      string
 }
 
 func (s *Server) presenceFor(bare string) ChatPresence {
@@ -33,6 +35,9 @@ func (s *Server) presenceFor(bare string) ChatPresence {
 	return best
 }
 func (s *Server) recordPresence(ctx context.Context, full, state, status string) {
+	s.recordPresencePayload(ctx, full, state, status, "", "")
+}
+func (s *Server) recordPresencePayload(ctx context.Context, full, state, status, payload, id string) {
 	jid := ParseJID(full)
 	s.mu.Lock()
 	if s.presence == nil {
@@ -44,7 +49,7 @@ func (s *Server) recordPresence(ctx context.Context, full, state, status string)
 	if state == "offline" {
 		delete(s.presence[jid.Bare()], jid.Resource)
 	} else {
-		s.presence[jid.Bare()][jid.Resource] = presenceState{ChatPresence{state, status}, time.Now()}
+		s.presence[jid.Bare()][jid.Resource] = presenceState{ChatPresence: ChatPresence{state, status}, Seen: time.Now(), Payload: payload, ID: id}
 	}
 	s.mu.Unlock()
 	user, err := s.store.GetUserByEmail(ctx, jid.Bare())
@@ -63,6 +68,9 @@ func (s *Server) recordPresence(ctx context.Context, full, state, status string)
 		stanza += `<show>` + xmlEscape(state) + `</show>`
 	}
 	stanza += `<status>` + xmlEscape(status) + `</status></presence>`
+	if payload != "" && state != "offline" {
+		stanza = `<presence from='` + xmlEscape(full) + `'` + attrIf("id", id) + `>` + payload + `</presence>`
+	}
 	for _, it := range roster {
 		if it.Subscription == "both" || it.Subscription == "from" {
 			s.hub.Route(it.JID, []byte(stanza))

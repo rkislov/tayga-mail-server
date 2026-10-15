@@ -70,3 +70,7 @@ References: [Message Carbons](https://xmpp.org/extensions/xep-0280.html), [MAM P
 ## IQ dispatch hardening (2026-10-15)
 
 IQ request handlers now match the root element and its namespace for ping, roster, vCard, session, PEP and upload discovery. Namespace text inside an unrelated element cannot invoke these handlers. Result/error stanzas are ignored by server-command dispatch to prevent reply loops; unknown request types and missing IDs are rejected. Regression tests exercise valid ping, nested/spoofed namespaces and unsolicited replies. This is a bounded correctness update, not completion of peer IQ routing or the remaining RFC/XEP checklist above.
+
+## Presence restoration (2026-10-15)
+
+Initial availability now returns current presence for subscribed local contacts and the owner's other resources. Approving a subscription sends existing presence immediately, including native clients that were already online. Local probes are handled with owner-side roster authorization; a full-JID lookup never returns other resources. Original presence payloads (including capability extensions), IDs and status text are retained for the connection lifetime and replayed. Tests cover consent, revocation, resource filtering, initial state, escaping and extension preservation. Full presence priority routing, directed-presence tracking and federation remain pending; this does not assert complete RFC 6121 conformance.
