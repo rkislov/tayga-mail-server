@@ -411,12 +411,13 @@ type MFAConfig struct {
 	AccessTokenTTL  time.Duration `yaml:"access_token_ttl"`  // default 1h
 	RefreshTokenTTL time.Duration `yaml:"refresh_token_ttl"` // default 720h
 	ChallengeTTL    time.Duration `yaml:"challenge_ttl"`     // default 5m
-	// When true, users with TOTP/WebAuthn cannot use password auth on IMAP/SMTP.
+	// When true, users with TOTP must use tokens for protocol authentication.
+	// WebAuthn/passkeys apply only to web login and do not block protocol passwords.
 	RequireTokenForMFAUsers bool           `yaml:"require_token_for_mfa_users"`
 	WebAuthn                WebAuthnConfig `yaml:"webauthn"`
 }
 
-// WebAuthnConfig configures passkey / security-key MFA (RP ID defaults from http.public_url).
+// WebAuthnConfig configures web-only passkey / security-key MFA (RP ID defaults from http.public_url).
 type WebAuthnConfig struct {
 	Enabled       bool     `yaml:"enabled"`
 	RPDisplayName string   `yaml:"rp_display_name"`

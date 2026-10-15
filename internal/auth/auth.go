@@ -104,16 +104,23 @@ func NewLayer(store storage.Driver, ldapCfg config.LDAPConfig, mfaCfg config.MFA
 	return l
 }
 
-// Authenticate verifies username/password for IMAP/SMTP/POP3/ManageSieve.
+// Authenticate verifies username/password for non-web protocols, including FlowSync.
 // Users with TOTP enabled are rejected when RequireTokenForMFAUsers is set
-// (they must use XOAUTH2/OAUTHBEARER with an access token from the HTTP API).
+// (they must use an access token from the HTTP API). WebAuthn/passkeys protect
+// web login only and must not change password authentication in other clients.
 func (l *Layer) Authenticate(ctx context.Context, username, password string) (*storage.User, error) {
 	u, err := l.verifyPassword(ctx, username, password)
 	if err != nil {
 		return nil, err
 	}
-	if l.mfaCfg.RequireTokenForMFAUsers && l.MFA != nil && l.MFA.IsEnabled(ctx, u.ID) {
-		return nil, ErrMFARequired
+	if l.mfaCfg.RequireTokenForMFAUsers && l.MFA != nil {
+		mfa, err := l.MFA.Store.GetUserMFA(ctx, u.ID)
+		if err != nil && !errors.Is(err, storage.ErrNotFound) {
+			return nil, err
+		}
+		if err == nil && mfa.TOTPEnabled {
+			return nil, ErrMFARequired
+		}
 	}
 	return u, nil
 }
