@@ -66,3 +66,7 @@ MAM preferences use [XEP-0441](https://xmpp.org/extensions/xep-0441.html), separ
 Carbons now use a shared path for C2S, web plaintext, web OMEMO and bot outgoing messages. Direct full-JID delivery also sends received copies to other Carbons-enabled resources without duplicating the original on the selected resource. Forwarded message/body namespaces are explicit, and private/no-copy hints and already wrapped carbon messages suppress copying. Invalid enable/disable commands are rejected. Expanded `urn:xmpp:carbons:rules:0` is deliberately not advertised: full MUC eligibility and error-response tracking remain incomplete. Component replacement also closes the previous connection outside the hub lock to prevent recursive unregister deadlocks.
 
 References: [Message Carbons](https://xmpp.org/extensions/xep-0280.html), [MAM Preferences](https://xmpp.org/extensions/xep-0441.html).
+
+## IQ dispatch hardening (2026-10-15)
+
+IQ request handlers now match the root element and its namespace for ping, roster, vCard, session, PEP and upload discovery. Namespace text inside an unrelated element cannot invoke these handlers. Result/error stanzas are ignored by server-command dispatch to prevent reply loops; unknown request types and missing IDs are rejected. Regression tests exercise valid ping, nested/spoofed namespaces and unsolicited replies. This is a bounded correctness update, not completion of peer IQ routing or the remaining RFC/XEP checklist above.
