@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -29,20 +30,21 @@ import (
 
 // Server exposes health, metrics, auth API, and the embedded Web UI.
 type Server struct {
-	flowSubmit flowsync.SubmitFunc
-	log        *slog.Logger
-	cfg        *config.Config
-	hub        *settings.Hub
-	store      storage.Driver
-	authn      *auth.Layer
-	ms         *mailstore.Store
-	tls        *tlsutil.Manager
-	xmpp       xmpp.Gateway
-	migrate    *migrate.Service
-	notify     *notify.Hub
-	webpush    *webpush.Service
-	siem       *siem.Exporter
-	servers    []*http.Server
+	calendarSubscriptionsMu sync.Mutex
+	flowSubmit              flowsync.SubmitFunc
+	log                     *slog.Logger
+	cfg                     *config.Config
+	hub                     *settings.Hub
+	store                   storage.Driver
+	authn                   *auth.Layer
+	ms                      *mailstore.Store
+	tls                     *tlsutil.Manager
+	xmpp                    xmpp.Gateway
+	migrate                 *migrate.Service
+	notify                  *notify.Hub
+	webpush                 *webpush.Service
+	siem                    *siem.Exporter
+	servers                 []*http.Server
 }
 
 func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth.Layer, ms *mailstore.Store, tlsMgr *tlsutil.Manager, hub *settings.Hub) *Server {
@@ -69,6 +71,7 @@ func (s *Server) cfgLive() *config.Config {
 // Handler builds the HTTP mux (health, auth, DAV, FlowSync, admin UI).
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/calendar/subscriptions", s.handleCalendarSubscriptions)
 	mux.HandleFunc("/healthz", s.handleHealthz)
 	mux.HandleFunc("/readyz", s.handleReadyz)
 	mux.HandleFunc("/.well-known/mta-sts.txt", s.handleMTASTSPolicy)
@@ -179,6 +182,7 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 	}
 	handler := s.Handler()
+	go s.runCalendarSubscriptions(ctx)
 
 	go func() {
 		<-ctx.Done()
