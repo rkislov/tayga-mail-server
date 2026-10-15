@@ -3668,3 +3668,13 @@ html body { background:var(--work-bg);background-image:none;color:var(--work-tex
 .chat-bubble {border-radius:10px 10px 10px 3px;}
 .chat-bubble.is-mine {border-radius:10px 10px 3px 10px;}
 .chart-card,.ca-panel,.preview-box,.secret,.rte,.rte-toolbar,.form-row-check {background:var(--work-raised);color:var(--work-text);border-color:var(--work-line);border-radius:8px;}
+
+.calendar-visibility { flex: 0 0 auto; width: 18px; height: 18px; margin: 0 8px; accent-color: var(--accent, #3564d4); }
+.calendar-subscriptions { width: min(760px, 94vw); height: fit-content; max-height: 92dvh; }
+.calendar-subscriptions .document-preview-content { display: block; height: auto; max-height: calc(92dvh - 80px); padding: 20px; }
+.calendar-subscriptions form { display: grid; gap: 14px; margin-top: 24px; }
+.calendar-subscriptions label { display: grid; gap: 6px; }
+.subscription-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.subscription-row > div { min-width: 0; overflow-wrap: anywhere; }
+.avatar-initials { display: inline-flex; align-items: center; justify-content: center; background: var(--surface-alt, #e1e8f5); color: var(--text, #24406a); font-weight: 600; font-size: 12px; flex-shrink: 0; }
+.avatar-initials.profile-avatar { font-size: 24px; }

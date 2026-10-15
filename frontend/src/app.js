@@ -256,12 +256,17 @@ function applyTheme(name) {
   renderThemeGallery(key);
 }
 
+function accountInitials(name, email='') {
+  const clean=String(name||'').replace(/<[^>]*>/g,'').replace(/["']/g,'').trim();
+  const words=(clean&&!clean.includes('@')?clean:String(email||clean).split('@')[0]).split(/[\s._-]+/u).filter(Boolean);
+  return (words.length>1 ? Array.from(words[0])[0]+Array.from(words[words.length-1])[0] : Array.from(words[0]||'?').slice(0,2).join('')).toLocaleUpperCase();
+}
 function updateNavUser(email, isAdmin) {
   const mail = email || state.email || localStorage.getItem("tayga.email") || "";
   const avatar = $("nav-avatar");
   const emailEl = $("nav-user-email");
   const roleEl = $("nav-user-role");
-  if (avatar) avatar.textContent = (mail.trim()[0] || "T").toUpperCase();
+  if (avatar) avatar.textContent = accountInitials(state.me?.email===mail ? state.me.display_name : "", mail);
   if (emailEl) emailEl.textContent = mail || "—";
   if (roleEl) {
     const key = isAdmin ? "role_admin" : "role_user";
@@ -301,6 +306,8 @@ const APPS = [
 const mailState = { mailboxID: "", messageID: "", mailboxes: [], order: [], searchQ: "", offset: 0, pageSize: 50, request: 0, sort: "date", sortOrder: "desc", filter: "all" };
 const calState = {
   showPast: false,
+  hiddenCalendars: new Set(),
+  loadSequence: 0,
   calendarID: "",
   eventID: "",
   calendars: [],
@@ -3432,7 +3439,7 @@ function renderCalMonth() {
       continue;
     }
     const dots = cell.events.slice(0, 3).map((ev) =>
-      `<span class="cal-pill" data-ev="${escapeHtml(ev.id)}" title="${escapeHtml(calendarEventLabel(ev))}">${escapeHtml(calendarEventLabel(ev))}</span>`
+      `<span class="cal-pill" style="--calendar-color:${calendarEventColor(ev)};border-left:3px solid ${calendarEventColor(ev)}" data-ev="${escapeHtml(ev.id)}" title="${escapeHtml(calendarEventLabel(ev))}">${escapeHtml(calendarEventLabel(ev))}</span>`
     ).join("");
     const more = cell.events.length > 3
       ? `<span class="cal-more">+${cell.events.length - 3}</span>`
@@ -3593,7 +3600,7 @@ function renderCalEventLog() {
   list.innerHTML = events.map((e) => `
     <li>
       <button type="button" class="msg-item cal-item${isPast(e) ? " is-past" : ""}${e.id === calState.eventID ? " is-active" : ""}" data-ev="${escapeHtml(e.id)}">
-        <span class="msg-subject">${escapeHtml(calendarEventLabel(e))}</span>
+        <span class="msg-subject"><span class="calendar-color-dot" style="background:${calendarEventColor(e)}"></span>${escapeHtml(calendarEventLabel(e))}</span>
         <span class="msg-date cal-start">${escapeHtml(fmtCalShort(e.start))}</span>
         <span class="msg-date cal-end">${escapeHtml(fmtCalTime(e.end) || fmtCalShort(e.end))}</span>
       </button>
@@ -3603,13 +3610,17 @@ function renderCalEventLog() {
   });
 }
 
+function calendarVisibilityKey() { return 'calendar.hidden.' + (state.email || localStorage.getItem('tayga.email') || ''); }
+function calendarEventColor(ev) { const c=calState.calendars.find(c=>c.id===ev.calendar_id); return /^#[0-9a-fA-F]{6}$/.test(c?.color)?c.color:'#c77c35'; }
 async function refreshCalendar() {
   const folders = $("cal-folder-list");
   const list = $("cal-event-list");
   if (!folders || !list) return;
   try {
     const data = await api("/api/v1/calendar/calendars");
-    calState.calendars = data.calendars || [];
+    const subscriptions = await api("/api/v1/calendar/subscriptions");
+    calState.calendars = [...(data.calendars || []), ...(subscriptions.calendars || [])];
+    try { calState.hiddenCalendars = new Set(JSON.parse(localStorage.getItem(calendarVisibilityKey()) || '[]')); } catch { calState.hiddenCalendars = new Set(); }
     calState.defaultCalendarID=data.default_calendar_id||"";
     if (calState.calendarID && !calState.calendars.some((c) => c.id === calState.calendarID)) {
       calState.calendarID = "";
@@ -3621,6 +3632,7 @@ async function refreshCalendar() {
       const label = calendarDisplayLabel(c) + (c.is_default ? " ★" : "") + (c.shared ? " · " + t("cal_shared") : "");
       const del = `<button type="button" class="btn-secondary btn-sm btn-ico" data-cal-properties="${escapeHtml(c.id)}" title="${escapeHtml(t("cal_properties"))}" aria-label="${escapeHtml(t("cal_properties"))}">⋯</button>`;
       return `<li class="folder-row">
+        <input type="checkbox" class="calendar-visibility" data-cal-visible="${escapeHtml(c.id)}" aria-label="${escapeHtml(mailImageText('Показывать события: ', 'Show events: ') + label)}" ${calState.hiddenCalendars.has(c.id) ? '' : 'checked'}>
         <button type="button" class="folder-btn${c.id === calState.calendarID ? " is-active" : ""}" data-cal="${escapeHtml(c.id)}">
           <span class="calendar-color-dot" style="background:${/^#[0-9a-fA-F]{6}$/.test(c.color)?c.color:"#c77c35"}"></span><span>${escapeHtml(label)}</span>
         </button>
@@ -3635,7 +3647,16 @@ async function refreshCalendar() {
         loadCalEvents();
       });
     });
-    folders.querySelectorAll("[data-cal-properties]").forEach(btn=>btn.addEventListener("click",()=>openCalendarProperties(btn.dataset.calProperties)));
+    folders.querySelectorAll('[data-cal-visible]').forEach(input => input.addEventListener('change', () => {
+      if (input.checked) calState.hiddenCalendars.delete(input.dataset.calVisible);
+      else calState.hiddenCalendars.add(input.dataset.calVisible);
+      localStorage.setItem(calendarVisibilityKey(), JSON.stringify([...calState.hiddenCalendars]));
+      loadCalEvents();
+    }));
+    folders.querySelectorAll("[data-cal-properties]").forEach(btn=>btn.addEventListener("click",()=> {
+      const cal=calState.calendars.find(c=>c.id===btn.dataset.calProperties);
+      if(cal?.external) openCalendarSubscriptions(); else openCalendarProperties(btn.dataset.calProperties);
+    }));
     await loadCalEvents();
     await refreshCalInvites();
   } catch (err) {
@@ -3659,6 +3680,7 @@ $("btn-cal-add")?.addEventListener("click", async () => {
 });
 
 async function loadCalEvents() {
+  const sequence = ++calState.loadSequence;
   const list = $("cal-event-list");
   const title = $("cal-folder-title");
   if (!list || !calState.calendarID) {
@@ -3670,14 +3692,17 @@ async function loadCalEvents() {
   }
   const cal = calState.calendars.find((c) => c.id === calState.calendarID);
   $("app-calendar").style.setProperty("--calendar-color", /^#[0-9a-fA-F]{6}$/.test(cal?.color)?cal.color:"#c77c35");
-  ["btn-cal-new","btn-cal-new-mobile","btn-cal-delete"].forEach(id=>{if($(id))$(id).disabled=cal?.writable===false;});
-  if (title) title.textContent = cal?.display_name || cal?.name || t("calendar_title");
+  ["btn-cal-new","btn-cal-new-mobile"].forEach(id=>{if($(id))$(id).disabled=cal?.writable===false;});
+  const visible=calState.calendars.filter(c=>!calState.hiddenCalendars.has(c.id));
+  if (title) title.textContent = visible.length===1 ? calendarDisplayLabel(visible[0]) : t("calendar_title") + " · " + visible.length;
   try {
-    const ev = await api("/api/v1/calendar/calendars/" + encodeURIComponent(calState.calendarID) + "/events");
-    calState.events = (ev.events || []).slice().sort((a, b) => String(a.start || "").localeCompare(String(b.start || "")));
+    const results = await Promise.all(visible.map(async c => c.external ? (c.events || []) : (await api("/api/v1/calendar/calendars/" + encodeURIComponent(c.id) + "/events")).events || []));
+    if(sequence !== calState.loadSequence) return;
+    calState.events = results.flat().sort((a,b)=>String(a.start||'').localeCompare(String(b.start||'')));
+    if(!calState.events.some(e=>e.id===calState.eventID)) calState.eventID='';
     renderCalMonth();
     renderCalEventLog();
-    if (calState.eventID) openCalEvent(calState.eventID);
+    if (calState.eventID && !$("cal-reader")?.classList.contains("hidden")) openCalEvent(calState.eventID);
     else showCalReader(null);
   } catch (err) {
     setMsg($("cal-msg"), err.message, "err");
@@ -3697,6 +3722,9 @@ function showCalReader(ev) {
   empty.classList.add("hidden");
   reader.classList.remove("hidden");
   setMobilePane("read");
+  const calendar=calState.calendars.find(c=>c.id===ev.calendar_id);
+  if($('btn-cal-delete')) $('btn-cal-delete').disabled=calendar?.writable===false;
+  $('cal-attach-upload')?.classList.toggle('hidden', calendar?.writable===false);
   $("cal-subject").textContent = calendarEventLabel(ev);
   $("cal-read-start").textContent = fmtCalWhen(ev.start);
   $("cal-read-end").textContent = fmtCalWhen(ev.end);
@@ -3728,6 +3756,9 @@ async function openCalEvent(id) {
     const day = calEventDayKey(cached);
     if (day) calState.selectedDay = day;
     showCalReader(cached);
+    const owner=calState.calendars.find(c=>c.id===cached.calendar_id);
+    if($('btn-cal-delete')) $('btn-cal-delete').disabled=owner?.writable===false;
+    if(owner?.external) return;
   }
   document.querySelectorAll(".cal-item").forEach((el) => {
     el.classList.toggle("is-active", el.dataset.ev === id);
@@ -3737,7 +3768,7 @@ async function openCalEvent(id) {
   });
   try {
     const d = await api("/api/v1/calendar/events/" + encodeURIComponent(id));
-    showCalReader(d);
+    if(calState.eventID===id) showCalReader(d);
   } catch (err) {
     if (!cached) setMsg($("cal-msg"), err.message, "err");
   }

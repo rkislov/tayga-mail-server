@@ -1309,12 +1309,17 @@ function applyTheme(name) {
   renderThemeGallery(key);
 }
 
+function accountInitials(name, email='') {
+  const clean=String(name||'').replace(/<[^>]*>/g,'').replace(/["']/g,'').trim();
+  const words=(clean&&!clean.includes('@')?clean:String(email||clean).split('@')[0]).split(/[\s._-]+/u).filter(Boolean);
+  return (words.length>1 ? Array.from(words[0])[0]+Array.from(words[words.length-1])[0] : Array.from(words[0]||'?').slice(0,2).join('')).toLocaleUpperCase();
+}
 function updateNavUser(email, isAdmin) {
   const mail = email || state.email || localStorage.getItem("tayga.email") || "";
   const avatar = $("nav-avatar");
   const emailEl = $("nav-user-email");
   const roleEl = $("nav-user-role");
-  if (avatar) avatar.textContent = (mail.trim()[0] || "T").toUpperCase();
+  if (avatar) avatar.textContent = accountInitials(state.me?.email===mail ? state.me.display_name : "", mail);
   if (emailEl) emailEl.textContent = mail || "—";
   if (roleEl) {
     const key = isAdmin ? "role_admin" : "role_user";
@@ -1354,6 +1359,8 @@ const APPS = [
 const mailState = { mailboxID: "", messageID: "", mailboxes: [], order: [], searchQ: "", offset: 0, pageSize: 50, request: 0, sort: "date", sortOrder: "desc", filter: "all" };
 const calState = {
   showPast: false,
+  hiddenCalendars: new Set(),
+  loadSequence: 0,
   calendarID: "",
   eventID: "",
   calendars: [],
@@ -4485,7 +4492,7 @@ function renderCalMonth() {
       continue;
     }
     const dots = cell.events.slice(0, 3).map((ev) =>
-      `<span class="cal-pill" data-ev="${escapeHtml(ev.id)}" title="${escapeHtml(calendarEventLabel(ev))}">${escapeHtml(calendarEventLabel(ev))}</span>`
+      `<span class="cal-pill" style="--calendar-color:${calendarEventColor(ev)};border-left:3px solid ${calendarEventColor(ev)}" data-ev="${escapeHtml(ev.id)}" title="${escapeHtml(calendarEventLabel(ev))}">${escapeHtml(calendarEventLabel(ev))}</span>`
     ).join("");
     const more = cell.events.length > 3
       ? `<span class="cal-more">+${cell.events.length - 3}</span>`
@@ -4646,7 +4653,7 @@ function renderCalEventLog() {
   list.innerHTML = events.map((e) => `
     <li>
       <button type="button" class="msg-item cal-item${isPast(e) ? " is-past" : ""}${e.id === calState.eventID ? " is-active" : ""}" data-ev="${escapeHtml(e.id)}">
-        <span class="msg-subject">${escapeHtml(calendarEventLabel(e))}</span>
+        <span class="msg-subject"><span class="calendar-color-dot" style="background:${calendarEventColor(e)}"></span>${escapeHtml(calendarEventLabel(e))}</span>
         <span class="msg-date cal-start">${escapeHtml(fmtCalShort(e.start))}</span>
         <span class="msg-date cal-end">${escapeHtml(fmtCalTime(e.end) || fmtCalShort(e.end))}</span>
       </button>
@@ -4656,13 +4663,17 @@ function renderCalEventLog() {
   });
 }
 
+function calendarVisibilityKey() { return 'calendar.hidden.' + (state.email || localStorage.getItem('tayga.email') || ''); }
+function calendarEventColor(ev) { const c=calState.calendars.find(c=>c.id===ev.calendar_id); return /^#[0-9a-fA-F]{6}$/.test(c?.color)?c.color:'#c77c35'; }
 async function refreshCalendar() {
   const folders = $("cal-folder-list");
   const list = $("cal-event-list");
   if (!folders || !list) return;
   try {
     const data = await api("/api/v1/calendar/calendars");
-    calState.calendars = data.calendars || [];
+    const subscriptions = await api("/api/v1/calendar/subscriptions");
+    calState.calendars = [...(data.calendars || []), ...(subscriptions.calendars || [])];
+    try { calState.hiddenCalendars = new Set(JSON.parse(localStorage.getItem(calendarVisibilityKey()) || '[]')); } catch { calState.hiddenCalendars = new Set(); }
     calState.defaultCalendarID=data.default_calendar_id||"";
     if (calState.calendarID && !calState.calendars.some((c) => c.id === calState.calendarID)) {
       calState.calendarID = "";
@@ -4674,6 +4685,7 @@ async function refreshCalendar() {
       const label = calendarDisplayLabel(c) + (c.is_default ? " ★" : "") + (c.shared ? " · " + t("cal_shared") : "");
       const del = `<button type="button" class="btn-secondary btn-sm btn-ico" data-cal-properties="${escapeHtml(c.id)}" title="${escapeHtml(t("cal_properties"))}" aria-label="${escapeHtml(t("cal_properties"))}">⋯</button>`;
       return `<li class="folder-row">
+        <input type="checkbox" class="calendar-visibility" data-cal-visible="${escapeHtml(c.id)}" aria-label="${escapeHtml(mailImageText('Показывать события: ', 'Show events: ') + label)}" ${calState.hiddenCalendars.has(c.id) ? '' : 'checked'}>
         <button type="button" class="folder-btn${c.id === calState.calendarID ? " is-active" : ""}" data-cal="${escapeHtml(c.id)}">
           <span class="calendar-color-dot" style="background:${/^#[0-9a-fA-F]{6}$/.test(c.color)?c.color:"#c77c35"}"></span><span>${escapeHtml(label)}</span>
         </button>
@@ -4688,7 +4700,16 @@ async function refreshCalendar() {
         loadCalEvents();
       });
     });
-    folders.querySelectorAll("[data-cal-properties]").forEach(btn=>btn.addEventListener("click",()=>openCalendarProperties(btn.dataset.calProperties)));
+    folders.querySelectorAll('[data-cal-visible]').forEach(input => input.addEventListener('change', () => {
+      if (input.checked) calState.hiddenCalendars.delete(input.dataset.calVisible);
+      else calState.hiddenCalendars.add(input.dataset.calVisible);
+      localStorage.setItem(calendarVisibilityKey(), JSON.stringify([...calState.hiddenCalendars]));
+      loadCalEvents();
+    }));
+    folders.querySelectorAll("[data-cal-properties]").forEach(btn=>btn.addEventListener("click",()=> {
+      const cal=calState.calendars.find(c=>c.id===btn.dataset.calProperties);
+      if(cal?.external) openCalendarSubscriptions(); else openCalendarProperties(btn.dataset.calProperties);
+    }));
     await loadCalEvents();
     await refreshCalInvites();
   } catch (err) {
@@ -4712,6 +4733,7 @@ $("btn-cal-add")?.addEventListener("click", async () => {
 });
 
 async function loadCalEvents() {
+  const sequence = ++calState.loadSequence;
   const list = $("cal-event-list");
   const title = $("cal-folder-title");
   if (!list || !calState.calendarID) {
@@ -4723,14 +4745,17 @@ async function loadCalEvents() {
   }
   const cal = calState.calendars.find((c) => c.id === calState.calendarID);
   $("app-calendar").style.setProperty("--calendar-color", /^#[0-9a-fA-F]{6}$/.test(cal?.color)?cal.color:"#c77c35");
-  ["btn-cal-new","btn-cal-new-mobile","btn-cal-delete"].forEach(id=>{if($(id))$(id).disabled=cal?.writable===false;});
-  if (title) title.textContent = cal?.display_name || cal?.name || t("calendar_title");
+  ["btn-cal-new","btn-cal-new-mobile"].forEach(id=>{if($(id))$(id).disabled=cal?.writable===false;});
+  const visible=calState.calendars.filter(c=>!calState.hiddenCalendars.has(c.id));
+  if (title) title.textContent = visible.length===1 ? calendarDisplayLabel(visible[0]) : t("calendar_title") + " · " + visible.length;
   try {
-    const ev = await api("/api/v1/calendar/calendars/" + encodeURIComponent(calState.calendarID) + "/events");
-    calState.events = (ev.events || []).slice().sort((a, b) => String(a.start || "").localeCompare(String(b.start || "")));
+    const results = await Promise.all(visible.map(async c => c.external ? (c.events || []) : (await api("/api/v1/calendar/calendars/" + encodeURIComponent(c.id) + "/events")).events || []));
+    if(sequence !== calState.loadSequence) return;
+    calState.events = results.flat().sort((a,b)=>String(a.start||'').localeCompare(String(b.start||'')));
+    if(!calState.events.some(e=>e.id===calState.eventID)) calState.eventID='';
     renderCalMonth();
     renderCalEventLog();
-    if (calState.eventID) openCalEvent(calState.eventID);
+    if (calState.eventID && !$("cal-reader")?.classList.contains("hidden")) openCalEvent(calState.eventID);
     else showCalReader(null);
   } catch (err) {
     setMsg($("cal-msg"), err.message, "err");
@@ -4750,6 +4775,9 @@ function showCalReader(ev) {
   empty.classList.add("hidden");
   reader.classList.remove("hidden");
   setMobilePane("read");
+  const calendar=calState.calendars.find(c=>c.id===ev.calendar_id);
+  if($('btn-cal-delete')) $('btn-cal-delete').disabled=calendar?.writable===false;
+  $('cal-attach-upload')?.classList.toggle('hidden', calendar?.writable===false);
   $("cal-subject").textContent = calendarEventLabel(ev);
   $("cal-read-start").textContent = fmtCalWhen(ev.start);
   $("cal-read-end").textContent = fmtCalWhen(ev.end);
@@ -4781,6 +4809,9 @@ async function openCalEvent(id) {
     const day = calEventDayKey(cached);
     if (day) calState.selectedDay = day;
     showCalReader(cached);
+    const owner=calState.calendars.find(c=>c.id===cached.calendar_id);
+    if($('btn-cal-delete')) $('btn-cal-delete').disabled=owner?.writable===false;
+    if(owner?.external) return;
   }
   document.querySelectorAll(".cal-item").forEach((el) => {
     el.classList.toggle("is-active", el.dataset.ev === id);
@@ -4790,7 +4821,7 @@ async function openCalEvent(id) {
   });
   try {
     const d = await api("/api/v1/calendar/events/" + encodeURIComponent(id));
-    showCalReader(d);
+    if(calState.eventID===id) showCalReader(d);
   } catch (err) {
     if (!cached) setMsg($("cal-msg"), err.message, "err");
   }
@@ -7144,12 +7175,25 @@ async function openFileAccess(path){
  try{await refresh()}catch(e){status.textContent=e.message}
 }
 
-async function loadAccountAvatar(image,email=''){
- const request=(image.dataset.request||'')+'x';image.dataset.request=request;try{const response=await fetch('/api/v1/me/avatar'+(email?'?email='+encodeURIComponent(email):''),{headers:{Authorization:'Bearer '+state.tokens?.access_token}});if(!response.ok){image.hidden=true;return}const blob=await response.blob();if(image.dataset.request!==request)return;if(image.dataset.blobURL)URL.revokeObjectURL(image.dataset.blobURL);image.dataset.blobURL=URL.createObjectURL(blob);image.src=image.dataset.blobURL;image.hidden=false;}catch{image.hidden=true}
+function avatarFallback(image,email='') {
+ let fallback=image._initials;
+ if(!fallback){fallback=document.createElement('span');fallback.className=image.className+' avatar-initials';image.after(fallback);image._initials=fallback;}
+ const name=image.dataset.displayName || (!email ? state.me?.display_name : '');
+ fallback.textContent=accountInitials(name,email||state.email);fallback.setAttribute('aria-label',name||email||state.email||'');
+ image.hidden=true;fallback.hidden=false;
 }
-function renderSenderAvatar(from){const email=String(from||'').match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0];const host=$('mail-from');if(!host||!email)return;const image=document.createElement('img');image.className='account-avatar';image.alt='';image.hidden=true;host.prepend(image);loadAccountAvatar(image,email);}
+async function loadAccountAvatar(image,email=''){
+ const request=String(Number(image.dataset.request||0)+1);image.dataset.request=request;avatarFallback(image,email);
+ try{const response=await fetch('/api/v1/me/avatar'+(email?'?email='+encodeURIComponent(email):''),{headers:{Authorization:'Bearer '+state.tokens?.access_token}});
+ if(image.dataset.request!==request)return;if(!response.ok)return;
+ const blob=await response.blob();if(image.dataset.request!==request)return;
+ if(image.dataset.blobURL)URL.revokeObjectURL(image.dataset.blobURL);
+ image.dataset.blobURL=URL.createObjectURL(blob);image.onload=()=>{if(image.dataset.request===request){image.hidden=false;image._initials.hidden=true}};image.onerror=()=>{if(image.dataset.request===request)avatarFallback(image,email)};image.src=image.dataset.blobURL;
+ }catch{if(image.dataset.request===request)avatarFallback(image,email)}
+}
+function renderSenderAvatar(from){const email=String(from||'').match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0];const host=$('mail-from');if(!host||!email)return;const image=document.createElement('img');image.className='account-avatar';image.alt='';image.hidden=true;image.dataset.displayName=String(from||'').replace(email,'');host.prepend(image);loadAccountAvatar(image,email);}
 function mountProfileAvatar(){const host=$('profile-form');if(!host)return;const row=document.createElement('div');row.className='profile-avatar-controls';const image=document.createElement('img');image.className='account-avatar profile-avatar';image.alt=mailImageText('Аватар','Avatar');const input=document.createElement('input');input.type='file';input.accept='image/png,image/jpeg';const label=document.createElement('label');label.textContent=mailImageText('Аватар для почты и XMPP','Mail and XMPP avatar');label.append(input);const remove=document.createElement('button');remove.type='button';remove.className='btn-secondary btn-sm';remove.textContent=mailImageText('Удалить аватар','Remove avatar');const status=document.createElement('p');status.setAttribute('role','status');row.append(image,label,remove,status);host.before(row);
- input.onchange=async()=>{const file=input.files?.[0];if(!file)return;input.disabled=true;try{const response=await fetch('/api/v1/me/avatar',{method:'PUT',headers:{Authorization:'Bearer '+state.tokens?.access_token},body:file});if(!response.ok)throw Error((await response.json()).error);await loadAccountAvatar(image);status.textContent=mailImageText('Аватар сохранён','Avatar saved');}catch(e){status.textContent=e.message}finally{input.disabled=false;input.value=''}};remove.onclick=async()=>{try{await api('/api/v1/me/avatar',{method:'DELETE'});image.hidden=true;}catch(e){status.textContent=e.message}};const observer=new MutationObserver(()=>{if(!$('app-profile').classList.contains('hidden'))loadAccountAvatar(image)});observer.observe($('app-profile'),{attributes:true,attributeFilter:['class']});}
+ input.onchange=async()=>{const file=input.files?.[0];if(!file)return;input.disabled=true;try{const response=await fetch('/api/v1/me/avatar',{method:'PUT',headers:{Authorization:'Bearer '+state.tokens?.access_token},body:file});if(!response.ok)throw Error((await response.json()).error);await loadAccountAvatar(image);status.textContent=mailImageText('Аватар сохранён','Avatar saved');}catch(e){status.textContent=e.message}finally{input.disabled=false;input.value=''}};remove.onclick=async()=>{try{await api('/api/v1/me/avatar',{method:'DELETE'});image.dataset.request=String(Number(image.dataset.request||0)+1);avatarFallback(image);}catch(e){status.textContent=e.message}};const observer=new MutationObserver(()=>{if(!$('app-profile').classList.contains('hidden'))loadAccountAvatar(image)});observer.observe($('app-profile'),{attributes:true,attributeFilter:['class']});}
 mountProfileAvatar();
 
 // Shared, accessible browser for administrative connection records.
@@ -7277,6 +7321,7 @@ function mountSectionSettings(app,title,items){
 }
 mountSectionSettings('calendar',mailImageText('Настройки календаря','Calendar settings'),[
  {label:mailImageText('Добавить календарь','Add calendar'),run:()=>$('btn-cal-add')?.click()},
+ {label:mailImageText('Подписки iCalendar / CalDAV','iCalendar / CalDAV subscriptions'),run:()=>openCalendarSubscriptions()},
  {label:mailImageText('Приглашения','Invitations'),run:()=>$('btn-cal-invites')?.click()},
  {label:mailImageText('Обновить календари','Refresh calendars'),run:()=>$('btn-cal-refresh')?.click()}
 ]);
@@ -7344,6 +7389,25 @@ function renderChatGroupButton(){
  let button=$('chat-group-info');if(!button){button=document.createElement('button');button.id='chat-group-info';button.type='button';button.className='btn-secondary btn-sm';$('chat-peer')?.after(button)}
  button.hidden=!chatState.roster.find(r=>r.jid===chatState.peer)?.group;button.textContent=mailImageText('Участники','Members');
  button.onclick=async()=>{const jid=chatState.peer;try{const {rooms}=await api('/api/v1/chat/rooms');const room=rooms.find(r=>r.jid===jid);if(!room)return;const dialog=document.createElement('dialog');dialog.className='document-preview chat-group-dialog';const header=document.createElement('header'),title=document.createElement('strong'),close=document.createElement('button');title.textContent=room.name;close.className='btn-secondary';close.textContent='×';close.onclick=()=>dialog.close();header.append(title,close);const body=document.createElement('div');body.className='stack-gap';for(const email of room.members){const p=document.createElement('p');p.textContent=email;body.append(p)}const leave=document.createElement('button');leave.className='btn-secondary';leave.textContent=mailImageText('Выйти из группы','Leave group');leave.onclick=async()=>{if(!confirm(mailImageText('Выйти из этой группы? Доступ к истории будет закрыт.','Leave this group? You will lose access to its history.')))return;try{await api('/api/v1/chat/rooms/'+encodeURIComponent(jid),{method:'DELETE'});dialog.close();chatState.peer='';$('chat-thread').classList.add('hidden');$('chat-empty').classList.remove('hidden');await refreshChat()}catch(error){setMsg($('chat-msg'),error.message,'err')}};body.append(leave);dialog.append(header,body);document.body.append(dialog);dialog.onclose=()=>dialog.remove();dialog.showModal()}catch(error){setMsg($('chat-msg'),error.message,'err')}};
+}
+
+async function openCalendarSubscriptions() {
+ const dialog=document.createElement('dialog'); dialog.className='document-preview calendar-subscriptions';
+ const header=document.createElement('header'),title=document.createElement('strong'),close=document.createElement('button');
+ title.textContent=mailImageText('Подписки на календари','Calendar subscriptions');close.type='button';close.className='btn-secondary action-icon';close.textContent='×';close.setAttribute('aria-label',t('close'));close.onclick=()=>dialog.close();header.append(title,close);
+ const body=document.createElement('div');body.className='document-preview-content';
+ const hint=document.createElement('p');hint.className='meta';hint.textContent=mailImageText('Календари только для чтения. Сервер обновляет их каждые 15 минут, даже когда браузер закрыт. Для CalDAV укажите адрес конкретного календаря, для iCalendar — ссылку .ics. Поддерживаются публичные HTTPS-серверы. Повторы отображаются за последний год и на два года вперёд.','Read-only calendars refreshed by the server every 15 minutes, even with the browser closed. Use a calendar collection URL for CalDAV or an .ics feed for iCalendar. Public HTTPS servers are supported. Recurrences cover the past year and the next two years.');
+ const list=document.createElement('div'),form=document.createElement('form'),status=document.createElement('p');status.setAttribute('role','status');
+ const fields={};
+ function field(name,label,type='text'){const wrap=document.createElement('label');wrap.textContent=label;const input=document.createElement('input');input.type=type;input.name=name;input.className='field-input';wrap.append(input);form.append(wrap);fields[name]=input;return input}
+ field('display_name',mailImageText('Название','Name')).required=true;
+ const kindLabel=document.createElement('label');kindLabel.textContent=mailImageText('Тип подписки','Subscription type');const kind=document.createElement('select');kind.className='field-input';kind.append(new Option('iCalendar (.ics)','ical'),new Option('CalDAV','caldav'));kindLabel.append(kind);form.append(kindLabel);
+ field('url',mailImageText('Адрес календаря (HTTPS или webcal)','Calendar URL (HTTPS or webcal)'),'url').required=true;
+ field('username',mailImageText('Логин (если нужен)','Username (if required)')).autocomplete='off';field('password',mailImageText('Пароль приложения (если нужен)','App password (if required)'),'password').autocomplete='new-password';
+ const submit=document.createElement('button');submit.type='submit';submit.className='btn';submit.textContent=mailImageText('Подписаться','Subscribe');form.append(submit);
+ const render=async()=>{const data=await api('/api/v1/calendar/subscriptions');list.replaceChildren();for(const cal of data.calendars||[]){const row=document.createElement('div');row.className='subscription-row';const info=document.createElement('div'),name=document.createElement('strong'),detail=document.createElement('p'),remove=document.createElement('button');name.textContent=cal.display_name;detail.className='meta';detail.textContent=cal.error||mailImageText('Обновлено: ','Updated: ')+new Date(cal.updated_at).toLocaleString();info.append(name,detail);remove.type='button';remove.className='btn-secondary';remove.textContent=mailImageText('Отписаться','Unsubscribe');remove.onclick=async()=>{if(!await askConfirm(mailImageText('Удалить эту подписку?','Remove this subscription?')))return;remove.disabled=true;try{await api('/api/v1/calendar/subscriptions?id='+encodeURIComponent(cal.id),{method:'DELETE'});await render();await refreshCalendar()}catch(e){status.textContent=e.message;remove.disabled=false}};row.append(info,remove);list.append(row)}};
+ form.onsubmit=async event=>{event.preventDefault();submit.disabled=true;status.textContent=mailImageText('Загружаем календарь…','Loading calendar…');try{const payload={kind:kind.value};for(const [key,input]of Object.entries(fields))payload[key]=input.value;await api('/api/v1/calendar/subscriptions',{method:'POST',body:JSON.stringify(payload)});fields.password.value='';status.textContent=mailImageText('Подписка добавлена','Subscription added');await render();await refreshCalendar()}catch(e){status.textContent=e.message}finally{submit.disabled=false}};
+ body.append(hint,list,form,status);dialog.append(header,body);document.body.append(dialog);dialog.addEventListener('close',()=>{fields.password.value='';dialog.remove()},{once:true});dialog.showModal();try{await render()}catch(e){status.textContent=e.message}
 }
 // SPDX-License-Identifier: GPL-3.0-only
 // OMEMO legacy (XEP-0384 0.3): ratchet operations are supplied by libomemo.js.
