@@ -45,6 +45,9 @@ func (s *Server) changeSubscription(ctx context.Context, owner, peer string, toS
 		_ = session.pushRosterPush(peer, "", item.Name, item.Subscription, groups)
 		break
 	}
+	if !toSide && enabled {
+		s.currentPresence(ctx, ParseJID(owner), ParseJID(peer), func(raw []byte) { s.hub.Route(peer, raw) })
+	}
 	return nil
 }
 func (s *Session) sendCurrentDeviceLists(ctx context.Context) {
