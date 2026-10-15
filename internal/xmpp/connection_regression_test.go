@@ -78,3 +78,36 @@ func TestBindingRequiresAuthenticationAndCorrectNamespace(t *testing.T) {
 		}
 	}
 }
+
+func TestIQDispatchUsesRootNamespaceAndIgnoresReplies(t *testing.T) {
+	srv, _, u := testServer(t)
+	for _, tc := range []struct{ typ, payload, want string }{
+		{"get", `<ping xmlns='urn:xmpp:ping'/>`, "type='result'"},
+		{"get", `<query xmlns='urn:unknown'><ping xmlns='urn:xmpp:ping'/></query>`, "feature-not-implemented"},
+		{"get", `<ping xmlns='urn:wrong'>urn:xmpp:ping</ping>`, "feature-not-implemented"},
+		{"get", `<query xmlns='urn:wrong'>jabber:iq:roster</query>`, "feature-not-implemented"},
+		{"result", `<query xmlns='jabber:iq:roster'/>`, ""},
+		{"error", `<ping xmlns='urn:xmpp:ping'/>`, ""},
+		{"unknown", `<ping xmlns='urn:xmpp:ping'/>`, "bad-request"},
+	} {
+		t.Run(tc.typ+tc.payload, func(t *testing.T) {
+			var out bytes.Buffer
+			s := &Session{srv: srv, user: u, JID: ParseJID(u.Email + "/test"), bw: bufio.NewWriter(&out)}
+			s.dec = xml.NewDecoder(strings.NewReader(`<iq type='` + tc.typ + `' id='test'>` + tc.payload + `</iq>`))
+			token, err := s.dec.Token()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = s.handleIQ(token.(xml.StartElement)); err != nil {
+				t.Fatal(err)
+			}
+			if tc.want == "" {
+				if out.Len() != 0 {
+					t.Fatalf("reply loop: %s", out.String())
+				}
+			} else if !strings.Contains(out.String(), tc.want) {
+				t.Fatalf("got %s want %s", out.String(), tc.want)
+			}
+		})
+	}
+}

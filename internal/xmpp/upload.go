@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
-	"strings"
 )
 
 const UploadNamespace = "urn:xmpp:http:upload:0"
@@ -29,11 +28,15 @@ func (s *Session) uploadIQ(id, typ, to, inner string) (bool, error) {
 	if handler == nil {
 		return false, nil
 	}
+	var root struct{ XMLName xml.Name }
+	if xml.Unmarshal([]byte(inner), &root) != nil {
+		return false, nil
+	}
 	jid := "upload." + s.srv.domain
 	reply := func(payload string) error {
 		return s.writeString(fmt.Sprintf(`<iq type='result' id='%s' from='%s' to='%s'>%s</iq>`, xmlEscape(id), xmlEscape(to), xmlEscape(s.JID.Full()), payload))
 	}
-	if typ == "get" && strings.Contains(inner, "http://jabber.org/protocol/disco#items") && (to == s.srv.domain || to == s.JID.Domain || to == "") {
+	if typ == "get" && root.XMLName == (xml.Name{Space: "http://jabber.org/protocol/disco#items", Local: "query"}) && (to == s.srv.domain || to == s.JID.Domain || to == "") {
 		if to == "" {
 			to = s.srv.domain
 		}
@@ -42,7 +45,7 @@ func (s *Session) uploadIQ(id, typ, to, inner string) (bool, error) {
 	if to != jid {
 		return false, nil
 	}
-	if typ == "get" && strings.Contains(inner, "http://jabber.org/protocol/disco#info") {
+	if typ == "get" && root.XMLName == (xml.Name{Space: "http://jabber.org/protocol/disco#info", Local: "query"}) {
 		return true, reply(fmt.Sprintf(`<query xmlns='http://jabber.org/protocol/disco#info'><identity category='store' type='file' name='Tayga file upload'/><feature var='%s'/><x xmlns='jabber:x:data' type='result'><field var='FORM_TYPE' type='hidden'><value>%s</value></field><field var='max-file-size'><value>%d</value></field></x></query>`, UploadNamespace, UploadNamespace, MaxUploadSize))
 	}
 	var req struct {

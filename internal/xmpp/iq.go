@@ -32,8 +32,18 @@ func (s *Session) handleIQ(se xml.StartElement) error {
 	if err != nil {
 		return err
 	}
+	// Replies must never be interpreted as new commands (or answered with errors).
+	if typ == "result" || typ == "error" {
+		return nil
+	}
+	if typ != "get" && typ != "set" || id == "" {
+		return s.writeString(iqBadRequest(id))
+	}
 	var request struct{ XMLName xml.Name }
-	if xml.Unmarshal([]byte(inner), &request) == nil && s.log != nil {
+	if xml.Unmarshal([]byte(inner), &request) != nil {
+		return s.writeString(iqBadRequest(id))
+	}
+	if s.log != nil {
 		s.log.Info("xmpp IQ request", "type", typ, "element", request.XMLName.Local, "namespace", request.XMLName.Space, "to", to)
 	}
 	if handled, err := s.uploadIQ(id, typ, to, inner); handled {
@@ -42,7 +52,7 @@ func (s *Session) handleIQ(se xml.StartElement) error {
 	ctx := context.Background()
 
 	switch {
-	case typ == "get" && strings.Contains(inner, "vcard-temp"):
+	case typ == "get" && request.XMLName == (xml.Name{Space: "vcard-temp", Local: "vCard"}):
 		user := s.user
 		if to != "" {
 			email := strings.Split(to, "/")[0]
@@ -61,22 +71,22 @@ func (s *Session) handleIQ(se xml.StartElement) error {
 			photo = "<PHOTO><TYPE>image/png</TYPE><BINVAL>" + value.Data + "</BINVAL></PHOTO>"
 		}
 		return s.writeString(fmt.Sprintf(`<iq type='result' id='%s' from='%s' to='%s'><vCard xmlns='vcard-temp'><FN>%s</FN>%s</vCard></iq>`, xmlEscape(id), xmlEscape(user.Email), xmlEscape(s.JID.Full()), xmlEscape(user.DisplayName), photo))
-	case typ == "set" && strings.Contains(inner, "urn:ietf:params:xml:ns:xmpp-session"):
+	case typ == "set" && request.XMLName == (xml.Name{Space: "urn:ietf:params:xml:ns:xmpp-session", Local: "session"}):
 		return s.writeString(fmt.Sprintf(`<iq type='result' id='%s'/>`, xmlEscape(id)))
 
-	case typ == "get" && strings.Contains(inner, "urn:xmpp:ping"):
+	case typ == "get" && request.XMLName == (xml.Name{Space: "urn:xmpp:ping", Local: "ping"}):
 		return s.writeString(fmt.Sprintf(
 			`<iq type='result' id='%s' from='%s' to='%s'/>`,
 			xmlEscape(id), xmlEscape(s.iqResponder(to)), xmlEscape(s.JID.Full()),
 		))
 
-	case typ == "get" && strings.Contains(inner, "http://jabber.org/protocol/disco#info"):
+	case typ == "get" && request.XMLName == (xml.Name{Space: "http://jabber.org/protocol/disco#info", Local: "query"}):
 		return s.writeDiscoInfo(id, to)
 
-	case strings.Contains(inner, "jabber:iq:roster"):
+	case request.XMLName == (xml.Name{Space: "jabber:iq:roster", Local: "query"}):
 		return s.handleRosterIQ(ctx, id, typ, inner)
 
-	case strings.Contains(inner, "http://jabber.org/protocol/pubsub"):
+	case request.XMLName.Local == "pubsub" && (request.XMLName.Space == "http://jabber.org/protocol/pubsub" || request.XMLName.Space == "http://jabber.org/protocol/pubsub#owner"):
 		return s.handlePubSubIQ(ctx, id, typ, to, inner)
 
 	case request.XMLName.Space == "urn:xmpp:mam:2":
