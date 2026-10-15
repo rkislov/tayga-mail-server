@@ -37,13 +37,21 @@ jobs:
             echo "published=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Locate release notes
+        id: notes
+        if: steps.existing.outputs.published != 'true'
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          test -f "docs/release-${version}.md"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
       - name: Run GoReleaser
         if: steps.existing.outputs.published != 'true'
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --clean
+          args: release --clean --release-notes docs/release-${{ steps.notes.outputs.version }}.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
