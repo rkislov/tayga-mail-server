@@ -5,6 +5,7 @@ package flowsync
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"strings"
 	"time"
@@ -170,8 +171,9 @@ func (h *easHandler) syncMailCollection(ctx context.Context, u *storage.User, co
 			body = digest(fmt.Sprintf("%s:%d:%s", m.FilePath, m.Size, m.Flags))
 		}
 		adds = append(adds, syncAdd{
-			ServerID: m.ID,
-			Body:     body, BodyType: bt, EstimatedSize: estimated, Truncated: truncated, To: content.To, Attachments: content.Attachments,
+			ServerID:       m.ID,
+			NativeBodyType: content.nativeBodyType(),
+			Body:           body, BodyType: bt, EstimatedSize: estimated, Truncated: truncated, To: content.To, Attachments: content.Attachments,
 			Subject: hdr.Subject,
 			From:    hdr.From,
 			Date:    m.InternalDate.UTC().Format("2006-01-02T15:04:05.000Z"),
@@ -273,17 +275,38 @@ func renderMailSyncXML(syncKey, collectionID string, adds []syncAdd, wb []writeb
 		fmt.Fprintf(&b, `<Email:DateReceived xmlns:Email="Email:">%s</Email:DateReceived>`, xmlEscape(a.Date))
 		fmt.Fprintf(&b, `<Email:Read xmlns:Email="Email:">%d</Email:Read>`, bool01(a.Read))
 		fmt.Fprintf(&b, `<Email:To xmlns:Email="Email:">%s</Email:To>`, xmlEscape(a.To))
-		fmt.Fprintf(&b, `<Body xmlns="AirSyncBase:"><Type>%s</Type><EstimatedDataSize>%d</EstimatedDataSize><Truncated>%d</Truncated><Data>%s</Data></Body>`, xmlEscape(a.BodyType), a.EstimatedSize, bool01(a.Truncated), xmlEscape(a.Body))
-		if len(a.Attachments) > 0 {
-			b.WriteString(`<Attachments xmlns="AirSyncBase:">`)
-			for index, attachment := range a.Attachments {
-				fmt.Fprintf(&b, `<Attachment><DisplayName>%s</DisplayName><FileReference>%s:%d</FileReference><Method>1</Method><EstimatedDataSize>%d</EstimatedDataSize></Attachment>`, xmlEscape(attachment.Name), xmlEscape(a.ServerID), index, len(attachment.Data))
-			}
-			b.WriteString(`</Attachments>`)
-		}
+		b.WriteString(renderMailBody(a))
 		b.WriteString(`</ApplicationData></Add>`)
 	}
 	b.WriteString(`</Commands></Collection></Collections></Sync>`)
+	return b.String()
+}
+
+func renderMailBody(a syncAdd) string {
+	var b strings.Builder
+	// The XML intermediate uses base64 for binary MIME, just like ComposeMail.
+	// encodeWire emits the original bytes as WBXML OPAQUE, without transcoding.
+	if a.BodyType == "4" {
+		a.Body = base64.StdEncoding.EncodeToString([]byte(a.Body))
+	}
+	fmt.Fprintf(&b, `<Body xmlns="AirSyncBase:"><Type>%s</Type><EstimatedDataSize>%d</EstimatedDataSize><Truncated>%d</Truncated><Data>%s</Data></Body>`, xmlEscape(a.BodyType), a.EstimatedSize, bool01(a.Truncated), xmlEscape(a.Body))
+	if a.NativeBodyType != "" {
+		fmt.Fprintf(&b, `<NativeBodyType xmlns="AirSyncBase:">%s</NativeBodyType>`, xmlEscape(a.NativeBodyType))
+	}
+	if len(a.Attachments) > 0 {
+		b.WriteString(`<Attachments xmlns="AirSyncBase:">`)
+		for index, attachment := range a.Attachments {
+			fmt.Fprintf(&b, `<Attachment><DisplayName>%s</DisplayName><FileReference>%s:%d</FileReference><Method>1</Method><EstimatedDataSize>%d</EstimatedDataSize>`, xmlEscape(attachment.Name), xmlEscape(a.ServerID), index, len(attachment.Data))
+			if attachment.ContentID != "" {
+				fmt.Fprintf(&b, `<ContentId>%s</ContentId>`, xmlEscape(attachment.ContentID))
+			}
+			if attachment.ContentLocation != "" {
+				fmt.Fprintf(&b, `<ContentLocation>%s</ContentLocation>`, xmlEscape(attachment.ContentLocation))
+			}
+			fmt.Fprintf(&b, `<IsInline>%d</IsInline></Attachment>`, bool01(attachment.Inline))
+		}
+		b.WriteString(`</Attachments>`)
+	}
 	return b.String()
 }
 

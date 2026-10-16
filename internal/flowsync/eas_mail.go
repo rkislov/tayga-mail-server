@@ -82,11 +82,8 @@ func (h *easHandler) itemOperations(ctx context.Context, u *storage.User, body [
 				continue
 			}
 			text, kind, size, truncated := preferredBody(content, prefs)
-			flag := 0
-			if truncated {
-				flag = 1
-			}
-			fmt.Fprintf(&out, `<Fetch><Status>1</Status><CollectionId xmlns="AirSync:">%s</CollectionId><ServerId xmlns="AirSync:">%s</ServerId><Properties><Body xmlns="AirSyncBase:"><Type>%s</Type><EstimatedDataSize>%d</EstimatedDataSize><Truncated>%d</Truncated><Data>%s</Data></Body></Properties></Fetch>`, xmlEscape(msg.MailboxID), xmlEscape(id), kind, size, flag, xmlEscape(text))
+			properties := renderMailBody(syncAdd{ServerID: id, Body: text, BodyType: kind, NativeBodyType: content.nativeBodyType(), EstimatedSize: size, Truncated: truncated, Attachments: content.Attachments})
+			fmt.Fprintf(&out, `<Fetch><Status>1</Status><CollectionId xmlns="AirSync:">%s</CollectionId><ServerId xmlns="AirSync:">%s</ServerId><Properties>%s</Properties></Fetch>`, xmlEscape(msg.MailboxID), xmlEscape(id), properties)
 		}
 	}
 	out.WriteString(`</Response></ItemOperations>`)

@@ -21,8 +21,9 @@ type bodyPreference struct {
 	AllOrNone bool
 }
 type syncPreferences struct {
-	Filter int
-	Bodies []bodyPreference
+	Filter      int
+	Bodies      []bodyPreference
+	MIMESupport int `json:",omitempty"`
 }
 
 func (p syncPreferences) hash() string { raw, _ := json.Marshal(p); return string(raw) }
@@ -30,6 +31,13 @@ func preferencesFrom(request *protocolNode, previous syncPreferences) (syncPrefe
 	options := request.child("Options")
 	if options == nil {
 		return previous, nil
+	}
+	if node := options.child("MIMESupport"); node != nil {
+		n, err := strconv.Atoi(strings.TrimSpace(node.Text))
+		if err != nil || n < 0 || n > 2 {
+			return previous, fmt.Errorf("invalid MIME support")
+		}
+		previous.MIMESupport = n
 	}
 	if f := options.child("FilterType"); f != nil {
 		n, err := strconv.Atoi(strings.TrimSpace(f.Text))
@@ -44,7 +52,7 @@ func preferencesFrom(request *protocolNode, previous syncPreferences) (syncPrefe
 			continue
 		}
 		p := bodyPreference{Type: node.value("Type")}
-		if p.Type != "1" && p.Type != "2" {
+		if p.Type != "1" && p.Type != "2" && p.Type != "4" {
 			continue
 		}
 		if n := node.child("TruncationSize"); n != nil {
@@ -100,7 +108,23 @@ func preferredBody(content messageContent, p syncPreferences) (string, string, i
 	kind, text := "1", content.Text
 	var preference bodyPreference
 	if len(p.Bodies) > 0 {
-		preference = p.Bodies[0]
+		// Prefer the native body among the formats accepted by the client.
+		// MIME is only returned when explicitly enabled and requested.
+		for _, candidate := range p.Bodies {
+			if candidate.Type == "4" {
+				if len(content.MIME) > 0 && (p.MIMESupport == 2 || (p.MIMESupport == 1 && content.SMIME)) {
+					preference = candidate
+					break
+				}
+				continue
+			}
+			if preference.Type == "" || candidate.Type == content.nativeBodyType() {
+				preference = candidate
+			}
+		}
+		if preference.Type == "" {
+			preference = bodyPreference{Type: "1", Size: 32 << 10, HasSize: true}
+		}
 		kind = preference.Type
 	} else if content.HTML != "" {
 		kind = "2"
@@ -115,6 +139,9 @@ func preferredBody(content messageContent, p syncPreferences) (string, string, i
 	if kind == "1" && text == "" && content.HTML != "" {
 		text = mailsearch.ExtractHTMLText(content.HTML)
 	}
+	if kind == "4" {
+		text = string(content.MIME)
+	}
 	size := len([]byte(text))
 	limit := 32 << 10
 	// An explicit BodyPreference without TruncationSize requests the whole
@@ -124,9 +151,6 @@ func preferredBody(content messageContent, p syncPreferences) (string, string, i
 	}
 	if preference.HasSize {
 		limit = preference.Size
-		if limit > 1<<20 {
-			limit = 1 << 20
-		}
 	}
 	truncated := size > limit
 	if truncated {
@@ -134,7 +158,7 @@ func preferredBody(content messageContent, p syncPreferences) (string, string, i
 			text = ""
 		} else {
 			end := limit
-			for end > 0 && !utf8.ValidString(text[:end]) {
+			for kind != "4" && end > 0 && !utf8.ValidString(text[:end]) {
 				end--
 			}
 			text = text[:end]
