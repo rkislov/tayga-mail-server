@@ -84,6 +84,11 @@ func (h *easHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	useWBXML := requestWantsWBXML(r.Header.Get("Content-Type"), r.Header.Get("Accept"), body)
+	// A native client can repeat Ping without a body or Content-Type. The
+	// negotiated ActiveSync version still requires a WBXML response (MS-ASHTTP).
+	if len(body) == 0 && version != "" {
+		useWBXML = true
+	}
 	if len(body) > 0 && body[0] == wbxmlVersion {
 		body, err = decodeWire(body)
 		if err != nil {
@@ -132,12 +137,21 @@ func (h *easHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
+		if trace := traceRequest(r); trace != nil {
+			trace.Result = "command_failed"
+			if r.Context().Err() != nil {
+				trace.Result = "request_cancelled"
+			}
+		}
 		http.Error(w, "FlowSync command failed", http.StatusInternalServerError)
 		return
 	}
 	if useWBXML && xmlOut != "" {
 		binOut, err = encodeWire(xmlOut)
 		if err != nil {
+			if trace := traceRequest(r); trace != nil {
+				trace.Result = "response_encoding_failed"
+			}
 			http.Error(w, "response encoding failed", 500)
 			return
 		}

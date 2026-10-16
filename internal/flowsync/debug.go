@@ -130,7 +130,7 @@ func wbStructure(data []byte) []string {
 			value := "[redacted]"
 			if len(stack) > 0 {
 				tag := stack[len(stack)-1]
-				if tag == tagFHStatus || tag == tagFHType || tag == tagFHCount || tag == tagProvStatus || tag == tagStatus {
+				if tag == tagFHStatus || tag == tagFHType || tag == tagFHCount || tag == tagProvStatus || tag == tagStatus || tag == tagPingStatus || tag == tagGIEStatus || tag == (wbTag{20, 13}) {
 					value = numericTrace(s)
 				}
 			}

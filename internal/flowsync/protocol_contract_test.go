@@ -2,11 +2,33 @@
 package flowsync
 
 import (
+	"bytes"
 	"encoding/xml"
 	"io"
 	"strings"
 	"testing"
 )
+
+func TestWireEmptyMoreAvailable(t *testing.T) {
+	wire, err := encodeWire(`<Sync xmlns="AirSync:"><Collections><Collection><MoreAvailable/><Commands/></Collection></Collections></Sync>`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// MS-ASWBXML AirSync: MoreAvailable (0x14) and Commands (0x16)
+	// contain no payload here, so their content bits must remain clear.
+	want := []byte{3, 1, 106, 0, 0, 0, 0x45, 0x5c, 0x4f, 0x14, 0x16, 1, 1, 1}
+	if !bytes.Equal(wire, want) {
+		t.Fatalf("empty tags encoded with content: %x", wire)
+	}
+	decoded, err := decodeWire(wire)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, err := parseProtocolXML(decoded)
+	if err != nil || doc.find("MoreAvailable") == nil || doc.find("Commands") == nil {
+		t.Fatalf("empty tag lost: %s (%v)", decoded, err)
+	}
+}
 
 // Literal wire values from MS-ASWBXML, independent of encoder constants.
 func TestWireFieldContract(t *testing.T) {
