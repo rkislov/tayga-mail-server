@@ -124,6 +124,18 @@ func (h *easHandler) syncOne(ctx context.Context, u *storage.User, dev *storage.
 	}
 	fingerprint := digest(request.render())
 	if key != "0" && key == state.PreviousKey && fingerprint == state.RequestHash && state.Response != "" {
+		// Older builds cached successful responses that silently omitted Fetch.
+		// Repair only the read response; never reapply Add/Change/Delete on retry.
+		repaired, err := h.repairSyncFetchReplay(ctx, kind, id, request, state)
+		if err != nil {
+			return "", err
+		}
+		if repaired != state.Response {
+			state.Response = repaired
+			if err := saveCollectionState(ctx, h.store, u.ID, dev.ID, id, state); err != nil {
+				return "", err
+			}
+		}
 		return state.Response, nil
 	}
 	if key != "0" && (key == "" || key != state.Key) {
@@ -147,6 +159,11 @@ func (h *easHandler) syncOne(ctx context.Context, u *storage.User, dev *storage.
 	}
 	// The key is validated before accepting any client changes.
 	writes := h.applyWritebacks(context.WithValue(ctx, deleteMovesKey{}, request.value("DeletesAsMoves") != "0"), u, kind, id, parseXMLClientOps(request.render()))
+	fetches, err := h.fetchSyncMail(ctx, kind, id, request)
+	if err != nil {
+		return "", err
+	}
+	writes = append(writes, fetches...)
 	if request.value("GetChanges") == "0" {
 		next := storage.NewID()
 		out := fmt.Sprintf(`<Collection xmlns="AirSync:"><SyncKey>%s</SyncKey><CollectionId>%s</CollectionId><Status>1</Status>%s</Collection>`, next, xmlEscape(id), renderWritebackResponses(writes))

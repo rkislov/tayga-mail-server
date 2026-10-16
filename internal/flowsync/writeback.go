@@ -20,10 +20,11 @@ type clientOp struct {
 }
 
 type writebackResult struct {
-	ClientID string
-	ServerID string
-	Status   int
-	Kind     string // add | change | delete
+	ClientID        string
+	ServerID        string
+	Status          int
+	Kind            string // add | change | delete
+	ApplicationData string // server-rendered payload for a successful Sync/Fetch
 }
 
 // parseSyncClientOps extracts Add/Change/Delete from Sync request XML (or WBXML-decoded text fields).
@@ -470,6 +471,8 @@ func renderWritebackResponses(results []writebackResult) string {
 			tag = "Change"
 		case "delete":
 			tag = "Delete"
+		case "fetch":
+			tag = "Fetch"
 		}
 		fmt.Fprintf(&b, `<%s>`, tag)
 		if r.ClientID != "" {
@@ -479,6 +482,7 @@ func renderWritebackResponses(results []writebackResult) string {
 			fmt.Fprintf(&b, `<ServerId>%s</ServerId>`, xmlEscape(r.ServerID))
 		}
 		fmt.Fprintf(&b, `<Status>%d</Status>`, r.Status)
+		b.WriteString(r.ApplicationData)
 		fmt.Fprintf(&b, `</%s>`, tag)
 	}
 	b.WriteString(`</Responses>`)
