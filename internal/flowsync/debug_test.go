@@ -36,3 +36,19 @@ func TestProtocolTraceRedactsContent(t *testing.T) {
 		protocolStructure(bad)
 	}
 }
+
+func TestProtocolTraceKeepsPingAndFetchStatus(t *testing.T) {
+	for _, response := range []string{
+		`<Ping xmlns="Ping:"><Status>3</Status><Folders><Folder>private-folder-id</Folder></Folders></Ping>`,
+		`<ItemOperations xmlns="ItemOperations:"><Status>3</Status><Response><Fetch><Status>3</Status></Fetch></Response></ItemOperations>`,
+	} {
+		wire, err := encodeWire(response)
+		if err != nil {
+			t.Fatal(err)
+		}
+		trace := strings.Join(protocolStructure(wire), " ")
+		if !strings.Contains(trace, " 3 </>") || strings.Contains(trace, "private-folder-id") {
+			t.Fatalf("status missing or content leaked: %s", trace)
+		}
+	}
+}

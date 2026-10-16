@@ -144,6 +144,13 @@ func encodeWire(body string) ([]byte, error) {
 	dec := xml.NewDecoder(strings.NewReader(body))
 	enc := newWBEncoder()
 	var names []xml.Name
+	var pending *wbTag
+	flushStart := func() {
+		if pending != nil {
+			enc.start(*pending)
+			pending = nil
+		}
+	}
 	for {
 		token, err := dec.Token()
 		if err == io.EOF {
@@ -154,6 +161,7 @@ func encodeWire(body string) ([]byte, error) {
 		}
 		switch t := token.(type) {
 		case xml.StartElement:
+			flushStart()
 			names = append(names, t.Name)
 			found := false
 			for page, ns := range wirePages {
@@ -162,7 +170,8 @@ func encodeWire(body string) ([]byte, error) {
 				}
 				for code := byte(5); code < 64; code++ {
 					if wireName(page, code) == t.Name.Local {
-						enc.start(wbTag{page, code})
+						tag := wbTag{page, code}
+						pending = &tag
 						found = true
 						break
 					}
@@ -174,9 +183,17 @@ func encodeWire(body string) ([]byte, error) {
 			}
 		case xml.EndElement:
 			names = names[:len(names)-1]
-			enc.end()
+			if pending != nil {
+				// Empty tags such as MoreAvailable have no content bit or END.
+				enc.switchPage(pending.page)
+				enc.buf.WriteByte(pending.code & 0x3f)
+				pending = nil
+			} else {
+				enc.end()
+			}
 		case xml.CharData:
 			if len(t) > 0 {
+				flushStart()
 				if len(names) > 0 && ((names[len(names)-1].Space == "ItemOperations:" && names[len(names)-1].Local == "Data") || (names[len(names)-1].Space == "ComposeMail:" && names[len(names)-1].Local == "Mime")) {
 					raw, e := base64.StdEncoding.DecodeString(string(t))
 					if e != nil {
