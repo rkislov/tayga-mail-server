@@ -117,11 +117,16 @@ func preferredBody(content messageContent, p syncPreferences) (string, string, i
 	}
 	size := len([]byte(text))
 	limit := 32 << 10
+	// An explicit BodyPreference without TruncationSize requests the whole
+	// body, including when Apple Mail fetches a previously truncated message.
+	if len(p.Bodies) > 0 && !preference.HasSize {
+		limit = size
+	}
 	if preference.HasSize {
 		limit = preference.Size
-	}
-	if limit > 1<<20 {
-		limit = 1 << 20
+		if limit > 1<<20 {
+			limit = 1 << 20
+		}
 	}
 	truncated := size > limit
 	if truncated {
