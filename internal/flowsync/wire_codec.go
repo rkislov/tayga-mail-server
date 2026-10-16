@@ -55,6 +55,7 @@ func decodeWire(body []byte) ([]byte, error) {
 	var out bytes.Buffer
 	enc := xml.NewEncoder(&out)
 	var stack []xml.StartElement
+	var bodyTypes []string
 	page := byte(0)
 	roots := 0
 	for r.Len() > 0 {
@@ -71,6 +72,7 @@ func decodeWire(body []byte) ([]byte, error) {
 			}
 			start := stack[len(stack)-1]
 			stack = stack[:len(stack)-1]
+			bodyTypes = bodyTypes[:len(bodyTypes)-1]
 			err = enc.EncodeToken(start.End())
 		case 3, 0xc3:
 			if len(stack) == 0 {
@@ -93,7 +95,12 @@ func decodeWire(body []byte) ([]byte, error) {
 				}
 			}
 			if err == nil {
-				if stack[len(stack)-1].Name.Space == "ComposeMail:" && stack[len(stack)-1].Name.Local == "Mime" {
+				name := stack[len(stack)-1].Name
+				if name == (xml.Name{Space: "AirSyncBase:", Local: "Type"}) && len(stack) > 1 && stack[len(stack)-2].Name == (xml.Name{Space: "AirSyncBase:", Local: "Body"}) {
+					bodyTypes[len(bodyTypes)-2] += string(value)
+				}
+				mimeBody := name == (xml.Name{Space: "AirSyncBase:", Local: "Data"}) && len(bodyTypes) > 1 && bodyTypes[len(bodyTypes)-2] == "4"
+				if name == (xml.Name{Space: "ComposeMail:", Local: "Mime"}) || name == (xml.Name{Space: "ItemOperations:", Local: "Data"}) || mimeBody {
 					value = []byte(base64.StdEncoding.EncodeToString(value))
 				}
 				err = enc.EncodeToken(xml.CharData(value))
@@ -123,6 +130,7 @@ func decodeWire(body []byte) ([]byte, error) {
 			err = enc.EncodeToken(start)
 			if token&0x40 != 0 {
 				stack = append(stack, start)
+				bodyTypes = append(bodyTypes, "")
 			} else if err == nil {
 				err = enc.EncodeToken(start.End())
 			}
@@ -144,6 +152,7 @@ func encodeWire(body string) ([]byte, error) {
 	dec := xml.NewDecoder(strings.NewReader(body))
 	enc := newWBEncoder()
 	var names []xml.Name
+	var bodyTypes []string
 	var pending *wbTag
 	flushStart := func() {
 		if pending != nil {
@@ -163,6 +172,7 @@ func encodeWire(body string) ([]byte, error) {
 		case xml.StartElement:
 			flushStart()
 			names = append(names, t.Name)
+			bodyTypes = append(bodyTypes, "")
 			found := false
 			for page, ns := range wirePages {
 				if ns != t.Name.Space {
@@ -183,6 +193,7 @@ func encodeWire(body string) ([]byte, error) {
 			}
 		case xml.EndElement:
 			names = names[:len(names)-1]
+			bodyTypes = bodyTypes[:len(bodyTypes)-1]
 			if pending != nil {
 				// Empty tags such as MoreAvailable have no content bit or END.
 				enc.switchPage(pending.page)
@@ -194,7 +205,11 @@ func encodeWire(body string) ([]byte, error) {
 		case xml.CharData:
 			if len(t) > 0 {
 				flushStart()
-				if len(names) > 0 && ((names[len(names)-1].Space == "ItemOperations:" && names[len(names)-1].Local == "Data") || (names[len(names)-1].Space == "ComposeMail:" && names[len(names)-1].Local == "Mime")) {
+				if len(names) > 1 && names[len(names)-1] == (xml.Name{Space: "AirSyncBase:", Local: "Type"}) && names[len(names)-2] == (xml.Name{Space: "AirSyncBase:", Local: "Body"}) {
+					bodyTypes[len(bodyTypes)-2] += string(t)
+				}
+				mimeBody := len(names) > 1 && names[len(names)-1] == (xml.Name{Space: "AirSyncBase:", Local: "Data"}) && bodyTypes[len(bodyTypes)-2] == "4"
+				if len(names) > 0 && (mimeBody || (names[len(names)-1].Space == "ItemOperations:" && names[len(names)-1].Local == "Data") || (names[len(names)-1].Space == "ComposeMail:" && names[len(names)-1].Local == "Mime")) {
 					raw, e := base64.StdEncoding.DecodeString(string(t))
 					if e != nil {
 						return nil, e

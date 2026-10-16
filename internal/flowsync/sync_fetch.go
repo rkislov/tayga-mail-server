@@ -19,7 +19,17 @@ func (h *easHandler) repairSyncFetchReplay(ctx context.Context, kind collectionK
 	if err != nil {
 		return "", err
 	}
-	if doc.find("Fetch") != nil {
+	// A successful Fetch from older builds can also be missing the native
+	// format. Refresh that read-only result while preserving other responses.
+	needsRepair := doc.find("Fetch") == nil
+	if responses := doc.find("Responses"); responses != nil {
+		for _, response := range responses.Children {
+			if response.Name.Local == "Fetch" && response.value("Status") == "1" && response.find("NativeBodyType") == nil {
+				needsRepair = true
+			}
+		}
+	}
+	if !needsRepair {
 		return state.Response, nil
 	}
 	preferences, err := preferencesFrom(request, state.Preferences)
@@ -53,7 +63,13 @@ func (h *easHandler) repairSyncFetchReplay(ctx context.Context, kind collectionK
 		copy(collection.Children[at+1:], collection.Children[at:])
 		collection.Children[at] = responses
 	}
-	responses.Children = append(responses.Children, added.find("Responses").Children...)
+	kept := responses.Children[:0]
+	for _, response := range responses.Children {
+		if response.Name.Local != "Fetch" {
+			kept = append(kept, response)
+		}
+	}
+	responses.Children = append(kept, added.find("Responses").Children...)
 	return doc.render(), nil
 }
 
@@ -100,8 +116,9 @@ func (h *easHandler) fetchSyncMail(ctx context.Context, kind collectionKind, col
 		body, bodyType, size, truncated := preferredBody(content, contextPreferences(ctx))
 		full := renderMailSyncXML("", collectionID, []syncAdd{{
 			ServerID: id, Subject: content.Subject, From: content.From, To: content.To,
-			Date: msg.InternalDate.UTC().Format("2006-01-02T15:04:05.000Z"),
-			Read: storage.HasFlag(msg.Flags, `\Seen`), Body: body, BodyType: bodyType,
+			NativeBodyType: content.nativeBodyType(),
+			Date:           msg.InternalDate.UTC().Format("2006-01-02T15:04:05.000Z"),
+			Read:           storage.HasFlag(msg.Flags, `\Seen`), Body: body, BodyType: bodyType,
 			EstimatedSize: size, Truncated: truncated, Attachments: content.Attachments,
 		}}, nil)
 		doc, err := parseProtocolXML([]byte(full))
