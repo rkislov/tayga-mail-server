@@ -608,7 +608,11 @@
             <strong data-i18n="chat_title">Чат</strong>
             <button type="button" class="btn-spray btn-sm btn-ico" id="btn-chat-new" data-i18n-title="chat_new" title="Диалог" aria-label="Диалог"><span class="ico" data-ico="chat" aria-hidden="true"></span></button>
           </div>
-          <label class="field-label" for="chat-presence" data-i18n="presence_label">Мой статус</label><select id="chat-presence" class="field-input"><option value="online" data-i18n="presence_online">В сети</option><option value="away" data-i18n="presence_away">Отошёл</option><option value="dnd" data-i18n="presence_dnd">Не беспокоить</option><option value="offline" data-i18n="presence_offline">Не в сети</option></select>
+          <div class="chat-self" id="chat-self">
+            <div class="chat-self-identity"><strong id="chat-self-name"></strong><span class="meta" id="chat-self-email"></span></div>
+            <button type="button" id="chat-presence-toggle" class="chat-presence-toggle" aria-haspopup="menu" aria-expanded="false" aria-controls="chat-presence-menu" aria-label="Мой статус"><span class="presence-dot" data-presence="online" aria-hidden="true"></span></button>
+            <div id="chat-presence-menu" class="chat-presence-menu" role="menu" aria-label="Мой статус" hidden></div>
+          </div>
           <ul id="chat-roster" class="msg-list"></ul>
           <p id="chat-roster-msg" class="msg files-msg"></p>
         </div>
