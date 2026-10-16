@@ -10,6 +10,36 @@ import (
 	"github.com/tayga/tms/internal/storage"
 )
 
+func isReadOnlySyncFetch(request *protocolNode) bool {
+	commands := request.child("Commands")
+	if request.value("GetChanges") != "0" || commands == nil || len(commands.Children) == 0 {
+		return false
+	}
+	for _, command := range commands.Children {
+		if command.Name.Local != "Fetch" {
+			return false
+		}
+	}
+	return true
+}
+
+func cachedFetchOnly(response string) bool {
+	doc, err := parseProtocolXML([]byte(response))
+	if err != nil || doc.find("Commands") != nil || doc.find("MoreAvailable") != nil {
+		return false
+	}
+	responses := doc.find("Responses")
+	if responses == nil || len(responses.Children) == 0 {
+		return false
+	}
+	for _, response := range responses.Children {
+		if response.Name.Local != "Fetch" {
+			return false
+		}
+	}
+	return true
+}
+
 func (h *easHandler) repairSyncFetchReplay(ctx context.Context, kind collectionKind, collectionID string, request *protocolNode, state collectionState) (string, error) {
 	commands := request.child("Commands")
 	if commands == nil || commands.child("Fetch") == nil {

@@ -371,13 +371,7 @@ func (h *easHandler) itemEstimate(ctx context.Context, u *storage.User, dev *sto
 					if e != nil {
 						return "", nil, e
 					}
-					hashes := map[string]string{}
-					if commands := parsed.find("Commands"); commands != nil {
-						for _, add := range commands.Children {
-							hashes[add.value("ServerId")] = digest(add.render() + prefs.hash())
-						}
-					}
-					previous := state.Items
+					hashes, previous := snapshotItemHashes(kind, parsed.find("Commands"), prefs, state.Items, state.itemPreferences(), state.Preferences)
 					if key == "0" {
 						previous = nil
 					}

@@ -16,10 +16,10 @@ type pingSubscription struct {
 	Folders   []string
 }
 
-func (h *easHandler) collectionSnapshot(ctx context.Context, u *storage.User, id string) (map[string]string, error) {
+func (h *easHandler) collectionSnapshot(ctx context.Context, u *storage.User, id string, state collectionState) (map[string]string, map[string]string, error) {
 	kind, err := h.resolveCollection(ctx, u.ID, id)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var full string
 	switch kind {
@@ -33,19 +33,14 @@ func (h *easHandler) collectionSnapshot(ctx context.Context, u *storage.User, id
 		full, _, err = h.syncMailCollection(context.WithValue(ctx, mailSnapshotKey{}, true), u, id, "snapshot", false, nil)
 	}
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	doc, err := parseProtocolXML([]byte(full))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	hashes := map[string]string{}
-	if commands := doc.find("Commands"); commands != nil {
-		for _, item := range commands.Children {
-			hashes[item.value("ServerId")] = digest(item.render() + contextPreferences(ctx).hash())
-		}
-	}
-	return hashes, nil
+	current, previous := snapshotItemHashes(kind, doc.find("Commands"), contextPreferences(ctx), state.Items, state.itemPreferences(), state.Preferences)
+	return current, previous, nil
 }
 
 func (h *easHandler) ping(ctx context.Context, u *storage.User, dev *storage.FlowSyncDevice, body []byte) (string, error) {
@@ -117,11 +112,11 @@ func (h *easHandler) ping(ctx context.Context, u *storage.User, dev *storage.Flo
 			if err != nil {
 				return "", err
 			}
-			snapshot, err := h.collectionSnapshot(context.WithValue(ctx, preferencesKey{}, state.Preferences), u, id)
+			snapshot, previous, err := h.collectionSnapshot(context.WithValue(ctx, preferencesKey{}, state.Preferences), u, id, state)
 			if err != nil {
 				return status(7), nil
 			}
-			ids, _, _ := diffItems(state.Items, snapshot, 1)
+			ids, _, _ := diffItems(previous, snapshot, 1)
 			if len(ids) > 0 {
 				changed = append(changed, id)
 			}
