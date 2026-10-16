@@ -21,6 +21,44 @@ type collectionState struct {
 	PreviousKey string
 	RequestHash string
 	Response    string
+	// Options used to build Items can differ from the sticky Fetch options.
+	ItemPreferences *syncPreferences `json:",omitempty"`
+	ReadKeys        []string         `json:",omitempty"`
+}
+
+func (s collectionState) itemPreferences() syncPreferences {
+	if s.ItemPreferences != nil {
+		return *s.ItemPreferences
+	}
+	return s.Preferences
+}
+
+// Read-only Fetch may race a window of Sync responses. Accept a bounded set of
+// keys issued to this device and collection, but never use them for writebacks.
+func (s collectionState) canFetch(key string) bool {
+	if key == "" || key == "0" {
+		return false
+	}
+	if key == s.Key || key == s.PreviousKey {
+		return true
+	}
+	for _, old := range s.ReadKeys {
+		if old == key {
+			return true
+		}
+	}
+	return false
+}
+
+func (s collectionState) nextReadKeys() []string {
+	keys := append([]string(nil), s.ReadKeys...)
+	if s.Key != "" && s.Key != "0" {
+		keys = append(keys, s.Key)
+	}
+	if len(keys) > 32 {
+		keys = keys[len(keys)-32:]
+	}
+	return keys
 }
 
 func digest(s string) string { v := sha256.Sum256([]byte(s)); return hex.EncodeToString(v[:]) }
@@ -123,6 +161,28 @@ func (h *easHandler) syncOne(ctx context.Context, u *storage.User, dev *storage.
 		return "", err
 	}
 	fingerprint := digest(request.render())
+	if isReadOnlySyncFetch(request) {
+		if !state.canFetch(key) {
+			return syncStatus(id, 3), nil
+		}
+		preferences, err := preferencesFrom(request, state.Preferences)
+		if err != nil || !validFilter(kind, preferences) {
+			return syncStatus(id, 4), nil
+		}
+		fetches, err := h.fetchSyncMail(context.WithValue(ctx, preferencesKey{}, preferences), kind, id, request)
+		if err != nil {
+			return "", err
+		}
+		// Fetch does not acknowledge a Sync window or change its key/replay.
+		// Keep sticky Options separately from the snapshot's representation.
+		if state.ItemPreferences == nil {
+			p := state.Preferences
+			state.ItemPreferences = &p
+		}
+		state.Preferences = preferences
+		out := fmt.Sprintf(`<Collection xmlns="AirSync:"><SyncKey>%s</SyncKey><CollectionId>%s</CollectionId><Status>1</Status>%s</Collection>`, xmlEscape(key), xmlEscape(id), renderWritebackResponses(fetches))
+		return out, saveCollectionState(ctx, h.store, u.ID, dev.ID, id, state)
+	}
 	if key != "0" && key == state.PreviousKey && fingerprint == state.RequestHash && state.Response != "" {
 		// Older builds cached successful responses that silently omitted Fetch.
 		// Repair only the read response; never reapply Add/Change/Delete on retry.
@@ -138,7 +198,10 @@ func (h *easHandler) syncOne(ctx context.Context, u *storage.User, dev *storage.
 		}
 		return state.Response, nil
 	}
-	if key != "0" && (key == "" || key != state.Key) {
+	// Earlier builds advanced the key for a Fetch. Its previous key describes
+	// the same snapshot; allow the next Sync to recover without a folder reset.
+	legacyFetchKey := key != "" && key == state.PreviousKey && cachedFetchOnly(state.Response)
+	if key != "0" && (key == "" || (key != state.Key && !legacyFetchKey)) {
 		return syncStatus(id, 3), nil
 	}
 	preferences, err := preferencesFrom(request, state.Preferences)
@@ -167,7 +230,8 @@ func (h *easHandler) syncOne(ctx context.Context, u *storage.User, dev *storage.
 	if request.value("GetChanges") == "0" {
 		next := storage.NewID()
 		out := fmt.Sprintf(`<Collection xmlns="AirSync:"><SyncKey>%s</SyncKey><CollectionId>%s</CollectionId><Status>1</Status>%s</Collection>`, next, xmlEscape(id), renderWritebackResponses(writes))
-		return out, saveCollectionState(ctx, h.store, u.ID, dev.ID, id, collectionState{Preferences: preferences, Key: next, Items: state.Items, PreviousKey: key, RequestHash: fingerprint, Response: out})
+		p := state.itemPreferences()
+		return out, saveCollectionState(ctx, h.store, u.ID, dev.ID, id, collectionState{Preferences: preferences, ItemPreferences: &p, ReadKeys: state.nextReadKeys(), Key: next, Items: state.Items, PreviousKey: key, RequestHash: fingerprint, Response: out})
 	}
 	var full string
 	switch kind {
@@ -189,12 +253,11 @@ func (h *easHandler) syncOne(ctx context.Context, u *storage.User, dev *storage.
 	}
 	commands := document.find("Commands")
 	items := map[string]*protocolNode{}
-	hashes := map[string]string{}
+	hashes, previous := snapshotItemHashes(kind, commands, preferences, state.Items, state.itemPreferences(), state.Preferences)
 	if commands != nil {
 		for _, add := range commands.Children {
 			sid := add.value("ServerId")
 			items[sid] = add
-			hashes[sid] = digest(add.render() + preferences.hash())
 		}
 	}
 	window := 100
@@ -204,7 +267,7 @@ func (h *easHandler) syncOne(ctx context.Context, u *storage.User, dev *storage.
 	if window > 512 {
 		window = 512
 	}
-	ids, nextItems, more := diffItems(state.Items, hashes, window)
+	ids, nextItems, more := diffItems(previous, hashes, window)
 	if kind == kindMail && len(ids) > 0 {
 		selected := map[string]bool{}
 		for _, sid := range ids {
@@ -256,6 +319,6 @@ func (h *easHandler) syncOne(ctx context.Context, u *storage.User, dev *storage.
 	}
 	result.WriteString(`</Collection>`)
 	out := result.String()
-	err = saveCollectionState(ctx, h.store, u.ID, dev.ID, id, collectionState{Preferences: preferences, Key: nextKey, Items: nextItems, PreviousKey: key, RequestHash: fingerprint, Response: out})
+	err = saveCollectionState(ctx, h.store, u.ID, dev.ID, id, collectionState{Preferences: preferences, ItemPreferences: &preferences, ReadKeys: state.nextReadKeys(), Key: nextKey, Items: nextItems, PreviousKey: key, RequestHash: fingerprint, Response: out})
 	return out, err
 }
