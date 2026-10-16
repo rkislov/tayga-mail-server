@@ -327,7 +327,7 @@ const notesState = {
   shareTarget: null, saveTimer: null, drawing: false, dirty:false, revision:0, attachments:[], etags:{},
 };
 const filesState = { sharedRights:"write",listTarget:"",ownerID:"",sharedRoot:"", path: "", selected: null, entries: [] };
-const chatState = { peer: "", roster: [], messages: [], es: null, me: "", sending: false };
+const chatState = { peer: "", roster: [], messages: [], es: null, me: "", sending: false, presence: "online", presenceSaving: false };
 
 function show(id) {
   const account = id === "view-account";
@@ -3630,10 +3630,10 @@ async function refreshCalendar() {
     }
     folders.innerHTML = calState.calendars.map((c) => {
       const label = calendarDisplayLabel(c) + (c.is_default ? " ★" : "") + (c.shared ? " · " + t("cal_shared") : "");
-      const del = `<button type="button" class="btn-secondary btn-sm btn-ico" data-cal-properties="${escapeHtml(c.id)}" title="${escapeHtml(t("cal_properties"))}" aria-label="${escapeHtml(t("cal_properties"))}">⋯</button>`;
-      return `<li class="folder-row">
+      const del = `<button type="button" class="btn-secondary btn-sm btn-ico calendar-properties" data-cal-properties="${escapeHtml(c.id)}" title="${escapeHtml(t("cal_properties"))}" aria-label="${escapeHtml(t("cal_properties") + ': ' + label)}">⋯</button>`;
+      return `<li class="folder-row calendar-folder-row">
         <input type="checkbox" class="calendar-visibility" data-cal-visible="${escapeHtml(c.id)}" aria-label="${escapeHtml(mailImageText('Показывать события: ', 'Show events: ') + label)}" ${calState.hiddenCalendars.has(c.id) ? '' : 'checked'}>
-        <button type="button" class="folder-btn${c.id === calState.calendarID ? " is-active" : ""}" data-cal="${escapeHtml(c.id)}">
+        <button type="button" class="folder-btn${c.id === calState.calendarID ? " is-active" : ""}" data-cal="${escapeHtml(c.id)}" title="${escapeHtml(label)}">
           <span class="calendar-color-dot" style="background:${/^#[0-9a-fA-F]{6}$/.test(c.color)?c.color:"#c77c35"}"></span><span>${escapeHtml(label)}</span>
         </button>
         ${del}
@@ -4149,6 +4149,8 @@ function startChatLive() {
       const data = await api("/api/v1/chat/roster");
       if (chatState.es !== es) return;
       chatState.roster = data.roster || [];
+      chatState.me = data.me || state.email;
+      chatState.presence = data.presence || 'online';
       renderChatRoster();
     } catch (err) {
       if (chatState.es === es) setMsg($("chat-roster-msg"), err.message, "err");
@@ -4211,6 +4213,39 @@ function scrollChatBottom() {
   if (box) box.scrollTop = box.scrollHeight;
 }
 
+function chatPresenceValue(value) {
+  return ['online','away','dnd','offline'].includes(value) ? value : 'unknown';
+}
+
+function chatPresenceDot(value) {
+  const presence = chatPresenceValue(value);
+  return `<span class="presence-dot" data-presence="${presence}" role="img" aria-label="${escapeHtml(t('presence_'+presence))}" title="${escapeHtml(t('presence_'+presence))}"></span>`;
+}
+
+function setChatPresenceMenu(open, returnFocus = false) {
+  const menu = $('chat-presence-menu'), button = $('chat-presence-toggle');
+  if (!menu || !button) return;
+  menu.hidden = !open;
+  button.setAttribute('aria-expanded', String(open));
+  if (open) menu.querySelector('[aria-checked="true"]')?.focus();
+  else if (returnFocus) button.focus();
+}
+
+function renderChatSelfPresence() {
+  const button = $('chat-presence-toggle'), menu = $('chat-presence-menu');
+  if (!button || !menu) return;
+  const presence = chatPresenceValue(chatState.presence);
+  const focusedChoice = menu.contains(document.activeElement) ? document.activeElement.dataset.presenceChoice : null;
+  $('chat-self-name').textContent = state.me?.display_name || chatState.me || state.email;
+  $('chat-self-email').textContent = chatState.me || state.email;
+  button.querySelector('.presence-dot').dataset.presence = presence;
+  button.title = button.ariaLabel = t('presence_label') + ': ' + t('presence_'+presence);
+  button.disabled = chatState.presenceSaving;
+  menu.setAttribute('aria-label', t('presence_label'));
+  menu.innerHTML = ['online','away','dnd','offline'].map(value => `<button type="button" role="menuitemradio" aria-checked="${value===presence}" data-presence-choice="${value}">${chatPresenceDot(value)}<span>${escapeHtml(t('presence_'+value))}</span><span class="presence-check" aria-hidden="true">${value===presence?'✓':''}</span></button>`).join('');
+  if (focusedChoice && !menu.hidden) menu.querySelector(`[data-presence-choice="${focusedChoice}"]`)?.focus();
+}
+
 function renderChatPeerPresence() {
  const button=$('chat-request-presence');if(!button)return;
  let label=$('chat-peer-presence');if(!label){label=document.createElement('span');label.id='chat-peer-presence';label.className='meta';label.setAttribute('role','status');button.after(label)}
@@ -4221,6 +4256,7 @@ function renderChatPeerPresence() {
 }
 
 function renderChatRoster() {
+ renderChatSelfPresence();
  renderChatPeerPresence();
  renderOMEMOButton();
   renderChatGroupButton();
@@ -4233,8 +4269,8 @@ function renderChatRoster() {
  const presence=r.group?mailImageText("Группа","Group"):t("presence_"+(r.presence||"unknown"));
     return `<li>
       <button type="button" class="msg-item${jid === peer ? " is-active" : ""}" data-jid="${escapeHtml(jid)}">
-        <span class="msg-subject">${escapeHtml(label)}</span>
-        <span class="msg-date">${r.group?"":escapeHtml(jid)+" · "}${escapeHtml(presence)}</span>
+        <span class="chat-roster-name"><span class="msg-subject">${escapeHtml(label)}</span>${r.group?'':chatPresenceDot(r.presence)}</span>
+        <span class="msg-date">${escapeHtml(r.group?presence:jid)}</span>
       </button>${r.subscription_request?`<section class="chat-presence-request" aria-label="${escapeHtml(t('presence_request'))}"><strong>${escapeHtml(label)}</strong><span class="meta">${escapeHtml(jid)}</span><p>${escapeHtml(t('presence_request'))}</p><div class="chat-presence-request-actions"><button type="button" class="btn-secondary btn-sm" data-sub-action="accept" data-peer="${escapeHtml(jid)}">${escapeHtml(t('presence_accept'))}</button><button type="button" class="btn-secondary btn-sm" data-sub-action="reject" data-peer="${escapeHtml(jid)}">${escapeHtml(t('presence_reject'))}</button></div></section>`:''}
     </li>`;
   }).join("") || `<li class="meta msg-empty">${escapeHtml(t("chat_select"))}</li>`;
@@ -4250,7 +4286,7 @@ async function refreshChat() {
     const data = await api("/api/v1/chat/roster");
     chatState.roster = data.roster || [];
     chatState.me = data.me || state.email;
-    if ($('chat-presence')) $('chat-presence').value = data.presence || 'online';
+    chatState.presence = data.presence || 'online';
     renderChatRoster();
     if (chatState.peer) await openChatPeer(chatState.peer, true);
   } catch (err) {
@@ -5198,7 +5234,35 @@ $('task-cancel')?.addEventListener('click',()=>$('task-dialog').close());
 $('task-form')?.addEventListener('submit',async e=>{e.preventDefault();const button=$('task-save');button.disabled=true;try{await api('/api/v1/tasks'+(editingTask?'/'+encodeURIComponent(editingTask.id):''),{method:editingTask?'PUT':'POST',body:JSON.stringify({...editingTask,title:$('task-title').value,body:$('task-body').value,due:$('task-due').value?$('task-due').value+'T12:00:00Z':''})});$('task-dialog').close();await refreshTasks()}catch(err){setMsg($('task-edit-msg'),err.message,'err')}finally{button.disabled=false}});
 
 async function chatSubscription(jid,action){try{await api('/api/v1/chat/subscription',{method:'POST',body:JSON.stringify({jid,action})});await refreshChat()}catch(e){setMsg($('chat-roster-msg'),e.message,'err')}}
-$('chat-presence')?.addEventListener('change',async e=>{try{await api('/api/v1/chat/presence',{method:'POST',body:JSON.stringify({state:e.target.value})})}catch(err){setMsg($('chat-roster-msg'),err.message,'err')}});
+$('chat-presence-toggle')?.addEventListener('click', () => setChatPresenceMenu($('chat-presence-menu').hidden));
+$('chat-presence-menu')?.addEventListener('click', async e => {
+  const option = e.target.closest('[data-presence-choice]');
+  if (!option || chatState.presenceSaving) return;
+  const presence = option.dataset.presenceChoice;
+  setChatPresenceMenu(false, true);
+  if (presence === chatState.presence) return;
+  chatState.presenceSaving = true;
+  renderChatSelfPresence();
+  try {
+    await api('/api/v1/chat/presence', {method:'POST', body:JSON.stringify({state:presence})});
+    chatState.presence = presence;
+    setMsg($('chat-roster-msg'), '');
+  } catch (err) { setMsg($('chat-roster-msg'), err.message, 'err'); }
+  finally { chatState.presenceSaving = false; renderChatSelfPresence(); $('chat-presence-toggle').focus(); }
+});
+$('chat-self')?.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { setChatPresenceMenu(false, true); return; }
+  if (e.key === 'Tab') { setChatPresenceMenu(false); return; }
+  if (!['ArrowDown','ArrowUp','Home','End'].includes(e.key)) return;
+  e.preventDefault();
+  const menu = $('chat-presence-menu');
+  if (menu.hidden) { setChatPresenceMenu(true); return; }
+  const options = [...menu.querySelectorAll('[data-presence-choice]')];
+  const current = options.indexOf(document.activeElement);
+  const next = e.key==='Home'?0:e.key==='End'?options.length-1:(current+(e.key==='ArrowDown'?1:-1)+options.length)%options.length;
+  options[next]?.focus();
+});
+document.addEventListener('pointerdown', e => { if (!e.target.closest('#chat-self')) setChatPresenceMenu(false); });
 $('chat-request-presence')?.addEventListener('click',()=>{if(chatState.peer)chatSubscription(chatState.peer,'request')});
 
 $('chat-attach')?.addEventListener('click',()=>{
