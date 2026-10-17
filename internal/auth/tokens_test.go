@@ -113,8 +113,8 @@ func TestLoginMFAFlow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Find a valid TOTP by brute-forcing current window via ValidateTOTP helper:
-	// generate codes from secret using package by enabling with a probed code.
+	// Generate a code for the current window, allowing it to remain valid
+	// if password hashing crosses into the next window.
 	code := findValidTOTP(t, secret)
 	if err := layer.MFA.ConfirmSetup(ctx, u.ID, code); err != nil {
 		t.Fatal(err)
@@ -141,16 +141,7 @@ func TestLoginMFAFlow(t *testing.T) {
 
 func findValidTOTP(t *testing.T, secret string) string {
 	t.Helper()
-	// Probe by validating successive candidates from a tiny search is not possible
-	// without the generator. Recompute using the same algorithm via trial of
-	// current unix step — we import nothing private, so call ValidateTOTP after
-	// constructing codes with a local copy of hotp logic.
-	for _, skew := range []int64{-1, 0, 1} {
-		code := testHOTP(secret, time.Now().Unix()/30+skew)
-		if auth.ValidateTOTP(secret, code) {
-			return code
-		}
-	}
-	t.Fatal("could not find valid totp")
-	return ""
+	// Choosing the previous accepted window makes this code expire as soon as
+	// the clock crosses a 30-second boundary during the MFA login flow.
+	return testHOTP(secret, time.Now().Unix()/30)
 }
