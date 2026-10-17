@@ -151,13 +151,9 @@ func (s *Server) SendWebOMEMO(ctx context.Context, from, to, raw string) (ChatEv
 	id := randomID()
 	fromFull := ParseJID(from).Bare() + "/web"
 	stanza := fmt.Sprintf(`<message xmlns="jabber:client" from="%s" to="%s" id="%s" type="chat">%s<store xmlns="urn:xmpp:hints"/><encryption xmlns="urn:xmpp:eme:0" namespace="%s" name="OMEMO"/></message>`, xmlEscape(fromFull), xmlEscape(peer.Bare()), id, cipher, legacyOMEMO)
-	if err = s.archiveMAM(ctx, ParseJID(from).Bare(), peer.Bare(), id, stanza); err != nil {
+	stanza, id, err = s.prepareArchivedMessage(ctx, stanza)
+	if err != nil {
 		return ChatEvent{}, err
-	}
-	if from != peer.Bare() {
-		if err = s.archiveMAM(ctx, peer.Bare(), ParseJID(from).Bare(), id, stanza); err != nil {
-			return ChatEvent{}, err
-		}
 	}
 	if !s.hub.Route(peer.Bare(), []byte(stanza)) {
 		if err = s.storeOffline(ctx, peer.Bare(), stanza); err != nil {

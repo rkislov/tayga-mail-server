@@ -1,6 +1,6 @@
 # XMPP compatibility implementation plan
 
-Updated 2026-10-14. This is an implementation checklist, not a claim of complete RFC/XEP conformance.
+Updated 2026-10-17. This is an implementation checklist, not a claim of complete RFC/XEP conformance.
 
 ## Current batch: core connection and archive correctness
 
@@ -29,12 +29,13 @@ Updated 2026-10-14. This is an implementation checklist, not a claim of complete
 - [ ] RFC 7622 (with RFC 9844): strict JID normalization and validation; audit existing identities for collisions before migration.
 - [x] XEP-0198: acknowledgements and bounded resumable sessions; disconnect, replay, expiry and ownership tests (real-client verification remains above).
 - [ ] XEP-0313/0059: MAM query discovery/preferences and full protocol interoperability, including concurrent archive writes.
-- [ ] XEP-0359/0280: archive-assigned stable IDs and correct sent/received carbons across all entry points.
+- [x] XEP-0359: account-assigned stable IDs, matching MAM cursors and live/offline/Carbons/web copies across C2S, web, OMEMO, bot and component entry points.
+- [x] XEP-0280: shared sent/received copies for supported direct-message paths; expanded MUC eligibility remains pending.
 - [x] XEP-0352: active/inactive state; suppress only repeated identical availability while inactive. Messages and subscription requests remain immediate.
 - [ ] XEP-0363 and OMEMO: test key publication, multi-device trust, encrypted attachments and history with Conversations.
 - [ ] XEP-0045: interoperable MUC with membership, roles, invitations, history and domain policies.
 - [ ] RFC 7395: authenticated XMPP WebSocket transport with framing, origin checks and limits.
-- [ ] Web Push: persistent subscriptions, VAPID, service worker, delivery retries, subscription removal and notification privacy.
+- [x] Web Push: persistent subscriptions, VAPID, service worker, delivery retries, subscription removal and notification privacy. Browser/device delivery verification remains pending.
 - [ ] XEP-0357: real push registration/delivery only when a reachable client push service exists; Web Push does not substitute for native-app APNs.
 - [ ] RFC 6120/7712: S2S federation, DNS discovery, authenticated domain association, queues and abuse limits.
 - [ ] RFC 5122, 5437, 7259, 8266, 8284: XMPP links, Sieve notifications, mail Jabber-ID, nicknames and LDAP integration.
@@ -74,3 +75,17 @@ IQ request handlers now match the root element and its namespace for ping, roste
 ## Presence restoration (2026-10-15)
 
 Initial availability now returns current presence for subscribed local contacts and the owner's other resources. Approving a subscription sends existing presence immediately, including native clients that were already online. Local probes are handled with owner-side roster authorization; a full-JID lookup never returns other resources. Original presence payloads (including capability extensions), IDs and status text are retained for the connection lifetime and replayed. Tests cover consent, revocation, resource filtering, initial state, escaping and extension preservation. Full presence priority routing, directed-presence tracking and federation remain pending; this does not assert complete RFC 6121 conformance.
+
+## Stable message IDs (2026-10-17)
+
+[XEP-0359](https://xmpp.org/extensions/xep-0359.html) is now advertised for the server/account domains and local bare account JIDs. Each accepted message gets a server-generated UUID; the local accounts assign that value under their own bare JIDs. Client `message/@id` and `origin-id` remain intact for receipts and client correlation. Repeated or absent client IDs no longer collide in the archive. Incoming direct-child `stanza-id` claims for the assigning accounts are removed before stamping, including when MAM preferences disable storage; third-party IDs are preserved.
+
+Both local archive copies are committed in one transaction before delivery. The live stanza, offline copy, Carbons and web events share the assigned ID with MAM/history. This also applies to opaque OMEMO messages. Existing MAM cursor values remain unchanged; when old rows are read, the server adds the corresponding account `stanza-id` and explicit `jabber:client` namespace to the forwarded message. No history reset or database migration is needed. Web-only groups remain separate from XMPP MUC.
+
+Regression coverage: all five send entry points, duplicate/absent client IDs, spoofed IDs, disabled archiving, offline replay, database reopen/cursors, legacy MAM namespaces, self-message deduplication, discovery scope and transaction rollback on an archive failure. Native-client display of the capability is a separate device check.
+
+## Next push delivery work
+
+The native XEP-0357 item is still **not implemented or advertised**. The inspected [Secret-iOS revision](https://github.com/Secret-Messenger-App/Secret-iOS/tree/6f3083bb839b9ded22faa6feca30163be31df273) disables standard `XMPPPushModule` initialization and sends a custom `register-push-apns` command. Its capability check and its actual registration path are different. Advertising `urn:xmpp:push:0` alone would only change the checkmark.
+
+The next server batch needs an authenticated route to the app's XMPP push service (federation or a configured component), owner-scoped persistent enable/disable registrations, bounded notification queues, publish acknowledgements/errors/retries and removal of rejected registrations. Notifications should omit message bodies and encryption keys. End-to-end acceptance requires background delivery on the target app. The app operator's APNs credentials are not needed by Tayga when a working vendor push gateway exists, but that gateway must support this client. The existing browser Web Push implementation cannot wake the native Secret app.

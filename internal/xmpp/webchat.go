@@ -2,6 +2,7 @@ package xmpp
 
 import (
 	"context"
+	"encoding/xml"
 	"fmt"
 	"strings"
 	"sync"
@@ -247,6 +248,10 @@ func (s *Server) SendChatMessage(ctx context.Context, fromEmail, to, body string
 		`<message from='%s' to='%s' id='%s' type='chat'>%s</message>`,
 		xmlEscape(fromFull), xmlEscape(toJ.Full()), xmlEscape(id), bodyXML,
 	)
+	stanza, id, err := s.prepareArchivedMessage(ctx, stanza)
+	if err != nil {
+		return ChatEvent{}, err
+	}
 	b := []byte(stanza)
 	delivered := s.hub.Route(to, b)
 	if !delivered {
@@ -256,15 +261,15 @@ func (s *Server) SendChatMessage(ctx context.Context, fromEmail, to, body string
 		_ = s.storeOffline(ctx, toJ.Bare(), string(b))
 	}
 	_ = s.enqueueBotInbox(ctx, toJ.Bare(), fromFull, string(b), body)
-	_ = s.archiveMAM(ctx, from, toJ.Bare(), id, string(b))
-	_ = s.archiveMAM(ctx, toJ.Bare(), from, id, string(b))
 
 	ev := ChatEvent{Type: "message", ID: id, From: fromFull, To: toJ.Bare(), Body: body, At: time.Now().UTC()}
 	ev.Attachment, ev.Encrypted = stanzaAttachment(stanza)
 	ev.OMEMO = encryptedElement(stanza)
 	s.hub.fanoutCarbon(ParseJID(fromFull), "sent", stanza)
 	s.hub.pushWeb(from, ev)
-	s.hub.pushWeb(toJ.Bare(), ev)
+	if toJ.Bare() != from {
+		s.hub.pushWeb(toJ.Bare(), ev)
+	}
 	return ev, nil
 }
 
@@ -288,8 +293,13 @@ func (s *Server) SubscribeChat(bare string) (<-chan ChatEvent, func()) {
 }
 
 func parseMessageAddrs(stanza string) (from, to string) {
-	from = attrValue(stanza, "from")
-	to = attrValue(stanza, "to")
+	var message struct {
+		From string `xml:"from,attr"`
+		To   string `xml:"to,attr"`
+	}
+	if xml.Unmarshal([]byte(stanza), &message) == nil {
+		from, to = message.From, message.To
+	}
 	return from, to
 }
 
@@ -318,7 +328,7 @@ func (s *Server) notifyWebFromStanza(stanza, fallbackTo string) {
 	}
 	ev := ChatEvent{
 		Type: "message",
-		ID:   attrValue(stanza, "id"),
+		ID:   stanzaEventID(stanza, ParseJID(to).Bare()),
 		From: from,
 		To:   ParseJID(to).Bare(),
 		Body: extractBody(stanza),
@@ -332,8 +342,9 @@ func (s *Server) notifyWebFromStanza(stanza, fallbackTo string) {
 	if ev.To != "" {
 		s.hub.pushWeb(ev.To, ev)
 	}
-	if from != "" {
-		s.hub.pushWeb(ParseJID(from).Bare(), ev)
+	if sender := ParseJID(from).Bare(); sender != "" && sender != ev.To {
+		ev.ID = stanzaEventID(stanza, sender)
+		s.hub.pushWeb(sender, ev)
 	}
 }
 

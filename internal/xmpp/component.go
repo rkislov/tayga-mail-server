@@ -268,6 +268,12 @@ func (cs *componentSession) forwardStanza(se xml.StartElement) error {
 	stanza := fmt.Sprintf(`<%s from='%s' to='%s'%s%s>%s</%s>`,
 		name, xmlEscape(from), xmlEscape(to), attrIf("id", id), attrIf("type", typ), inner, name,
 	)
+	if name == "message" {
+		stanza, _, err = cs.srv.prepareArchivedMessage(ctx, stanza)
+		if err != nil {
+			return err
+		}
+	}
 	b := []byte(stanza)
 	delivered := cs.srv.hub.Route(to, b)
 	if name == "message" {
@@ -275,8 +281,6 @@ func (cs *componentSession) forwardStanza(se xml.StartElement) error {
 			_ = cs.srv.storeOffline(ctx, ParseJID(to).Bare(), string(b))
 		}
 		_ = cs.srv.enqueueBotInbox(ctx, ParseJID(to).Bare(), from, string(b), extractBody(inner))
-		_ = cs.srv.archiveMAM(ctx, ParseJID(from).Bare(), ParseJID(to).Bare(), id, string(b))
-		_ = cs.srv.archiveMAM(ctx, ParseJID(to).Bare(), ParseJID(from).Bare(), id, string(b))
 		cs.srv.notifyWebFromStanza(stanza, ParseJID(to).Bare())
 	}
 	return nil

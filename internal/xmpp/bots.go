@@ -215,12 +215,14 @@ func (s *Server) SendBotMessage(ctx context.Context, botUserEmail, to, body, msg
 		`<message from='%s' to='%s' id='%s' type='%s'>%s</message>`,
 		xmlEscape(from), xmlEscape(toJ.Full()), xmlEscape(id), xmlEscape(msgType), bodyXML,
 	)
+	stanza, _, err := s.prepareArchivedMessage(ctx, stanza)
+	if err != nil {
+		return err
+	}
 	b := []byte(stanza)
 	if !s.hub.Route(toJ.Bare(), b) && !s.hub.Route(to, b) {
 		_ = s.storeOffline(ctx, toJ.Bare(), string(b))
 	}
-	_ = s.archiveMAM(ctx, from, toJ.Bare(), id, string(b))
-	_ = s.archiveMAM(ctx, toJ.Bare(), from, id, string(b))
 	s.hub.fanoutCarbon(ParseJID(from), "sent", stanza)
 	s.notifyWebFromStanza(stanza, toJ.Bare())
 	return nil

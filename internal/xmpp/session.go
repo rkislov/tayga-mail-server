@@ -454,8 +454,13 @@ func (s *Session) handleMessage(se xml.StartElement) error {
 		attrIf("type", typ),
 		inner,
 	)
-	b := []byte(stanza)
 	ctx := context.Background()
+	stanza, _, err = s.srv.prepareArchivedMessage(ctx, stanza)
+	if err != nil {
+		s.log.Error("xmpp message archive failed", "error", err)
+		return s.writeString(fmt.Sprintf(`<message from='%s' to='%s'%s type='error'><error type='wait'><internal-server-error xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/></error></message>`, xmlEscape(to), xmlEscape(s.JID.Full()), attrIf("id", id)))
+	}
+	b := []byte(stanza)
 	delivered := s.srv.hub.Route(to, b)
 	if !delivered {
 		delivered = s.srv.hub.Route(toJID.Bare(), b)
@@ -464,8 +469,6 @@ func (s *Session) handleMessage(se xml.StartElement) error {
 		_ = s.srv.storeOffline(ctx, toJID.Bare(), string(b))
 	}
 	_ = s.srv.enqueueBotInbox(ctx, toJID.Bare(), s.JID.Full(), string(b), extractBody(inner))
-	_ = s.srv.archiveMAM(ctx, s.JID.Bare(), toJID.Bare(), id, string(b))
-	_ = s.srv.archiveMAM(ctx, toJID.Bare(), s.JID.Bare(), id, string(b))
 	s.srv.notifyWebFromStanza(stanza, toJID.Bare())
 	s.fanoutCarbon("sent", stanza)
 	return nil
