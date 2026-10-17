@@ -10,10 +10,10 @@ Canonical requirements: [tms-xmpp-001.md](./tms-xmpp-001.md).
 | 2 | PubSub/PEP publish + get (OMEMO device list / bundles nodes) | **done** (lab) |
 | 3 | MAM archive + query (`urn:xmpp:mam:2`); message carbons enable/sent | **done** (lab) |
 | Bots | XEP-0114 components + HTTP bot tokens | **done** (lab) |
-| Web UI | Built-in **Chat** app (plaintext over REST + SSE) | **done** (lab) |
+| Web UI | Built-in **Chat** app (REST + SSE, optional browser OMEMO) | implemented; see [browser limitations](web-omemo.md) |
 | Admin | Админка **XMPP**: C2S, компоненты, HTTP-боты | **done** |
 | — | S2S federation | pending |
-| 4–5 | Client OMEMO (WASM/JS); private keys never on server | pending |
+| 4–5 | Browser OMEMO; private keys in the browser | implemented; real-client interop ongoing |
 | 6 | Interop Gajim / Conversations / Dino | pending |
 
 Module: `internal/xmpp`. C2S listeners default **`xmpp.enabled: false`**; the web Chat app uses the same hub/MAM even when C2S is off. Enable C2S for external clients.
@@ -30,7 +30,7 @@ In the shell nav: **Чат / Chat**.
 | `POST /api/v1/chat/send` | send plaintext `{to,body}` |
 | `GET /api/v1/chat/events` | SSE live feed (`Authorization` or `?access_token=`) |
 
-Messages are stored in MAM as XMPP stanzas and fan out to online C2S sessions, components, and other web SSE subscribers. **OMEMO in the browser is not enabled yet** — treat web chat as plaintext until Stage 4–5.
+Messages are stored in MAM as XMPP stanzas and fan out to online C2S sessions, components, and other web SSE subscribers. Browser OMEMO is optional; see [setup, trust and limitations](web-omemo.md). Plaintext conversations remain unencrypted.
 
 ## Admin UI
 
@@ -72,11 +72,11 @@ Handshake: SHA-1 hex of `streamID + secret`.
 | Layer | Responsibility |
 |-------|----------------|
 | **Server** | Routing, roster, offline, PEP (public), MAM (opaque), carbons, web SSE |
-| **Client (future OMEMO)** | Encrypt/decrypt, private keys in IndexedDB |
+| **Client (OMEMO)** | Encrypt/decrypt, private keys in IndexedDB |
 
 ## License ADR
 
-Tayga is **Apache-2.0**. AGPL/GPL Signal stacks are **not** linked into `tayga-mail`.
+The server and FlowSync are **Apache-2.0**. The browser client with OMEMO is **GPL-3.0-only**; its crypto library is not linked into the Go server. See [browser OMEMO](web-omemo.md).
 
 ## Config
 
@@ -101,7 +101,7 @@ Theme **Стрит-арт** mural advertises **Tayga Mail Server** and the new *
 
 Веб-клиент распознаёт OOB (`jabber:x:oob`) и HTTPS URL-вложения в истории и живых событиях. Для локальных файлов доступно открытие превью; внешние ссылки открываются отдельно без передачи токена Tayga. Отправка из веба: «Вложение» использует upload slot и OOB, «Ссылка» сохраняет отдельный режим отправки ссылки хранилища.
 
-**OMEMO в вебе по-прежнему отсутствует.** Зашифрованное сообщение показывается с пояснением открыть его в совместимом клиенте. Добавление HTTP Upload не расшифровывает файлы Conversations и не является подтверждением сквозной совместимости всех версий клиента. Серверные тесты проверяют discovery, выдачу слота, загрузку/скачивание 1,3 МБ, одноразовость, границы доступа и разбор OOB/OMEMO.
+**OMEMO в вебе реализован отдельно от HTTP Upload** — [настройка и ограничения](web-omemo.md). Сам HTTP Upload не расшифровывает файлы Conversations и не является подтверждением сквозной совместимости всех версий клиента. Серверные тесты проверяют discovery, выдачу слота, загрузку/скачивание 1,3 МБ, одноразовость, границы доступа и разбор OOB/OMEMO.
 
 ### Групповые чаты в веб-интерфейсе
 
@@ -115,5 +115,19 @@ Theme **Стрит-арт** mural advertises **Tayga Mail Server** and the new *
 Это локальные веб-группы, не XMPP MUC: подключение к ним из Conversations,
 изменение состава после создания и групповое OMEMO пока не реализованы.
 Веб-уведомления работают при открытой вкладке приложения; системные уведомления
-требуют разрешения браузера и показываются, когда вкладка скрыта. Web Push при
-закрытом браузере не реализован.
+требуют разрешения браузера и показываются, когда вкладка скрыта. Для фоновых уведомлений реализован Web Push: HTTPS, разрешение браузера и
+подписка устройства обязательны. На iOS требуется установка веб-приложения
+на домашний экран. Проверка доставки на конкретных устройствах остаётся
+отдельным этапом; это не push внутри нативного XMPP-клиента.
+
+### Идентификаторы сообщений и статус Push
+
+С 17 октября 2026 поддерживается XEP-0359: сервер назначает сообщениям UUID,
+связанные с MAM и неизменные в живой доставке, offline-очереди и Carbons.
+Веб-история и SSE используют те же ID. Повторение клиентского ID на другом
+устройстве не приводит к потере сообщения в архиве. Старые курсоры истории
+сохраняются, сброс синхронизации не нужен.
+
+XEP-0357 пока не объявляется. Для нативных уведомлений нужен совместимый
+push-шлюз клиентского приложения; Web Push его не заменяет. Точный статус и
+следующий этап описаны в [плане совместимости](xmpp-compatibility-plan.md).

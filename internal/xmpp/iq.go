@@ -81,6 +81,12 @@ func (s *Session) handleIQ(se xml.StartElement) error {
 		))
 
 	case typ == "get" && request.XMLName == (xml.Name{Space: "http://jabber.org/protocol/disco#info", Local: "query"}):
+		var query struct {
+			Node string `xml:"node,attr"`
+		}
+		if xml.Unmarshal([]byte(inner), &query) != nil || query.Node != "" {
+			return s.writeString(iqItemNotFound(id))
+		}
 		return s.writeDiscoInfo(id, to)
 
 	case request.XMLName == (xml.Name{Space: "jabber:iq:roster", Local: "query"}):
@@ -124,6 +130,18 @@ func (s *Session) iqResponder(to string) string {
 
 func (s *Session) writeDiscoInfo(id, to string) error {
 	from := s.iqResponder(to)
+	if to != "" && to != s.JID.Domain && to != s.srv.domain && to != s.JID.Bare() {
+		// Clients also verify stanza-id support at the assigning account's JID.
+		jid, err := NormalizeJID(to)
+		if err != nil || jid.Resource != "" || jid.Local == "" || s.srv.store == nil {
+			return s.writeString(iqItemNotFound(id))
+		}
+		user, err := s.srv.store.GetUserByEmail(context.Background(), jid.Bare())
+		if err != nil || user == nil || !user.Enabled {
+			return s.writeString(iqItemNotFound(id))
+		}
+		return s.writeString(fmt.Sprintf(`<iq type='result' id='%s' from='%s' to='%s'><query xmlns='http://jabber.org/protocol/disco#info'><identity category='account' type='registered'/><feature var='urn:xmpp:sid:0'/></query></iq>`, xmlEscape(id), xmlEscape(jid.Bare()), xmlEscape(s.JID.Full())))
+	}
 	return s.writeString(fmt.Sprintf(
 		`<iq type='result' id='%s' from='%s' to='%s'><query xmlns='http://jabber.org/protocol/disco#info'>`+
 			`<identity category='server' type='im' name='Tayga XMPP'/>`+
@@ -132,6 +150,7 @@ func (s *Session) writeDiscoInfo(id, to string) error {
 			`<feature var='jabber:iq:roster'/>`+
 			`<feature var='vcard-temp'/>`+
 			`<feature var='urn:xmpp:mam:2'/>`+
+			`<feature var='urn:xmpp:sid:0'/>`+
 			`<feature var='urn:xmpp:carbons:2'/>`+
 			`<feature var='http://jabber.org/protocol/pubsub'/>`+
 			`<feature var='http://jabber.org/protocol/pubsub#publish'/>`+
@@ -317,12 +336,18 @@ func (s *Session) handleMAMIQ(ctx context.Context, id, typ, inner string) error 
 	queryID := query.QueryID
 	for _, r := range rows {
 		stamp := r.CreatedAt.UTC().Format(time.RFC3339)
+		// Old rows retain their cursor IDs; supply the corresponding extension
+		// without rewriting history or trusting IDs embedded by old clients.
+		stanza, err := stampMessage(r.Stanza, map[string]string{s.JID.Bare(): r.StanzaID})
+		if err != nil {
+			return s.writeString(iqInternalError(id))
+		}
 		msg := fmt.Sprintf(
 			`<message from='%s' to='%s'><result xmlns='urn:xmpp:mam:2' queryid='%s' id='%s'>`+
 				`<forwarded xmlns='urn:xmpp:forward:0'><delay xmlns='urn:xmpp:delay' stamp='%s'/>%s</forwarded>`+
 				`</result></message>`,
 			xmlEscape(s.JID.Bare()), xmlEscape(s.JID.Full()), xmlEscape(queryID), xmlEscape(r.StanzaID),
-			xmlEscape(stamp), r.Stanza,
+			xmlEscape(stamp), stanza,
 		)
 		s.SendRaw([]byte(msg))
 	}
@@ -375,6 +400,10 @@ func firstSubmatch(re *regexp.Regexp, s string) string {
 		return m[1]
 	}
 	return ""
+}
+
+func iqItemNotFound(id string) string {
+	return fmt.Sprintf(`<iq type='error' id='%s'><error type='cancel'><item-not-found xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/></error></iq>`, xmlEscape(id))
 }
 
 func iqBadRequest(id string) string {
