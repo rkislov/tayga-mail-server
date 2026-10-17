@@ -443,12 +443,15 @@ type backend struct {
 }
 
 func (b *backend) NewSession(c *gosmtp.Conn) (gosmtp.Session, error) {
-	return &session{
-		backend:    b,
-		connection: c.Conn(),
-		remote:     c.Conn().RemoteAddr().String(),
-		helo:       c.Hostname(),
-	}, nil
+	s := &session{
+		transactionID: storage.NewID(),
+		backend:       b,
+		connection:    c.Conn(),
+		remote:        c.Conn().RemoteAddr().String(),
+		helo:          c.Hostname(),
+	}
+	s.protocolResult("EHLO", s.helo, nil)
+	return s, nil
 }
 
 func (b *backend) writeMailLog(e *storage.MailLogEntry) {
@@ -468,16 +471,17 @@ func (b *backend) writeMailLog(e *storage.MailLogEntry) {
 }
 
 type session struct {
-	connection net.Conn
-	sessionID  string
-	backend    *backend
-	remote     string
-	helo       string
-	user       *storage.User
-	from       string
-	toLocal    []string
-	toRemote   []string
-	opts       *gosmtp.MailOptions
+	transactionID string
+	connection    net.Conn
+	sessionID     string
+	backend       *backend
+	remote        string
+	helo          string
+	user          *storage.User
+	from          string
+	toLocal       []string
+	toRemote      []string
+	opts          *gosmtp.MailOptions
 }
 
 func (s *session) AuthMechanisms() []string {
@@ -547,7 +551,9 @@ func (s *session) emitAuth(ok bool, username string, err error) {
 	s.backend.siem.EmitAuth(ok, username, stripPort(s.remote), detail)
 }
 
-func (s *session) Mail(from string, opts *gosmtp.MailOptions) error {
+func (s *session) Mail(from string, opts *gosmtp.MailOptions) (result error) {
+	s.transactionID = storage.NewID()
+	defer func() { s.protocolResult("MAIL", from, result) }()
 	if s.backend.requireAuth && s.user == nil {
 		return &gosmtp.SMTPError{Code: 530, EnhancedCode: gosmtp.EnhancedCode{5, 7, 0}, Message: "Authentication required"}
 	}
@@ -564,7 +570,13 @@ func (s *session) Mail(from string, opts *gosmtp.MailOptions) error {
 	return nil
 }
 
-func (s *session) Rcpt(to string, _ *gosmtp.RcptOptions) error {
+func (s *session) Rcpt(to string, _ *gosmtp.RcptOptions) (result error) {
+	defer func() {
+		s.protocolResult("RCPT", to, result)
+		if result != nil {
+			s.logMailEvent("rejected", "inbound", to, "", 0, "RCPT: "+result.Error())
+		}
+	}()
 	to = normalizeAddr(to)
 	_, err := s.backend.store.ResolveRecipient(context.Background(), to)
 	if err == nil {
@@ -583,7 +595,8 @@ func (s *session) Rcpt(to string, _ *gosmtp.RcptOptions) error {
 	return &gosmtp.SMTPError{Code: 550, EnhancedCode: gosmtp.EnhancedCode{5, 1, 1}, Message: "User unknown"}
 }
 
-func (s *session) Data(r io.Reader) error {
+func (s *session) Data(r io.Reader) (result error) {
+	defer func() { s.protocolResult("DATA", "[body omitted]", result) }()
 	if len(s.toLocal) == 0 && len(s.toRemote) == 0 {
 		return &gosmtp.SMTPError{Code: 554, EnhancedCode: gosmtp.EnhancedCode{5, 5, 0}, Message: "No valid recipients"}
 	}
@@ -637,11 +650,13 @@ func (s *session) Data(r io.Reader) error {
 				s.backend.log.Error("outbound enqueue failed", "err", err)
 				return &gosmtp.SMTPError{Code: 451, EnhancedCode: gosmtp.EnhancedCode{4, 3, 0}, Message: "Queue failed"}
 			}
-			for _, rcpt := range s.toRemote {
-				s.logMailEvent("queued", "outbound", rcpt, msgid, int64(len(outData)), "")
-			}
 		} else if s.backend.out != nil {
-			if err := s.backend.out.Send(from, s.toRemote, outData); err != nil {
+			trace := &deliveryTrace{log: s.backend.log, queueID: storage.NewID(), messageID: msgid, attempt: 1}
+			err := sendTraced(s.backend.out, from, s.toRemote, outData, trace)
+			for _, rcpt := range s.toRemote {
+				s.logMailEvent("smtp_dialogue", "outbound", rcpt, msgid, int64(len(outData)), trace.summary())
+			}
+			if err != nil {
 				s.backend.log.Error("outbound delivery failed", "err", err, "recipients", len(s.toRemote))
 				for _, rcpt := range s.toRemote {
 					s.logMailEvent("failed", "outbound", rcpt, msgid, int64(len(outData)), err.Error())
@@ -685,8 +700,13 @@ func (s *session) logMailEvent(event, direction, rcpt, msgid string, size int64,
 			tenantID = d.TenantID
 		}
 	}
-	if len(detail) > 500 {
-		detail = detail[:500]
+	detail = fmt.Sprintf("transaction_id=%s %s", s.transactionID, detail)
+	limit := 500
+	if event == "smtp_dialogue" {
+		limit = 32768
+	}
+	if len(detail) > limit {
+		detail = detail[:limit]
 	}
 	s.backend.writeMailLog(&storage.MailLogEntry{
 		TenantID:  tenantID,
@@ -896,7 +916,34 @@ func (s *session) Reset() {
 	s.opts = nil
 }
 
-func (s *session) Logout() error { s.backend.authn.ForgetSession(s.sessionID); return nil }
+func (s *session) Logout() error {
+	s.protocolResult("disconnect", "", nil)
+	s.backend.authn.ForgetSession(s.sessionID)
+	return nil
+}
+
+// Log protocol stages without ever reading AUTH secrets or the DATA payload.
+// EHLO denotes an accepted greeting; disconnect can also be a transport close.
+func (s *session) protocolResult(stage, argument string, result error) {
+	if s.backend == nil || s.backend.log == nil {
+		return
+	}
+	code := 250
+	detail := "accepted"
+	if result != nil {
+		code = 451
+		detail = "temporary failure"
+		var reply *gosmtp.SMTPError
+		if errors.As(result, &reply) {
+			code = reply.Code
+			detail = reply.Message
+		}
+	}
+	if len(argument) > 1024 {
+		argument = argument[:1024]
+	}
+	s.backend.log.Info("smtp incoming", "transaction_id", s.transactionID, "peer", s.remote, "helo", s.helo, "stage", stage, "argument", argument, "code", code, "result", detail)
+}
 
 func normalizeAddr(addr string) string {
 	addr = strings.TrimSpace(addr)

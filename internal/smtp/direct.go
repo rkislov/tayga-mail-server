@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
-	"net/smtp"
 	"sort"
 	"strings"
 	"time"
@@ -19,6 +18,7 @@ type directSender struct {
 	dane     *daneResolver
 	tlsrpt   *tlsReporter
 	log      *slog.Logger
+	trace    *deliveryTrace
 }
 
 func newDirectSender(timeout time.Duration, hostname string, sts *stsResolver, dane *daneResolver, tlsrpt *tlsReporter, log *slog.Logger) *directSender {
@@ -32,6 +32,12 @@ func newDirectSender(timeout time.Duration, hostname string, sts *stsResolver, d
 }
 
 func (d *directSender) Send(from string, to []string, data []byte) error {
+	return d.SendTrace(from, to, data, &deliveryTrace{log: d.log})
+}
+func (d *directSender) SendTrace(from string, to []string, data []byte, trace *deliveryTrace) error {
+	clone := *d
+	clone.trace = trace
+	d = &clone
 	byDomain := map[string][]string{}
 	for _, rcpt := range to {
 		dom := domainOf(rcpt)
@@ -49,10 +55,12 @@ func (d *directSender) Send(from string, to []string, data []byte) error {
 }
 
 func (d *directSender) sendDomain(from, domain string, rcpts []string, data []byte) error {
+	d.trace.command("dns", "MX "+domain)
 	hosts, err := mxHosts(domain)
 	if err != nil {
 		return err
 	}
+	d.trace.record("route", strings.Join(hosts, ", "))
 	var pol *stsPolicy
 	if d.sts != nil {
 		pol, err = d.sts.Policy(context.Background(), domain)
@@ -119,7 +127,13 @@ func isTLSRelated(err error) bool {
 	return strings.Contains(s, "starttls") || strings.Contains(s, "tls") || strings.Contains(s, "certificate") || strings.Contains(s, "dane")
 }
 
-func (d *directSender) dialAndSend(addr, serverName, policyDomain, from string, rcpts []string, data []byte, wantTLS bool) error {
+func (d *directSender) dialAndSend(addr, serverName, policyDomain, from string, rcpts []string, data []byte, wantTLS bool) (result error) {
+	trace := d.trace
+	if trace != nil {
+		trace.peer = addr
+	}
+	trace.command("connect", "TCP "+addr)
+	defer func() { result = trace.failure(result) }()
 	conn, err := net.DialTimeout("tcp", addr, d.timeout)
 	if err != nil {
 		d.recordTLS(&tlsEvent{
@@ -129,12 +143,17 @@ func (d *directSender) dialAndSend(addr, serverName, policyDomain, from string, 
 		return err
 	}
 	defer conn.Close()
+	if trace != nil {
+		trace.peer = serverName + "[" + conn.RemoteAddr().String() + "]"
+	}
+	trace.record("connected", "TCP connected")
 	_ = conn.SetDeadline(time.Now().Add(d.timeout))
-	c, err := smtp.NewClient(conn, serverName)
+	c, err := newTracedClient(conn, serverName, trace)
 	if err != nil {
 		return err
 	}
 	defer c.Close()
+	trace.command("ehlo", "EHLO "+d.hostname)
 	if err := c.Hello(d.hostname); err != nil {
 		return err
 	}
@@ -154,6 +173,7 @@ func (d *directSender) dialAndSend(addr, serverName, policyDomain, from string, 
 					return derr
 				}
 			}
+			trace.command("starttls", "STARTTLS")
 			if err := c.StartTLS(tlsCfg); err != nil {
 				result := "starttls-failure"
 				if daneReq || strings.Contains(strings.ToLower(err.Error()), "dane") {
@@ -168,6 +188,7 @@ func (d *directSender) dialAndSend(addr, serverName, policyDomain, from string, 
 				}
 				return fmt.Errorf("starttls: %w", err)
 			}
+			traceTLSReady(c, trace)
 			d.recordTLS(&tlsEvent{
 				PolicyDomain: policyDomain, MXHost: serverName,
 				ResultType: "successful-session", SendingMTA: d.hostname, Count: 1,
@@ -181,14 +202,17 @@ func (d *directSender) dialAndSend(addr, serverName, policyDomain, from string, 
 		}
 	}
 
+	trace.command("mail", "MAIL FROM:<"+from+">")
 	if err := c.Mail(from); err != nil {
 		return err
 	}
 	for _, rcpt := range rcpts {
+		trace.command("rcpt", "RCPT TO:<"+rcpt+">")
 		if err := c.Rcpt(rcpt); err != nil {
 			return err
 		}
 	}
+	trace.command("data", "DATA")
 	w, err := c.Data()
 	if err != nil {
 		return err
@@ -197,10 +221,16 @@ func (d *directSender) dialAndSend(addr, serverName, policyDomain, from string, 
 		_ = w.Close()
 		return err
 	}
+	trace.command("data_result", fmt.Sprintf("[message body omitted: %d bytes] .", len(data)))
 	if err := w.Close(); err != nil {
 		return err
 	}
-	return c.Quit()
+	trace.command("quit", "QUIT")
+	// A final 250 accepted the message; a QUIT failure must not resend it.
+	if err := c.Quit(); err != nil {
+		trace.record("warning", err.Error())
+	}
+	return nil
 }
 
 func (d *directSender) recordTLS(ev *tlsEvent) {
