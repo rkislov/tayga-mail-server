@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -59,6 +60,9 @@ func TestAndroidAttachmentDownloadUsesBase64String(t *testing.T) {
 			h.ServeHTTP(w, r.WithContext(withUser(ctx, u)))
 			if w.Code != 200 || w.Header().Get("Content-Type") != "application/vnd.ms-sync.wbxml" {
 				t.Fatalf("unexpected HTTP response %d", w.Code)
+			}
+			if w.Header().Get("Content-Length") != strconv.Itoa(w.Body.Len()) {
+				t.Fatal("response length differs from wire bytes")
 			}
 			// Inspect the actual wire representation independently of decodeWire:
 			// Data (page 20, tag 0x0c) must be STR_I containing base64, not OPAQUE.
