@@ -112,7 +112,10 @@ func preferredBody(content messageContent, p syncPreferences) (string, string, i
 		// MIME is only returned when explicitly enabled and requested.
 		for _, candidate := range p.Bodies {
 			if candidate.Type == "4" {
-				if len(content.MIME) > 0 && (p.MIMESupport == 2 || (p.MIMESupport == 1 && content.SMIME)) {
+				// Body/Data is a UTF-8 string, even for MIME. Binary or
+				// malformed source MIME cannot be placed in a STR_I value;
+				// negotiate another accepted body format in that case.
+				if len(content.MIME) > 0 && utf8.Valid(content.MIME) && !strings.ContainsRune(string(content.MIME), 0) && (p.MIMESupport == 2 || (p.MIMESupport == 1 && content.SMIME)) {
 					preference = candidate
 					break
 				}
@@ -158,7 +161,7 @@ func preferredBody(content messageContent, p syncPreferences) (string, string, i
 			text = ""
 		} else {
 			end := limit
-			for kind != "4" && end > 0 && !utf8.ValidString(text[:end]) {
+			for end > 0 && !utf8.ValidString(text[:end]) {
 				end--
 			}
 			text = text[:end]

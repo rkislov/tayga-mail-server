@@ -115,29 +115,33 @@ func TestAppleMailHTMLPreviewFetchAndInlineImage(t *testing.T) {
 	assertHTML(item)
 	attachment, wire := call("ItemOperations", `<ItemOperations xmlns="ItemOperations:"><Fetch><Store>Mailbox</Store><FileReference xmlns="AirSyncBase:">`+msg.ID+`:0</FileReference></Fetch></ItemOperations>`)
 	data, err := base64.StdEncoding.DecodeString(attachment.find("Properties").value("Data"))
-	if err != nil || !bytes.Equal(data, picture) || !bytes.Contains(wire, picture) {
+	opaquePicture := append([]byte{0xc3, byte(len(picture))}, picture...)
+	if err != nil || !bytes.Equal(data, picture) || !bytes.Contains(wire, opaquePicture) {
 		t.Fatal("inline image bytes corrupted")
 	}
-	// MIME is sent as original opaque bytes, never as a base64 string on the wire.
+	// Body/Data is a string even for MIME. Verify STR_I on the wire, without
+	// relying on our permissive decoder (which also accepts legacy OPAQUE).
+	mimeString := append([]byte{0x4b, 0x03}, raw...)
+	mimeString = append(mimeString, 0x00, 0x01)
 	mimeOptions := `<BodyPreference xmlns="AirSyncBase:"><Type>4</Type></BodyPreference><MIMESupport xmlns="AirSync:">2</MIMESupport>`
 	item, wire = call("ItemOperations", ioRequest(mimeOptions))
 	data, err = base64.StdEncoding.DecodeString(item.find("Body").value("Data"))
-	if err != nil || item.find("Body").value("Type") != "4" || !bytes.Equal(data, raw) || !bytes.Contains(wire, raw) {
+	if err != nil || item.find("Body").value("Type") != "4" || !bytes.Equal(data, raw) || !bytes.Contains(wire, mimeString) {
 		t.Fatal("MIME round trip corrupted")
 	}
-	mime, _ := sync(state.Key, `<GetChanges>0</GetChanges><Options>`+mimeOptions+`</Options><Commands><Fetch><ServerId>`+msg.ID+`</ServerId></Fetch></Commands>`)
-	if mime.find("Body").value("Type") != "4" || mime.find("Body").value("Data") != base64.StdEncoding.EncodeToString(raw) {
+	mime, wire := sync(state.Key, `<GetChanges>0</GetChanges><Options>`+mimeOptions+`</Options><Commands><Fetch><ServerId>`+msg.ID+`</ServerId></Fetch></Commands>`)
+	if mime.find("Body").value("Type") != "4" || mime.find("Body").value("Data") != base64.StdEncoding.EncodeToString(raw) || !bytes.Contains(wire, mimeString) {
 		t.Fatal("Sync Fetch ignored MIME preference")
 	}
 }
 
-func TestBodyNegotiationAndBinaryMIME(t *testing.T) {
+func TestBodyNegotiationAndMIMEText(t *testing.T) {
 	largeHTML := "<html>" + strings.Repeat("x", 1200000) + "</html>"
 	large, _, _, truncated := preferredBody(messageContent{HTML: largeHTML}, syncPreferences{Bodies: []bodyPreference{{Type: "2", Size: 2 << 20, HasSize: true}}})
 	if truncated || large != largeHTML {
 		t.Fatal("must honor the requested 2 MiB limit instead of silently capping it at 1 MiB")
 	}
-	content := messageContent{Text: "plain", HTML: `<b>html</b>`, MIME: []byte{'a', 0, 255, 13, 10}}
+	content := messageContent{Text: "plain", HTML: `<b>html</b>`, MIME: []byte("Content-Type: text/plain; charset=utf-8\r\n\r\nПривет\r\n")}
 	for _, support := range []int{0, 1, 2} {
 		p := syncPreferences{MIMESupport: support, Bodies: []bodyPreference{{Type: "1"}, {Type: "2"}, {Type: "4"}}}
 		body, kind, size, truncated := preferredBody(content, p)
@@ -174,5 +178,43 @@ func TestBodyNegotiationAndBinaryMIME(t *testing.T) {
 		if _, err := preferencesFrom(doc.find("Fetch"), syncPreferences{}); err == nil {
 			t.Fatal("invalid MIME support accepted")
 		}
+	}
+}
+
+func TestMIMEBodyUsesInlineString(t *testing.T) {
+	// MS-ASAIRS 2.2.2.20.1 and MS-ASDTYPE 2.7 require STR_I for Body/Data.
+	// A byte-level fixture catches an incorrect encoder/decoder round trip.
+	mime := "Subject: Test\r\n\r\nПривет\r\n"
+	input := `<Body xmlns="AirSyncBase:"><Type>4</Type><Data>` + base64.StdEncoding.EncodeToString([]byte(mime)) + `</Data></Body>`
+	got, err := encodeWire(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []byte{0x03, 0x01, 0x6a, 0x00, 0x00, 0x11, 0x4a, 0x46, 0x03, '4', 0x00, 0x01, 0x4b, 0x03}
+	want = append(want, []byte(mime)...)
+	want = append(want, 0x00, 0x01, 0x01)
+	if !bytes.Equal(got, want) {
+		t.Fatalf("MIME Body/Data must use STR_I: got %x, want %x", got, want)
+	}
+}
+
+func TestMIMEStringFallbackAndTruncation(t *testing.T) {
+	for _, invalid := range [][]byte{{'a', 0, 'b'}, {'a', 0xff, 'b'}} {
+		content := messageContent{Text: "plain", HTML: "<b>html</b>", MIME: invalid}
+		for _, bodies := range [][]bodyPreference{{{Type: "4"}}, {{Type: "4"}, {Type: "2"}}} {
+			_, kind, _, _ := preferredBody(content, syncPreferences{MIMESupport: 2, Bodies: bodies})
+			if kind == "4" {
+				t.Fatal("invalid MIME string must use an alternate body format")
+			}
+		}
+		input := `<Body xmlns="AirSyncBase:"><Type>4</Type><Data>` + base64.StdEncoding.EncodeToString(invalid) + `</Data></Body>`
+		if _, err := encodeWire(input); err == nil {
+			t.Fatal("encoder accepted invalid MIME string")
+		}
+	}
+	content := messageContent{MIME: []byte("Subject: Test\r\n\r\nЯ")}
+	body, kind, size, truncated := preferredBody(content, syncPreferences{MIMESupport: 2, Bodies: []bodyPreference{{Type: "4", Size: len(content.MIME) - 1, HasSize: true}}})
+	if kind != "4" || !truncated || size != len(content.MIME) || body != "Subject: Test\r\n\r\n" {
+		t.Fatal("MIME truncation split a UTF-8 character")
 	}
 }
