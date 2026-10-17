@@ -101,7 +101,7 @@ func decodeWire(body []byte) ([]byte, error) {
 					bodyTypes[len(bodyTypes)-2] += string(value)
 				}
 				mimeBody := name == (xml.Name{Space: "AirSyncBase:", Local: "Data"}) && len(bodyTypes) > 1 && bodyTypes[len(bodyTypes)-2] == "4"
-				if name == (xml.Name{Space: "ComposeMail:", Local: "Mime"}) || name == (xml.Name{Space: "ItemOperations:", Local: "Data"}) || mimeBody {
+				if name == (xml.Name{Space: "ComposeMail:", Local: "Mime"}) || (token == wbxmlOpaque && name == (xml.Name{Space: "ItemOperations:", Local: "Data"})) || mimeBody {
 					value = []byte(base64.StdEncoding.EncodeToString(value))
 				}
 				err = enc.EncodeToken(xml.CharData(value))
@@ -210,7 +210,9 @@ func encodeWire(body string) ([]byte, error) {
 					bodyTypes[len(bodyTypes)-2] += string(t)
 				}
 				mimeBody := len(names) > 1 && names[len(names)-1] == (xml.Name{Space: "AirSyncBase:", Local: "Data"}) && bodyTypes[len(bodyTypes)-2] == "4"
-				if len(names) > 0 && (mimeBody || (names[len(names)-1].Space == "ItemOperations:" && names[len(names)-1].Local == "Data") || (names[len(names)-1].Space == "ComposeMail:" && names[len(names)-1].Local == "Mime")) {
+				// MS-ASCMD 2.2.3.39.2: ItemOperations/Data is already a
+				// base64 string. Keep STR_I; binary OPAQUE breaks Gmail's parser.
+				if len(names) > 0 && (mimeBody || (names[len(names)-1].Space == "ComposeMail:" && names[len(names)-1].Local == "Mime")) {
 					raw, e := base64.StdEncoding.DecodeString(string(t))
 					if e != nil {
 						return nil, e
