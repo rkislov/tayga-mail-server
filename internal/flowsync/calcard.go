@@ -284,8 +284,8 @@ func renderMailSyncXML(syncKey, collectionID string, adds []syncAdd, wb []writeb
 
 func renderMailBody(a syncAdd) string {
 	var b strings.Builder
-	// The XML intermediate uses base64 for binary MIME, just like ComposeMail.
-	// encodeWire emits the original bytes as WBXML OPAQUE, without transcoding.
+	// Keep MIME base64-encoded in the XML intermediate to preserve its CRLFs.
+	// encodeWire restores the original MIME text as a WBXML inline string.
 	if a.BodyType == "4" {
 		a.Body = base64.StdEncoding.EncodeToString([]byte(a.Body))
 	}

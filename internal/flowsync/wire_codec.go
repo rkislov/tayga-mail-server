@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"unicode/utf8"
 )
 
 // Protocol names are shared by the XML and binary transports. Numeric assignments
@@ -214,9 +215,19 @@ func encodeWire(body string) ([]byte, error) {
 					if e != nil {
 						return nil, e
 					}
-					enc.buf.WriteByte(wbxmlOpaque)
-					writeMBInt(&enc.buf, uint64(len(raw)))
-					enc.buf.Write(raw)
+					if mimeBody {
+						// MS-ASAIRS 2.2.2.20.1 defines Body/Data as a string,
+						// including Type=4 MIME. MS-ASDTYPE 2.7 requires STR_I;
+						// OPAQUE is reserved here for actual binary fields below.
+						if !utf8.Valid(raw) || bytes.IndexByte(raw, 0) >= 0 {
+							return nil, fmt.Errorf("MIME body is not a WBXML string")
+						}
+						enc.str(string(raw))
+					} else {
+						enc.buf.WriteByte(wbxmlOpaque)
+						writeMBInt(&enc.buf, uint64(len(raw)))
+						enc.buf.Write(raw)
+					}
 				} else {
 					enc.str(string(t))
 				}
