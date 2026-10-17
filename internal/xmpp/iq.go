@@ -44,6 +44,12 @@ func (s *Session) handleIQ(se xml.StartElement) error {
 	if (typ == "get" || typ == "set") && !valid {
 		return s.writeString(iqBadRequest(id))
 	}
+	if handled, err := s.handleMUCIQ(id, typ, to, inner); handled {
+		return err
+	}
+	if handled, err := s.serviceItems(id, typ, to, inner); handled {
+		return err
+	}
 	if handled, err := s.routePeerIQ(id, typ, to, inner); handled {
 		return err
 	}

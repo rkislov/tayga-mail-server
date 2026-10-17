@@ -31,6 +31,7 @@ import (
 	"github.com/tayga/tms/internal/siem"
 	"github.com/tayga/tms/internal/sieve"
 	"github.com/tayga/tms/internal/smtp"
+	"github.com/tayga/tms/internal/spam"
 	"github.com/tayga/tms/internal/storage"
 	"github.com/tayga/tms/internal/tlsutil"
 	"github.com/tayga/tms/internal/version"
@@ -377,6 +378,14 @@ func run(cfgPath string) error {
 			"endpoint", cfg.Mailstore.ObjectStore.Endpoint,
 			"bucket", cfg.Mailstore.ObjectStore.Bucket,
 		)
+	}
+	if sqlStore, ok := store.(*storage.Store); ok {
+		sqlStore.SetSpamLearningPolicy(func() (bool, string) { c := hub.Config().Spam; return spam.LearningEnabled(c), c.Folder })
+		learning := &spam.LearningWorker{Store: sqlStore, Mailstore: ms, Config: func() config.SpamConfig { return hub.Config().Spam }, Log: log}
+		learningCtx, stopLearning := context.WithCancel(ctx)
+		learningDone := make(chan struct{})
+		go func() { defer close(learningDone); learning.Run(learningCtx) }()
+		defer func() { stopLearning(); <-learningDone }()
 	}
 	tlsMgr, err := tlsutil.NewManager(cfg)
 	if err != nil {

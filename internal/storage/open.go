@@ -110,6 +110,9 @@ func migrate(ctx context.Context, db *sql.DB, dialect Dialect) error {
 			"039_mam_preferences.sqlite.sql",
 			"040_mail_collection.sqlite.sql",
 			"041_xmpp_push.sqlite.sql",
+			"042_inbox_rules.sqlite.sql",
+			"043_muc.sqlite.sql",
+			"044_spam_learning.sqlite.sql",
 		}
 	case DialectPostgres:
 		files = []string{
@@ -154,6 +157,9 @@ func migrate(ctx context.Context, db *sql.DB, dialect Dialect) error {
 			"039_mam_preferences.postgres.sql",
 			"040_mail_collection.postgres.sql",
 			"041_xmpp_push.postgres.sql",
+			"042_inbox_rules.postgres.sql",
+			"043_muc.postgres.sql",
+			"044_spam_learning.postgres.sql",
 		}
 	default:
 		return fmt.Errorf("unsupported dialect")

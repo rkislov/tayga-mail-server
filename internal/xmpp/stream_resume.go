@@ -12,6 +12,7 @@ const resumeTTL = 2 * time.Minute
 const resumeBudget = 16 << 20
 
 type resumableStream struct {
+	rooms    []mucResumeState
 	presence *ChatPresence
 	state    streamManagement
 	jid      JID
@@ -29,6 +30,7 @@ func (s *Session) retainStream() {
 		return
 	}
 	snapshot := resumableStream{state: s.sm, jid: s.JID, userID: s.user.ID, carbons: s.carbons, expires: time.Now().Add(resumeTTL)}
+	snapshot.rooms = append([]mucResumeState(nil), s.mucResume...)
 	if s.lastPresence != nil {
 		p := *s.lastPresence
 		snapshot.presence = &p
@@ -124,6 +126,11 @@ func (s *Session) resumeStream(start xml.StartElement) error {
 	s.touchSession()
 	if old.presence != nil {
 		s.srv.recordPresence(context.Background(), s.JID.Full(), old.presence.State, old.presence.Status)
+	}
+	for _, room := range old.rooms {
+		if err := s.handleMUCPresence(room.JID+"/"+room.Nick, "", `<x xmlns='`+mucNS+`'><history maxstanzas='200' since='`+room.Since.Format(time.RFC3339Nano)+`'/></x>`); err != nil {
+			return err
+		}
 	}
 	// These are new deliveries, so they receive fresh outgoing sequence numbers.
 	return s.srv.flushOffline(context.Background(), s.user.ID, s.SendRaw)

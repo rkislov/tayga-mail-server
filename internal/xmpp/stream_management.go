@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const smNamespace = "urn:xmpp:sm:3"
@@ -37,6 +38,11 @@ func isCountedStanza(raw string) bool {
 // writeLocked serializes stanza accounting with socket writes. SM elements are
 // never counted; replay writes bypass this function to preserve sequence numbers.
 func (s *Session) writeLocked(raw string) error {
+	// A stalled mobile client must not hold routing or group locks indefinitely.
+	if s.conn != nil {
+		_ = s.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+		defer s.conn.SetWriteDeadline(time.Time{})
+	}
 	counted := s.sm.enabled && isCountedStanza(raw)
 	if counted && s.sm.sent-s.sm.acknowledged >= 1024 {
 		s.sm.resumable = false

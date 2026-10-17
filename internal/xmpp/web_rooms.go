@@ -7,12 +7,13 @@ import (
 	"time"
 )
 
-// Web rooms are local groups. They do not advertise XMPP MUC compatibility.
+// Local persistent, members-only rooms are shared by web clients and XMPP MUC.
 type ChatRoom struct {
-	JID     string   `json:"jid"`
-	Name    string   `json:"name"`
-	Owner   string   `json:"owner"`
-	Members []string `json:"members"`
+	Affiliations map[string]string `json:"affiliations"`
+	JID          string            `json:"jid"`
+	Name         string            `json:"name"`
+	Owner        string            `json:"owner"`
+	Members      []string          `json:"members"`
 }
 
 func (s *Server) isWebRoom(jid string) bool { return ParseJID(jid).Domain == "web-groups."+s.domain }
@@ -39,6 +40,10 @@ func (s *Server) ListChatRooms(ctx context.Context, email string) ([]ChatRoom, e
 		rooms[i].Members, err = s.roomMembers(ctx, rooms[i].JID)
 		if err != nil {
 			return nil, err
+		}
+		rooms[i].Affiliations = map[string]string{}
+		for _, member := range rooms[i].Members {
+			rooms[i].Affiliations[member] = s.roomAffiliation(ctx, mucRoom{JID: rooms[i].JID, Owner: rooms[i].Owner}, member)
 		}
 	}
 	return rooms, nil
@@ -71,12 +76,17 @@ func (s *Server) requireRoomMember(ctx context.Context, email, jid string) error
 	return nil
 }
 func (s *Server) CreateChatRoom(ctx context.Context, email, name string, members []string) (ChatRoom, error) {
+	s.mucMu.Lock()
+	defer s.mucMu.Unlock()
+	return s.createChatRoom(ctx, email, name, members, "")
+}
+func (s *Server) createChatRoom(ctx context.Context, email, name string, members []string, requested string) (ChatRoom, error) {
 	name = strings.TrimSpace(name)
 	if name == "" || len([]rune(name)) > 100 || len(members) > 99 {
 		return ChatRoom{}, fmt.Errorf("name (1–100 characters) and up to 99 participants required")
 	}
 	owner, err := s.store.GetUserByEmail(ctx, email)
-	if err != nil || !owner.Enabled {
+	if err != nil || !owner.Enabled || owner.AuthSource == "resource" {
 		return ChatRoom{}, fmt.Errorf("account unavailable")
 	}
 	unique := map[string]bool{email: true}
@@ -87,16 +97,19 @@ func (s *Server) CreateChatRoom(ctx context.Context, email, name string, members
 			continue
 		}
 		user, e := s.store.GetUserByEmail(ctx, member)
-		if e != nil || !user.Enabled || user.TenantID != owner.TenantID {
+		if e != nil || !user.Enabled || user.TenantID != owner.TenantID || user.AuthSource == "resource" {
 			return ChatRoom{}, fmt.Errorf("participant unavailable: %s", member)
 		}
 		unique[member] = true
 		all = append(all, member)
 	}
-	if len(all) < 2 {
+	if len(all) < 2 && requested == "" {
 		return ChatRoom{}, fmt.Errorf("choose at least one other participant")
 	}
 	room := ChatRoom{JID: randomID() + "@web-groups." + s.domain, Name: name, Owner: email, Members: all}
+	if requested != "" {
+		room.JID = requested
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return ChatRoom{}, err
@@ -115,15 +128,28 @@ func (s *Server) CreateChatRoom(ctx context.Context, email, name string, members
 	}
 	for _, member := range all {
 		s.hub.pushWeb(member, ChatEvent{Type: "roster"})
+		if member != email {
+			s.inviteRoomMember(email, member, room.JID)
+		}
 	}
 	return room, nil
 }
 func (s *Server) LeaveChatRoom(ctx context.Context, email, jid string) error {
+	s.mucMu.Lock()
+	defer s.mucMu.Unlock()
+	room, err := s.getRoom(ctx, jid)
+	if err != nil {
+		return err
+	}
+	if room.Owner == email {
+		return fmt.Errorf("transfer ownership or delete the group before leaving")
+	}
 	if err := s.requireRoomMember(ctx, email, jid); err != nil {
 		return err
 	}
-	_, err := s.db.ExecContext(ctx, s.rebind(`DELETE FROM web_chat_members WHERE room_jid=? AND email=?`), jid, email)
+	_, err = s.db.ExecContext(ctx, s.rebind(`DELETE FROM web_chat_members WHERE room_jid=? AND email=?`), jid, email)
 	if err == nil {
+		s.evictRoomMember(jid, email, "321")
 		s.hub.pushWeb(email, ChatEvent{Type: "roster"})
 	}
 	return err
@@ -135,7 +161,7 @@ func (s *Server) roomHistory(ctx context.Context, email, jid string, limit int) 
 	if limit < 1 || limit > 200 {
 		limit = 80
 	}
-	rows, err := s.db.QueryContext(ctx, s.rebind(`SELECT id,sender,body,created_at FROM web_chat_messages WHERE room_jid=? ORDER BY created_at DESC,id DESC LIMIT ?`), jid, limit)
+	rows, err := s.db.QueryContext(ctx, s.rebind(`SELECT id,sender,body,created_at,nick,origin_id FROM web_chat_messages WHERE room_jid=? ORDER BY created_at DESC,id DESC LIMIT ?`), jid, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +170,7 @@ func (s *Server) roomHistory(ctx context.Context, email, jid string, limit int) 
 	for rows.Next() {
 		var m HistoryMsg
 		var at string
-		if err = rows.Scan(&m.ID, &m.From, &m.Body, &at); err != nil {
+		if err = rows.Scan(&m.ID, &m.From, &m.Body, &at, &m.Nick, &m.OriginID); err != nil {
 			return nil, err
 		}
 		m.To = jid
@@ -157,6 +183,11 @@ func (s *Server) roomHistory(ctx context.Context, email, jid string, limit int) 
 	return messages, rows.Err()
 }
 func (s *Server) sendRoomMessage(ctx context.Context, email, jid, body string) (ChatEvent, error) {
+	s.mucMu.Lock()
+	defer s.mucMu.Unlock()
+	return s.sendRoomMessageAs(ctx, email, jid, body, email, "")
+}
+func (s *Server) sendRoomMessageAs(ctx context.Context, email, jid, body, nick, originID string) (ChatEvent, error) {
 	if err := s.requireRoomMember(ctx, email, jid); err != nil {
 		return ChatEvent{}, err
 	}
@@ -164,7 +195,7 @@ func (s *Server) sendRoomMessage(ctx context.Context, email, jid, body string) (
 		return ChatEvent{}, fmt.Errorf("message must contain 1–65536 bytes")
 	}
 	ev := ChatEvent{Type: "message", Room: jid, ID: randomID(), From: email, To: jid, Body: body, At: time.Now().UTC()}
-	result, err := s.db.ExecContext(ctx, s.rebind(`INSERT INTO web_chat_messages(id,room_jid,sender,body,created_at) SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM web_chat_members WHERE room_jid=? AND email=?)`), ev.ID, jid, email, body, ev.At.Format(time.RFC3339Nano), jid, email)
+	result, err := s.db.ExecContext(ctx, s.rebind(`INSERT INTO web_chat_messages(id,room_jid,sender,body,created_at,nick,origin_id) SELECT ?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM web_chat_members WHERE room_jid=? AND email=?)`), ev.ID, jid, email, body, ev.At.Format(time.RFC3339Nano), nick, originID, jid, email)
 	if err != nil {
 		return ChatEvent{}, err
 	}
@@ -178,5 +209,6 @@ func (s *Server) sendRoomMessage(ctx context.Context, email, jid, body string) (
 	for _, member := range members {
 		s.hub.pushWeb(member, ev)
 	}
+	s.broadcastRoomMessage(ev, nick, originID)
 	return ev, nil
 }

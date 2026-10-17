@@ -19,6 +19,7 @@ import (
 )
 
 type Session struct {
+	mucResume []mucResumeState // protected by mu; captured on disconnect
 	csi       clientState
 	sessionID string
 	srv       *Server
@@ -71,6 +72,7 @@ func (s *Session) Close() {
 	if s.bound {
 		s.srv.recordPresence(context.Background(), s.JID.Full(), "offline", "")
 		s.srv.hub.Unregister(s)
+		s.leaveMUC()
 	}
 	_ = s.conn.Close()
 }
@@ -466,6 +468,9 @@ func (s *Session) handleMessage(se xml.StartElement) error {
 	if to == "" {
 		return nil
 	}
+	if s.srv.isWebRoom(to) {
+		return s.handleMUCMessage(to, typ, id, inner)
+	}
 	toJID := ParseJID(to)
 	stanza := fmt.Sprintf(
 		`<message from='%s' to='%s'%s%s>%s</message>`,
@@ -507,6 +512,9 @@ func (s *Session) handlePresence(se xml.StartElement) error {
 	typ := attr(se, "type")
 	to := attr(se, "to")
 	from := s.JID.Full()
+	if s.srv.isWebRoom(to) {
+		return s.handleMUCPresence(to, typ, inner)
+	}
 	if to != "" {
 		toJID, err := NormalizeJID(to)
 		if err != nil {

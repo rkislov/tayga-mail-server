@@ -87,7 +87,7 @@ func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth
 	} else if sc != nil {
 		srv.scan = &scanPolicy{
 			scanner: sc, action: scan.Action(cfg.Scan.Action), folder: cfg.Scan.QuarantineFolder,
-			failOpen: cfg.Scan.FailOpen, log: log,
+			failOpen: cfg.Scan.FailOpen, log: log, store: store,
 		}
 		if srv.scan.action == "" {
 			srv.scan.action = scan.ActionQuarantine

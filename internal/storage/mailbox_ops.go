@@ -248,6 +248,9 @@ func (s *Store) MoveMessage(ctx context.Context, messageID, dstMailboxID string)
 	if _, err := tx.ExecContext(ctx, updMsg, dstMailboxID, uid, messageID); err != nil {
 		return nil, err
 	}
+	if err := s.queueSpamLearning(ctx, tx, messageID, msg.MailboxID, dstMailboxID); err != nil {
+		return nil, err
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}

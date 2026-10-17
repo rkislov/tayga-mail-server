@@ -659,7 +659,7 @@ func (m *Mailbox) CopyMessages(uid bool, seqset *imap.SeqSet, dest string) error
 			Archived:     strings.EqualFold(dst.mb.Name, "Archive"),
 		}
 		mailsearch.ApplyHeaders(nm, data)
-		inserted, err := m.user.backend.store.InsertMessage(ctx, nm)
+		inserted, err := m.user.backend.store.InsertCopiedMessage(ctx, nm, m.mb.ID)
 		if err != nil {
 			return err
 		}

@@ -19,6 +19,10 @@ import (
 
 // Server is the Stage-1 XMPP C2S listener (TMS-XMPP-001).
 type Server struct {
+	mucMu      sync.Mutex
+	muc        map[string]map[*Session]mucOccupant
+	mucPending map[string]*Session
+
 	pushMu sync.Mutex
 
 	resumeMu  sync.Mutex

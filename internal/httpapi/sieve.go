@@ -31,7 +31,12 @@ func (s *Server) handleSieveScripts(w http.ResponseWriter, r *http.Request) {
 				"active": sc.Active, "created_at": sc.CreatedAt,
 			})
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"scripts": out})
+		rules, err := s.store.GetInboxRules(r.Context(), au.ID)
+		if err != nil {
+			writeJSON(w, 500, map[string]string{"error": "rules unavailable"})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"scripts": out, "outlook_rules": rules})
 
 	case r.Method == http.MethodPut && path != "" && !strings.Contains(path, "/"):
 		var req struct {

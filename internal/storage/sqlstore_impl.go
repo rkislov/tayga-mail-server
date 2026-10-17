@@ -18,8 +18,9 @@ const (
 
 // Store implements storage.Driver for SQLite and PostgreSQL.
 type Store struct {
-	db      *sql.DB
-	dialect Dialect
+	db             *sql.DB
+	dialect        Dialect
+	learningPolicy func() (bool, string) // configured once before serving; callback reads live settings
 }
 
 var _ Driver = (*Store)(nil)
@@ -598,7 +599,7 @@ func (s *Store) GetMailboxByID(ctx context.Context, id string) (*Mailbox, error)
 }
 
 func (s *Store) InsertMessage(ctx context.Context, msg *Message) (*Message, error) {
-	return s.insertMessage(ctx, msg, "", "")
+	return s.insertMessage(ctx, msg, "", "", "")
 }
 
 // InsertCollectedMessage atomically records the source UID and message. Receipts
@@ -607,10 +608,10 @@ func (s *Store) InsertCollectedMessage(ctx context.Context, msg *Message, source
 	if sourceID == "" || remoteKey == "" {
 		return nil, fmt.Errorf("missing source receipt")
 	}
-	return s.insertMessage(ctx, msg, sourceID, remoteKey)
+	return s.insertMessage(ctx, msg, sourceID, remoteKey, "")
 }
 
-func (s *Store) insertMessage(ctx context.Context, msg *Message, sourceID, remoteKey string) (*Message, error) {
+func (s *Store) insertMessage(ctx context.Context, msg *Message, sourceID, remoteKey, copyFrom string) (*Message, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -665,6 +666,11 @@ func (s *Store) insertMessage(ctx context.Context, msg *Message, sourceID, remot
 	}
 	if _, err := tx.ExecContext(ctx, ins, args...); err != nil {
 		return nil, mapErr(err)
+	}
+	if copyFrom != "" {
+		if err := s.queueSpamLearning(ctx, tx, msg.ID, copyFrom, msg.MailboxID); err != nil {
+			return nil, err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, err

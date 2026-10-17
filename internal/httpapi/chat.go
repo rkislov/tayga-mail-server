@@ -42,12 +42,28 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 			CreateChatRoom(context.Context, string, string, []string) (xmpp.ChatRoom, error)
 			ListChatRooms(context.Context, string) ([]xmpp.ChatRoom, error)
 			LeaveChatRoom(context.Context, string, string) error
+			UpdateChatRoom(context.Context, string, string, string, string, bool) error
 		})
 		if !ok {
 			writeJSON(w, 503, map[string]string{"error": "groups unavailable"})
 			return
 		}
 		switch {
+		case strings.HasPrefix(path, "rooms/") && r.Method == http.MethodPatch:
+			var req struct {
+				Email       string `json:"email"`
+				Affiliation string `json:"affiliation"`
+				Destroy     bool   `json:"destroy"`
+			}
+			if json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&req) != nil {
+				writeJSON(w, 400, map[string]string{"error": "invalid room update"})
+				return
+			}
+			if err := groups.UpdateChatRoom(r.Context(), au.Email, strings.TrimPrefix(path, "rooms/"), req.Email, req.Affiliation, req.Destroy); err != nil {
+				writeJSON(w, 403, map[string]string{"error": err.Error()})
+				return
+			}
+			writeJSON(w, 200, map[string]bool{"ok": true})
 		case path == "rooms" && r.Method == http.MethodGet:
 			rooms, e := groups.ListChatRooms(r.Context(), au.Email)
 			if e != nil {
