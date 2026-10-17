@@ -1,6 +1,6 @@
 # XMPP compatibility implementation plan
 
-Updated 2026-10-17. This is an implementation checklist, not a claim of complete RFC/XEP conformance.
+Updated for 0.9.17, 2026-10-17. This is an implementation checklist, not a claim of complete RFC/XEP conformance.
 
 ## Current batch: core connection and archive correctness
 
@@ -36,7 +36,7 @@ Updated 2026-10-17. This is an implementation checklist, not a claim of complete
 - [ ] XEP-0045: interoperable MUC with membership, roles, invitations, history and domain policies.
 - [ ] RFC 7395: authenticated XMPP WebSocket transport with framing, origin checks and limits.
 - [x] Web Push: persistent subscriptions, VAPID, service worker, delivery retries, subscription removal and notification privacy. Browser/device delivery verification remains pending.
-- [ ] XEP-0357: real push registration/delivery only when a reachable client push service exists; Web Push does not substitute for native-app APNs.
+- [x] XEP-0357 publisher: persistent registrations, bounded queue, component and allowlisted TLS EXTERNAL/bidi routes, authenticated acknowledgements and retry/removal. See [native push](xmpp-push.md). Real ChatSecure background delivery is still blocked by vendor DNS/availability.
 - [ ] RFC 6120/7712: S2S federation, DNS discovery, authenticated domain association, queues and abuse limits.
 - [ ] RFC 5122, 5437, 7259, 8266, 8284: XMPP links, Sieve notifications, mail Jabber-ID, nicknames and LDAP integration.
 
@@ -48,7 +48,7 @@ Advertise capabilities only after protocol handling and negative tests exist. Ru
 
 References: [RFC index](https://xmpp.org/rfcs/), [Stream Management](https://xmpp.org/extensions/xep-0198.html), [MAM](https://xmpp.org/extensions/xep-0313.html), [RSM](https://xmpp.org/extensions/xep-0059.html), [Push](https://xmpp.org/extensions/xep-0357.html).
 
-## Web Push implementation (local, pending deployment and browser interop)
+## Web Push implementation (deployed; browser interop still pending)
 
 The server now persists VAPID keys, per-user browser subscriptions and delivery jobs in SQL. Mail delivery, calendar reminders and incoming chat messages enqueue generic notifications; subjects, message bodies and OMEMO plaintext are never included in the push payload. A single worker retries temporary failures with backoff (five attempts maximum), removes expired subscriptions on HTTP 404/410 and cascades queued-job removal. Queue insertion is limited to 10,000 pending jobs and each account to 20 browser subscriptions. A server restart retains the queue and signing identity. Multi-worker claim coordination is not implemented; run one delivery worker per database.
 
@@ -84,9 +84,9 @@ Both local archive copies are committed in one transaction before delivery. The 
 
 Regression coverage: all five send entry points, duplicate/absent client IDs, spoofed IDs, disabled archiving, offline replay, database reopen/cursors, legacy MAM namespaces, self-message deduplication, discovery scope and transaction rollback on an archive failure. Native-client display of the capability is a separate device check.
 
-## Next push delivery work
+## Push assessment before 0.9.17 (historical)
 
-The native XEP-0357 item is still **not implemented or advertised**. The inspected [Secret-iOS revision](https://github.com/Secret-Messenger-App/Secret-iOS/tree/6f3083bb839b9ded22faa6feca30163be31df273) disables standard `XMPPPushModule` initialization and sends a custom `register-push-apns` command. Its capability check and its actual registration path are different. Advertising `urn:xmpp:push:0` alone would only change the checkmark.
+Before 0.9.17, native XEP-0357 was **not implemented or advertised**. The implementation and current limits are now documented in [native push](xmpp-push.md). The inspected [Secret-iOS revision](https://github.com/Secret-Messenger-App/Secret-iOS/tree/6f3083bb839b9ded22faa6feca30163be31df273) disables standard `XMPPPushModule` initialization and sends a custom `register-push-apns` command. Its capability check and its actual registration path are different. Advertising `urn:xmpp:push:0` alone would only change the checkmark.
 
 The next server batch needs an authenticated route to the app's XMPP push service (federation or a configured component), owner-scoped persistent enable/disable registrations, bounded notification queues, publish acknowledgements/errors/retries and removal of rejected registrations. Notifications should omit message bodies and encryption keys. End-to-end acceptance requires background delivery on the target app. The app operator's APNs credentials are not needed by Tayga when a working vendor push gateway exists, but that gateway must support this client. The existing browser Web Push implementation cannot wake the native Secret app.
 
@@ -94,8 +94,14 @@ The next server batch needs an authenticated route to the app's XMPP push servic
 
 The later client reference is [ChatSecure](https://chatsecure.org/i/), not Secret-iOS. In [ChatSecure-iOS revision 38d6abba3e1c21156095ac3a1096d5e829df4b96](https://github.com/ChatSecure/ChatSecure-iOS/blob/38d6abba3e1c21156095ac3a1096d5e829df4b96/ChatSecureCore/Classes/Controllers/XMPP/OTRXMPPManager.m), `XMPPPushModule` is active and standard registration sends the vendor endpoint and token as publish options. The Secret-specific finding above must not be applied to ChatSecure.
 
-DNS was checked both locally and on the mail server: `chatsecure.org` resolved, but `push.chatsecure.org` had no usable address (`getaddrinfo`: name or service not known). A public DNS query returned a CNAME to `push.chatsecure.org.herokudns.com` without an A address. The vendor push API could not be contacted. Recheck its availability before end-to-end tests; do not treat DNS failure as evidence that the XEP is implemented. Tayga still does not advertise or implement XEP-0357. The persistent registrations, notification delivery route, retry handling and native-client delivery tests listed above remain work to do.
+DNS was checked both locally and on the mail server: `chatsecure.org` resolved, but `push.chatsecure.org` had no usable address (`getaddrinfo`: name or service not known). A public DNS query returned a CNAME to `push.chatsecure.org.herokudns.com` without an A address. The vendor push API could not be contacted. Recheck its availability before end-to-end tests; do not treat DNS failure as evidence that the XEP is implemented. At the time of this check, Tayga 0.9.16 did not advertise or implement XEP-0357. The persistent registrations, notification delivery route, retry handling and native-client delivery tests listed above remain work to do.
 
 ## Connection visibility, 0.9.16
 
-Bound native resources update their activity in the shared session registry and identify their XMPP resource in the user/admin connection list. Administrative disconnection disables Stream Management resumption before closing the socket, so a disconnected retained stream cannot be resumed. Tests verify activity updates, cleanup and token invalidation. Native push remains pending as described above.
+Bound native resources update their activity in the shared session registry and identify their XMPP resource in the user/admin connection list. Administrative disconnection disables Stream Management resumption before closing the socket, so a disconnected retained stream cannot be resumed. Tests verify activity updates, cleanup and token invalidation. Native push was pending in that release; 0.9.17 adds the publisher described below.
+
+## IQ routing and native push, 0.9.17
+
+Full-JID IQ requests and replies now reach the addressed device; spoofed `from` attributes are replaced with the authenticated sender. Missing resources return service-unavailable for requests and never generate reply loops. A request must have exactly one payload. IQs to authenticated components are forwarded as well. Server-owned roster/session operations reject another account as their target. This enables device capability queries without misinterpreting them as server commands; presence-priority routing and the other RFC 6121 items remain pending.
+
+The XEP-0357 publisher is implemented with conditional discovery and real protocol handling. External transport is restricted to configured push domains using verified TLS, EXTERNAL and bidi. Native ChatSecure delivery still depends on its vendor service. See [configuration, tests and limits](xmpp-push.md).

@@ -19,6 +19,8 @@ import (
 
 // Server is the Stage-1 XMPP C2S listener (TMS-XMPP-001).
 type Server struct {
+	pushMu sync.Mutex
+
 	resumeMu  sync.Mutex
 	resumable map[string]resumableStream
 	upload    UploadHandler
@@ -49,10 +51,12 @@ func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth
 	if sqlStore, ok := store.(*storage.Store); ok {
 		db = sqlStore.DB()
 	}
-	return &Server{
+	srv := &Server{
 		cfg: cfg, log: log, store: store, authn: authn, tls: tlsMgr,
 		hub: NewHub(), domain: domain, db: db,
 	}
+	srv.hub.nativePushSink = srv.enqueueNativePush
+	return srv
 }
 
 func (s *Server) Start(ctx context.Context) error {
@@ -110,6 +114,7 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	}
 
+	go s.runPushWorker(ctx)
 	go func() {
 		<-ctx.Done()
 		_ = s.Shutdown(context.Background())

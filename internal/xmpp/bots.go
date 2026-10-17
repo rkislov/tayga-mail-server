@@ -65,15 +65,18 @@ type Gateway interface {
 
 // Status is a public summary of the XMPP module for the admin UI.
 type Status struct {
-	Enabled         bool     `json:"enabled"`
-	Listen          string   `json:"listen,omitempty"`
-	ListenTLS       string   `json:"listen_tls,omitempty"`
-	S2SListen       string   `json:"s2s_listen,omitempty"`
-	RequireTLS      bool     `json:"require_tls"`
-	ComponentListen string   `json:"component_listen,omitempty"`
-	Components      []string `json:"components,omitempty"`
-	WebChat         bool     `json:"web_chat"`
-	Hostname        string   `json:"hostname,omitempty"`
+	PushServices      []string `json:"push_services"`
+	PushRegistrations int      `json:"push_registrations"`
+	PushQueued        int      `json:"push_queued"`
+	Enabled           bool     `json:"enabled"`
+	Listen            string   `json:"listen,omitempty"`
+	ListenTLS         string   `json:"listen_tls,omitempty"`
+	S2SListen         string   `json:"s2s_listen,omitempty"`
+	RequireTLS        bool     `json:"require_tls"`
+	ComponentListen   string   `json:"component_listen,omitempty"`
+	Components        []string `json:"components,omitempty"`
+	WebChat           bool     `json:"web_chat"`
+	Hostname          string   `json:"hostname,omitempty"`
 }
 
 func (s *Server) ComponentDomains() []string {
@@ -103,6 +106,16 @@ func (s *Server) Status() Status {
 	st.ComponentListen = s.cfg.XMPP.ComponentListen
 	st.Components = s.ComponentDomains()
 	st.Hostname = s.cfg.Server.Hostname
+	st.PushServices = append([]string{}, s.cfg.XMPP.PushServices...)
+	for _, c := range s.cfg.XMPP.Components {
+		if c.Push {
+			st.PushServices = append(st.PushServices, s.componentDomain(c))
+		}
+	}
+	if s.db != nil {
+		_ = s.db.QueryRow(`SELECT COUNT(*) FROM xmpp_push_registrations`).Scan(&st.PushRegistrations)
+		_ = s.db.QueryRow(`SELECT COUNT(*) FROM xmpp_push_jobs`).Scan(&st.PushQueued)
+	}
 	return st
 }
 

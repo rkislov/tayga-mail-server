@@ -22,7 +22,7 @@ https://mail.example.com/dav/files/
 
 Поддерживаются GET/HEAD, PUT, PROPFIND, MKCOL, COPY, MOVE, DELETE, LOCK/UNLOCK и ETag. DELETE перемещает в корзину. Блокировки действуют также на запись из веба и офиса. PUT принимает `If-Match` и `If-None-Match: *`; неполные загрузки отклоняются. Лимит одного файла — 10 ГиБ, данные записываются потоком во временный файл.
 
-Используйте обычный клиент WebDAV с HTTPS. Логин — полный почтовый адрес, пароль — пароль учётной записи. Passkey относится только к веб-входу. При включённом TOTP и политике `mfa.require_token_for_mfa_users` нужен клиент с поддержкой Bearer-токена; обхода этой политики в WebDAV нет. Собственный протокол синхронизации Nextcloud, его discovery/account API и возобновляемая загрузка по частям пока не реализованы. Общие файлы других пользователей доступны через веб-интерфейс, но не подключаются виртуальными папками в личный WebDAV.
+Используйте обычный клиент WebDAV с HTTPS. Логин — полный почтовый адрес, пароль — пароль учётной записи. Passkey относится только к веб-входу. При включённом TOTP и политике `mfa.require_token_for_mfa_users` нужен клиент с поддержкой Bearer-токена; обхода этой политики в WebDAV нет. Собственный протокол синхронизации Nextcloud, его discovery/account API и совместимость с его chunk API пока не реализованы. Возобновляемая загрузка в веб-интерфейсе Tayga описана ниже. Общие файлы других пользователей доступны через веб-интерфейс, но не подключаются виртуальными папками в личный WebDAV.
 
 ## Отдельный офисный сервер
 
@@ -65,3 +65,14 @@ files:
 Опциональный `TestOfficePublicIntegration` запускает отдельный стенд на `127.0.0.1:18439` с временной БД и искусственным ODT-файлом. Он доступен только при явной установке `TAYGA_OFFICE_TEST_URL` и `TAYGA_PUBLIC_TEST_URL`; наружу выдаются лишь WOPI и случайный путь тестовой страницы. Проверка завершается после сохранения маркера `WOPI-SAVE-OK` и POST на случайный путь завершения, сохранённый вместе с URL страницы в системном временном каталоге `tayga-office-live.json`. Обычный `go test ./...` не обращается к публичному редактору.
 
 Документация протокола: [Collabora SDK examples](https://github.com/CollaboraOnline/collabora-online-sdk-examples), [WOPI proof validation](https://learn.microsoft.com/en-us/microsoft-365/cloud-storage-partner-program/online/scenarios/proofkeys).
+
+
+## Resumable web uploads (0.9.17)
+
+The web file picker and drag-and-drop now upload in chunks of at most 8 MiB, with the same 10 GiB per-file limit. A lost response is recovered by reading the server's acknowledged offset. After a page reload, select the same file again, or open **Files → settings → Unfinished uploads → Resume**. The browser verifies the SHA-256 of every already uploaded chunk before continuing, so a different file with the same name/size cannot corrupt the stored prefix. No file content or access token is saved to localStorage; only account-scoped upload identifiers and metadata are retained there.
+
+Sessions and acknowledged offsets survive server restarts. The server truncates an unacknowledged partial last chunk on retry. Completing a session atomically publishes the file, preserves the previous version and checks the ETag captured at the start; a concurrent edit produces a conflict rather than being overwritten. Completion is idempotent, including recovery after a rename before the response. Shared-folder permissions are rechecked before publication, and DAV/WOPI locks are honored. History/trash are unaffected until completion.
+
+An account can have four unfinished sessions reserving at most 20 GiB total. A session expires 24 hours after creation. Expired staging data is removed at startup, hourly and during that user's session-list/create activity. The user can cancel unfinished uploads immediately; cancellation never deletes the current file. These are staging limits, not a general file-storage quota. Versions and trash still require manual cleanup; automatic retention policy and per-user storage quotas remain pending.
+
+API: `POST /api/v1/files/uploads` with `path`, `size`, optional `owner_id`; `GET /uploads` lists unfinished sessions; `GET /uploads/{id}` returns `upload` and accepted chunk hashes; `PATCH /uploads/{id}` accepts a bounded body and `Upload-Offset`; `POST /uploads/{id}/complete` publishes; `DELETE /uploads/{id}` cancels. All routes are under `/api/v1/files` and require the initiating user's bearer session. This is a Tayga API, not the Nextcloud chunk protocol. Back up `file-state` alongside the regular file tree if unfinished uploads must be recoverable from backups.

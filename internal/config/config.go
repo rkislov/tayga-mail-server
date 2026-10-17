@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"regexp"
@@ -337,6 +338,8 @@ type ManageSieveConfig struct {
 // XMPPConfig controls the embedded XMPP module (TMS-XMPP-001).
 // Disabled by default until Stage 1 is production-ready.
 type XMPPConfig struct {
+	PushServices []string `yaml:"push_services"` // explicit remote push domains; TLS EXTERNAL + bidi only
+
 	Enabled         bool                  `yaml:"enabled"`
 	Listen          string                `yaml:"listen"`     // C2S STARTTLS, default :5222
 	ListenTLS       string                `yaml:"listen_tls"` // C2S implicit TLS, optional (:5223)
@@ -349,6 +352,8 @@ type XMPPConfig struct {
 // XMPPComponentConfig registers an external XMPP component (bot/bridge) by subdomain.
 // Domain becomes "{subdomain}.{server.hostname}" unless Domain is set explicitly.
 type XMPPComponentConfig struct {
+	Push bool `yaml:"push"` // allow XEP-0357 publishing via this authenticated component
+
 	Name      string `yaml:"name"`      // label for logs
 	Subdomain string `yaml:"subdomain"` // e.g. "bots" → bots.mail.example.com
 	Domain    string `yaml:"domain"`    // optional full component domain
@@ -668,6 +673,22 @@ func Default() *Config {
 
 // Validate checks required fields.
 func (c *Config) Validate() error {
+	if len(c.XMPP.PushServices) > 16 {
+		return fmt.Errorf("xmpp.push_services: at most 16 service domains")
+	}
+	for i, service := range c.XMPP.PushServices {
+		service = strings.ToLower(strings.TrimSpace(service))
+		if len(service) > 253 || net.ParseIP(service) != nil || !strings.Contains(service, ".") {
+			return fmt.Errorf("xmpp.push_services: expected a DNS domain")
+		}
+		for _, label := range strings.Split(service, ".") {
+			if len(label) == 0 || len(label) > 63 || !regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$`).MatchString(label) {
+				return fmt.Errorf("xmpp.push_services: invalid DNS domain")
+			}
+		}
+		c.XMPP.PushServices[i] = service
+	}
+
 	if c.Files.OfficeURL != "" {
 		u, err := url.Parse(c.Files.OfficeURL)
 		if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
