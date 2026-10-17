@@ -598,11 +598,38 @@ func (s *Store) GetMailboxByID(ctx context.Context, id string) (*Mailbox, error)
 }
 
 func (s *Store) InsertMessage(ctx context.Context, msg *Message) (*Message, error) {
+	return s.insertMessage(ctx, msg, "", "")
+}
+
+// InsertCollectedMessage atomically records the source UID and message. Receipts
+// survive local deletion so periodic collection cannot resurrect deleted mail.
+func (s *Store) InsertCollectedMessage(ctx context.Context, msg *Message, sourceID, remoteKey string) (*Message, error) {
+	if sourceID == "" || remoteKey == "" {
+		return nil, fmt.Errorf("missing source receipt")
+	}
+	return s.insertMessage(ctx, msg, sourceID, remoteKey)
+}
+
+func (s *Store) insertMessage(ctx context.Context, msg *Message, sourceID, remoteKey string) (*Message, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
+
+	if sourceID != "" {
+		result, err := tx.ExecContext(ctx, s.rebind(`INSERT INTO mail_source_receipts(source_id,remote_key,created_at) VALUES(?,?,?) ON CONFLICT(source_id,remote_key) DO NOTHING`), sourceID, remoteKey, time.Now().Unix())
+		if err != nil {
+			return nil, err
+		}
+		n, err := result.RowsAffected()
+		if err != nil {
+			return nil, err
+		}
+		if n == 0 {
+			return nil, ErrCollectedDuplicate
+		}
+	}
 
 	var uid int64
 	lockQ := s.rebind(`SELECT uidnext FROM mailboxes WHERE id = ?`)

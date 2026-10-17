@@ -393,7 +393,7 @@ function showApp(name) {
   }
   $("compose-backdrop")?.classList.add("hidden");
   setNavOpen(false);
-  if (app === "profile") {loadMe();refreshSignature();refreshPasskeys();}
+  if (app === "profile") {loadMe();refreshSignature();refreshPasskeys();refreshMailSources();}
   const migrationPane=$("app-migration");
   if (migrationPane) {
     if (!migrationPane._originalParent) migrationPane._originalParent=migrationPane.parentElement;
@@ -520,7 +520,7 @@ async function refreshAccessToken() {
 }
 
 async function api(path, opts = {}) {
-  if(filesState.ownerID&&/^\/api\/v1\/files(?:[/?]|$)/.test(path)&&!/^\/api\/v1\/files\/(?:access|shares)/.test(path))path+=(path.includes('?')?'&':'?')+'owner_id='+encodeURIComponent(filesState.ownerID);
+  if(filesState.ownerID&&/^\/api\/v1\/files(?:[/?]|$)/.test(path)&&!/^\/api\/v1\/files\/(?:access|shares|library|office)/.test(path))path+=(path.includes('?')?'&':'?')+'owner_id='+encodeURIComponent(filesState.ownerID);
   const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
   if (state.tokens?.access_token) {
     headers.Authorization = "Bearer " + state.tokens.access_token;
@@ -849,18 +849,28 @@ $("q-search")?.addEventListener("keydown", (e) => {
 });
 
 let maillogTimer = null;
+let maillogOffset = 0, maillogRequest = 0;
+const maillogPageSize = 100;
 
-async function refreshMailLog() {
+async function refreshMailLog(reset = true) {
   const pre = $("maillog-lines");
   const msg = $("maillog-msg");
   const scopeEl = $("maillog-scope");
   if (!pre) return;
+  if (reset) maillogOffset = 0;
+  const request = ++maillogRequest;
+  const previous = $("maillog-prev"), next = $("maillog-next");
+  if (previous) previous.disabled = true;
+  if (next) next.disabled = true;
   const q = ($("maillog-q")?.value || "").trim();
   try {
-    const params = new URLSearchParams({ limit: "200" });
+    const params = new URLSearchParams({ limit: String(maillogPageSize + 1), offset: String(maillogOffset) });
     if (q) params.set("q", q);
     const d = await api("/api/v1/admin/mail-log?" + params.toString());
-    const items = d.items || [];
+    if (request !== maillogRequest) return;
+    const items = (d.items || []).slice(0, maillogPageSize);
+    if (previous) previous.disabled = maillogOffset === 0;
+    if (next) next.disabled = (d.items || []).length <= maillogPageSize;
     if (scopeEl) {
       const key = d.scope === "domain" ? "maillog_scope_domain" : "maillog_scope_global";
       scopeEl.setAttribute("data-i18n", key);
@@ -871,10 +881,13 @@ async function refreshMailLog() {
     } else {
       pre.textContent = items.map((it) => it.line || "").filter(Boolean).join("\n");
     }
-    setMsg(msg, items.length ? `${items.length}` : "", items.length ? "ok" : "");
+    pre.scrollTop = 0;
+    setMsg(msg, items.length ? `${maillogOffset + 1}–${maillogOffset + items.length}` : "0", "");
   } catch (err) {
+    if (request !== maillogRequest) return;
     pre.textContent = "";
     setMsg(msg, err.message, "err");
+    if (previous) previous.disabled = maillogOffset === 0;
   }
 }
 
@@ -885,6 +898,8 @@ function scheduleMailLogSearch() {
 
 $("btn-maillog-search")?.addEventListener("click", () => refreshMailLog());
 $("btn-maillog-refresh")?.addEventListener("click", () => refreshMailLog());
+$("maillog-prev")?.addEventListener("click", () => {maillogOffset = Math.max(0, maillogOffset - maillogPageSize); refreshMailLog(false);});
+$("maillog-next")?.addEventListener("click", () => {maillogOffset += maillogPageSize; refreshMailLog(false);});
 $("maillog-q")?.addEventListener("input", () => scheduleMailLogSearch());
 $("maillog-q")?.addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
@@ -4104,6 +4119,7 @@ function showFileReader(entry) {
   preview.textContent=mailImageText('Просмотр','Preview');preview.hidden=entry.is_dir||!documentPreviewType(entry.name);
   let share=$('btn-files-share');if(!share){share=document.createElement('button');share.id='btn-files-share';share.type='button';share.className='btn-secondary btn-sm';$('btn-files-download').after(share);}share.hidden=!!filesState.ownerID;share.textContent=mailImageText('Доступ','Share');share.onclick=()=>openFileAccess(joinPath(filesState.path,entry.name));
   preview.onclick=()=>openDocumentPreview({url:'/api/v1/files/content?path='+encodeURIComponent(joinPath(filesState.path,entry.name))+(filesState.ownerID?'&owner_id='+encodeURIComponent(filesState.ownerID):''),name:entry.name,size:entry.size});
+  mountFileReaderActions(entry);
 }
 
 function selectFileEntry(name) {
@@ -4380,7 +4396,7 @@ async function refreshFiles() {
         </button>
       </li>`;
     }
-    html += filesState.entries.map((e) => `
+    html += fileEntriesPage(filesState.entries).map((e) => `
       <li class="file-row">
         <button type="button" draggable="true" class="file-item${e.is_dir ? " is-dir" : ""}${filesState.selected?.name === e.name ? " is-active" : ""}" data-name="${escapeHtml(e.name)}">
           <span class="file-name">${escapeHtml(e.name)}</span>
@@ -4389,6 +4405,7 @@ async function refreshFiles() {
         </button><button type="button" class="file-more" data-file-menu="${escapeHtml(e.name)}" aria-label="${escapeHtml(t("files_actions")+": "+e.name)}">⋯</button>
       </li>`).join("") || (!filesState.path ? `<li class="meta msg-empty">${escapeHtml(t("empty_files"))}</li>` : "");
     list.innerHTML = html;
+    fileRowsRendered();
     $("files-up")?.addEventListener("click", () => filesGoUp());
     list.querySelectorAll("[data-name]").forEach((btn) => {
       btn.addEventListener("click", () => selectFileEntry(btn.dataset.name));
@@ -4450,7 +4467,7 @@ $("btn-files-open")?.addEventListener("click", () => {
 });
 $("btn-files-delete")?.addEventListener("click", async () => {
   if (!filesState.selected) return;
-  if (!await askConfirm(t("delete") + " " + filesState.selected.name + "?", { danger: true })) return;
+  if (!await askConfirm(mailImageText("Переместить в корзину: ","Move to trash: ") + filesState.selected.name + "?")) return;
   try {
     await api("/api/v1/files?path=" + encodeURIComponent(joinPath(filesState.path, filesState.selected.name)), {
       method: "DELETE",

@@ -32,6 +32,8 @@ seed:
 #   tls_listen: ":443"
 #   public_url: "https://mail.example.com"
 #   admins: ["admin@example.com"]
+# files:
+#   office_url: "https://office.example.com" # Optional separate Collabora server.
 # xmpp:
 #   enabled: false
 #   listen: ":5222"

@@ -108,6 +108,7 @@ func migrate(ctx context.Context, db *sql.DB, dialect Dialect) error {
 			"037_task_properties.sqlite.sql",
 			"038_webpush.sqlite.sql",
 			"039_mam_preferences.sqlite.sql",
+			"040_mail_collection.sqlite.sql",
 		}
 	case DialectPostgres:
 		files = []string{
@@ -150,6 +151,7 @@ func migrate(ctx context.Context, db *sql.DB, dialect Dialect) error {
 			"037_task_properties.postgres.sql",
 			"038_webpush.postgres.sql",
 			"039_mam_preferences.postgres.sql",
+			"040_mail_collection.postgres.sql",
 		}
 	default:
 		return fmt.Errorf("unsupported dialect")

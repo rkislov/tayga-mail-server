@@ -14,6 +14,7 @@ var EditableSections = []string{
 	"pop3",
 	"managesieve",
 	"http",
+	"files",
 	"spam",
 	"scan",
 	"siem",
@@ -40,6 +41,8 @@ var EditableSections = []string{
 // for listeners / HA / snapshotted SMTP policies (phase 1).
 func RequiresRestart(section string) bool {
 	switch section {
+	case "files":
+		return false
 	case "server", "smtp", "imap", "pop3", "managesieve", "http",
 		"spam", "scan", "siem", "dkim_verify", "spf", "iprev", "helo", "greylist", "dmarc", "arc",
 		"ldap", "oidc", "mfa", "flowsync", "ha", "log", "seed", "mailstore", "tls", "xmpp":
@@ -75,6 +78,8 @@ func getSectionPtr(cfg *config.Config, section string) (any, error) {
 		return &cfg.ManageSieve, nil
 	case "http":
 		return &cfg.HTTP, nil
+	case "files":
+		return &cfg.Files, nil
 	case "spam":
 		return &cfg.Spam, nil
 	case "scan":

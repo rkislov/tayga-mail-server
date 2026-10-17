@@ -15,6 +15,7 @@ import (
 	"github.com/tayga/tms/internal/auth"
 	"github.com/tayga/tms/internal/config"
 	"github.com/tayga/tms/internal/dav"
+	"github.com/tayga/tms/internal/fetchmail"
 	"github.com/tayga/tms/internal/flowsync"
 	"github.com/tayga/tms/internal/frontend"
 	"github.com/tayga/tms/internal/mailstore"
@@ -30,6 +31,9 @@ import (
 
 // Server exposes health, metrics, auth API, and the embedded Web UI.
 type Server struct {
+	fileMu                  sync.Mutex
+	fileDAVLocks            map[string]*fileLockSystem
+	officeSessions          map[string]officeSession
 	calendarSubscriptionsMu sync.Mutex
 	flowSubmit              flowsync.SubmitFunc
 	log                     *slog.Logger
@@ -41,6 +45,7 @@ type Server struct {
 	tls                     *tlsutil.Manager
 	xmpp                    xmpp.Gateway
 	migrate                 *migrate.Service
+	collector               *fetchmail.Service
 	notify                  *notify.Hub
 	webpush                 *webpush.Service
 	siem                    *siem.Exporter
@@ -112,6 +117,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/files/shares/", s.handleFileShares)
 	mux.HandleFunc("/api/v1/files/", s.handleFiles)
 	mux.HandleFunc("/api/v1/files", s.handleFiles)
+	mux.HandleFunc("/dav/files/", s.handleFileDAV)
+	mux.HandleFunc("/api/v1/files/library/", s.handleFileLibrary)
+	mux.HandleFunc("/api/v1/files/office", s.handleOfficeSession)
+	mux.HandleFunc("/wopi/files/", s.handleWOPI)
 	mux.HandleFunc("/calendar/public/", s.handlePublicCalendar)
 	mux.HandleFunc("/s/", s.handlePublicShare)
 	mux.HandleFunc("/api/v1/sieve/scripts", s.handleSieveScripts)
@@ -152,6 +161,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/bots/xmpp/", s.handleBotXMPP)
 	mux.HandleFunc("/api/v1/chat/", s.handleChat)
 	mux.HandleFunc("/api/v1/chat", s.handleChat)
+	mux.HandleFunc("/api/v1/mail-sources", s.handleMailSources)
+	mux.HandleFunc("/api/v1/mail-sources/", s.handleMailSources)
 	mux.HandleFunc("/api/v1/migration", s.handleMigration)
 	mux.HandleFunc("/api/v1/migration/", s.handleMigration)
 	mux.HandleFunc("/api/v1/admin/migration", s.handleAdminMigration)

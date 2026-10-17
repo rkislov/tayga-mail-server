@@ -15,6 +15,7 @@ import (
 	"github.com/tayga/tms/internal/backup"
 	"github.com/tayga/tms/internal/climenu"
 	"github.com/tayga/tms/internal/config"
+	"github.com/tayga/tms/internal/fetchmail"
 	"github.com/tayga/tms/internal/ha"
 	"github.com/tayga/tms/internal/httpapi"
 	imapserver "github.com/tayga/tms/internal/imap"
@@ -524,7 +525,17 @@ func run(cfgPath string) error {
 		migSvc.Start(ctx)
 	}
 
+	collector, err := fetchmail.New(cfg, log, store, ms)
+	if err != nil {
+		return fmt.Errorf("mail collector: %w", err)
+	}
+	if collector != nil {
+		collector.Notifier = sieveEng.Notifier
+		collector.Writers = writers
+		collector.Start(ctx)
+	}
 	httpSrv := httpapi.New(cfg, log, store, authn, ms, tlsMgr, hub)
+	httpSrv.SetMailCollector(collector)
 	httpSrv.SetFlowSyncSubmit(smtpSrv.SubmitAuthenticated)
 	httpSrv.SetXMPP(xmppSrv)
 	httpSrv.SetMigrate(migSvc)

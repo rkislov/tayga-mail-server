@@ -794,8 +794,12 @@ keep;</textarea>
             <button type="button" class="btn-spray" id="btn-maillog-search" data-i18n="maillog_find">Найти</button>
             <button type="button" class="btn-secondary" id="btn-maillog-refresh" data-i18n="refresh">Обновить</button>
           </div>
-          <pre class="secret preview-box maillog-lines" id="maillog-lines" aria-live="polite"></pre>
-          <p id="maillog-msg" class="msg" role="status"></p>
+          <pre class="secret preview-box maillog-lines" id="maillog-lines" tabindex="0" aria-label="Mail log"></pre>
+          <nav class="maillog-pager" aria-label="Mail log pages">
+            <button type="button" class="btn-secondary action-icon" id="maillog-prev" aria-label="Previous page">‹</button>
+            <p id="maillog-msg" class="msg" role="status"></p>
+            <button type="button" class="btn-secondary action-icon" id="maillog-next" aria-label="Next page">›</button>
+          </nav>
         </div>
       </div>
 
