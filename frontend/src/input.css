@@ -3721,3 +3721,79 @@ html body { background:var(--work-bg);background-image:none;color:var(--work-tex
 .subscription-row > div { min-width: 0; overflow-wrap: anywhere; }
 .avatar-initials { display: inline-flex; align-items: center; justify-content: center; background: var(--surface-alt, #e1e8f5); color: var(--text, #24406a); font-weight: 600; font-size: 12px; flex-shrink: 0; }
 .avatar-initials.profile-avatar { font-size: 24px; }
+
+/* Personal file library, history and external office integration. */
+.file-browser-tools,.file-browser-selection,.file-library-nav,.file-library-search { display:flex; align-items:center; gap:.65rem; }
+.file-browser-tools,.file-browser-selection { padding:.75rem 1rem; border-bottom:1px solid var(--md-outline-variant); }
+.file-browser-tools .field-input,.file-library-search .field-input { flex:1; min-width:0; }
+.file-browser-selection>input,.file-row>input { flex:0 0 auto; width:18px; height:18px; accent-color:var(--md-primary); }
+.file-browser-selection>span { font-size:.85rem; }
+.file-browser-selection .file-library-nav { margin-left:auto; }
+.file-library-nav { justify-content:flex-end; font-size:.85rem; white-space:nowrap; }
+#files-list .file-row>input { margin-left:1rem; }
+.file-library-dialog { width:min(960px,96vw); max-height:90dvh; padding:0; }
+.file-library-dialog>.meta { padding:.5rem 1.25rem; margin:0; }
+.file-library-dialog>header { display:flex; align-items:center; gap:.75rem; padding:1rem 1.25rem; }
+.file-library-dialog>header>strong { flex:1; overflow:hidden; text-overflow:ellipsis; }
+.file-library-body { padding:1rem 1.25rem; overflow:auto; min-height:0; }
+.file-library-body>.meta { margin:.75rem 0; }
+.file-library-table { width:100%; border-collapse:collapse; font-size:.9rem; margin:1rem 0; }
+.file-library-table th,.file-library-table td { padding:.75rem; border-bottom:1px solid var(--md-outline-variant); text-align:left; vertical-align:middle; }
+.file-library-table th { font-size:.8rem; color:var(--md-text-secondary); }
+.file-library-table td:first-child { overflow-wrap:anywhere; }
+.file-library-table tbody tr:hover { background:var(--md-surface-variant); }
+.file-library-actions { white-space:nowrap; }
+.file-library-actions button+button { margin-left:.35rem; }
+.file-search-result { display:block; width:100%; padding:.8rem; text-align:left; border-bottom:1px solid var(--md-outline-variant); overflow-wrap:anywhere; }
+.file-search-result:hover { background:var(--md-surface-variant); }
+.file-office-dialog[open] { display:flex; flex-direction:column; width:98vw; height:96dvh; max-width:none; max-height:96dvh; }
+.file-office-dialog .file-library-body { flex:1; display:flex; padding:0; }
+.file-office-dialog iframe { width:100%; height:100%; border:0; background:white; }
+@media(max-width:640px){
+ .file-browser-selection { flex-wrap:wrap; }
+ .file-browser-selection .file-library-nav { flex:1 1 auto; }
+ .file-library-table th,.file-library-table td { padding:.5rem; font-size:.8rem; }
+ .file-library-body { padding:.6rem; }
+ .file-library-actions { min-width:96px; }
+}
+.file-library-dialog:not(.file-office-dialog) { height:fit-content; min-height:20rem; }
+.file-library-dialog:not(.file-office-dialog) .file-library-body { max-height:65dvh; }
+@media(max-width:640px){
+ #files-list .file-item { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:.35rem .75rem; min-height:64px; padding:.75rem; }
+ #files-list .file-item .file-name { grid-column:1/-1; }
+ #files-list .file-item .file-size,#files-list .file-item .file-kind { font-size:.75rem; min-width:0; }
+ #files-list .file-item .file-kind { text-align:right; }
+ #files-list #files-up { min-height:44px; display:flex; align-items:center; gap:1rem; }
+ #files-list #files-up .file-name { flex:1; }
+ #files-list #files-up .file-size { display:none; }
+}
+
+/* The mail log uses the available viewport, including on narrow screens. */
+#app-maillog { width:100%; height:calc(100dvh - 6rem); min-height:28rem; }
+#app-maillog > .card { display:flex; flex-direction:column; height:100%; min-width:0; min-height:0; }
+#app-maillog .maillog-lines { flex:1 1 0; min-height:8rem; max-height:none; width:100%; overflow:auto; white-space:pre; overflow-wrap:normal; word-break:normal; overscroll-behavior:contain; }
+.maillog-pager,.mail-image-sender-pager { display:flex; flex-wrap:wrap; align-items:center; gap:.65rem; margin-top:.75rem; }
+.maillog-pager .msg { margin:0; }
+.mail-image-sender-pager select { width:auto; max-width:100%; }
+#mail-image-settings .mail-image-sender { min-width:0; gap:.75rem; }
+#mail-image-settings .mail-image-sender > span { min-width:0; overflow-wrap:anywhere; }
+@media(max-width:640px) {
+  #app-maillog .filter-bar { flex-wrap:wrap; }
+  #app-maillog .filter-grow { flex-basis:100%; min-width:0; }
+  #app-maillog .filter-bar button { flex:1; }
+  #app-maillog > .card { padding:.75rem; }
+}
+.mail-sources-header {display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;}
+.mail-sources-header .heading {flex:1;min-width:12rem;}
+.mail-sources-table-wrap {overflow:auto;max-width:100%;}
+.mail-sources-table-wrap td {min-width:9rem;overflow-wrap:anywhere;}
+.mail-sources-actions {white-space:nowrap;}
+.mail-sources-actions button + button {margin-left:.35rem;}
+.mail-source-dialog {width:min(46rem,calc(100vw - 2rem));max-height:calc(100dvh - 2rem);margin:auto;padding:1.25rem;overflow:auto;color:var(--ui-text);background:var(--panel-bg);border:1px solid var(--ui-border);border-radius:1rem;}
+.mail-source-dialog header,.mail-source-dialog footer {display:flex;gap:1rem;align-items:center;justify-content:space-between;}
+.mail-source-dialog .heading {flex:1;}
+.mail-source-fields {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem 1rem;margin:1rem 0;}
+.mail-source-fields .field-label {min-width:0;}
+.mail-source-dialog .meta,.mail-source-dialog .msg {margin:.75rem 0;}
+.mail-source-dialog::backdrop {background:rgb(0 0 0/.45);}
+@media(max-width:640px){.mail-source-fields{grid-template-columns:minmax(0,1fr);}.mail-source-dialog footer{flex-wrap:wrap;}.mail-source-dialog footer button{flex:1;}}

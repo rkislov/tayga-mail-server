@@ -1450,7 +1450,7 @@ function showApp(name) {
   }
   $("compose-backdrop")?.classList.add("hidden");
   setNavOpen(false);
-  if (app === "profile") {loadMe();refreshSignature();refreshPasskeys();}
+  if (app === "profile") {loadMe();refreshSignature();refreshPasskeys();refreshMailSources();}
   const migrationPane=$("app-migration");
   if (migrationPane) {
     if (!migrationPane._originalParent) migrationPane._originalParent=migrationPane.parentElement;
@@ -1577,7 +1577,7 @@ async function refreshAccessToken() {
 }
 
 async function api(path, opts = {}) {
-  if(filesState.ownerID&&/^\/api\/v1\/files(?:[/?]|$)/.test(path)&&!/^\/api\/v1\/files\/(?:access|shares)/.test(path))path+=(path.includes('?')?'&':'?')+'owner_id='+encodeURIComponent(filesState.ownerID);
+  if(filesState.ownerID&&/^\/api\/v1\/files(?:[/?]|$)/.test(path)&&!/^\/api\/v1\/files\/(?:access|shares|library|office)/.test(path))path+=(path.includes('?')?'&':'?')+'owner_id='+encodeURIComponent(filesState.ownerID);
   const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
   if (state.tokens?.access_token) {
     headers.Authorization = "Bearer " + state.tokens.access_token;
@@ -1906,18 +1906,28 @@ $("q-search")?.addEventListener("keydown", (e) => {
 });
 
 let maillogTimer = null;
+let maillogOffset = 0, maillogRequest = 0;
+const maillogPageSize = 100;
 
-async function refreshMailLog() {
+async function refreshMailLog(reset = true) {
   const pre = $("maillog-lines");
   const msg = $("maillog-msg");
   const scopeEl = $("maillog-scope");
   if (!pre) return;
+  if (reset) maillogOffset = 0;
+  const request = ++maillogRequest;
+  const previous = $("maillog-prev"), next = $("maillog-next");
+  if (previous) previous.disabled = true;
+  if (next) next.disabled = true;
   const q = ($("maillog-q")?.value || "").trim();
   try {
-    const params = new URLSearchParams({ limit: "200" });
+    const params = new URLSearchParams({ limit: String(maillogPageSize + 1), offset: String(maillogOffset) });
     if (q) params.set("q", q);
     const d = await api("/api/v1/admin/mail-log?" + params.toString());
-    const items = d.items || [];
+    if (request !== maillogRequest) return;
+    const items = (d.items || []).slice(0, maillogPageSize);
+    if (previous) previous.disabled = maillogOffset === 0;
+    if (next) next.disabled = (d.items || []).length <= maillogPageSize;
     if (scopeEl) {
       const key = d.scope === "domain" ? "maillog_scope_domain" : "maillog_scope_global";
       scopeEl.setAttribute("data-i18n", key);
@@ -1928,10 +1938,13 @@ async function refreshMailLog() {
     } else {
       pre.textContent = items.map((it) => it.line || "").filter(Boolean).join("\n");
     }
-    setMsg(msg, items.length ? `${items.length}` : "", items.length ? "ok" : "");
+    pre.scrollTop = 0;
+    setMsg(msg, items.length ? `${maillogOffset + 1}–${maillogOffset + items.length}` : "0", "");
   } catch (err) {
+    if (request !== maillogRequest) return;
     pre.textContent = "";
     setMsg(msg, err.message, "err");
+    if (previous) previous.disabled = maillogOffset === 0;
   }
 }
 
@@ -1942,6 +1955,8 @@ function scheduleMailLogSearch() {
 
 $("btn-maillog-search")?.addEventListener("click", () => refreshMailLog());
 $("btn-maillog-refresh")?.addEventListener("click", () => refreshMailLog());
+$("maillog-prev")?.addEventListener("click", () => {maillogOffset = Math.max(0, maillogOffset - maillogPageSize); refreshMailLog(false);});
+$("maillog-next")?.addEventListener("click", () => {maillogOffset += maillogPageSize; refreshMailLog(false);});
 $("maillog-q")?.addEventListener("input", () => scheduleMailLogSearch());
 $("maillog-q")?.addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
@@ -5161,6 +5176,7 @@ function showFileReader(entry) {
   preview.textContent=mailImageText('Просмотр','Preview');preview.hidden=entry.is_dir||!documentPreviewType(entry.name);
   let share=$('btn-files-share');if(!share){share=document.createElement('button');share.id='btn-files-share';share.type='button';share.className='btn-secondary btn-sm';$('btn-files-download').after(share);}share.hidden=!!filesState.ownerID;share.textContent=mailImageText('Доступ','Share');share.onclick=()=>openFileAccess(joinPath(filesState.path,entry.name));
   preview.onclick=()=>openDocumentPreview({url:'/api/v1/files/content?path='+encodeURIComponent(joinPath(filesState.path,entry.name))+(filesState.ownerID?'&owner_id='+encodeURIComponent(filesState.ownerID):''),name:entry.name,size:entry.size});
+  mountFileReaderActions(entry);
 }
 
 function selectFileEntry(name) {
@@ -5437,7 +5453,7 @@ async function refreshFiles() {
         </button>
       </li>`;
     }
-    html += filesState.entries.map((e) => `
+    html += fileEntriesPage(filesState.entries).map((e) => `
       <li class="file-row">
         <button type="button" draggable="true" class="file-item${e.is_dir ? " is-dir" : ""}${filesState.selected?.name === e.name ? " is-active" : ""}" data-name="${escapeHtml(e.name)}">
           <span class="file-name">${escapeHtml(e.name)}</span>
@@ -5446,6 +5462,7 @@ async function refreshFiles() {
         </button><button type="button" class="file-more" data-file-menu="${escapeHtml(e.name)}" aria-label="${escapeHtml(t("files_actions")+": "+e.name)}">⋯</button>
       </li>`).join("") || (!filesState.path ? `<li class="meta msg-empty">${escapeHtml(t("empty_files"))}</li>` : "");
     list.innerHTML = html;
+    fileRowsRendered();
     $("files-up")?.addEventListener("click", () => filesGoUp());
     list.querySelectorAll("[data-name]").forEach((btn) => {
       btn.addEventListener("click", () => selectFileEntry(btn.dataset.name));
@@ -5507,7 +5524,7 @@ $("btn-files-open")?.addEventListener("click", () => {
 });
 $("btn-files-delete")?.addEventListener("click", async () => {
   if (!filesState.selected) return;
-  if (!await askConfirm(t("delete") + " " + filesState.selected.name + "?", { danger: true })) return;
+  if (!await askConfirm(mailImageText("Переместить в корзину: ","Move to trash: ") + filesState.selected.name + "?")) return;
   try {
     await api("/api/v1/files?path=" + encodeURIComponent(joinPath(filesState.path, filesState.selected.name)), {
       method: "DELETE",
@@ -6371,7 +6388,7 @@ const CONFIG_GROUPS = [
   { title: ["Почта и клиенты", "Mail and clients"], icon: "mail", sections: ["smtp", "imap", "pop3", "managesieve", "flowsync", "xmpp"] },
   { title: ["Защита почты", "Mail protection"], icon: "lock", sections: ["spam", "scan", "dkim_verify", "spf", "iprev", "helo", "greylist", "dmarc", "arc"] },
   { title: ["Вход и пользователи", "Identity and users"], icon: "user", sections: ["ldap", "oidc", "mfa", "seed"] },
-  { title: ["Хранение и доступность", "Storage and availability"], icon: "files", sections: ["storage", "mailstore", "ha"] },
+  { title: ["Хранение и доступность", "Storage and availability"], icon: "files", sections: ["storage", "mailstore", "files", "ha"] },
   { title: ["Сервер и наблюдение", "Server and observability"], icon: "server", sections: ["server", "http", "tls", "log", "siem"] },
 ];
 const CONFIG_SECTIONS = {
@@ -6397,6 +6414,7 @@ const CONFIG_SECTIONS = {
   seed: ["Первоначальная учётная запись", "Параметры создания первой организации и администратора."],
   storage: ["База данных", "Параметры bootstrap YAML, доступные только для чтения."],
   mailstore: ["Письма и S3", "Каталог maildir и зеркало объектного хранилища."],
+  files: ["Файлы и офис", "Адрес отдельного Collabora Online для совместного редактирования."],
   ha: ["Высокая доступность", "Лидер, аренда узла и закрепление писателей за пользователями."],
   http: ["Веб-интерфейс и HTTP", "HTTP/HTTPS, публичный адрес и глобальные администраторы."],
   tls: ["TLS и ACME", "Сертификаты сервисов и автоматическая выдача через ACME."],
@@ -6586,10 +6604,14 @@ $("config-dialog")?.addEventListener("submit", async event => {
 let mailImagePreferences = {mode: "block", senders: []};
 let mailImagePreferenceToken = "";
 let mailImagePreferencePromise;
+let mailImageSenderQuery = "";
+let mailImageSenderPage = 0;
+let mailImageSenderPageSize = 10;
 async function refreshMailImagePreferences(force = false) {
   const token = state.tokens?.access_token || "";
   if (!token) {mailImagePreferences = {mode: "block", senders: []}; mailImagePreferenceToken = ""; return;}
   if (!force && token === mailImagePreferenceToken && mailImagePreferencePromise) return mailImagePreferencePromise;
+  if (mailImagePreferenceToken !== token) {mailImageSenderQuery = ""; mailImageSenderPage = 0;}
   mailImagePreferenceToken = token;
   mailImagePreferences = {mode: "block", senders: []};
   mailImagePreferencePromise = api("/api/v1/mail/image-preferences").then(value => {
@@ -6620,15 +6642,36 @@ function renderMailImageSettings() {
   const message = document.createElement("p");message.className = "meta"; message.setAttribute("role", "status");
   select.addEventListener("change", async () => {select.disabled = true;try {await saveMailImagePreferences({...mailImagePreferences, mode:select.value});}catch(error) {select.value = mailImagePreferences.mode;message.textContent = error.message;}finally {select.disabled = false;}});
   const list = document.createElement("div");list.className = "stack-gap";
-  for (const sender of mailImagePreferences.senders || []) {
+  const search = document.createElement("input"); search.type = "search"; search.className = "field-input";
+  search.id = "mail-image-sender-search"; search.value = mailImageSenderQuery;
+  search.placeholder = mailImageText("Поиск отправителя…", "Search senders…"); search.setAttribute("aria-label", search.placeholder);
+  const pager = document.createElement("nav"); pager.className = "mail-image-sender-pager";
+  pager.setAttribute("aria-label", mailImageText("Страницы разрешённых отправителей", "Allowed sender pages"));
+  const renderSenders = () => {
+  list.replaceChildren(); pager.replaceChildren();
+  const senders = (mailImagePreferences.senders || []).filter(sender => sender.toLocaleLowerCase().includes(mailImageSenderQuery.trim().toLocaleLowerCase()));
+  mailImageSenderPage = Math.min(mailImageSenderPage, Math.max(0, Math.ceil(senders.length / mailImageSenderPageSize) - 1));
+  const offset = mailImageSenderPage * mailImageSenderPageSize;
+  for (const sender of senders.slice(offset, offset + mailImageSenderPageSize)) {
     const row = document.createElement("div");row.className = "mail-image-sender";
     const name = document.createElement("span");name.textContent = sender;
     const remove = document.createElement("button");remove.type = "button";remove.className = "btn-secondary btn-sm";remove.textContent = mailImageText("Убрать исключение", "Remove exception");
     remove.addEventListener("click", async () => {remove.disabled = true;try {await saveMailImagePreferences({...mailImagePreferences, senders:mailImagePreferences.senders.filter(value => value !== sender)});}catch(error) {message.textContent = error.message;remove.disabled = false;}});
     row.append(name,remove);list.append(row);
   }
+  if (!senders.length) {const empty = document.createElement("p"); empty.className = "meta"; empty.textContent = mailImageSenderQuery ? mailImageText("Ничего не найдено", "No matching senders") : mailImageText("Нет исключений", "No exceptions"); list.append(empty);}
+  const previous = document.createElement("button"), next = document.createElement("button"), count = document.createElement("span"), size = document.createElement("select");
+  for (const [button, text, label, change] of [[previous,"‹",mailImageText("Предыдущая страница", "Previous page"),-1],[next,"›",mailImageText("Следующая страница", "Next page"),1]]) {button.type="button";button.className="btn-secondary action-icon";button.textContent=text;button.setAttribute("aria-label",label);button.onclick=()=>{mailImageSenderPage+=change;renderSenders();};}
+  previous.disabled = mailImageSenderPage === 0; next.disabled = offset + mailImageSenderPageSize >= senders.length;
+  count.setAttribute("role","status");count.textContent = senders.length ? `${offset+1}–${Math.min(offset+mailImageSenderPageSize,senders.length)} / ${senders.length}` : "0";
+  size.className="field-input";size.setAttribute("aria-label",mailImageText("Отправителей на странице", "Senders per page"));
+  for(const n of [10,25,50]) {const option=document.createElement("option");option.value=n;option.textContent=n+mailImageText(" на странице"," per page");size.append(option);}size.value=mailImageSenderPageSize;
+  size.onchange=()=>{mailImageSenderPageSize=Number(size.value);mailImageSenderPage=0;renderSenders();};pager.append(previous,count,next,size);
+  };
+  search.addEventListener("input",()=>{mailImageSenderQuery=search.value;mailImageSenderPage=0;renderSenders();});
+  renderSenders();
   const caption = document.createElement("p");caption.className = "meta";caption.textContent = mailImageText("Разрешённые отправители", "Allowed senders");
-  card.append(title,hint,label,caption,list,message);
+  card.append(title,hint,label,caption,search,list,pager,message);
 }
 
 let mailPageData;
@@ -7316,7 +7359,7 @@ function enhanceConnectionTable(table) {
   search.oninput=()=>{page=0;render()};size.onchange=()=>{page=0;render()};prev.onclick=()=>{page--;render()};next.onclick=()=>{page++;render()};render();
 }
 
-async function openAdminSessions(){const dialog=document.createElement('dialog');dialog.className='document-preview admin-sessions-dialog';dialog.style.width='min(960px,94vw)';const header=document.createElement('header'),title=document.createElement('strong'),refresh=document.createElement('button'),close=document.createElement('button');title.textContent=mailImageText('Сессии и подключения','Sessions and connections');refresh.className=close.className='btn-secondary btn-sm';refresh.innerHTML=designIcon('refresh');refresh.title=t('refresh');refresh.setAttribute('aria-label',refresh.title);close.innerHTML=designIcon('close');close.title=mailImageText('Закрыть','Close');close.setAttribute('aria-label',close.title);refresh.classList.add('action-icon');close.classList.add('action-icon');close.onclick=()=>dialog.close();header.append(title,refresh,close);const content=document.createElement('div');content.className='document-preview-content';const status=document.createElement('p');status.setAttribute('role','status');dialog.append(header,content,status);document.body.append(dialog);dialog.addEventListener('close',()=>dialog.remove(),{once:true});dialog.showModal();const load=async()=>{try{const data=await api('/api/v1/admin/sessions');content.replaceChildren();const table=document.createElement('table');table.className='admin-users-table';const head=document.createElement('tr');for(const name of [mailImageText('Пользователь','User'),mailImageText('Протокол','Protocol'),'IP',mailImageText('Устройство / клиент','Device / client'),mailImageText('Последняя активность','Last seen'),'']){const cell=document.createElement('th');cell.textContent=name;head.append(cell)}table.append(head);for(const item of data.sessions||[]){const row=document.createElement('tr');for(const value of [item.email,item.protocol,item.address,item.agent||'—',new Date(item.last_seen).toLocaleString()]){const cell=document.createElement('td');cell.textContent=value;row.append(cell)}const cell=document.createElement('td'),button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.innerHTML=designIcon('disconnect');button.title=mailImageText('Разорвать сессию','Disconnect session');button.setAttribute('aria-label',button.title);button.classList.add('action-icon');button.onclick=async()=>{button.disabled=true;try{await api('/api/v1/admin/sessions/'+encodeURIComponent(item.id),{method:'DELETE'});await load()}catch(error){status.textContent=error.message;button.disabled=false}};cell.append(button);row.append(cell);table.append(row)}content.append(table);enhanceConnectionTable(table);const hint=document.createElement('p');hint.className='meta';hint.textContent=mailImageText('Почтовые соединения показаны пока подключены. Web, EWS и ActiveSync — при активности за последние 15 минут. Разрыв Web отзывает токен, EWS/ActiveSync — прерывает текущие запросы. Вход с паролем остаётся доступен.','Mail connections are listed while connected. Web, EWS and ActiveSync show activity in the last 15 minutes. Disconnect revokes Web tokens or cancels current EWS/ActiveSync requests. Password login remains possible.');content.append(hint)}catch(error){status.textContent=error.message}};refresh.onclick=load;await load();}
+async function openAdminSessions(){const dialog=document.createElement('dialog');dialog.className='document-preview admin-sessions-dialog';dialog.style.width='min(960px,94vw)';const header=document.createElement('header'),title=document.createElement('strong'),refresh=document.createElement('button'),close=document.createElement('button');title.textContent=mailImageText('Сессии и подключения','Sessions and connections');refresh.className=close.className='btn-secondary btn-sm';refresh.innerHTML=designIcon('refresh');refresh.title=t('refresh');refresh.setAttribute('aria-label',refresh.title);close.innerHTML=designIcon('close');close.title=mailImageText('Закрыть','Close');close.setAttribute('aria-label',close.title);refresh.classList.add('action-icon');close.classList.add('action-icon');close.onclick=()=>dialog.close();header.append(title,refresh,close);const content=document.createElement('div');content.className='document-preview-content';const status=document.createElement('p');status.setAttribute('role','status');dialog.append(header,content,status);document.body.append(dialog);dialog.addEventListener('close',()=>dialog.remove(),{once:true});dialog.showModal();const load=async()=>{try{const data=await api('/api/v1/admin/sessions');content.replaceChildren();const table=document.createElement('table');table.className='admin-users-table';const head=document.createElement('tr');for(const name of [mailImageText('Пользователь','User'),mailImageText('Протокол','Protocol'),'IP',mailImageText('Устройство / клиент','Device / client'),mailImageText('Последняя активность','Last seen'),'']){const cell=document.createElement('th');cell.textContent=name;head.append(cell)}table.append(head);for(const item of data.sessions||[]){const row=document.createElement('tr');for(const value of [item.email,item.protocol,item.address,item.agent||'—',new Date(item.last_seen).toLocaleString()]){const cell=document.createElement('td');cell.textContent=value;row.append(cell)}const cell=document.createElement('td'),button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.innerHTML=designIcon('disconnect');button.title=mailImageText('Разорвать сессию','Disconnect session');button.setAttribute('aria-label',button.title);button.classList.add('action-icon');button.onclick=async()=>{button.disabled=true;try{await api('/api/v1/admin/sessions/'+encodeURIComponent(item.id),{method:'DELETE'});await load()}catch(error){status.textContent=error.message;button.disabled=false}};cell.append(button);row.append(cell);table.append(row)}content.append(table);enhanceConnectionTable(table);const hint=document.createElement('p');hint.className='meta';hint.textContent=mailImageText('Почтовые и XMPP-соединения показаны, пока подключены. Web, EWS и ActiveSync — при активности за последние 15 минут. Разрыв Web отзывает токен, EWS/ActiveSync — прерывает текущие запросы. Вход с паролем остаётся доступен.','Mail and XMPP connections are listed while connected. Web, EWS and ActiveSync show activity in the last 15 minutes. Disconnect revokes Web tokens or cancels current EWS/ActiveSync requests. Password login remains possible.');content.append(hint)}catch(error){status.textContent=error.message}};refresh.onclick=load;await load();}
 const sessionsButton=document.createElement('button');sessionsButton.type='button';sessionsButton.className='btn-secondary';sessionsButton.textContent=mailImageText('Сессии и устройства','Sessions and devices');sessionsButton.onclick=openAdminSessions;$('app-monitor')?.prepend(sessionsButton);
 
 async function openAdminDevices(){const dialog=document.createElement('dialog');dialog.className='document-preview admin-sessions-dialog admin-devices-dialog';dialog.style.width='min(960px,94vw)';const header=document.createElement('header'),title=document.createElement('strong'),refresh=document.createElement('button'),close=document.createElement('button');title.textContent=mailImageText('Мобильные устройства','Mobile devices');refresh.className=close.className='btn-secondary btn-sm action-icon';refresh.innerHTML=designIcon('refresh');refresh.title=t('refresh');refresh.setAttribute('aria-label',refresh.title);close.innerHTML=designIcon('close');close.title=mailImageText('Закрыть','Close');close.setAttribute('aria-label',close.title);close.onclick=()=>dialog.close();header.append(title,refresh,close);const body=document.createElement('div');body.className='document-preview-content';const status=document.createElement('p');status.setAttribute('role','status');dialog.append(header,body,status);document.body.append(dialog);dialog.addEventListener('close',()=>dialog.remove(),{once:true});dialog.showModal();const load=async()=>{const data=await api('/api/v1/admin/devices');body.replaceChildren();const table=document.createElement('table');table.className='admin-users-table device-table';const thead=document.createElement('thead'),headRow=document.createElement('tr');for(const label of [mailImageText('Пользователь','User'),mailImageText('Устройство / клиент','Device / client'),'IP',mailImageText('Последняя активность','Last activity'),mailImageText('Состояние','State'),mailImageText('Действия','Actions')]){const th=document.createElement('th');th.textContent=label;headRow.append(th)}thead.append(headRow);const tbody=document.createElement('tbody');table.append(thead,tbody);body.append(table);for(const item of data.devices||[]){const row=document.createElement('tr');for(const value of [item.email,(item.type||'—')+' · '+item.device_id+' · '+(item.agent||''),item.address||'—',new Date(item.last_seen).toLocaleString(),(item.blocked?mailImageText('Заблокировано','Blocked'):mailImageText('Разрешено','Allowed'))+' · '+(item.wipe_status==='none'?mailImageText('Нет команды удаления','No wipe requested'):item.wipe_status)]){const td=document.createElement('td');td.textContent=value;row.append(td)}const actions=document.createElement('td');actions.className='device-actions';row.append(actions);for(const [action,label] of [[item.blocked?'unblock':'block',item.blocked?mailImageText('Разрешить','Allow'):mailImageText('Заблокировать','Block')],['wipe_account',mailImageText('Удалить данные учётной записи','Erase account data')],['cancel_wipe',mailImageText('Отменить неотправленную команду','Cancel unsent command')]]){const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm action-icon';button.innerHTML=designIcon(action==='wipe_account'?'delete':action==='cancel_wipe'?'close':'disconnect');button.title=label;button.setAttribute('aria-label',label);if(action==='wipe_account')button.disabled=!item.account_wipe_supported||['pending','sent','acknowledged'].includes(item.wipe_status);if(action==='cancel_wipe')button.disabled=item.wipe_status!=='pending';button.onclick=async()=>{let confirm='';if(action==='wipe_account'){confirm=await askPrompt(mailImageText('Удаление данных этой учётной записи на устройстве. Введите ID устройства для подтверждения: ','Erase this account’s data on the device. Enter device ID to confirm: ')+item.device_id);if(confirm!==item.device_id)return}button.disabled=true;try{await api('/api/v1/admin/devices/'+encodeURIComponent(item.id),{method:'POST',body:JSON.stringify({action,confirm_device_id:confirm})});await load()}catch(error){status.textContent=error.message;button.disabled=false}};actions.append(button)}tbody.append(row)}if(!data.devices?.length){const row=document.createElement("tr"),cell=document.createElement("td");cell.colSpan=6;cell.textContent=mailImageText("Устройств пока нет","No devices yet");row.append(cell);tbody.append(row)}enhanceConnectionTable(table);const hint=document.createElement('p');hint.className='meta';hint.textContent=mailImageText('Удаление доступно клиентам FlowSync / ActiveSync 16.1 после Provision. Команда затрагивает только данные учётной записи и выполняется при следующем подключении клиента. Статус acknowledged означает подтверждение клиента.','Account-only wipe is available after Provision for FlowSync / ActiveSync 16.1 clients. It is sent on the next client connection. Acknowledged means the client confirmed the command.');body.append(hint)};const reload=async()=>{refresh.disabled=true;status.textContent='';try{await load()}catch(error){status.textContent=error.message}finally{refresh.disabled=false}};refresh.onclick=reload;await reload()}
@@ -7476,6 +7519,174 @@ async function openCalendarSubscriptions() {
  const render=async()=>{const data=await api('/api/v1/calendar/subscriptions');list.replaceChildren();for(const cal of data.calendars||[]){const row=document.createElement('div');row.className='subscription-row';const info=document.createElement('div'),name=document.createElement('strong'),detail=document.createElement('p'),remove=document.createElement('button');name.textContent=cal.display_name;detail.className='meta';detail.textContent=cal.error||mailImageText('Обновлено: ','Updated: ')+new Date(cal.updated_at).toLocaleString();info.append(name,detail);remove.type='button';remove.className='btn-secondary';remove.textContent=mailImageText('Отписаться','Unsubscribe');remove.onclick=async()=>{if(!await askConfirm(mailImageText('Удалить эту подписку?','Remove this subscription?')))return;remove.disabled=true;try{await api('/api/v1/calendar/subscriptions?id='+encodeURIComponent(cal.id),{method:'DELETE'});await render();await refreshCalendar()}catch(e){status.textContent=e.message;remove.disabled=false}};row.append(info,remove);list.append(row)}};
  form.onsubmit=async event=>{event.preventDefault();submit.disabled=true;status.textContent=mailImageText('Загружаем календарь…','Loading calendar…');try{const payload={kind:kind.value};for(const [key,input]of Object.entries(fields))payload[key]=input.value;await api('/api/v1/calendar/subscriptions',{method:'POST',body:JSON.stringify(payload)});fields.password.value='';status.textContent=mailImageText('Подписка добавлена','Subscription added');await render();await refreshCalendar()}catch(e){status.textContent=e.message}finally{submit.disabled=false}};
  body.append(hint,list,form,status);dialog.append(header,body);document.body.append(dialog);dialog.addEventListener('close',()=>{fields.password.value='';dialog.remove()},{once:true});dialog.showModal();try{await render()}catch(e){status.textContent=e.message}
+}
+// File library UI: all mutations use the same versioned server storage as DAV/WOPI.
+function fileLibraryDialog(title, wide=false) {
+  const focus=document.activeElement, dialog=document.createElement('dialog');
+  dialog.className='document-preview file-library-dialog'+(wide?' file-office-dialog':'');dialog.setAttribute('aria-label',title);
+  const head=document.createElement('header'),name=document.createElement('strong'),close=document.createElement('button');
+  name.textContent=title;close.type='button';close.className='btn-secondary action-icon';close.title=t('close');close.setAttribute('aria-label',close.title);close.innerHTML=designIcon('close');close.onclick=()=>dialog.close();head.append(name,close);
+  const body=document.createElement('div');body.className='file-library-body';const status=document.createElement('p');status.className='meta';status.setAttribute('role','status');
+  dialog.append(head,body,status);dialog.onclose=()=>{dialog.remove();if(focus?.isConnected)focus.focus()};document.body.append(dialog);dialog.showModal();return {dialog,head,body,status,close};
+}
+function fileAction(label,run,icon='') {
+  const button=document.createElement('button');button.type='button';button.className=icon?'btn-secondary action-icon':'btn-secondary btn-sm';button.title=label;button.setAttribute('aria-label',label);
+  if(icon)button.innerHTML=designIcon(icon);else button.textContent=label;button.onclick=run;return button;
+}
+function libraryMessage(error) {
+  return ({409:mailImageText('Файл изменён или путь уже занят. Обновите список и повторите действие.','File changed or the destination exists. Refresh and retry.'),423:mailImageText('Документ открыт для редактирования. Закройте редактор и повторите действие.','Document is locked for editing. Close the editor and retry.'),503:mailImageText('Офисный редактор ещё не подключён. Администратор может указать адрес Collabora в настройках сервера → Файлы.','Office is not connected yet. Configure Collabora in server settings → Files.')})[error.status]||error.message;
+}
+async function openFileHistory(kind,path='') {
+  const view=fileLibraryDialog(kind==='trash'?mailImageText('Корзина','Trash'):mailImageText('Версии файла','File versions')+' · '+path);
+  const search=document.createElement('input');search.type='search';search.className='field-input';search.placeholder=mailImageText('Поиск по имени или пути','Search name or path');search.setAttribute('aria-label',search.placeholder);
+  const note=document.createElement('p');note.className='meta';note.textContent=kind==='trash'?mailImageText('Восстановление возвращает файл на прежнее место. Общий доступ после удаления нужно предоставить заново.','Restoring returns the file to its original location. Share it again after restoring.'):mailImageText('При восстановлении текущий файл также сохраняется в истории.','Restoring also preserves the current file in history.');
+  const table=document.createElement('table');table.className='file-library-table';const nav=document.createElement('div');nav.className='file-library-nav';view.body.append(search,note,table,nav);
+  let items=[],page=0;
+  const load=async()=>{view.status.textContent=mailImageText('Загрузка…','Loading…');try{const data=await api('/api/v1/files/library/'+kind+(path?'?path='+encodeURIComponent(path):''));items=data.entries||[];render();view.status.textContent=''}catch(error){view.status.textContent=libraryMessage(error)}};
+  const render=()=>{
+    const q=search.value.trim().toLocaleLowerCase(),filtered=items.filter(e=>e.path.toLocaleLowerCase().includes(q));page=Math.min(page,Math.max(0,Math.ceil(filtered.length/25)-1));
+    table.innerHTML='<thead><tr><th>'+escapeHtml(mailImageText('Файл','File'))+'</th><th>'+escapeHtml(mailImageText('Дата','Date'))+'</th><th>'+escapeHtml(t('col_size'))+'</th><th>'+escapeHtml(mailImageText('Действия','Actions'))+'</th></tr></thead>';const tbody=document.createElement('tbody');table.append(tbody);
+    for(const item of filtered.slice(page*25,(page+1)*25)){
+      const row=document.createElement('tr'),name=document.createElement('td'),date=document.createElement('td'),size=document.createElement('td'),actions=document.createElement('td');name.textContent=item.path;date.textContent=new Date(item.at).toLocaleString();size.textContent=item.is_dir?'—':fmtBytes(item.size);actions.className='file-library-actions';
+      const act=async remove=>{
+        const question=remove?mailImageText('Удалить без возможности восстановления: ','Permanently delete: '):mailImageText('Восстановить: ','Restore: ');
+        if(!await askConfirm(question+item.path+'?',{danger:remove}))return;
+        actions.querySelectorAll('button').forEach(b=>b.disabled=true);
+        try{await api('/api/v1/files/library/'+(remove?'trash':'restore'),{method:remove?'DELETE':'POST',body:JSON.stringify({id:item.id,kind})});await load();await refreshFiles()}catch(error){view.status.textContent=libraryMessage(error);actions.querySelectorAll('button').forEach(b=>b.disabled=false)}
+      };
+      actions.append(fileAction(mailImageText('Восстановить','Restore'),()=>act(false),'reply'));if(kind==='trash')actions.append(fileAction(mailImageText('Удалить навсегда','Delete permanently'),()=>act(true),'delete'));row.append(name,date,size,actions);tbody.append(row);
+    }
+    if(!filtered.length){const row=tbody.insertRow(),cell=row.insertCell();cell.colSpan=4;cell.textContent=mailImageText('Нет файлов','No files')}
+    const label=document.createElement('span');label.textContent=filtered.length?`${page*25+1}–${Math.min((page+1)*25,filtered.length)} / ${filtered.length}`:'0';const prev=fileAction('‹',()=>{page--;render()}),next=fileAction('›',()=>{page++;render()});prev.setAttribute('aria-label',mailImageText('Предыдущая страница','Previous page'));next.setAttribute('aria-label',mailImageText('Следующая страница','Next page'));prev.disabled=page===0;next.disabled=(page+1)*25>=filtered.length;nav.replaceChildren(prev,label,next);
+  };search.oninput=()=>{page=0;render()};await load();
+}
+async function openFileDAVInfo() {
+  const v=fileLibraryDialog(mailImageText('Подключение по WebDAV','Connect with WebDAV'));
+  try{const info=await api('/api/v1/files/office');const label=document.createElement('label'),url=document.createElement('input'),hint=document.createElement('p');label.textContent=mailImageText('Адрес личного хранилища','Personal storage address');url.className='field-input';url.readOnly=true;url.value=info.webdav_url;url.setAttribute('aria-label',label.textContent);hint.textContent=mailImageText('Логин — полный почтовый адрес. Используйте WebDAV-клиент с HTTPS. Passkey применяется только для входа в веб-интерфейс. При обязательном TOTP нужен клиент с поддержкой Bearer-токена.','Use your full email address and an HTTPS WebDAV client. Passkeys are for web sign-in only. Enforced TOTP requires a client that supports Bearer tokens.');v.body.append(label,url,fileAction(mailImageText('Скопировать адрес','Copy address'),async()=>{try{await navigator.clipboard.writeText(url.value);v.status.textContent=mailImageText('Адрес скопирован','Address copied')}catch{url.select()}}),hint)}catch(error){v.status.textContent=libraryMessage(error)}
+}
+function mountFileReaderActions(entry) {
+  let versions=$('btn-files-versions'),office=$('btn-files-office');
+  if(!versions){versions=fileAction(mailImageText('История версий','Version history'),()=>{});versions.id='btn-files-versions';$('btn-files-download').after(versions)}
+  if(!office){office=fileAction(mailImageText('Открыть в офисе','Open in office'),()=>{});office.id='btn-files-office';$('btn-files-download').after(office)}
+  versions.hidden=entry.is_dir||!!filesState.ownerID;versions.onclick=()=>openFileHistory('versions',joinPath(filesState.path,entry.name));
+  office.hidden=entry.is_dir||!(/\.(odt|ods|odp|odg|docx?|xlsx?|pptx?|rtf|csv|txt)$/i.test(entry.name));office.onclick=()=>openOfficeDocument(joinPath(filesState.path,entry.name),entry.name);
+}
+async function openOfficeDocument(path,name) {
+  const owner=filesState.ownerID,v=fileLibraryDialog(name,true);v.status.textContent=mailImageText('Подключение к редактору…','Connecting to editor…');
+  try{
+    const session=await api('/api/v1/files/office?lang='+encodeURIComponent(document.documentElement.lang||'ru'),{method:'POST',body:JSON.stringify({path,owner_id:owner})});if(!v.dialog.open)return;
+    const endpoint=new URL(session.url);if(endpoint.protocol!=='https:')throw new Error('HTTPS required');
+    const frame=document.createElement('iframe');frame.name='tayga-office-'+crypto.randomUUID();frame.title=name;frame.allow='clipboard-read; clipboard-write; fullscreen';frame.referrerPolicy='no-referrer';
+    const form=document.createElement('form');form.method='POST';form.action=endpoint.href;form.target=frame.name;form.hidden=true;
+    for(const key of ['access_token','access_token_ttl']){const input=document.createElement('input');input.type='hidden';input.name=key;input.value=String(session[key]);form.append(input)}
+    v.body.append(frame,form);const send=(MessageId,Values={})=>frame.contentWindow?.postMessage(JSON.stringify({MessageId,SendTime:Date.now(),Values}),endpoint.origin);
+    const save=fileAction(t('save'),()=>{send('Action_Save',{DontTerminateEdit:true,Notify:true});v.status.textContent=mailImageText('Сохранение…','Saving…')});save.hidden=!session.writable;v.head.insertBefore(save,v.close);
+    const close=async()=>{if(session.writable&&!await askConfirm(mailImageText('Закрыть редактор? Убедитесь, что последние изменения сохранены.','Close the editor? Make sure your latest changes have been saved.')))return;v.dialog.close();refreshFiles()};v.close.onclick=close;v.dialog.addEventListener('cancel',event=>{event.preventDefault();close()});
+    const receive=event=>{if(event.source!==frame.contentWindow||event.origin!==endpoint.origin)return;let data;try{data=typeof event.data==='string'?JSON.parse(event.data):event.data}catch{return}
+      if(data?.MessageId==='App_LoadingStatus'&&data.Values?.Status==='Document_Loaded')v.status.textContent=session.writable?mailImageText('Изменения сохраняются на сервере Tayga.','Changes are saved on the Tayga server.'):mailImageText('Только просмотр','Read only');
+      if(data?.MessageId==='Action_Save_Resp')v.status.textContent=data.Values?.success===false?mailImageText('Не удалось сохранить документ. Не закрывайте редактор.','Save failed. Keep the editor open.'):mailImageText('Сохранено','Saved');
+      if(data?.MessageId==='UI_Close')close();
+    };window.addEventListener('message',receive);v.dialog.addEventListener('close',()=>window.removeEventListener('message',receive),{once:true});frame.onload=()=>send('Host_PostmessageReady');form.submit();form.remove();
+  }catch(error){v.status.textContent=libraryMessage(error)}
+}
+const fileBrowser={page:0,identity:'',selected:new Set()};
+function fileEntriesPage(entries) {
+  const identity=[state.email,filesState.ownerID,filesState.path,filesState.listTarget].join('|');if(identity!==fileBrowser.identity){fileBrowser.identity=identity;fileBrowser.page=0;fileBrowser.selected.clear();if($('files-search'))$('files-search').value=''}
+  const query=($('files-search')?.value||'').trim().toLocaleLowerCase();const sorted=entries.filter(e=>e.name.toLocaleLowerCase().includes(query)).sort((a,b)=>Number(b.is_dir)-Number(a.is_dir)||a.name.localeCompare(b.name));
+  const available=new Set(entries.map(e=>e.name));for(const name of fileBrowser.selected)if(!available.has(name))fileBrowser.selected.delete(name);
+  fileBrowser.page=Math.min(fileBrowser.page,Math.max(0,Math.ceil(sorted.length/50)-1));
+  const nav=$('files-pagination');if(nav){const label=document.createElement('span');label.textContent=sorted.length?`${fileBrowser.page*50+1}–${Math.min((fileBrowser.page+1)*50,sorted.length)} / ${sorted.length}`:'0';const prev=fileAction('‹',()=>{fileBrowser.page--;refreshFiles()}),next=fileAction('›',()=>{fileBrowser.page++;refreshFiles()});prev.setAttribute('aria-label',mailImageText('Предыдущая страница','Previous page'));next.setAttribute('aria-label',mailImageText('Следующая страница','Next page'));prev.disabled=fileBrowser.page===0;next.disabled=(fileBrowser.page+1)*50>=sorted.length;nav.replaceChildren(prev,label,next)}
+  if($('btn-files-search-all'))$('btn-files-search-all').hidden=!!filesState.ownerID;
+  return sorted.slice(fileBrowser.page*50,(fileBrowser.page+1)*50);
+}
+function fileRowsRendered() {
+  for(const row of $('files-list').querySelectorAll('.file-row')){const name=row.querySelector('[data-name]').dataset.name,check=document.createElement('input');check.type='checkbox';check.checked=fileBrowser.selected.has(name);check.setAttribute('aria-label',mailImageText('Выбрать ','Select ')+name);check.onchange=()=>{if(check.checked)fileBrowser.selected.add(name);else fileBrowser.selected.delete(name);updateFileSelection()};row.prepend(check)}updateFileSelection();
+}
+function updateFileSelection(){
+  const label=$('files-selection-label');if(label)label.textContent=mailImageText('Выбрано: ','Selected: ')+fileBrowser.selected.size;
+  const remove=$('btn-files-trash-selected');if(remove)remove.disabled=!fileBrowser.selected.size||(!!filesState.ownerID&&filesState.sharedRights!=='write');
+  const all=$('files-select-page'),visible=[...$('files-list').querySelectorAll('.file-row input[type=checkbox]')];if(all){all.checked=visible.length>0&&visible.every(e=>e.checked);all.indeterminate=visible.some(e=>e.checked)&&!all.checked;all.disabled=!visible.length}
+}
+async function trashSelectedFiles(){
+  const names=[...fileBrowser.selected],path=filesState.path,owner=filesState.ownerID;if(!names.length||!await askConfirm(mailImageText('Переместить выбранные файлы в корзину: ','Move selected items to trash: ')+names.length+'?'))return;
+  const button=$('btn-files-trash-selected');button.disabled=true;let moved=0;
+  try{for(const name of names){if(filesState.ownerID!==owner||filesState.path!==path)throw new Error(mailImageText('Папка изменилась; операция остановлена.','Folder changed; operation stopped.'));await api('/api/v1/files?path='+encodeURIComponent(joinPath(path,name)),{method:'DELETE'});fileBrowser.selected.delete(name);moved++}setMsg($('files-msg'),mailImageText('В корзине: ','Moved to trash: ')+moved)}catch(error){setMsg($('files-msg'),libraryMessage(error),'err')}finally{await refreshFiles();updateFileSelection()}
+}
+async function openFileSearch(){
+  const v=fileLibraryDialog(mailImageText('Поиск во всех моих файлах','Search all my files'));const form=document.createElement('form'),query=document.createElement('input'),submit=fileAction(mailImageText('Найти','Search'),()=>{});submit.type='submit';query.type='search';query.required=true;query.maxLength=256;query.className='field-input';query.placeholder=mailImageText('Имя файла или папки','File or folder name');query.setAttribute('aria-label',query.placeholder);query.value=$('files-search')?.value||'';form.className='file-library-search';form.append(query,submit);const results=document.createElement('div'),nav=document.createElement('div');nav.className='file-library-nav';v.body.append(form,results,nav);let page=1,seq=0;
+  const search=async()=>{const id=++seq;if(!query.value.trim())return;v.status.textContent=mailImageText('Поиск…','Searching…');try{const data=await api('/api/v1/files/library/search?q='+encodeURIComponent(query.value)+'&page='+page);if(id!==seq||!v.dialog.open)return;results.replaceChildren();for(const entry of data.entries||[]){const row=fileAction(entry.path,async()=>{filesState.ownerID='';filesState.listTarget='';filesState.sharedRoot='';filesState.path=entry.is_dir?entry.path:entry.path.split('/').slice(0,-1).join('/');filesState.selected=null;v.dialog.close();await refreshFiles();if(!entry.is_dir)selectFileEntry(entry.name)});row.className='file-search-result';results.append(row)}v.status.textContent=data.truncated?mailImageText('Просмотрено 100 000 элементов. Уточните запрос или папку.','Scanned 100,000 entries. Narrow your query or folder.'):mailImageText('Найдено: ','Found: ')+data.total;const prev=fileAction('‹',()=>{page--;search()}),next=fileAction('›',()=>{page++;search()}),label=document.createElement('span');label.textContent=String(page);prev.disabled=page<=1;next.disabled=page*data.page_size>=data.total;nav.replaceChildren(prev,label,next)}catch(error){v.status.textContent=libraryMessage(error)}};form.onsubmit=event=>{event.preventDefault();page=1;search()};if(query.value)await search();else query.focus();
+}
+function mountFileLibrary(){
+  const toolbar=document.createElement('div');toolbar.className='file-browser-tools';const search=document.createElement('input');search.id='files-search';search.type='search';search.className='field-input';search.placeholder=mailImageText('Поиск в папке','Search this folder');search.setAttribute('aria-label',search.placeholder);let timer;search.oninput=()=>{clearTimeout(timer);fileBrowser.page=0;timer=setTimeout(refreshFiles,200)};
+  const global=fileAction(mailImageText('Искать везде','Search all'),openFileSearch);global.id='btn-files-search-all';toolbar.append(search,global);$('files-upload-panel').before(toolbar);
+  const bulk=document.createElement('div');bulk.className='file-browser-selection';const all=document.createElement('input');all.type='checkbox';all.id='files-select-page';all.setAttribute('aria-label',mailImageText('Выбрать страницу','Select page'));all.onchange=()=>{for(const check of $('files-list').querySelectorAll('.file-row input[type=checkbox]')){check.checked=all.checked;const name=check.parentElement.querySelector('[data-name]').dataset.name;if(all.checked)fileBrowser.selected.add(name);else fileBrowser.selected.delete(name)}updateFileSelection()};const label=document.createElement('span');label.id='files-selection-label';const trash=fileAction(mailImageText('В корзину','Move to trash'),trashSelectedFiles,'delete');trash.id='btn-files-trash-selected';const nav=document.createElement('div');nav.id='files-pagination';nav.className='file-library-nav';bulk.append(all,label,trash,nav);$('files-list').before(bulk);
+  const menu=$('files-settings-menu');menu?.append(fileAction(mailImageText('Корзина','Trash'),()=>openFileHistory('trash')),fileAction(mailImageText('Подключить WebDAV','Connect WebDAV'),openFileDAVInfo));
+}
+mountFileLibrary();
+// Personal external mailbox collection. Credentials never enter browser storage.
+let mailSourcesGeneration = 0;
+async function refreshMailSources() {
+  const host = $('app-profile'); if (!host || !state.tokens?.access_token) return;
+  let card = $('mail-sources-card');
+  if (!card) {card=document.createElement('section');card.id='mail-sources-card';card.className='card stack-gap';host.insertBefore(card,$('profile-security')?.previousElementSibling || null);}
+  const generation=++mailSourcesGeneration, token=state.tokens.access_token;
+  try {
+    const data=await api('/api/v1/mail-sources');if(generation!==mailSourcesGeneration||state.tokens?.access_token!==token)return;
+    card.replaceChildren();
+    const header=document.createElement('div');header.className='mail-sources-header';
+    const title=document.createElement('h3');title.className='heading';title.textContent=mailImageText('Почта с внешних аккаунтов','External mail accounts');
+    const add=document.createElement('button');add.type='button';add.className='btn-spray';add.textContent=mailImageText('Добавить аккаунт','Add account');add.onclick=()=>editMailSource();
+    const refresh=document.createElement('button');refresh.type='button';refresh.className='btn-secondary action-icon';refresh.innerHTML=designIcon('refresh');refresh.setAttribute('aria-label',t('refresh'));refresh.title=t('refresh');refresh.onclick=refreshMailSources;header.append(title,refresh,add);
+    const hint=document.createElement('p');hint.className='meta';hint.textContent=mailImageText('Автоматически забирает новые письма по расписанию. Оригиналы остаются на внешнем сервере. До 5 аккаунтов.','Collect new mail on a schedule. Originals stay on the external server. Up to 5 accounts.');
+    const status=document.createElement('p');status.className='msg';status.setAttribute('role','status');
+    const wrap=document.createElement('div');wrap.className='mail-sources-table-wrap';const table=document.createElement('table');table.className='admin-users-table';const head=document.createElement('thead'),tr=document.createElement('tr');
+    for(const text of [mailImageText('Аккаунт / сервер','Account / server'),mailImageText('Папка назначения','Destination folder'),mailImageText('Расписание','Schedule'),mailImageText('Результат','Result'),mailImageText('Действия','Actions')]){const th=document.createElement('th');th.textContent=text;tr.append(th);}head.append(tr);table.append(head);const body=document.createElement('tbody');
+    for(const source of data.sources||[]){
+      const row=document.createElement('tr');const cell=()=>{const td=document.createElement('td');row.append(td);return td;};
+      const identity=cell(),name=document.createElement('strong'),server=document.createElement('p');name.textContent=source.name;server.className='meta';server.textContent=`${source.username} · ${source.host}:${source.port} · ${source.protocol.toUpperCase()}${source.security==='tls'?'S':''}`;identity.append(name,server);
+      cell().textContent=source.target_folder;
+      const schedule=cell();schedule.textContent=source.enabled?mailImageText(`Каждые ${source.interval_minutes} мин.`,`Every ${source.interval_minutes} min.`):mailImageText('Приостановлено','Paused');
+      const next=document.createElement('p');next.className='meta';next.textContent=source.enabled?(source.next_run?mailImageText('Следующая: ','Next: ')+new Date(source.next_run*1000).toLocaleString():mailImageText('Ожидает запуска','Waiting to start')):'';schedule.append(next);
+      const result=cell();const labels={pending:mailImageText('Ожидает запуска','Waiting'),running:mailImageText('Загрузка…','Collecting…'),ok:mailImageText('Готово','Completed'),error:mailImageText('Ошибка','Error')};result.textContent=labels[source.status]||source.status;
+      const details=document.createElement('p');details.className='meta';details.textContent=mailImageText(`Загружено: ${source.copied}`,`Collected: ${source.copied}`)+(source.last_run?' · '+new Date(source.last_run*1000).toLocaleString():'');result.append(details);
+      if(source.last_error){const error=document.createElement('p');error.className='msg err';error.textContent=source.last_error;result.append(error);}
+      const actions=cell();actions.className='mail-sources-actions';
+      const action=(icon,ru,en,handler)=>{const b=document.createElement('button');b.type='button';b.className='btn-secondary action-icon';b.innerHTML=designIcon(icon);b.title=mailImageText(ru,en);b.setAttribute('aria-label',b.title);b.disabled=source.status==='running';b.onclick=handler;actions.append(b);return b;};
+      action('edit','Настроить','Edit',()=>editMailSource(source));
+      const run=action('refresh','Забрать сейчас','Collect now',async()=>{try{run.disabled=true;await api(`/api/v1/mail-sources/${encodeURIComponent(source.id)}/run`,{method:'POST'});await refreshMailSources();}catch(error){status.textContent=error.message;run.disabled=false;}});run.disabled=run.disabled||!source.enabled;
+      action('trash','Удалить настройку','Remove source',async()=>{if(!confirm(mailImageText('Удалить настройку сбора? Уже загруженные письма останутся.','Remove this collection source? Downloaded messages will remain.')))return;try{await api(`/api/v1/mail-sources/${encodeURIComponent(source.id)}`,{method:'DELETE'});await refreshMailSources();}catch(error){status.textContent=error.message;}});
+      body.append(row);
+    }
+    table.append(body);wrap.append(table);card.append(header,hint);if((data.sources||[]).length)card.append(wrap);else{const empty=document.createElement('p');empty.className='meta';empty.textContent=mailImageText('Подключите внешний почтовый ящик с доступом по IMAP/POP3 и паролем приложения.','Connect an external mailbox using IMAP or POP3.');card.append(empty);}card.append(status);
+  } catch(error){if(generation===mailSourcesGeneration&&state.tokens?.access_token===token)card.textContent=error.message;}
+}
+async function editMailSource(source={}) {
+  const dialog=document.createElement('dialog');dialog.className='mail-source-dialog';
+  const form=document.createElement('form'),header=document.createElement('header'),title=document.createElement('h3'),close=document.createElement('button');title.className='heading';title.id='mail-source-title';title.textContent=mailImageText(source.id?'Настройка сбора почты':'Подключить внешний ящик',source.id?'Edit mail collection':'Connect external mailbox');dialog.setAttribute('aria-labelledby',title.id);close.type='button';close.className='btn-secondary action-icon';close.innerHTML=designIcon('close');close.setAttribute('aria-label',mailImageText('Закрыть','Close'));close.onclick=()=>dialog.close();header.append(title,close);
+  const fields=document.createElement('div');fields.className='mail-source-fields';const inputs={};
+  const field=(name,ru,en,value,options)=>{const label=document.createElement('label');label.className='field-label';label.textContent=mailImageText(ru,en);const input=document.createElement(options?'select':'input');input.className='field-input';input.name=name;input.id='mail-source-'+name;if(options)for(const [v,ru,en] of options){const o=document.createElement('option');o.value=v;o.textContent=mailImageText(ru,en);input.append(o);}input.value=value??'';label.append(input);fields.append(label);inputs[name]=input;return input;};
+  field('name','Название','Name',source.name||'');
+  const protocol=field('protocol','Протокол','Protocol',source.protocol||'imap',[['imap','IMAP','IMAP'],['pop3','POP3','POP3']]);
+  const host=field('host','Сервер','Server',source.host||'');host.placeholder='imap.example.com';host.required=true;
+  const security=field('security','Защита соединения','Connection security',source.security||'tls',[['tls','SSL/TLS (IMAPS / POP3S)','SSL/TLS (IMAPS / POP3S)'],['starttls','STARTTLS','STARTTLS'],['plain','Без шифрования','Unencrypted']]);
+  const port=field('port','Порт','Port',source.port||993);port.type='number';port.min=1;port.max=65535;port.required=true;
+  field('username','Имя пользователя','Username',source.username||'').required=true;
+  const password=field('password',source.id?'Новый пароль (оставьте пустым, чтобы сохранить)':'Пароль приложения',source.id?'New password (leave blank to keep)':'Application password','');password.type='password';password.autocomplete='new-password';password.required=!source.id;
+  const folder=field('source_folder','Папка на внешнем сервере','Remote folder',source.source_folder||'INBOX');folder.required=true;
+  const destination=field('destination','Куда складывать письма','Save messages to','existing',[['existing','В существующую папку','Existing folder'],['new','В новую папку','New folder']]);
+  const target=field('target_existing','Папка на Tayga','Tayga folder','INBOX',[['INBOX','Входящие','Inbox']]);
+  const newTarget=field('target_new','Название новой папки','New folder name','');newTarget.placeholder=mailImageText('Внешняя почта','External mail');
+  const interval=field('interval_minutes','Проверять каждые (минуты)','Check every (minutes)',source.interval_minutes||15);interval.type='number';interval.min=5;interval.max=1440;interval.required=true;
+  const enabledLabel=document.createElement('label');enabledLabel.className='field-check';const enabled=document.createElement('input');enabled.type='checkbox';enabled.checked=source.enabled!==false;const enabledText=document.createElement('span');enabledText.textContent=mailImageText('Автоматический сбор включён','Enable scheduled collection');enabledLabel.append(enabled,enabledText);fields.append(enabledLabel);
+  const hint=document.createElement('p');hint.className='meta';hint.textContent=mailImageText('При первом запуске загружаются все письма выбранной папки, затем — новые. Оригиналы остаются на источнике. Папка создаётся при первой загрузке. Для Gmail и других сервисов может понадобиться пароль приложения. Проверка TLS-сертификата обязательна.','The first run copies all mail in the selected folder, then only new mail. Originals are retained. The destination is created on the first download. Your provider may require an application password. TLS certificates are verified.');
+  const status=document.createElement('p');status.className='msg';status.setAttribute('role','status');
+  const actions=document.createElement('footer');const test=document.createElement('button');test.type='button';test.className='btn-secondary';test.textContent=mailImageText('Проверить соединение','Test connection');const save=document.createElement('button');save.type='submit';save.className='btn-spray';save.textContent=t('save');actions.append(test,save);
+  const update=()=>{folder.parentElement.hidden=protocol.value==='pop3';newTarget.parentElement.hidden=destination.value!=='new';target.parentElement.hidden=destination.value!=='existing';newTarget.required=destination.value==='new';};
+  const defaultPort=()=>{port.value=protocol.value==='imap'?(security.value==='tls'?993:143):(security.value==='tls'?995:110);update();};protocol.onchange=defaultPort;security.onchange=defaultPort;destination.onchange=update;update();
+  const values=()=>({name:inputs.name.value,protocol:protocol.value,host:host.value,security:security.value,port:Number(port.value),username:inputs.username.value,password:password.value,source_folder:protocol.value==='imap'?folder.value:'INBOX',target_folder:destination.value==='new'?newTarget.value:target.value,interval_minutes:Number(interval.value),enabled:enabled.checked});
+  const submit=async(check)=>{if(!form.reportValidity())return;test.disabled=save.disabled=true;status.textContent=mailImageText(check?'Проверяем соединение…':'Сохраняем…',check?'Testing connection…':'Saving…');try{const suffix=source.id?'/'+encodeURIComponent(source.id):'';await api('/api/v1/mail-sources'+suffix+(check?'/test':''),{method:check||!source.id?'POST':'PUT',body:JSON.stringify(values())});if(check){status.textContent=mailImageText('Соединение и доступ к ящику проверены.','Connection and mailbox access verified.');}else{dialog.close();await refreshMailSources();}}catch(error){status.textContent=error.message;}finally{test.disabled=save.disabled=false;}};
+  test.onclick=()=>submit(true);form.onsubmit=e=>{e.preventDefault();submit(false);};form.append(header,fields,hint,status,actions);dialog.append(form);document.body.append(dialog);dialog.addEventListener('close',()=>{password.value='';dialog.remove();},{once:true});dialog.showModal();
+  try{const data=await api('/api/v1/mail/mailboxes');for(const box of data.mailboxes||[]){if(box.name==='INBOX'||box.shared)continue;const option=document.createElement('option');option.value=box.name;option.textContent=box.name;target.append(option);}if(source.target_folder){if([...target.options].some(o=>o.value===source.target_folder)){target.value=source.target_folder}else{destination.value='new';newTarget.value=source.target_folder;}}update();}catch(error){status.textContent=error.message;}
 }
 // SPDX-License-Identifier: GPL-3.0-only
 // OMEMO legacy (XEP-0384 0.3): ratchet operations are supplied by libomemo.js.

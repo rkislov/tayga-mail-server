@@ -48,6 +48,9 @@ archives:
       - docs/setup-filters.md
       - docs/web-omemo.md
       - docs/xmpp-compatibility-plan.md
+      - docs/files-and-office.md
+      - docs/external-mail.md
+      - docs/mail-delivery-logs.md
       - frontend/LICENSE
       - frontend/package*.json
       - frontend/build-*.cjs

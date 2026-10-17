@@ -27,6 +27,7 @@ type Config struct {
 	FlowSync    FlowSyncConfig    `yaml:"flowsync"`
 	TLS         TLSConfig         `yaml:"tls"`
 	HTTP        HTTPConfig        `yaml:"http"`
+	Files       FilesConfig       `yaml:"files"`
 	Seed        SeedConfig        `yaml:"seed"`
 	HA          HAConfig          `yaml:"ha"`
 	Scan        ScanConfig        `yaml:"scan"`
@@ -40,6 +41,11 @@ type Config struct {
 	DMARC       DMARCConfig       `yaml:"dmarc"`
 	ARC         ARCConfig         `yaml:"arc"`
 	Log         LogConfig         `yaml:"log"`
+}
+
+// FilesConfig integrates an administrator-operated Collabora Online service.
+type FilesConfig struct {
+	OfficeURL string `yaml:"office_url"` // HTTPS base URL; empty disables WOPI sessions
 }
 
 // SIEMConfig exports security events to a SIEM over syslog (CEF).
@@ -662,6 +668,12 @@ func Default() *Config {
 
 // Validate checks required fields.
 func (c *Config) Validate() error {
+	if c.Files.OfficeURL != "" {
+		u, err := url.Parse(c.Files.OfficeURL)
+		if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+			return fmt.Errorf("files.office_url must be an HTTPS base URL without credentials or query")
+		}
+	}
 	if c.Server.Hostname == "" {
 		return fmt.Errorf("server.hostname is required")
 	}

@@ -83,6 +83,7 @@ type Driver interface {
 	SetFileAccess(ctx context.Context, ownerID, path, granteeID, rights string) error
 	DeleteFileAccess(ctx context.Context, ownerID, path, granteeID string) error
 	ListFileAccess(ctx context.Context, ownerID, granteeID string) ([]FileAccess, error)
+	RetargetFileReferences(ctx context.Context, ownerID, from, to string) error
 	CreateFileShare(ctx context.Context, sh *FileShare) (*FileShare, error)
 	GetFileShareByToken(ctx context.Context, token string) (*FileShare, error)
 	GetFileShareByID(ctx context.Context, id string) (*FileShare, error)

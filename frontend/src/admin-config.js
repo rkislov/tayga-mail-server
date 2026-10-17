@@ -3,7 +3,7 @@ const CONFIG_GROUPS = [
   { title: ["Почта и клиенты", "Mail and clients"], icon: "mail", sections: ["smtp", "imap", "pop3", "managesieve", "flowsync", "xmpp"] },
   { title: ["Защита почты", "Mail protection"], icon: "lock", sections: ["spam", "scan", "dkim_verify", "spf", "iprev", "helo", "greylist", "dmarc", "arc"] },
   { title: ["Вход и пользователи", "Identity and users"], icon: "user", sections: ["ldap", "oidc", "mfa", "seed"] },
-  { title: ["Хранение и доступность", "Storage and availability"], icon: "files", sections: ["storage", "mailstore", "ha"] },
+  { title: ["Хранение и доступность", "Storage and availability"], icon: "files", sections: ["storage", "mailstore", "files", "ha"] },
   { title: ["Сервер и наблюдение", "Server and observability"], icon: "server", sections: ["server", "http", "tls", "log", "siem"] },
 ];
 const CONFIG_SECTIONS = {
@@ -29,6 +29,7 @@ const CONFIG_SECTIONS = {
   seed: ["Первоначальная учётная запись", "Параметры создания первой организации и администратора."],
   storage: ["База данных", "Параметры bootstrap YAML, доступные только для чтения."],
   mailstore: ["Письма и S3", "Каталог maildir и зеркало объектного хранилища."],
+  files: ["Файлы и офис", "Адрес отдельного Collabora Online для совместного редактирования."],
   ha: ["Высокая доступность", "Лидер, аренда узла и закрепление писателей за пользователями."],
   http: ["Веб-интерфейс и HTTP", "HTTP/HTTPS, публичный адрес и глобальные администраторы."],
   tls: ["TLS и ACME", "Сертификаты сервисов и автоматическая выдача через ACME."],

@@ -2,10 +2,14 @@
 let mailImagePreferences = {mode: "block", senders: []};
 let mailImagePreferenceToken = "";
 let mailImagePreferencePromise;
+let mailImageSenderQuery = "";
+let mailImageSenderPage = 0;
+let mailImageSenderPageSize = 10;
 async function refreshMailImagePreferences(force = false) {
   const token = state.tokens?.access_token || "";
   if (!token) {mailImagePreferences = {mode: "block", senders: []}; mailImagePreferenceToken = ""; return;}
   if (!force && token === mailImagePreferenceToken && mailImagePreferencePromise) return mailImagePreferencePromise;
+  if (mailImagePreferenceToken !== token) {mailImageSenderQuery = ""; mailImageSenderPage = 0;}
   mailImagePreferenceToken = token;
   mailImagePreferences = {mode: "block", senders: []};
   mailImagePreferencePromise = api("/api/v1/mail/image-preferences").then(value => {
@@ -36,15 +40,36 @@ function renderMailImageSettings() {
   const message = document.createElement("p");message.className = "meta"; message.setAttribute("role", "status");
   select.addEventListener("change", async () => {select.disabled = true;try {await saveMailImagePreferences({...mailImagePreferences, mode:select.value});}catch(error) {select.value = mailImagePreferences.mode;message.textContent = error.message;}finally {select.disabled = false;}});
   const list = document.createElement("div");list.className = "stack-gap";
-  for (const sender of mailImagePreferences.senders || []) {
+  const search = document.createElement("input"); search.type = "search"; search.className = "field-input";
+  search.id = "mail-image-sender-search"; search.value = mailImageSenderQuery;
+  search.placeholder = mailImageText("Поиск отправителя…", "Search senders…"); search.setAttribute("aria-label", search.placeholder);
+  const pager = document.createElement("nav"); pager.className = "mail-image-sender-pager";
+  pager.setAttribute("aria-label", mailImageText("Страницы разрешённых отправителей", "Allowed sender pages"));
+  const renderSenders = () => {
+  list.replaceChildren(); pager.replaceChildren();
+  const senders = (mailImagePreferences.senders || []).filter(sender => sender.toLocaleLowerCase().includes(mailImageSenderQuery.trim().toLocaleLowerCase()));
+  mailImageSenderPage = Math.min(mailImageSenderPage, Math.max(0, Math.ceil(senders.length / mailImageSenderPageSize) - 1));
+  const offset = mailImageSenderPage * mailImageSenderPageSize;
+  for (const sender of senders.slice(offset, offset + mailImageSenderPageSize)) {
     const row = document.createElement("div");row.className = "mail-image-sender";
     const name = document.createElement("span");name.textContent = sender;
     const remove = document.createElement("button");remove.type = "button";remove.className = "btn-secondary btn-sm";remove.textContent = mailImageText("Убрать исключение", "Remove exception");
     remove.addEventListener("click", async () => {remove.disabled = true;try {await saveMailImagePreferences({...mailImagePreferences, senders:mailImagePreferences.senders.filter(value => value !== sender)});}catch(error) {message.textContent = error.message;remove.disabled = false;}});
     row.append(name,remove);list.append(row);
   }
+  if (!senders.length) {const empty = document.createElement("p"); empty.className = "meta"; empty.textContent = mailImageSenderQuery ? mailImageText("Ничего не найдено", "No matching senders") : mailImageText("Нет исключений", "No exceptions"); list.append(empty);}
+  const previous = document.createElement("button"), next = document.createElement("button"), count = document.createElement("span"), size = document.createElement("select");
+  for (const [button, text, label, change] of [[previous,"‹",mailImageText("Предыдущая страница", "Previous page"),-1],[next,"›",mailImageText("Следующая страница", "Next page"),1]]) {button.type="button";button.className="btn-secondary action-icon";button.textContent=text;button.setAttribute("aria-label",label);button.onclick=()=>{mailImageSenderPage+=change;renderSenders();};}
+  previous.disabled = mailImageSenderPage === 0; next.disabled = offset + mailImageSenderPageSize >= senders.length;
+  count.setAttribute("role","status");count.textContent = senders.length ? `${offset+1}–${Math.min(offset+mailImageSenderPageSize,senders.length)} / ${senders.length}` : "0";
+  size.className="field-input";size.setAttribute("aria-label",mailImageText("Отправителей на странице", "Senders per page"));
+  for(const n of [10,25,50]) {const option=document.createElement("option");option.value=n;option.textContent=n+mailImageText(" на странице"," per page");size.append(option);}size.value=mailImageSenderPageSize;
+  size.onchange=()=>{mailImageSenderPageSize=Number(size.value);mailImageSenderPage=0;renderSenders();};pager.append(previous,count,next,size);
+  };
+  search.addEventListener("input",()=>{mailImageSenderQuery=search.value;mailImageSenderPage=0;renderSenders();});
+  renderSenders();
   const caption = document.createElement("p");caption.className = "meta";caption.textContent = mailImageText("Разрешённые отправители", "Allowed senders");
-  card.append(title,hint,label,caption,list,message);
+  card.append(title,hint,label,caption,search,list,pager,message);
 }
 
 let mailPageData;

@@ -98,6 +98,9 @@ func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			name := e.Name()
+			if e.Type()&os.ModeSymlink != 0 || strings.HasPrefix(name, ".upload-") {
+				continue
+			}
 			item := map[string]any{
 				"name": name, "is_dir": e.IsDir(),
 				"mtime": info.ModTime().UTC().Format(time.RFC3339),
@@ -127,6 +130,7 @@ func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "not a file"})
 			return
 		}
+		w.Header().Set("ETag", fileETag(st))
 		w.Header().Set("Content-Type", "application/octet-stream")
 		w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": filepath.Base(abs)}))
 		http.ServeContent(w, r, filepath.Base(abs), st.ModTime(), f)
@@ -142,9 +146,9 @@ func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
-		size, err := streamUpload(w, r, abs)
+		size, err := s.saveFile(w, r, ownerID, rel)
 		if err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			fileError(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"path": cleanRel(rel), "size": size})
@@ -183,11 +187,18 @@ func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, 400, map[string]string{"error": "cannot delete root"})
 			return
 		}
-		if err := os.RemoveAll(abs); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		s.fileMu.Lock()
+		release, err := s.claimFileWrite(ownerID, rel, "")
+		if err == nil {
+			_, err = s.trashFile(ownerID, rel)
+			release()
+		}
+		s.fileMu.Unlock()
+		if err != nil {
+			fileError(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+		writeJSON(w, http.StatusOK, map[string]string{"status": "trashed"})
 
 	case r.Method == http.MethodPost && path == "move":
 		var req struct {
@@ -220,8 +231,20 @@ func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
-		if err := os.Rename(src, dst); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		s.fileMu.Lock()
+		release, err := s.claimFileWrite(ownerID, req.From, "")
+		if err == nil {
+			var releaseTo func()
+			releaseTo, err = s.claimFileWrite(ownerID, req.To, "")
+			if err == nil {
+				err = s.moveFile(ownerID, req.From, req.To)
+				releaseTo()
+			}
+			release()
+		}
+		s.fileMu.Unlock()
+		if err != nil {
+			fileError(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"status": "moved", "path": cleanRel(req.To)})

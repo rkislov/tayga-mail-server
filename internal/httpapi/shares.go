@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"encoding/json"
-	"io"
 	"mime"
 	"net/http"
 	"os"
@@ -203,20 +202,17 @@ func (s *Server) handlePublicShare(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, 400, map[string]string{"error": "file path required"})
 			return
 		}
-		data, readErr := io.ReadAll(http.MaxBytesReader(w, r.Body, 64<<20))
-		if readErr != nil {
-			writeJSON(w, 413, map[string]string{"error": "file exceeds 64 MiB"})
+		rel, pathErr := filepath.Rel(root, abs)
+		if pathErr != nil {
+			fileError(w, pathErr)
 			return
 		}
-		if err = os.MkdirAll(filepath.Dir(abs), 0750); err != nil {
-			writeJSON(w, 500, map[string]string{"error": "cannot create directory"})
+		size, saveErr := s.saveFile(w, r, sh.UserID, rel)
+		if saveErr != nil {
+			fileError(w, saveErr)
 			return
 		}
-		if err = os.WriteFile(abs, data, 0640); err != nil {
-			writeJSON(w, 500, map[string]string{"error": "cannot write file"})
-			return
-		}
-		writeJSON(w, 200, map[string]any{"status": "saved", "size": len(data)})
+		writeJSON(w, 200, map[string]any{"status": "saved", "size": size})
 		return
 	}
 	if err == nil && info.IsDir() {
