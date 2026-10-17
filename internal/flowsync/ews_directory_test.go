@@ -50,6 +50,17 @@ func TestEWSDirectoryIsolationAndRooms(t *testing.T) {
 	if !strings.Contains(out, room.Email) {
 		t.Fatal(out)
 	}
+	for _, scope := range []string{"ActiveDirectory", "Contacts"} {
+		folders := ""
+		if scope == "Contacts" {
+			folders = `<ParentFolderIds><FolderId Id="` + galFolderID(u) + `"/></ParentFolderIds>`
+		}
+		out, err = h.directoryEWS(ctx, u, "ResolveNames", `<ResolveNames SearchScope="`+scope+`" ReturnFullContactData="true">`+folders+`<UnresolvedEntry>roo</UnresolvedEntry></ResolveNames>`)
+		if err != nil || !strings.Contains(out, room.Email) || !strings.Contains(out, `PropertyTag="0x3905"`) || !strings.Contains(out, "<t:Value>7</t:Value>") {
+			t.Fatal(scope, out, err)
+		}
+		requireXML(t, out)
+	}
 	lists := run("GetRoomLists", "")
 	id := extractTag(lists, "EmailAddress")
 	if id == "" {

@@ -71,7 +71,7 @@ func (h *ewsHandler) subscribeEWS(ctx context.Context, u *storage.User, body str
 			if e != nil {
 				return ewsOperationError("Subscribe", "ErrorFolderNotFound", "Folder unavailable"), nil
 			}
-			if _, e = (&easHandler{store: h.store}).resolveCollection(ctx, u.ID, id); e != nil && systemFolderName(u, id) != "tasks" {
+			if e = h.readableEWSCollection(ctx, u, id); e != nil && systemFolderName(u, id) != "tasks" {
 				return ewsOperationError("Subscribe", "ErrorAccessDenied", "Folder unavailable"), nil
 			}
 			s.folders[id] = true
@@ -149,7 +149,13 @@ func (h *ewsHandler) notificationSnapshot(ctx context.Context, u *storage.User, 
 				add(v.ID, v.ETag)
 			}
 		case "IPF.Contact":
-			items, e := h.store.ListAddressObjects(ctx, id)
+			var items []*storage.AddressObject
+			var e error
+			if id == galFolderID(u) {
+				items, e = h.galContacts(ctx, u)
+			} else {
+				items, e = h.store.ListAddressObjects(ctx, id)
+			}
 			if e != nil {
 				return nil, e
 			}

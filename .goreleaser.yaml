@@ -52,6 +52,8 @@ archives:
       - docs/files-and-office.md
       - docs/external-mail.md
       - docs/mail-delivery-logs.md
+      - docs/mail-dlp.md
+      - docs/outlook-gal.md
       - frontend/LICENSE
       - frontend/package*.json
       - frontend/build-*.cjs

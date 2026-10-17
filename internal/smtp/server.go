@@ -239,6 +239,12 @@ func (s *Server) outbound() (outboundSender, *dkimSigner, error) {
 	if err != nil {
 		return nil, nil, err
 	}
+	if s.cfg.SMTP.DLP.Enabled {
+		if err := s.cfg.Validate(); err != nil {
+			return nil, nil, err
+		}
+		return newDLPRelay(s.cfg.SMTP.DLP, s.cfg.Server.Hostname, s.cfg.SMTP.WriteTimeout), sig, nil
+	}
 	if rel := newOutboundRelay(s.cfg.SMTP.Relay, s.cfg.SMTP.WriteTimeout); rel != nil {
 		return rel, sig, nil
 	}
@@ -286,6 +292,9 @@ func (s *Server) Start(ctx context.Context) error {
 		mode := "direct-mx"
 		if s.cfg.SMTP.Relay.Host != "" {
 			mode = "relay:" + s.cfg.SMTP.Relay.Host
+		}
+		if s.cfg.SMTP.DLP.Enabled {
+			mode = "dlp:" + s.cfg.SMTP.DLP.Host
 		}
 		s.log.Info("smtp outbound enabled", "mode", mode, "dkim", dkimSig != nil)
 	}

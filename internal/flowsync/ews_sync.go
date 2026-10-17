@@ -17,7 +17,7 @@ func (h *ewsHandler) syncEWSItems(ctx context.Context, u *storage.User, body str
 		return ewsOperationError("SyncFolderItems", "ErrorFolderNotFound", "folder unavailable"), nil
 	}
 	// Resolve and check ownership before loading any state or listing items.
-	if _, err := (&easHandler{store: h.store}).resolveCollection(ctx, u.ID, folder); err != nil && systemFolderName(u, folder) == "" {
+	if err := h.readableEWSCollection(ctx, u, folder); err != nil && systemFolderName(u, folder) == "" {
 		return ewsOperationError("SyncFolderItems", "ErrorAccessDenied", "folder unavailable"), nil
 	}
 	token := extractTag(body, "SyncState")

@@ -7,7 +7,8 @@ import (
 	"time"
 )
 
-func objectBusyIntervals(data string, from, to time.Time) ([]BusyInterval, error) {
+// CalendarBusyIntervals expands an iCalendar object without disclosing details.
+func CalendarBusyIntervals(data string, from, to time.Time) ([]BusyInterval, error) {
 	calendar, err := ical.NewDecoder(strings.NewReader(data)).Decode()
 	if err != nil {
 		return nil, err
@@ -74,4 +75,8 @@ func objectBusyIntervals(data string, from, to time.Time) ([]BusyInterval, error
 		}
 	}
 	return result, nil
+}
+
+func objectBusyIntervals(data string, from, to time.Time) ([]BusyInterval, error) {
+	return CalendarBusyIntervals(data, from, to)
 }

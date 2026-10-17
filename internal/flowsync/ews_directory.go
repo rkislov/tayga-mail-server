@@ -24,7 +24,10 @@ func ewsDirectResponse(op, code, message, payload string) string {
 	return fmt.Sprintf(`<m:%sResponse%s ResponseClass="%s">%s<m:ResponseCode>%s</m:ResponseCode>%s</m:%sResponse>`, op, ewsNamespaces, class, message, code, payload, op)
 }
 
-type directoryEntry struct{ name, email, kind, itemID, contact string }
+type directoryEntry struct {
+	name, email, kind, itemID string
+	displayType               int
+}
 
 func (e directoryEntry) mailbox() string {
 	s := `<t:Name>` + xmlEscape(e.name) + `</t:Name><t:EmailAddress>` + xmlEscape(e.email) + `</t:EmailAddress><t:RoutingType>SMTP</t:RoutingType><t:MailboxType>` + e.kind + `</t:MailboxType>`
@@ -65,10 +68,10 @@ func (h *ewsHandler) directoryEWS(ctx context.Context, u *storage.User, op, body
 		}
 		enabledUsers := map[string]bool{}
 		for _, user := range users {
-			if user.Enabled {
+			if user.Enabled && user.TenantID == u.TenantID {
 				enabledUsers[user.Email] = true
 			}
-			if user.Enabled && user.AuthSource != "resource" {
+			if user.Enabled && user.TenantID == u.TenantID && user.AuthSource != "resource" {
 				entries = append(entries, directoryEntry{name: user.DisplayName, email: user.Email, kind: "Mailbox"})
 			}
 		}
@@ -78,7 +81,14 @@ func (h *ewsHandler) directoryEWS(ctx context.Context, u *storage.User, op, body
 				continue
 			}
 			visibleRooms = append(visibleRooms, room)
-			entries = append(entries, directoryEntry{name: room.DisplayName, email: room.Email, kind: "Mailbox"})
+			displayType := 0
+			if room.Kind == "room" {
+				displayType = 7
+			} // PidTagDisplayTypeEx: DT_ROOM.
+			if room.Kind == "equipment" {
+				displayType = 8
+			} // DT_EQUIPMENT.
+			entries = append(entries, directoryEntry{name: room.DisplayName, email: room.Email, kind: "Mailbox", displayType: displayType})
 		}
 		rooms = visibleRooms
 	}
@@ -130,16 +140,22 @@ func (h *ewsHandler) directoryEWS(ctx context.Context, u *storage.User, op, body
 	default:
 		return ewsOperationError(op, "ErrorInvalidRequest", "Invalid search scope"), nil
 	}
+	directory := entries
 	if scope == "Contacts" {
 		entries = nil
 	}
 	if scope != "ActiveDirectory" {
 		books := []string{}
+		includeGAL := false
 		if folders := req.child("ParentFolderIds"); folders != nil {
 			for _, folder := range folders.Children {
 				id, e := h.resolveEWSFolder(ctx, u, folder.render())
 				if e != nil {
 					return ewsOperationError(op, "ErrorAccessDenied", "Contact folder unavailable"), nil
+				}
+				if id == galFolderID(u) && enabled == "true" {
+					includeGAL = true
+					continue
 				}
 				book, e := h.store.GetAddressBookByID(ctx, u.ID, id)
 				if e != nil || book.UserID != u.ID {
@@ -157,6 +173,9 @@ func (h *ewsHandler) directoryEWS(ctx context.Context, u *storage.User, op, body
 			}
 		}
 		var contacts []directoryEntry
+		if includeGAL {
+			contacts = append(contacts, directory...)
+		}
 		for _, id := range books {
 			cards, e := h.store.ListAddressObjects(ctx, id)
 			if e != nil {
@@ -205,7 +224,11 @@ func (h *ewsHandler) directoryEWS(ctx context.Context, u *storage.User, op, body
 			if entry.itemID != "" {
 				source = "Store"
 			}
-			b.WriteString("<t:Contact><t:DisplayName>" + xmlEscape(entry.name) + "</t:DisplayName><t:EmailAddresses><t:Entry Key=\"EmailAddress1\">SMTP:" + xmlEscape(entry.email) + "</t:Entry></t:EmailAddresses><t:ContactSource>" + source + "</t:ContactSource></t:Contact>")
+			b.WriteString("<t:Contact>")
+			if entry.displayType != 0 {
+				fmt.Fprintf(&b, `<t:ExtendedProperty><t:ExtendedFieldURI PropertyTag="0x3905" PropertyType="Integer"/><t:Value>%d</t:Value></t:ExtendedProperty>`, entry.displayType)
+			}
+			b.WriteString("<t:FileAs>" + xmlEscape(entry.name) + "</t:FileAs><t:DisplayName>" + xmlEscape(entry.name) + "</t:DisplayName><t:EmailAddresses><t:Entry Key=\"EmailAddress1\">SMTP:" + xmlEscape(entry.email) + "</t:Entry></t:EmailAddresses><t:ContactSource>" + source + "</t:ContactSource></t:Contact>")
 		}
 		b.WriteString("</t:Resolution>")
 	}
