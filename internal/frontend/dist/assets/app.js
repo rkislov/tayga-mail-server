@@ -6161,11 +6161,11 @@ $("lang-select")?.addEventListener("change", (e) => {
   $("topbar-language").open=false;
   applyLang(e.target.value);
   if (state.email) refreshMail();
-  renderThemeGallery(normalizeThemeKey(localStorage.getItem("tayga.theme") || "tayga"));
+  renderThemeGallery(normalizeThemeKey(localStorage.getItem("tayga.theme") || "random"));
   updateNavUser(state.email, !$("nav-admin")?.classList.contains("hidden"));
 });
 applyLang(lang);
-renderThemeGallery(normalizeThemeKey(localStorage.getItem("tayga.theme") || "tayga"));
+renderThemeGallery(normalizeThemeKey(localStorage.getItem("tayga.theme") || "random"));
 updateNavUser(state.email || localStorage.getItem("tayga.email") || "", false);
 
 // Restore session — invalid/expired tokens send user back to login

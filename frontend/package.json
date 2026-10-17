@@ -1,7 +1,7 @@
 {
   "name": "tayga-frontend",
   "private": true,
-  "version": "0.9.18",
+  "version": "0.9.19",
   "description": "Tayga Mail web UI (Tailwind) embedded via go:embed",
   "scripts": {
     "build": "node build-omemo.cjs && node build-pdfjs.cjs && tailwindcss -i ./src/input.css -o ../internal/frontend/dist/assets/app.css --minify && cat ./src/i18n.js ./src/app.js ./src/admin-config.js ./src/mail-images.js ./src/reader-actions.js ./src/protection.js ./src/travel.js ./src/rule-builder.js ./src/design-pack.js ./src/file-library.js ./src/file-uploads.js ./src/mail-attachments.js ./src/mail-sources.js ./src/omemo.js > ../internal/frontend/dist/assets/app.js && cp ./src/sw.js ../internal/frontend/dist/sw.js",
