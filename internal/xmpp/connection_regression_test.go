@@ -111,3 +111,32 @@ func TestIQDispatchUsesRootNamespaceAndIgnoresReplies(t *testing.T) {
 		})
 	}
 }
+
+func TestAdminDisconnectRemovesXMPPSessionAndPreventsResume(t *testing.T) {
+	srv, store, u := testServer(t)
+	srv.authn = auth.NewLayer(store, config.LDAPConfig{}, config.MFAConfig{}, config.OIDCConfig{})
+	a, b := net.Pipe()
+	defer b.Close()
+	s := newSession(srv, a, true)
+	s.user = u
+	s.authed = true
+	s.bound = true
+	s.JID = ParseJID(u.Email + "/Conversations.phone")
+	s.sm.enabled = true
+	s.sm.resumable = true
+	s.sm.token = "must-not-resume"
+	s.sessionID = srv.authn.TrackSession(u, "XMPP", "192.0.2.1:5000", "XMPP", s.streamID, true, s.disconnectAdmin)
+	srv.hub.Register(s)
+	s.touchSession()
+	records := srv.authn.Sessions()
+	if len(records) != 1 || records[0].Agent != "XMPP · Conversations.phone" || records[0].UserID != u.ID {
+		t.Fatal(records)
+	}
+	if err := srv.authn.CloseSession(records[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	s.retainStream()
+	if len(srv.authn.Sessions()) != 0 || len(srv.hub.Sessions(u.Email)) != 0 || len(srv.resumable) != 0 {
+		t.Fatal("disconnected session retained")
+	}
+}

@@ -32,3 +32,20 @@ func TestHTTPClientSessionGroupsAndCancelsRequests(t *testing.T) {
 		t.Fatal("closed session retained")
 	}
 }
+
+func TestLiveSessionTouchDoesNotResurrectClosedConnection(t *testing.T) {
+	a := &Layer{}
+	u := &storage.User{ID: "u", Email: "u@example.com"}
+	id := a.TrackSession(u, "XMPP", "192.0.2.1:1234", "XMPP", "stream", true, func() error { return nil })
+	before := a.Sessions()[0]
+	a.TouchSession(id, "XMPP · phone")
+	after := a.Sessions()[0]
+	if after.Agent != "XMPP · phone" || !after.Started.Equal(before.Started) || after.Seen.Before(before.Seen) {
+		t.Fatal(after)
+	}
+	a.CloseSession(id)
+	a.TouchSession(id, "XMPP · phone")
+	if len(a.Sessions()) != 0 {
+		t.Fatal("resurrected closed connection")
+	}
+}

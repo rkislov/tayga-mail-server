@@ -121,6 +121,7 @@ func (s *Session) resumeStream(start xml.StartElement) error {
 		return err
 	}
 	s.srv.hub.Register(s)
+	s.touchSession()
 	if old.presence != nil {
 		s.srv.recordPresence(context.Background(), s.JID.Full(), old.presence.State, old.presence.Status)
 	}

@@ -89,6 +89,25 @@ func (s *Session) SendRaw(b []byte) {
 	}
 }
 
+func (s *Session) touchSession() {
+	if s.srv != nil && s.srv.authn != nil {
+		label := "XMPP"
+		if s.JID.Resource != "" {
+			label += " · " + s.JID.Resource
+		}
+		s.srv.authn.TouchSession(s.sessionID, label)
+	}
+}
+
+func (s *Session) disconnectAdmin() error {
+	// A deliberate disconnect must not leave a resumable stream behind.
+	s.mu.Lock()
+	s.sm.resumable = false
+	s.mu.Unlock()
+	s.Close()
+	return nil
+}
+
 func (s *Session) writeString(str string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -298,7 +317,7 @@ func (s *Session) saslAuth(mech, b64 string) (authErr error) {
 		return err
 	}
 	s.user = u
-	s.sessionID = s.srv.authn.TrackSession(u, "XMPP", s.conn.RemoteAddr().String(), "", s.conn.RemoteAddr().String(), true, s.conn.Close)
+	s.sessionID = s.srv.authn.TrackSession(u, "XMPP", s.conn.RemoteAddr().String(), "XMPP", s.streamID, true, s.disconnectAdmin)
 	s.JID = ParseJID(u.Email)
 	s.log.Info("xmpp authentication succeeded", "user_id", u.ID, "domain", s.streamDomain, "peer", s.conn.RemoteAddr().String())
 	return nil
@@ -360,6 +379,7 @@ func (s *Session) handleBindOrSessionIQ(se xml.StartElement, domain string) erro
 	}
 	s.log.Info("xmpp resource bound", "jid", s.JID.Full())
 	s.bound = true
+	s.touchSession()
 	s.srv.hub.Register(s)
 	if err := s.writeString(fmt.Sprintf(
 		`<iq type='result' id='%s'><bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'><jid>%s</jid></bind></iq>`,
@@ -381,6 +401,7 @@ func (s *Session) stanzaLoop() error {
 		}
 		switch t := tok.(type) {
 		case xml.StartElement:
+			s.touchSession()
 			if t.Name.Space == csiNamespace {
 				if err := s.handleClientState(t); err != nil {
 					return err
