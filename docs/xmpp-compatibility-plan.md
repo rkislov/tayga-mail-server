@@ -1,6 +1,6 @@
 # XMPP compatibility implementation plan
 
-Updated for 0.9.17, 2026-10-17. This is an implementation checklist, not a claim of complete RFC/XEP conformance.
+Updated for 0.9.18, 2026-10-17. This is an implementation checklist, not a claim of complete RFC/XEP conformance.
 
 ## Current batch: core connection and archive correctness
 
@@ -33,7 +33,7 @@ Updated for 0.9.17, 2026-10-17. This is an implementation checklist, not a claim
 - [x] XEP-0280: shared sent/received copies for supported direct-message paths; expanded MUC eligibility remains pending.
 - [x] XEP-0352: active/inactive state; suppress only repeated identical availability while inactive. Messages and subscription requests remain immediate.
 - [ ] XEP-0363 and OMEMO: test key publication, multi-device trust, encrypted attachments and history with Conversations.
-- [ ] XEP-0045: interoperable MUC with membership, roles, invitations, history and domain policies.
+- [x] XEP-0045 local members-only profile: shared web/native rooms, membership, affiliations, invitations, bounded join history and tenant isolation. See [limits](xmpp.md); this is not complete XEP-0045 conformance.
 - [ ] RFC 7395: authenticated XMPP WebSocket transport with framing, origin checks and limits.
 - [x] Web Push: persistent subscriptions, VAPID, service worker, delivery retries, subscription removal and notification privacy. Browser/device delivery verification remains pending.
 - [x] XEP-0357 publisher: persistent registrations, bounded queue, component and allowlisted TLS EXTERNAL/bidi routes, authenticated acknowledgements and retry/removal. See [native push](xmpp-push.md). Real ChatSecure background delivery is still blocked by vendor DNS/availability.
@@ -80,7 +80,7 @@ Initial availability now returns current presence for subscribed local contacts 
 
 [XEP-0359](https://xmpp.org/extensions/xep-0359.html) is now advertised for the server/account domains and local bare account JIDs. Each accepted message gets a server-generated UUID; the local accounts assign that value under their own bare JIDs. Client `message/@id` and `origin-id` remain intact for receipts and client correlation. Repeated or absent client IDs no longer collide in the archive. Incoming direct-child `stanza-id` claims for the assigning accounts are removed before stamping, including when MAM preferences disable storage; third-party IDs are preserved.
 
-Both local archive copies are committed in one transaction before delivery. The live stanza, offline copy, Carbons and web events share the assigned ID with MAM/history. This also applies to opaque OMEMO messages. Existing MAM cursor values remain unchanged; when old rows are read, the server adds the corresponding account `stanza-id` and explicit `jabber:client` namespace to the forwarded message. No history reset or database migration is needed. Web-only groups remain separate from XMPP MUC.
+Both local archive copies are committed in one transaction before delivery. The live stanza, offline copy, Carbons and web events share the assigned ID with MAM/history. This also applies to opaque OMEMO messages. Existing MAM cursor values remain unchanged; when old rows are read, the server adds the corresponding account `stanza-id` and explicit `jabber:client` namespace to the forwarded message. No history reset or database migration is needed. As of 0.9.18, local groups share history with the native MUC profile documented in [XMPP](xmpp.md).
 
 Regression coverage: all five send entry points, duplicate/absent client IDs, spoofed IDs, disabled archiving, offline replay, database reopen/cursors, legacy MAM namespaces, self-message deduplication, discovery scope and transaction rollback on an archive failure. Native-client display of the capability is a separate device check.
 

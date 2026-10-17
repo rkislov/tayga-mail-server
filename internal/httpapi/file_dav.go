@@ -60,10 +60,23 @@ func (s *Server) claimFileWrite(owner, rel, officeValue string) (func(), error) 
 }
 
 type davUploadState struct {
-	failed   atomic.Bool
-	bytes    atomic.Int64
-	expected int64
+	quotaExceeded atomic.Bool
+	failed        atomic.Bool
+	bytes         atomic.Int64
+	expected      int64
 }
+type davQuotaResponse struct {
+	http.ResponseWriter
+	state *davUploadState
+}
+
+func (w davQuotaResponse) WriteHeader(status int) {
+	if w.state.quotaExceeded.Load() && status >= 400 {
+		status = http.StatusInsufficientStorage
+	}
+	w.ResponseWriter.WriteHeader(status)
+}
+
 type davBody struct {
 	io.ReadCloser
 	state *davUploadState
@@ -134,7 +147,7 @@ func (s *Server) handleFileDAV(w http.ResponseWriter, r *http.Request) {
 	s.fileMu.Unlock()
 	h := webdav.Handler{Prefix: "/dav/files", FileSystem: &personalDAV{srv: s, owner: owner, root: root, upload: state}, LockSystem: locks}
 	w.Header().Set("Cache-Control", "private, no-cache")
-	h.ServeHTTP(w, r)
+	h.ServeHTTP(davQuotaResponse{w, state}, r)
 }
 
 type personalDAV struct {
@@ -327,5 +340,8 @@ func (f *davFile) Close() error {
 	f.fs.srv.fileMu.Lock()
 	defer f.fs.srv.fileMu.Unlock()
 	_, err := f.fs.srv.commitFile(f.fs.owner, f.rel, f.File.Name(), f.expected)
+	if errors.Is(err, errFileQuota) {
+		f.fs.upload.quotaExceeded.Store(true)
+	}
 	return err
 }

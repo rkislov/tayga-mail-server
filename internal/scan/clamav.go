@@ -1,6 +1,7 @@
 package scan
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/binary"
@@ -93,4 +94,43 @@ func parseClamVirus(line string) string {
 	line = strings.TrimPrefix(line, "stream: ")
 	line = strings.TrimSuffix(line, " FOUND")
 	return strings.TrimSpace(line)
+}
+
+// Version queries the running engine; the database version/date reflect what
+// clamd has loaded, not merely files downloaded by freshclam.
+func (c *ClamAV) Version(ctx context.Context) (map[string]string, error) {
+	d := net.Dialer{Timeout: 3 * time.Second}
+	conn, err := d.DialContext(ctx, "tcp", c.addr)
+	if err != nil {
+		return nil, fmt.Errorf("ClamAV unavailable")
+	}
+	defer conn.Close()
+	deadline := time.Now().Add(3 * time.Second)
+	if at, ok := ctx.Deadline(); ok && at.Before(deadline) {
+		deadline = at
+	}
+	conn.SetDeadline(deadline)
+	if _, err = conn.Write([]byte("zVERSION\x00")); err != nil {
+		return nil, fmt.Errorf("ClamAV version request failed")
+	}
+	raw, err := bufio.NewReader(io.LimitReader(conn, 4096)).ReadString(0)
+	if err != nil && err != io.EOF {
+		return nil, fmt.Errorf("ClamAV version response failed")
+	}
+	line := strings.TrimSpace(strings.TrimRight(raw, "\x00"))
+	if line == "COMMAND UNAVAILABLE" {
+		return nil, fmt.Errorf("ClamAV VERSION disabled; enable EnableVersionCommand in clamd.conf")
+	}
+	if !strings.HasPrefix(line, "ClamAV ") {
+		return nil, fmt.Errorf("unexpected ClamAV version response")
+	}
+	parts := strings.SplitN(strings.TrimPrefix(line, "ClamAV "), "/", 3)
+	out := map[string]string{"engine": parts[0]}
+	if len(parts) > 1 {
+		out["database_version"] = parts[1]
+	}
+	if len(parts) > 2 {
+		out["database_date"] = parts[2]
+	}
+	return out, nil
 }

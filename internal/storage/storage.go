@@ -126,6 +126,7 @@ type Driver interface {
 	DeleteMailbox(ctx context.Context, userID, name string) error
 	RenameMailbox(ctx context.Context, userID, oldName, newName, newPath string) error
 
+	InsertCopiedMessage(ctx context.Context, msg *Message, sourceMailboxID string) (*Message, error)
 	InsertMessage(ctx context.Context, msg *Message) (*Message, error)
 	GetMessageByID(ctx context.Context, id string) (*Message, error)
 	GetMessageByUID(ctx context.Context, mailboxID string, uid int64) (*Message, error)
@@ -141,6 +142,8 @@ type Driver interface {
 	DeleteMessage(ctx context.Context, messageID string) error
 	ExpungeMailbox(ctx context.Context, mailboxID string) ([]*Message, error)
 
+	GetInboxRules(ctx context.Context, userID string) (InboxRuleSet, error)
+	SaveInboxRules(ctx context.Context, userID string, previous int64, rulesJSON, script string) error
 	ListSieveScripts(ctx context.Context, userID string) ([]*SieveScript, error)
 	GetSieveScript(ctx context.Context, userID, name string) (*SieveScript, error)
 	GetActiveSieveScript(ctx context.Context, userID string) (*SieveScript, error)

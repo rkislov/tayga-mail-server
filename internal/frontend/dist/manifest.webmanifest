@@ -1,1 +1,1 @@
-{"id":"/","name":"Tayga Mail","short_name":"Tayga","start_url":"/","scope":"/","display":"standalone","background_color":"#f5f8f5","theme_color":"#365f4b","icons":[{"src":"/assets/favicon.svg","sizes":"any","type":"image/svg+xml","purpose":"any"}]}
+{"id":"/","name":"Tayga Mail","short_name":"Tayga","start_url":"/","scope":"/","display":"standalone","background_color":"#f5f6f9","theme_color":"#30376f","icons":[{"src":"/assets/favicon.svg?v=0.9.18","sizes":"any","type":"image/svg+xml","purpose":"any"}]}

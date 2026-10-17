@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"github.com/tayga/tms/internal/storage"
 	"github.com/tayga/tms/internal/xmpp"
-	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -174,24 +173,17 @@ func (s *Server) handleChatUploadPut(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(409)
 		return
 	}
-	f, err := os.CreateTemp(filepath.Dir(dest), ".upload-*")
+	temp, _, err := s.stageFile(r.Context(), record.UserID, http.MaxBytesReader(w, r.Body, record.Size+1), record.Size)
 	if err != nil {
-		w.WriteHeader(500)
+		fileError(w, err)
 		return
 	}
-	defer os.Remove(f.Name())
-	defer f.Close()
-	n, err := io.Copy(f, http.MaxBytesReader(w, r.Body, record.Size+1))
-	if err != nil || n != record.Size {
-		w.WriteHeader(400)
-		return
-	}
-	if f.Chmod(0640) != nil || f.Close() != nil {
-		w.WriteHeader(500)
-		return
-	}
-	if err = os.Rename(f.Name(), dest); err != nil {
-		w.WriteHeader(500)
+	defer os.Remove(temp)
+	s.fileMu.Lock()
+	_, err = s.commitFile(record.UserID, record.Path, temp, "")
+	s.fileMu.Unlock()
+	if err != nil {
+		fileError(w, err)
 		return
 	}
 	os.Remove(recordPath)

@@ -153,6 +153,13 @@ func (s *Server) handleFileUploads(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, 403, map[string]string{"error": "file access denied"})
 			return
 		}
+		s.fileMu.Lock()
+		quotaErr := s.checkFileQuota(owner, req.Size)
+		s.fileMu.Unlock()
+		if quotaErr != nil {
+			fileError(w, quotaErr)
+			return
+		}
 		targetRoot, e := s.filesRoot(owner)
 		if e != nil {
 			fileError(w, e)

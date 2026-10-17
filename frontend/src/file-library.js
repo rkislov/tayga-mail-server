@@ -12,7 +12,7 @@ function fileAction(label,run,icon='') {
   if(icon)button.innerHTML=designIcon(icon);else button.textContent=label;button.onclick=run;return button;
 }
 function libraryMessage(error) {
-  return ({409:mailImageText('Файл изменён или путь уже занят. Обновите список и повторите действие.','File changed or the destination exists. Refresh and retry.'),423:mailImageText('Документ открыт для редактирования. Закройте редактор и повторите действие.','Document is locked for editing. Close the editor and retry.'),503:mailImageText('Офисный редактор ещё не подключён. Администратор может указать адрес Collabora в настройках сервера → Файлы.','Office is not connected yet. Configure Collabora in server settings → Files.')})[error.status]||error.message;
+  return ({507:mailImageText('Квота файлов исчерпана. Очистите корзину или удалите ненужные версии.','File quota exceeded. Empty trash or remove old versions.'),409:mailImageText('Файл изменён или путь уже занят. Обновите список и повторите действие.','File changed or the destination exists. Refresh and retry.'),423:mailImageText('Документ открыт для редактирования. Закройте редактор и повторите действие.','Document is locked for editing. Close the editor and retry.'),503:mailImageText('Офисный редактор ещё не подключён. Администратор может указать адрес Collabora в настройках сервера → Файлы.','Office is not connected yet. Configure Collabora in server settings → Files.')})[error.status]||error.message;
 }
 async function openFileHistory(kind,path='') {
   const view=fileLibraryDialog(kind==='trash'?mailImageText('Корзина','Trash'):mailImageText('Версии файла','File versions')+' · '+path);
@@ -30,9 +30,9 @@ async function openFileHistory(kind,path='') {
         const question=remove?mailImageText('Удалить без возможности восстановления: ','Permanently delete: '):mailImageText('Восстановить: ','Restore: ');
         if(!await askConfirm(question+item.path+'?',{danger:remove}))return;
         actions.querySelectorAll('button').forEach(b=>b.disabled=true);
-        try{await api('/api/v1/files/library/'+(remove?'trash':'restore'),{method:remove?'DELETE':'POST',body:JSON.stringify({id:item.id,kind})});await load();await refreshFiles()}catch(error){view.status.textContent=libraryMessage(error);actions.querySelectorAll('button').forEach(b=>b.disabled=false)}
+        try{await api('/api/v1/files/library/'+(remove?kind:'restore'),{method:remove?'DELETE':'POST',body:JSON.stringify({id:item.id,kind})});await load();await refreshFiles()}catch(error){view.status.textContent=libraryMessage(error);actions.querySelectorAll('button').forEach(b=>b.disabled=false)}
       };
-      actions.append(fileAction(mailImageText('Восстановить','Restore'),()=>act(false),'reply'));if(kind==='trash')actions.append(fileAction(mailImageText('Удалить навсегда','Delete permanently'),()=>act(true),'delete'));row.append(name,date,size,actions);tbody.append(row);
+      actions.append(fileAction(mailImageText('Восстановить','Restore'),()=>act(false),'reply'));actions.append(fileAction(mailImageText('Удалить навсегда','Delete permanently'),()=>act(true),'delete'));row.append(name,date,size,actions);tbody.append(row);
     }
     if(!filtered.length){const row=tbody.insertRow(),cell=row.insertCell();cell.colSpan=4;cell.textContent=mailImageText('Нет файлов','No files')}
     const label=document.createElement('span');label.textContent=filtered.length?`${page*25+1}–${Math.min((page+1)*25,filtered.length)} / ${filtered.length}`:'0';const prev=fileAction('‹',()=>{page--;render()}),next=fileAction('›',()=>{page++;render()});prev.setAttribute('aria-label',mailImageText('Предыдущая страница','Previous page'));next.setAttribute('aria-label',mailImageText('Следующая страница','Next page'));prev.disabled=page===0;next.disabled=(page+1)*25>=filtered.length;nav.replaceChildren(prev,label,next);
@@ -101,3 +101,13 @@ function mountFileLibrary(){
   const menu=$('files-settings-menu');menu?.append(fileAction(mailImageText('Незавершённые загрузки','Unfinished uploads'),openPendingFileUploads),fileAction(mailImageText('Корзина','Trash'),()=>openFileHistory('trash')),fileAction(mailImageText('Подключить WebDAV','Connect WebDAV'),openFileDAVInfo));
 }
 mountFileLibrary();
+
+async function openFileStorageUsage(){
+ const v=fileLibraryDialog(mailImageText('Место в хранилище','Storage usage'));
+ try{const usage=await api('/api/v1/files/library/usage');const total=document.createElement('strong');total.textContent=fmtBytes(usage.used_bytes)+' / '+(usage.quota_bytes>0?fmtBytes(usage.quota_bytes):'∞');v.body.append(total);
+ if(usage.quota_bytes>0){const progress=document.createElement('progress');progress.max=usage.quota_bytes;progress.value=usage.used_bytes;progress.setAttribute('aria-label',mailImageText('Использовано места','Storage used'));progress.style.width='100%';v.body.append(progress)}
+ for(const [label,value] of [[mailImageText('Файлы','Files'),usage.live_bytes],[mailImageText('Корзина','Trash'),usage.trash_bytes],[mailImageText('Версии','Versions'),usage.version_bytes]]){const p=document.createElement('p');p.textContent=label+': '+fmtBytes(value);v.body.append(p)}
+ const hint=document.createElement('p');hint.className='meta';hint.textContent=mailImageText('Квота учитывает каждую сохранённую версию и корзину. Для освобождения места удалите ненужные версии или очистите корзину. Незавершённые загрузки ограничены отдельно.','Every retained version and trashed file counts toward your quota. Remove old versions or empty trash to free space. Pending uploads have separate limits.');v.body.append(hint,fileAction(mailImageText('Открыть корзину','Open trash'),()=>{v.dialog.close();openFileHistory('trash')}),fileAction(mailImageText('Все версии','All versions'),()=>{v.dialog.close();openFileHistory('versions')}));
+ }catch(error){v.status.textContent=libraryMessage(error)}
+}
+$('files-settings-menu')?.append(fileAction(mailImageText('Место в хранилище','Storage usage'),openFileStorageUsage));

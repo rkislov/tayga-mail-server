@@ -60,6 +60,10 @@ func (h *ewsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var soap string
 	var err error
 	switch op {
+	case "GetInboxRules", "UpdateInboxRules":
+		soap, err = h.inboxRulesEWS(r.Context(), u, op, string(body))
+	case "ResolveNames", "GetRoomLists", "GetRooms", "ExpandDL":
+		soap, err = h.directoryEWS(r.Context(), u, op, string(body))
 	case "Subscribe":
 		soap, err = h.subscribeEWS(r.Context(), u, string(body))
 	case "Unsubscribe":

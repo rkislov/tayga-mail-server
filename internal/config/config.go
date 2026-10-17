@@ -143,19 +143,25 @@ type DNSBLConfig struct {
 	Zones   []string `yaml:"zones"`
 	Score   float64  `yaml:"score"`
 }
+type SpamLearningConfig struct {
+	Disabled bool   `yaml:"disabled"`
+	URL      string `yaml:"url"`
+	Password string `yaml:"password"`
+}
 type SpamConfig struct {
-	DNSBL           DNSBLConfig   `yaml:"dnsbl"`
-	Enabled         bool          `yaml:"enabled"`
-	Backend         string        `yaml:"backend"` // rspamd | none
-	URL             string        `yaml:"url"`
-	Password        string        `yaml:"password"`
-	Timeout         time.Duration `yaml:"timeout"`
-	FailOpen        bool          `yaml:"fail_open"`
-	Folder          string        `yaml:"folder"` // Junk / Quarantine for quarantine action
-	FollowRspamd    bool          `yaml:"follow_rspamd"`
-	RejectAbove     float64       `yaml:"reject_above"`
-	QuarantineAbove float64       `yaml:"quarantine_above"`
-	TagAbove        float64       `yaml:"tag_above"`
+	Learning        SpamLearningConfig `yaml:"learning"`
+	DNSBL           DNSBLConfig        `yaml:"dnsbl"`
+	Enabled         bool               `yaml:"enabled"`
+	Backend         string             `yaml:"backend"` // rspamd | none
+	URL             string             `yaml:"url"`
+	Password        string             `yaml:"password"`
+	Timeout         time.Duration      `yaml:"timeout"`
+	FailOpen        bool               `yaml:"fail_open"`
+	Folder          string             `yaml:"folder"` // Junk / Quarantine for quarantine action
+	FollowRspamd    bool               `yaml:"follow_rspamd"`
+	RejectAbove     float64            `yaml:"reject_above"`
+	QuarantineAbove float64            `yaml:"quarantine_above"`
+	TagAbove        float64            `yaml:"tag_above"`
 }
 
 // ScanConfig configures antivirus scanning of inbound SMTP messages.

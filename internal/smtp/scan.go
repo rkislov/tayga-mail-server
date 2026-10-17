@@ -17,13 +17,30 @@ type scanPolicy struct {
 	folder   string
 	failOpen bool
 	log      *slog.Logger
+	store    storage.Driver
 }
 
 func (p *scanPolicy) apply(ctx context.Context, u *storage.User, data []byte, msgid string, deliverQuarantine func(context.Context, *storage.User, []byte, string) error) ([]byte, error) {
-	if p == nil || p.scanner == nil {
+	if p == nil || p.scanner == nil || p.scanner.Name() == "noop" {
 		return data, nil
 	}
 	res, err := p.scanner.Scan(ctx, data)
+	if recorder, ok := p.store.(interface {
+		RecordProtection(context.Context, string, string, string) error
+	}); ok {
+		outcome := "clean"
+		if err != nil {
+			outcome = "error"
+		} else if res != nil && !res.Clean {
+			outcome = string(p.action)
+			if outcome == "" {
+				outcome = "quarantine"
+			}
+		}
+		if e := recorder.RecordProtection(ctx, u.DomainID, "antivirus", outcome); e != nil && p.log != nil {
+			p.log.Warn("antivirus statistics failed", "error", e)
+		}
+	}
 	if err != nil {
 		if p.failOpen {
 			if p.log != nil {

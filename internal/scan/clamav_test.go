@@ -72,3 +72,31 @@ func TestClamAVCleanAndInfected(t *testing.T) {
 	}
 	<-done
 }
+
+func TestClamAVLoadedDatabaseVersion(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		c, e := ln.Accept()
+		if e != nil {
+			return
+		}
+		defer c.Close()
+		cmd := make([]byte, 9)
+		if _, e = io.ReadFull(c, cmd); e != nil || string(cmd) != "zVERSION\x00" {
+			t.Errorf("command %q %v", cmd, e)
+			return
+		}
+		io.WriteString(c, "ClamAV 1.4.3/27800/Sat Oct 17 07:00:00 2026\x00")
+	}()
+	info, e := NewClamAV(ln.Addr().String(), time.Second).Version(context.Background())
+	if e != nil || info["engine"] != "1.4.3" || info["database_version"] != "27800" || info["database_date"] == "" {
+		t.Fatal(info, e)
+	}
+	<-done
+}

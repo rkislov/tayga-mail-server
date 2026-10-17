@@ -11,6 +11,7 @@ import (
 // DefaultCoSConfig is applied when a user has no class assigned.
 const DefaultCoSConfig = `{
   "quota_bytes": 0,
+  "file_quota_bytes": 0,
   "max_mail_size": 26214400,
   "large_attach_bytes": 10485760,
   "share_max_ttl_sec": 604800,
@@ -18,11 +19,12 @@ const DefaultCoSConfig = `{
 }`
 
 type cosConfig struct {
-	QuotaBytes        int64 `json:"quota_bytes"`
-	MaxMailSize       int64 `json:"max_mail_size"`
-	LargeAttachBytes  int64 `json:"large_attach_bytes"`
-	ShareMaxTTLSec    int64 `json:"share_max_ttl_sec"`
-	Features          map[string]bool `json:"features"`
+	QuotaBytes       int64           `json:"quota_bytes"`
+	FileQuotaBytes   int64           `json:"file_quota_bytes"`
+	MaxMailSize      int64           `json:"max_mail_size"`
+	LargeAttachBytes int64           `json:"large_attach_bytes"`
+	ShareMaxTTLSec   int64           `json:"share_max_ttl_sec"`
+	Features         map[string]bool `json:"features"`
 }
 
 func parseCoSConfig(raw string) cosConfig {
@@ -82,6 +84,11 @@ func (s *Server) handleAdminCoS(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
 			return
 		}
+		var limits cosConfig
+		if len(req.Config) > 0 && (json.Unmarshal(req.Config, &limits) != nil || limits.FileQuotaBytes < 0 || limits.FileQuotaBytes > 9007199254740991) {
+			writeJSON(w, 400, map[string]string{"error": "invalid file quota"})
+			return
+		}
 		cfg := string(req.Config)
 		if cfg == "" {
 			cfg = DefaultCoSConfig
@@ -106,6 +113,11 @@ func (s *Server) handleAdminCoS(w http.ResponseWriter, r *http.Request) {
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+			return
+		}
+		var limits cosConfig
+		if len(req.Config) > 0 && (json.Unmarshal(req.Config, &limits) != nil || limits.FileQuotaBytes < 0 || limits.FileQuotaBytes > 9007199254740991) {
+			writeJSON(w, 400, map[string]string{"error": "invalid file quota"})
 			return
 		}
 		sc := &storage.ServiceClass{ID: path, TenantID: admin.TenantID, Name: req.Name, Config: string(req.Config)}

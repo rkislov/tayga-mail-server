@@ -65,3 +65,10 @@ function mountVisualRuleBuilder(){
  const original=$('sieve-body')?.closest('.card');if(original){const details=document.createElement('details');details.className='advanced-sieve';const summary=document.createElement('summary');summary.textContent=mailImageText('Расширенный редактор Sieve и сохранённые скрипты','Advanced Sieve editor and saved scripts');original.before(details);details.append(summary,original)}renderVisualRules();
 }
 mountVisualRuleBuilder();
+
+function renderOutlookRules(data){
+ let host=$('outlook-rules-summary');if(!host){host=document.createElement('section');host.id='outlook-rules-summary';host.className='card';$('app-filters').append(host)}host.replaceChildren();
+ const title=document.createElement('h3');title.textContent=mailImageText('Правила Outlook','Outlook rules');const hint=document.createElement('p');hint.className='meta';hint.textContent=mailImageText('Управляются из меню «Правила сервера» в Outlook и выполняются перед правилами веб-конструктора. «Остановить обработку» завершает всю цепочку.','Managed through Server Rules in Outlook and run before web rules. Stop processing ends the entire chain.');host.append(title,hint);
+ let rules=[];try{rules=JSON.parse(data?.rules_json||'[]')}catch{}for(const rule of rules){const row=document.createElement('p');row.textContent=(rule.enabled?'✓ ':'— ')+rule.name;host.append(row)}
+ if(!rules.length){const empty=document.createElement('p');empty.className='meta';empty.textContent=mailImageText('Правил Outlook пока нет.','No Outlook rules yet.');host.append(empty)}else{const details=document.createElement('details'),summary=document.createElement('summary'),code=document.createElement('pre');summary.textContent=mailImageText('Сгенерированный Sieve','Generated Sieve');code.textContent=data.script;details.append(summary,code);host.append(details)}
+}

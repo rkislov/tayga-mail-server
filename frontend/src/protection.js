@@ -1,5 +1,6 @@
 /* Keep technical reports out of the message list. Never render quarantine HTML. */
 async function refreshProtectionMessages() {
+  refreshProtectionDiagnostics();
   const list = $("quarantine-list");
   if (!list) return;
   const params = new URLSearchParams({limit:"200"});
@@ -26,7 +27,7 @@ async function refreshProtectionMessages() {
 async function protectionMessageAction(id,action,dialog) {
   if(dialog) dialog.close();
   if(action==='delete' && !await askConfirm('Удалить письмо без возможности восстановления?',{danger:true})) {if(dialog) dialog.showModal();return;}
-  if(action==='release' && !await askConfirm('Переместить письмо во входящие? Это не обучает Rspamd и не отключает проверку отправителя.')) {if(dialog) dialog.showModal();return;}
+  if(action==='release' && !await askConfirm('Переместить письмо во входящие? Для письма из папки спама будет запланировано обучение Rspamd как обычной почты, если оно включено.')) {if(dialog) dialog.showModal();return;}
   try {
     await api('/api/v1/admin/quarantine/'+encodeURIComponent(id)+(action==='release'?'/release':''),{method:action==='release'?'POST':'DELETE'});
     if(dialog) dialog.remove();
@@ -57,3 +58,22 @@ function renderProtectionStats(stats) {
 }
 document.querySelectorAll('[data-protection-config]').forEach(button=>button.addEventListener('click',async()=>{await refreshSettings();await openAdminConfig(button.dataset.protectionConfig);}));
 $('monitor-open-antispam')?.addEventListener('click',()=>showApp('antispam'));
+
+async function refreshProtectionDiagnostics(){
+ let host=$('protection-diagnostics');
+ if(!host){host=document.createElement('section');host.id='protection-diagnostics';host.className='protection-diagnostics';document.querySelector('#app-antispam .protection-settings')?.after(host);
+ const head=document.createElement('div');head.className='actions';const title=document.createElement('h3');title.className='heading';title.textContent=mailImageText('Обучение и антивирус','Learning and antivirus');const select=document.createElement('select');select.className='field-input';select.id='protection-period';select.setAttribute('aria-label',mailImageText('Период статистики','Statistics period'));for(const [value,text]of [['hour',mailImageText('Текущий час','Current hour')],['day',mailImageText('Последние сутки','Last 24 hours')],['30d',mailImageText('Последние 30 дней','Last 30 days')]]){const o=document.createElement('option');o.value=value;o.textContent=text;select.append(o)}select.value='day';select.onchange=refreshProtectionDiagnostics;head.append(title,select);const content=document.createElement('div');content.id='protection-diagnostic-content';host.append(head,content)}
+ const content=$('protection-diagnostic-content');content.setAttribute('aria-live','polite');content.textContent=mailImageText('Загрузка…','Loading…');
+ try{const d=await api('/api/v1/admin/protection/stats?period='+$('protection-period').value);content.replaceChildren();
+ const note=document.createElement('p');note.className='meta';note.textContent=mailImageText('Счётчики сохраняются после перезапуска; данные собираются с установки 0.9.18, по часовым интервалам. Антивирус — проверки по получателям.','Counters survive restarts; data starts with 0.9.18 and uses hourly buckets. Antivirus counts per-recipient checks.');content.append(note);
+ const grid=document.createElement('div');grid.className='protection-stat-grid';content.append(grid);
+ const card=(name,rows)=>{const box=document.createElement('div');box.className='protection-stat-card';const h=document.createElement('h4');h.textContent=name;const dl=document.createElement('dl');for(const [label,value]of rows){const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;dd.textContent=String(value??0);dl.append(dt,dd)}box.append(h,dl);grid.append(box);return box};
+ const learning=d.counts?.learning||{},av=d.counts?.antivirus||{};
+ card('Rspamd · '+mailImageText('обучение','learning'),[[mailImageText('Автообучение','Automatic training'),d.learning_enabled?mailImageText('Включено','Enabled'):mailImageText('Выключено','Disabled')],['Spam',learning.spam],['Ham',learning.ham],[mailImageText('Уже обучено','Already learned'),learning.duplicate],[mailImageText('Пропущено','Skipped'),learning.skipped],[mailImageText('Ошибки попыток','Failed attempts'),learning.error],[mailImageText('В очереди сейчас','Pending now'),d.queue?.pending],[mailImageText('Исчерпаны попытки','Retries exhausted'),d.queue?.failed]]);
+ card(mailImageText('Антивирус','Antivirus'),[[mailImageText('Состояние','Status'),d.antivirus_enabled?d.antivirus_backend:mailImageText('Выключен','Disabled')],[mailImageText('Чистые','Clean'),av.clean],[mailImageText('Отклонено','Rejected'),av.reject],[mailImageText('Карантин','Quarantined'),av.quarantine],[mailImageText('Помечено','Tagged'),av.tag],[mailImageText('Ошибки','Errors'),av.error]]);
+ const versions=[];if(d.antivirus_version){versions.push(['ClamAV',d.antivirus_version.engine],[mailImageText('Версия базы','Database version'),d.antivirus_version.database_version],[mailImageText('Дата базы','Database date'),d.antivirus_version.database_date])}else if(d.antivirus_enabled)versions.push([mailImageText('Версия базы','Database version'),mailImageText('Нет данных от сканера','Scanner did not provide data')]);
+ if(d.rspamd){versions.push(['Rspamd',d.rspamd.version||'—'],[mailImageText('Обучено в Rspamd всего','Total learned in Rspamd'),d.rspamd.learned??'—']);for(const f of d.rspamd.statfiles||[])versions.push([f.symbol||'Bayes',f.revision??f.used??'—'])}
+ if(versions.length)card(mailImageText('Движки и базы','Engines and databases'),versions);
+ for(const e of [d.rspamd_error,d.antivirus_error])if(e){const p=document.createElement('p');p.className='msg err';p.textContent=e;content.append(p)}
+ }catch(e){content.textContent=e.message}
+}

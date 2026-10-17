@@ -3805,3 +3805,35 @@ html body { background:var(--work-bg);background-image:none;color:var(--work-tex
 .mail-source-dialog .meta,.mail-source-dialog .msg {margin:.75rem 0;}
 .mail-source-dialog::backdrop {background:rgb(0 0 0/.45);}
 @media(max-width:640px){.mail-source-fields{grid-template-columns:minmax(0,1fr);}.mail-source-dialog footer{flex-wrap:wrap;}.mail-source-dialog footer button{flex:1;}}
+
+.group-member-row{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;padding:.65rem 0;border-bottom:1px solid var(--border-color,#dfe3ef)}
+.group-member-row>span{flex:1 1 16rem;overflow-wrap:anywhere}.group-member-row .field-input{flex:1;min-width:12rem}
+#outlook-rules-summary pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:20rem;overflow:auto}
+
+.protection-diagnostics {margin:24px 0;padding:20px 0;border-block:1px solid var(--work-line)}
+.protection-diagnostics .actions {justify-content:space-between;align-items:center}.protection-diagnostics select {width:auto;max-width:100%}
+.protection-stat-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:16px}
+.protection-stat-card {padding:16px;border:1px solid var(--work-line);border-radius:12px;background:var(--work-raised)}
+.protection-stat-card h4 {font-weight:600;margin-bottom:12px}.protection-stat-card dl {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px 12px;font-size:14px}.protection-stat-card dd {text-align:right;overflow-wrap:anywhere}
+
+/* Selected wallpapers remain visible through primary workspace surfaces. */
+.theme-random-shot {display:grid;place-items:center;font-size:2.5rem;color:#fff;background:linear-gradient(135deg,#30376f,#7697b0)}
+html[data-theme] body {
+ background-image:linear-gradient(rgb(16 18 27/.24),rgb(16 18 27/.40)),var(--tayga-bg-image,none);
+ background-size:cover;background-position:center;background-attachment:fixed;
+}
+html[data-color-mode="light"][data-theme] body {
+ background-image:linear-gradient(rgb(245 246 249/.24),rgb(245 246 249/.42)),var(--tayga-bg-image,none);
+}
+html[data-theme] :is(.panel,.card,.pane,.panel-pane,.app-topbar,.mail-folders,.mail-list,.mail-reader,.mail-read,.compose-panel) {
+ background:color-mix(in srgb,var(--work-panel) 86%,transparent);
+ backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+}
+html[data-color-mode="light"][data-theme] :is(.panel,.card,.pane,.panel-pane,.app-topbar,.mail-folders,.mail-list,.mail-reader,.mail-read,.compose-panel) {
+ background:color-mix(in srgb,var(--work-panel) 82%,transparent);
+}
+/* Nested cards and editing controls keep an even reading surface. */
+html[data-theme] .card .card {background:var(--work-raised);backdrop-filter:none}
+@media (prefers-reduced-transparency:reduce) {
+ html[data-theme] :is(.panel,.card,.pane,.panel-pane,.app-topbar,.mail-folders,.mail-list,.mail-reader,.mail-read,.compose-panel) {background:var(--work-panel)!important;backdrop-filter:none;-webkit-backdrop-filter:none}
+}

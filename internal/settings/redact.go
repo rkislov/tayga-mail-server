@@ -30,6 +30,9 @@ func redactConfig(cfg *config.Config) {
 	if cfg.Mailstore.ObjectStore.AccessKey != "" {
 		cfg.Mailstore.ObjectStore.AccessKey = redacted
 	}
+	if cfg.Spam.Learning.Password != "" {
+		cfg.Spam.Learning.Password = redacted
+	}
 	if cfg.Spam.Password != "" {
 		cfg.Spam.Password = redacted
 	}
@@ -71,6 +74,9 @@ func preserveSecrets(old, neu *config.Config) {
 	}
 	if isSecretUnset(neu.Mailstore.ObjectStore.AccessKey) {
 		neu.Mailstore.ObjectStore.AccessKey = old.Mailstore.ObjectStore.AccessKey
+	}
+	if isSecretUnset(neu.Spam.Learning.Password) {
+		neu.Spam.Learning.Password = old.Spam.Learning.Password
 	}
 	if isSecretUnset(neu.Spam.Password) {
 		neu.Spam.Password = old.Spam.Password

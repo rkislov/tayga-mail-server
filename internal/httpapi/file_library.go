@@ -173,6 +173,13 @@ func (s *Server) commitFile(owner, rel, temp, expected string) (string, error) {
 	if expected != "*" && fileETag(info) != expected {
 		return "", errFileConflict
 	}
+	newInfo, err := os.Stat(temp)
+	if err != nil {
+		return "", err
+	}
+	if err = s.checkFileQuota(owner, newInfo.Size()); err != nil {
+		return "", err
+	}
 	if err = os.MkdirAll(filepath.Dir(abs), 0750); err != nil {
 		return "", err
 	}
@@ -196,6 +203,14 @@ func (s *Server) commitFile(owner, rel, temp, expected string) (string, error) {
 func (s *Server) stageFile(ctx context.Context, owner string, src io.Reader, size int64) (string, int64, error) {
 	if size > maxWebUploadBytes {
 		return "", 0, errFileTooLarge
+	}
+	if size > 0 {
+		s.fileMu.Lock()
+		err := s.checkFileQuota(owner, size)
+		s.fileMu.Unlock()
+		if err != nil {
+			return "", 0, err
+		}
 	}
 	root, err := s.fileStateRoot(owner, "uploads")
 	if err != nil {
@@ -314,6 +329,8 @@ func fileError(w http.ResponseWriter, err error) {
 		status = 423
 	case errors.Is(err, errFileTooLarge):
 		status = 413
+	case errors.Is(err, errFileQuota):
+		status = http.StatusInsufficientStorage
 	case errors.Is(err, errFileIncomplete):
 		status = 400
 	case errors.Is(err, os.ErrNotExist):
@@ -337,6 +354,17 @@ func (s *Server) handleFileLibrary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	op := strings.TrimPrefix(r.URL.Path, "/api/v1/files/library/")
+	if op == "usage" && r.Method == http.MethodGet {
+		s.fileMu.Lock()
+		usage, err := s.fileUsage(au.ID)
+		s.fileMu.Unlock()
+		if err != nil {
+			fileError(w, err)
+			return
+		}
+		writeJSON(w, 200, usage)
+		return
+	}
 	if op == "search" && r.Method == http.MethodGet {
 		s.searchFiles(w, r, au.ID)
 		return
@@ -352,7 +380,7 @@ func (s *Server) handleFileLibrary(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"entries": items})
 		return
 	}
-	if (op == "restore" && r.Method == http.MethodPost) || (op == "trash" && r.Method == http.MethodDelete) {
+	if (op == "restore" && r.Method == http.MethodPost) || ((op == "trash" || op == "versions") && r.Method == http.MethodDelete) {
 		var req struct {
 			ID   string `json:"id"`
 			Kind string `json:"kind"`
@@ -361,8 +389,8 @@ func (s *Server) handleFileLibrary(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, 400, map[string]string{"error": "invalid request"})
 			return
 		}
-		if op == "trash" {
-			req.Kind = "trash"
+		if r.Method == http.MethodDelete {
+			req.Kind = op
 		}
 		if req.Kind != "trash" && req.Kind != "versions" {
 			writeJSON(w, 400, map[string]string{"error": "invalid kind"})
@@ -375,7 +403,7 @@ func (s *Server) handleFileLibrary(w http.ResponseWriter, r *http.Request) {
 			fileError(w, err)
 			return
 		}
-		if op == "trash" {
+		if r.Method == http.MethodDelete {
 			if err = os.RemoveAll(dir); err != nil {
 				fileError(w, err)
 				return

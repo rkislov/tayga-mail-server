@@ -13,6 +13,8 @@ import (
 
 	gosieve "github.com/foxcpp/go-sieve"
 	"github.com/foxcpp/go-sieve/interp"
+	"github.com/foxcpp/go-sieve/lexer"
+	"github.com/foxcpp/go-sieve/parser"
 	"github.com/tayga/tms/internal/mailsearch"
 	"github.com/tayga/tms/internal/mailstore"
 	"github.com/tayga/tms/internal/storage"
@@ -73,8 +75,16 @@ func (e *Engine) Deliver(ctx context.Context, user *storage.User, envelopeFrom, 
 	}
 
 	var result Result
-	if script != nil && script.Script != "" {
-		result, err = Execute(script.Script, envelopeFrom, envelopeTo, user.Email, data)
+	rules, err := e.Store.GetInboxRules(ctx, user.ID)
+	if err != nil {
+		return err
+	}
+	custom := ""
+	if script != nil {
+		custom = script.Script
+	}
+	if rules.Script != "" || custom != "" {
+		result, err = ExecuteScripts([]string{rules.Script, custom}, envelopeFrom, envelopeTo, user.Email, data)
 		if err != nil {
 			e.Log.Warn("sieve execute failed; falling back to INBOX", "user", user.Email, "err", err)
 			result = Result{Deliveries: []Delivery{{Mailbox: "INBOX"}}}
@@ -168,7 +178,32 @@ func (e *Engine) redirectLocal(ctx context.Context, fromUser *storage.User, addr
 
 // Execute loads and runs a Sieve script, returning normalized actions.
 func Execute(script, envFrom, envTo, authUser string, raw []byte) (Result, error) {
-	loaded, err := gosieve.Load(strings.NewReader(script), gosieve.DefaultOptions())
+	return ExecuteScripts([]string{script}, envFrom, envTo, authUser, raw)
+}
+
+// Merge parsed commands, hoisting require declarations. One runtime preserves
+// stop, flags and implicit keep across managed rules and the custom script.
+func ExecuteScripts(scripts []string, envFrom, envTo, authUser string, raw []byte) (Result, error) {
+	opts := gosieve.DefaultOptions()
+	var requires, commands []parser.Cmd
+	for _, script := range scripts {
+		tokens, err := lexer.Lex(strings.NewReader(script), &opts.Lexer)
+		if err != nil {
+			return Result{}, err
+		}
+		cmds, err := parser.Parse(lexer.NewStream(tokens), &opts.Parser)
+		if err != nil {
+			return Result{}, err
+		}
+		for _, cmd := range cmds {
+			if strings.EqualFold(cmd.Id, "require") {
+				requires = append(requires, cmd)
+			} else {
+				commands = append(commands, cmd)
+			}
+		}
+	}
+	loaded, err := interp.LoadScript(append(requires, commands...), &opts.Interp)
 	if err != nil {
 		return Result{}, err
 	}

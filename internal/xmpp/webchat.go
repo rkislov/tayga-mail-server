@@ -35,6 +35,8 @@ type RosterEntry struct {
 
 // HistoryMsg is a decoded MAM / chat history item.
 type HistoryMsg struct {
+	Nick       string          `json:"-"`
+	OriginID   string          `json:"-"`
 	OMEMO      string          `json:"omemo,omitempty"`
 	Attachment *ChatAttachment `json:"attachment,omitempty"`
 	Encrypted  bool            `json:"encrypted,omitempty"`

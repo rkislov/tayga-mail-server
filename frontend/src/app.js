@@ -219,6 +219,14 @@ function renderThemeGallery(active) {
   const gallery = document.getElementById("theme-gallery");
   if (!gallery) return;
   gallery.innerHTML = "";
+  const random = document.createElement("button");
+  random.type = "button";
+  random.className = "theme-tile" + (active === "random" ? " is-active" : "");
+  random.setAttribute("role", "option");
+  random.setAttribute("aria-selected", String(active === "random"));
+  random.innerHTML = `<span class="theme-tile-shot theme-random-shot" aria-hidden="true">↻</span><span class="theme-tile-meta"><strong>${lang === "en" ? "Random background" : "Случайный фон"}</strong><em>${lang === "en" ? "Changes on page reload" : "Меняется при обновлении страницы"}</em></span>`;
+  random.addEventListener("click", () => applyTheme("random"));
+  gallery.appendChild(random);
   Object.entries(THEMES).forEach(([key, theme]) => {
     const btn = document.createElement("button");
     btn.type = "button";
@@ -240,20 +248,33 @@ function normalizeThemeKey(name) {
   return name;
 }
 
-function applyTheme(name) {
-  const key = normalizeThemeKey(name) in THEMES ? normalizeThemeKey(name) : "tayga";
+function applyTheme(name, {persist = true} = {}) {
+  const choice = normalizeThemeKey(name);
+  const automatic = !Object.hasOwn(THEMES, choice);
+  let key = choice;
+  if (automatic) {
+    let previous = document.documentElement.dataset.theme;
+    try { previous = sessionStorage.getItem("tayga.lastRandomTheme") || previous; } catch {}
+    const choices = Object.keys(THEMES).filter(candidate => candidate !== previous);
+    key = choices[Math.floor(Math.random() * choices.length)];
+    try { sessionStorage.setItem("tayga.lastRandomTheme", key); } catch {}
+  }
   const theme = THEMES[key];
   document.documentElement.dataset.theme = key;
+  document.documentElement.dataset.themeMode = automatic ? "random" : "fixed";
   document.documentElement.style.setProperty(
     "--tayga-bg-image",
     `image-set(url('${theme.image}') 1x, url('${theme.image2x}') 2x)`
   );
   const sel = document.getElementById("theme-select");
-  if (sel && sel.value !== key) sel.value = key;
+  if (sel) sel.value = automatic ? "random" : key;
   const preview = document.getElementById("theme-preview");
   if (preview) preview.style.backgroundImage = `url('${theme.image}')`;
-  localStorage.setItem("tayga.theme", key);
-  renderThemeGallery(key);
+  if (persist) {
+    if (automatic) localStorage.removeItem("tayga.theme");
+    else localStorage.setItem("tayga.theme", key);
+  }
+  renderThemeGallery(automatic ? "random" : key);
 }
 
 function accountInitials(name, email='') {
@@ -290,8 +311,8 @@ applyColorMode(localStorage.getItem("tayga.colorMode") || "auto");
 $("color-mode-select")?.addEventListener("change",event=>applyColorMode(event.target.value));
 
 (function initTheme() {
-  const saved = localStorage.getItem("tayga.theme") || "tayga";
-  applyTheme(saved);
+  const saved = localStorage.getItem("tayga.theme") || "random";
+  applyTheme(saved, {persist: false});
   document.getElementById("theme-select")?.addEventListener("change", (e) => {
     applyTheme(e.target.value);
   });
@@ -1985,6 +2006,7 @@ function cosConfigFrom(sc) {
     id: sc?.id || "",
     name: sc?.name || "",
     quota_bytes: Number(cfg.quota_bytes ?? base.quota_bytes) || 0,
+    file_quota_bytes: Number(cfg.file_quota_bytes || 0),
     max_mail_size: Number(cfg.max_mail_size ?? base.max_mail_size) || 0,
     large_attach_bytes: Number(cfg.large_attach_bytes ?? base.large_attach_bytes) || 0,
     share_max_ttl_sec: Number(cfg.share_max_ttl_sec ?? base.share_max_ttl_sec) || 0,
@@ -2006,6 +2028,7 @@ function cosFormHTML(draft) {
     </label>`).join("");
   const limits = [
     ["cos-quota", "cos_quota", "cos_quota_hint", draft.quota_bytes],
+    ["cos-file-quota", "cos_file_quota", "cos_file_quota_hint", draft.file_quota_bytes],
     ["cos-max-mail", "cos_max_mail", "cos_max_mail_hint", draft.max_mail_size],
     ["cos-large-attach", "cos_large_attach", "cos_large_attach_hint", draft.large_attach_bytes],
     ["cos-share-ttl", "cos_share_ttl", "cos_share_ttl_hint", draft.share_max_ttl_sec],
@@ -2031,6 +2054,7 @@ function readCoSForm() {
     name: ($("cos-name")?.value || "").trim(),
     config: {
       quota_bytes: Number($("cos-quota")?.value || 0),
+      file_quota_bytes: Number($("cos-file-quota")?.value || 0),
       max_mail_size: Number($("cos-max-mail")?.value || 0),
       large_attach_bytes: Number($("cos-large-attach")?.value || 0),
       share_max_ttl_sec: Number($("cos-share-ttl")?.value || 0),
@@ -2165,6 +2189,7 @@ async function refreshSieve() {
   try {
     const data = await api("/api/v1/sieve/scripts");
     refreshVisualRules(data.scripts || []);
+    renderOutlookRules(data.outlook_rules);
     const list = $("sieve-list");
     list.innerHTML = (data.scripts || []).map((sc) => `
       <li>
