@@ -24,6 +24,9 @@ func redactConfig(cfg *config.Config) {
 	if cfg.SMTP.Relay.Password != "" {
 		cfg.SMTP.Relay.Password = redacted
 	}
+	if cfg.SMTP.DLP.Password != "" {
+		cfg.SMTP.DLP.Password = redacted
+	}
 	if cfg.Mailstore.ObjectStore.SecretKey != "" {
 		cfg.Mailstore.ObjectStore.SecretKey = redacted
 	}
@@ -68,6 +71,9 @@ func preserveSecrets(old, neu *config.Config) {
 	}
 	if isSecretUnset(neu.SMTP.Relay.Password) {
 		neu.SMTP.Relay.Password = old.SMTP.Relay.Password
+	}
+	if isSecretUnset(neu.SMTP.DLP.Password) {
+		neu.SMTP.DLP.Password = old.SMTP.DLP.Password
 	}
 	if isSecretUnset(neu.Mailstore.ObjectStore.SecretKey) {
 		neu.Mailstore.ObjectStore.SecretKey = old.Mailstore.ObjectStore.SecretKey

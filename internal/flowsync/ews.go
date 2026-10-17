@@ -60,6 +60,8 @@ func (h *ewsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var soap string
 	var err error
 	switch op {
+	case "GetUserAvailabilityRequest":
+		soap, err = h.availabilityEWS(r.Context(), u, string(body))
 	case "GetInboxRules", "UpdateInboxRules":
 		soap, err = h.inboxRulesEWS(r.Context(), u, op, string(body))
 	case "ResolveNames", "GetRoomLists", "GetRooms", "ExpandDL":
@@ -107,7 +109,11 @@ func (h *ewsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		soap = ewsFault("ErrorInternalServerError", "FlowSync operation failed")
 	}
 	if strings.Contains(soap, "<m:FaultResponse") && op != "" {
-		soap = ewsOperationError(op, extractTag(soap, "ResponseCode"), extractTag(soap, "MessageText"))
+		if op == "GetUserAvailabilityRequest" {
+			soap = availabilityError(extractTag(soap, "ResponseCode"), extractTag(soap, "MessageText"))
+		} else {
+			soap = ewsOperationError(op, extractTag(soap, "ResponseCode"), extractTag(soap, "MessageText"))
+		}
 	}
 	if t := traceRequest(r); t != nil {
 		decoder := xml.NewDecoder(strings.NewReader(soap))
@@ -202,6 +208,11 @@ func (h *ewsHandler) findFolder(ctx context.Context, u *storage.User) (string, e
 		fmt.Fprintf(&b, `<t:ContactsFolder><t:FolderId Id="%s" ChangeKey="contact-v2"/><t:ParentFolderId Id="%s"/><t:DisplayName>%s</t:DisplayName><t:FolderClass>IPF.Contact</t:FolderClass><t:TotalCount>%d</t:TotalCount></t:ContactsFolder>`,
 			xmlEscape(ab.ID), xmlEscape("root:"+u.ID), xmlEscape(name), len(contacts))
 	}
+	gal, err := h.galFolderXML(ctx, u)
+	if err != nil {
+		return "", err
+	}
+	b.WriteString(gal)
 	for _, nf := range nfs {
 		name := nf.DisplayName
 		if name == "" {
@@ -227,6 +238,9 @@ func (h *ewsHandler) findItem(ctx context.Context, u *storage.User, body string)
 		return ewsFault("ErrorFolderNotFound", "folder unavailable"), nil
 	}
 
+	if folderID == galFolderID(u) {
+		return h.findGALItems(ctx, u, body)
+	}
 	if name := systemFolderName(u, folderID); name == "tasks" || name == "todosearch" {
 		return h.findTasks(ctx, u)
 	}
@@ -319,6 +333,9 @@ func (h *ewsHandler) getItem(ctx context.Context, u *storage.User, body string) 
 	id := extractAttr(body, "ItemId", "Id")
 	if id == "" {
 		return ewsFault("ErrorInvalidId", "missing ItemId"), nil
+	}
+	if strings.HasPrefix(id, "ews-gal-item:") {
+		return h.getGALItem(ctx, u, id)
 	}
 	if taskID(id) {
 		t, err := h.getTask(ctx, u, id)

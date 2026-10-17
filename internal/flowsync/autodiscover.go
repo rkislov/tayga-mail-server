@@ -140,10 +140,10 @@ func (a *autodiscover) handlePOX(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(&b, `<EMailAddress>%s</EMailAddress>`, xmlEscape(loginName))
 		b.WriteString(`</User><Account><AccountType>email</AccountType><Action>settings</Action>`)
 
-		// ActiveSync (EXPR)
+		// External Exchange services. ASUrl means Availability, not ActiveSync.
 		fmt.Fprintf(&b, `<Protocol><Type>EXPR</Type><Server>%s</Server><SSL>%s</SSL><AuthPackage>Basic</AuthPackage>`,
 			xmlEscape(a.hostname), sslOnOff)
-		fmt.Fprintf(&b, `<ASUrl>%s/Microsoft-Server-ActiveSync</ASUrl>`, xmlEscape(ep.Base))
+		fmt.Fprintf(&b, `<ASUrl>%s/EWS/Exchange.asmx</ASUrl>`, xmlEscape(ep.Base))
 		fmt.Fprintf(&b, `<EwsUrl>%s/EWS/Exchange.asmx</EwsUrl>`, xmlEscape(ep.Base))
 		fmt.Fprintf(&b, `<OOFUrl>%s/EWS/Exchange.asmx</OOFUrl>`, xmlEscape(ep.Base))
 		b.WriteString(`</Protocol>`)
@@ -151,6 +151,7 @@ func (a *autodiscover) handlePOX(w http.ResponseWriter, r *http.Request) {
 		// EWS (EXCH)
 		fmt.Fprintf(&b, `<Protocol><Type>EXCH</Type><Server>%s</Server><SSL>%s</SSL><AuthPackage>Basic</AuthPackage>`,
 			xmlEscape(a.hostname), sslOnOff)
+		fmt.Fprintf(&b, `<ASUrl>%s/EWS/Exchange.asmx</ASUrl>`, xmlEscape(ep.Base))
 		fmt.Fprintf(&b, `<EwsUrl>%s/EWS/Exchange.asmx</EwsUrl>`, xmlEscape(ep.Base))
 		fmt.Fprintf(&b, `<OOFUrl>%s/EWS/Exchange.asmx</OOFUrl>`, xmlEscape(ep.Base))
 		b.WriteString(`</Protocol>`)

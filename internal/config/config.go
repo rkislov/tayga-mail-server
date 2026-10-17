@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -255,6 +256,7 @@ type SMTPConfig struct {
 	WriteTimeout   time.Duration       `yaml:"write_timeout"`
 	OutboundDirect bool                `yaml:"outbound_direct"` // MX lookup when relay.host empty
 	Relay          SMTPRelayConfig     `yaml:"relay"`
+	DLP            SMTPDLPConfig       `yaml:"dlp"`
 	DKIM           SMTPDKIMConfig      `yaml:"dkim"`
 	RateLimit      SMTPRateLimitConfig `yaml:"rate_limit"`
 	Queue          SMTPQueueConfig     `yaml:"queue"`
@@ -317,6 +319,16 @@ type SMTPRelayConfig struct {
 	Username        string `yaml:"username"`
 	Password        string `yaml:"password"`
 	DisableSTARTTLS bool   `yaml:"disable_starttls"`
+}
+
+// SMTPDLPConfig routes external delivery through a policy-enforcing SMTP gateway.
+// The gateway is responsible for final delivery after accepting DATA.
+type SMTPDLPConfig struct {
+	Enabled        bool   `yaml:"enabled"`
+	Host           string `yaml:"host"`
+	Username       string `yaml:"username"`
+	Password       string `yaml:"password"`
+	AllowPlaintext bool   `yaml:"allow_plaintext"`
 }
 
 // SMTPDKIMConfig signs outbound messages before relay.
@@ -679,6 +691,32 @@ func Default() *Config {
 
 // Validate checks required fields.
 func (c *Config) Validate() error {
+	if c.SMTP.DLP.Enabled {
+		host, port, err := net.SplitHostPort(c.SMTP.DLP.Host)
+		p, pe := strconv.Atoi(port)
+		if err != nil || host == "" || strings.ContainsAny(host, " /\r\n\t@") || pe != nil || p < 1 || p > 65535 {
+			return fmt.Errorf("smtp.dlp.host must be host:port")
+		}
+		if !c.SMTP.Queue.Enabled {
+			return fmt.Errorf("smtp.dlp requires smtp.queue.enabled")
+		}
+		if c.SMTP.Relay.Host != "" {
+			return fmt.Errorf("smtp.dlp and smtp.relay cannot be enabled together; configure onward delivery on the DLP gateway")
+		}
+		if c.SMTP.DLP.Username == "" && c.SMTP.DLP.Password != "" {
+			return fmt.Errorf("smtp.dlp.username is required with a password")
+		}
+		// Catch obvious routing loops without resolving administrator DNS at startup.
+		ip := net.ParseIP(host)
+		if strings.EqualFold(host, c.Server.Hostname) || strings.EqualFold(host, "localhost") || (ip != nil && ip.IsLoopback()) {
+			for _, listener := range []string{c.SMTP.MX, c.SMTP.Submission, c.SMTP.SMTPS} {
+				_, listenPort, _ := net.SplitHostPort(listener)
+				if port == listenPort {
+					return fmt.Errorf("smtp.dlp.host points to a local SMTP listener")
+				}
+			}
+		}
+	}
 	if len(c.XMPP.PushServices) > 16 {
 		return fmt.Errorf("xmpp.push_services: at most 16 service domains")
 	}

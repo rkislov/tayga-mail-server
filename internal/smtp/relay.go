@@ -12,11 +12,14 @@ import (
 )
 
 type outboundRelay struct {
-	host     string
-	username string
-	password string
-	startTLS bool
-	timeout  time.Duration
+	host       string
+	username   string
+	password   string
+	startTLS   bool
+	requireTLS bool
+	helo       string
+	route      string
+	timeout    time.Duration
 }
 
 func newOutboundRelay(cfg config.SMTPRelayConfig, timeout time.Duration) *outboundRelay {
@@ -45,6 +48,9 @@ func (r *outboundRelay) SendTrace(from string, to []string, data []byte, trace *
 	if trace != nil {
 		trace.peer = r.host
 	}
+	if r.route != "" {
+		trace.command("route", r.route)
+	}
 	trace.command("connect", "TCP "+r.host)
 	defer func() { result = trace.failure(result) }()
 	host, _, err := net.SplitHostPort(r.host)
@@ -64,8 +70,12 @@ func (r *outboundRelay) SendTrace(from string, to []string, data []byte, trace *
 	}
 	defer c.Close()
 
-	trace.command("ehlo", "EHLO localhost")
-	if err := c.Hello("localhost"); err != nil {
+	helo := r.helo
+	if helo == "" {
+		helo = "localhost"
+	}
+	trace.command("ehlo", "EHLO "+helo)
+	if err := c.Hello(helo); err != nil {
 		return err
 	}
 	if r.startTLS {
@@ -75,6 +85,8 @@ func (r *outboundRelay) SendTrace(from string, to []string, data []byte, trace *
 				return fmt.Errorf("relay starttls: %w", err)
 			}
 			traceTLSReady(c, trace)
+		} else if r.requireTLS {
+			return fmt.Errorf("DLP gateway requires STARTTLS; plaintext delivery refused")
 		}
 	}
 	if r.username != "" {
@@ -119,4 +131,18 @@ func (r *outboundRelay) SendTrace(from string, to []string, data []byte, trace *
 		trace.record("warning", err.Error())
 	}
 	return nil
+}
+
+func newDLPRelay(cfg config.SMTPDLPConfig, hostname string, timeout time.Duration) *outboundRelay {
+	if !cfg.Enabled {
+		return nil
+	}
+	r := newOutboundRelay(config.SMTPRelayConfig{Host: cfg.Host, Username: cfg.Username, Password: cfg.Password}, timeout)
+	if r == nil {
+		return nil
+	}
+	r.requireTLS = !cfg.AllowPlaintext
+	r.helo = hostname
+	r.route = "DLP SMTP gateway (external recipients)"
+	return r
 }

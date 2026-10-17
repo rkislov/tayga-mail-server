@@ -13,6 +13,9 @@ import (
 )
 
 func (h *ewsHandler) createItem(ctx context.Context, u *storage.User, body string) (string, error) {
+	if strings.HasPrefix(extractAttr(body, "FolderId", "Id"), "ews-gal:") || strings.HasPrefix(extractAttr(body, "ParentFolderId", "Id"), "ews-gal:") {
+		return ewsFault("ErrorAccessDenied", "Directory is read-only"), nil
+	}
 	if doc, e := parseProtocolXML([]byte(body)); e == nil && doc.find("Task") != nil {
 		return h.writeTask(ctx, u, body, true)
 	}
@@ -115,6 +118,9 @@ func (h *ewsHandler) updateItem(ctx context.Context, u *storage.User, body strin
 		return ewsFault("ErrorInvalidId", "missing ItemId"), nil
 	}
 
+	if strings.HasPrefix(id, "ews-gal-item:") {
+		return ewsFault("ErrorAccessDenied", "Directory entries are read-only"), nil
+	}
 	if taskID(id) {
 		return h.writeTask(ctx, u, body, false)
 	}
@@ -199,6 +205,9 @@ func (h *ewsHandler) deleteItem(ctx context.Context, u *storage.User, body strin
 	id := extractAttr(body, "ItemId", "Id")
 	if id == "" {
 		return ewsFault("ErrorInvalidId", "missing ItemId"), nil
+	}
+	if strings.HasPrefix(id, "ews-gal-item:") {
+		return ewsFault("ErrorAccessDenied", "Directory entries are read-only"), nil
 	}
 	if taskID(id) {
 		if err := h.store.DeleteTask(ctx, u.ID, id); err != nil {

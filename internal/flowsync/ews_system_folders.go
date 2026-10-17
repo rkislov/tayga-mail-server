@@ -40,7 +40,7 @@ func systemFolderXML(u *storage.User, name string) string {
 	if !ok {
 		return ""
 	}
-	return fmt.Sprintf(`<t:%s><t:FolderId Id="%s" ChangeKey="1"/><t:ParentFolderId Id="%s"/><t:DisplayName>%s</t:DisplayName><t:FolderClass>%s</t:FolderClass><t:TotalCount>0</t:TotalCount><t:ChildFolderCount>0</t:ChildFolderCount><t:EffectiveRights><t:CreateAssociated>false</t:CreateAssociated><t:CreateContents>false</t:CreateContents><t:CreateHierarchy>false</t:CreateHierarchy><t:Delete>None</t:Delete><t:Modify>None</t:Modify><t:Read>FullDetails</t:Read></t:EffectiveRights></t:%s>`, f.Kind, xmlEscape(systemFolderID(u.ID, name)), xmlEscape("root:"+u.ID), f.Name, f.Class, f.Kind)
+	return fmt.Sprintf(`<t:%s><t:FolderId Id="%s" ChangeKey="1"/><t:ParentFolderId Id="%s"/><t:DisplayName>%s</t:DisplayName><t:FolderClass>%s</t:FolderClass><t:TotalCount>0</t:TotalCount><t:ChildFolderCount>0</t:ChildFolderCount><t:EffectiveRights><t:CreateAssociated>false</t:CreateAssociated><t:CreateContents>false</t:CreateContents><t:CreateHierarchy>false</t:CreateHierarchy><t:Delete>false</t:Delete><t:Modify>false</t:Modify><t:Read>true</t:Read></t:EffectiveRights></t:%s>`, f.Kind, xmlEscape(systemFolderID(u.ID, name)), xmlEscape("root:"+u.ID), f.Name, f.Class, f.Kind)
 }
 func emptyEWSItems() string {
 	return `<m:FindItemResponse xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"><m:ResponseMessages><m:FindItemResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:RootFolder TotalItemsInView="0" IncludesLastItemInRange="true"><t:Items/></m:RootFolder></m:FindItemResponseMessage></m:ResponseMessages></m:FindItemResponse>`
@@ -50,7 +50,12 @@ func (h *ewsHandler) findRequestedFolder(ctx context.Context, u *storage.User, b
 	if err != nil {
 		return ewsOperationError("FindFolder", "ErrorFolderNotFound", "folder unavailable"), nil
 	}
-	if systemFolderName(u, id) != "" {
+	if id == galFolderID(u) {
+		if err := h.readableEWSCollection(ctx, u, id); err != nil {
+			return ewsOperationError("FindFolder", "ErrorAccessDenied", "Directory unavailable"), nil
+		}
+	}
+	if systemFolderName(u, id) != "" || id == galFolderID(u) {
 		return `<m:FindFolderResponse xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"><m:ResponseMessages><m:FindFolderResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:RootFolder TotalItemsInView="0" IncludesLastItemInRange="true"><t:Folders/></m:RootFolder></m:FindFolderResponseMessage></m:ResponseMessages></m:FindFolderResponse>`, nil
 	}
 	if id != "root:"+u.ID {

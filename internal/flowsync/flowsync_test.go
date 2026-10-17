@@ -115,7 +115,7 @@ func TestAutodiscoverPOX(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status %d", w.Code)
 	}
-	if !strings.Contains(w.Body.String(), "/Microsoft-Server-ActiveSync") {
-		t.Fatalf("missing AS url: %s", w.Body.String())
+	if strings.Count(w.Body.String(), "<ASUrl>http://127.0.0.1:8080/EWS/Exchange.asmx</ASUrl>") != 2 {
+		t.Fatalf("availability must use EWS for EXCH and EXPR: %s", w.Body.String())
 	}
 }
