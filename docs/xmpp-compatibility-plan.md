@@ -89,3 +89,13 @@ Regression coverage: all five send entry points, duplicate/absent client IDs, sp
 The native XEP-0357 item is still **not implemented or advertised**. The inspected [Secret-iOS revision](https://github.com/Secret-Messenger-App/Secret-iOS/tree/6f3083bb839b9ded22faa6feca30163be31df273) disables standard `XMPPPushModule` initialization and sends a custom `register-push-apns` command. Its capability check and its actual registration path are different. Advertising `urn:xmpp:push:0` alone would only change the checkmark.
 
 The next server batch needs an authenticated route to the app's XMPP push service (federation or a configured component), owner-scoped persistent enable/disable registrations, bounded notification queues, publish acknowledgements/errors/retries and removal of rejected registrations. Notifications should omit message bodies and encryption keys. End-to-end acceptance requires background delivery on the target app. The app operator's APNs credentials are not needed by Tayga when a working vendor push gateway exists, but that gateway must support this client. The existing browser Web Push implementation cannot wake the native Secret app.
+
+## ChatSecure follow-up, 2026-10-17
+
+The later client reference is [ChatSecure](https://chatsecure.org/i/), not Secret-iOS. In [ChatSecure-iOS revision 38d6abba3e1c21156095ac3a1096d5e829df4b96](https://github.com/ChatSecure/ChatSecure-iOS/blob/38d6abba3e1c21156095ac3a1096d5e829df4b96/ChatSecureCore/Classes/Controllers/XMPP/OTRXMPPManager.m), `XMPPPushModule` is active and standard registration sends the vendor endpoint and token as publish options. The Secret-specific finding above must not be applied to ChatSecure.
+
+DNS was checked both locally and on the mail server: `chatsecure.org` resolved, but `push.chatsecure.org` had no usable address (`getaddrinfo`: name or service not known). A public DNS query returned a CNAME to `push.chatsecure.org.herokudns.com` without an A address. The vendor push API could not be contacted. Recheck its availability before end-to-end tests; do not treat DNS failure as evidence that the XEP is implemented. Tayga still does not advertise or implement XEP-0357. The persistent registrations, notification delivery route, retry handling and native-client delivery tests listed above remain work to do.
+
+## Connection visibility, 0.9.16
+
+Bound native resources update their activity in the shared session registry and identify their XMPP resource in the user/admin connection list. Administrative disconnection disables Stream Management resumption before closing the socket, so a disconnected retained stream cannot be resumed. Tests verify activity updates, cleanup and token invalidation. Native push remains pending as described above.

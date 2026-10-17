@@ -53,6 +53,19 @@ func (a *Layer) ForgetSession(id string) {
 	delete(a.sessions.items, id)
 	a.sessions.mu.Unlock()
 }
+
+// TouchSession updates a live connection without resurrecting one closed by an administrator.
+func (a *Layer) TouchSession(id, agent string) {
+	a.sessions.mu.Lock()
+	defer a.sessions.mu.Unlock()
+	if entry, ok := a.sessions.items[id]; ok {
+		entry.Seen = time.Now().UTC()
+		if agent != "" {
+			entry.Agent = agent
+		}
+		a.sessions.items[id] = entry
+	}
+}
 func (a *Layer) Sessions() []SessionInfo {
 	a.sessions.mu.Lock()
 	defer a.sessions.mu.Unlock()
