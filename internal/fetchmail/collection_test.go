@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -14,6 +15,7 @@ import (
 	"net"
 	"net/http/httptest"
 	"net/textproto"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -22,6 +24,7 @@ import (
 
 	"github.com/tayga/tms/internal/config"
 	"github.com/tayga/tms/internal/mailstore"
+	"github.com/tayga/tms/internal/migrate"
 	"github.com/tayga/tms/internal/storage"
 )
 
@@ -436,5 +439,26 @@ func TestCollectionSizeAndQuotaFailureDoNotRecordReceipt(t *testing.T) {
 	var receipts int
 	if e := s.db.QueryRow(`SELECT COUNT(*) FROM mail_source_receipts`).Scan(&receipts); e != nil || receipts != 0 {
 		t.Fatal("failed import marked complete", receipts, e)
+	}
+}
+
+func TestRelativeMaildirUsesExistingSecretDirectory(t *testing.T) {
+	s, _, cfg := fixture(t)
+	t.Chdir(t.TempDir())
+	cfg.Mailstore.Root = "maildir"
+	existing, e := migrate.ResolveKey("", "./data")
+	if e != nil {
+		t.Fatal(e)
+	}
+	collector, e := New(cfg, s.log, s.store, s.ms)
+	if e != nil {
+		t.Fatal(e)
+	}
+	expected := sha256.Sum256(append(existing, []byte("tayga-mail-collection-v1")...))
+	if !bytes.Equal(collector.key, expected[:]) {
+		t.Fatal("key directory differs from migration service")
+	}
+	if _, e = os.Stat("secrets.key"); !errors.Is(e, os.ErrNotExist) {
+		t.Fatal("created key in working directory", e)
 	}
 }
