@@ -298,6 +298,9 @@ func TestStableIDDiscoveryScope(t *testing.T) {
 		if strings.Contains(out.String(), `var='urn:xmpp:sid:0'`) != want {
 			t.Fatal(to, out.String())
 		}
+		if want && !strings.Contains(out.String(), "pubsub#retrieve-items") {
+			t.Fatal("account PEP discovery lost", to, out.String())
+		}
 		if strings.Contains(out.String(), `var='urn:xmpp:push:0'`) {
 			t.Fatal("unavailable push advertised")
 		}

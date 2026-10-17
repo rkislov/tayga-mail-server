@@ -140,7 +140,8 @@ func (s *Session) writeDiscoInfo(id, to string) error {
 		if err != nil || user == nil || !user.Enabled {
 			return s.writeString(iqItemNotFound(id))
 		}
-		return s.writeString(fmt.Sprintf(`<iq type='result' id='%s' from='%s' to='%s'><query xmlns='http://jabber.org/protocol/disco#info'><identity category='account' type='registered'/><feature var='urn:xmpp:sid:0'/></query></iq>`, xmlEscape(id), xmlEscape(jid.Bare()), xmlEscape(s.JID.Full())))
+		// Keep the account's PEP features available to OMEMO discovery as well.
+		from = jid.Bare()
 	}
 	return s.writeString(fmt.Sprintf(
 		`<iq type='result' id='%s' from='%s' to='%s'><query xmlns='http://jabber.org/protocol/disco#info'>`+
