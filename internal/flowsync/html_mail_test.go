@@ -115,8 +115,9 @@ func TestAppleMailHTMLPreviewFetchAndInlineImage(t *testing.T) {
 	assertHTML(item)
 	attachment, wire := call("ItemOperations", `<ItemOperations xmlns="ItemOperations:"><Fetch><Store>Mailbox</Store><FileReference xmlns="AirSyncBase:">`+msg.ID+`:0</FileReference></Fetch></ItemOperations>`)
 	data, err := base64.StdEncoding.DecodeString(attachment.find("Properties").value("Data"))
-	opaquePicture := append([]byte{0xc3, byte(len(picture))}, picture...)
-	if err != nil || !bytes.Equal(data, picture) || !bytes.Contains(wire, opaquePicture) {
+	encodedPicture := append([]byte{0x4c, 0x03}, []byte(base64.StdEncoding.EncodeToString(picture))...)
+	encodedPicture = append(encodedPicture, 0x00, 0x01)
+	if err != nil || !bytes.Equal(data, picture) || !bytes.Contains(wire, encodedPicture) {
 		t.Fatal("inline image bytes corrupted")
 	}
 	// Body/Data is a string even for MIME. Verify STR_I on the wire, without
