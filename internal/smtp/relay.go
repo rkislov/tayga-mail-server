@@ -36,9 +36,17 @@ func newOutboundRelay(cfg config.SMTPRelayConfig, timeout time.Duration) *outbou
 }
 
 func (r *outboundRelay) Send(from string, to []string, data []byte) error {
+	return r.SendTrace(from, to, data, nil)
+}
+func (r *outboundRelay) SendTrace(from string, to []string, data []byte, trace *deliveryTrace) (result error) {
 	if r == nil {
 		return fmt.Errorf("outbound relay not configured")
 	}
+	if trace != nil {
+		trace.peer = r.host
+	}
+	trace.command("connect", "TCP "+r.host)
+	defer func() { result = trace.failure(result) }()
 	host, _, err := net.SplitHostPort(r.host)
 	if err != nil {
 		host = r.host
@@ -50,33 +58,50 @@ func (r *outboundRelay) Send(from string, to []string, data []byte) error {
 	defer conn.Close()
 	_ = conn.SetDeadline(time.Now().Add(r.timeout))
 
-	c, err := smtp.NewClient(conn, host)
+	c, err := newTracedClient(conn, host, trace)
 	if err != nil {
 		return err
 	}
 	defer c.Close()
 
+	trace.command("ehlo", "EHLO localhost")
+	if err := c.Hello("localhost"); err != nil {
+		return err
+	}
 	if r.startTLS {
 		if ok, _ := c.Extension("STARTTLS"); ok {
+			trace.command("starttls", "STARTTLS")
 			if err := c.StartTLS(&tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}); err != nil {
 				return fmt.Errorf("relay starttls: %w", err)
 			}
+			traceTLSReady(c, trace)
 		}
 	}
 	if r.username != "" {
 		auth := smtp.PlainAuth("", r.username, r.password, host)
-		if err := c.Auth(auth); err != nil {
-			return fmt.Errorf("relay auth: %w", err)
+		trace.command("auth", "AUTH PLAIN [credentials redacted]")
+		if trace != nil {
+			trace.auth = true
+		}
+		err := c.Auth(auth)
+		if trace != nil {
+			trace.auth = false
+		}
+		if err != nil {
+			return fmt.Errorf("relay authentication rejected")
 		}
 	}
+	trace.command("mail", "MAIL FROM:<"+from+">")
 	if err := c.Mail(from); err != nil {
 		return err
 	}
 	for _, rcpt := range to {
+		trace.command("rcpt", "RCPT TO:<"+rcpt+">")
 		if err := c.Rcpt(rcpt); err != nil {
 			return err
 		}
 	}
+	trace.command("data", "DATA")
 	w, err := c.Data()
 	if err != nil {
 		return err
@@ -85,8 +110,13 @@ func (r *outboundRelay) Send(from string, to []string, data []byte) error {
 		_ = w.Close()
 		return err
 	}
+	trace.command("data_result", fmt.Sprintf("[message body omitted: %d bytes] .", len(data)))
 	if err := w.Close(); err != nil {
 		return err
 	}
-	return c.Quit()
+	trace.command("quit", "QUIT")
+	if err := c.Quit(); err != nil {
+		trace.record("warning", err.Error())
+	}
+	return nil
 }

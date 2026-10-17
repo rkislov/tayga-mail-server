@@ -2,8 +2,10 @@ package smtp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"net/textproto"
 	"strings"
 	"time"
 
@@ -92,7 +94,7 @@ func (q *OutboundQueue) Enqueue(ctx context.Context, from string, to []string, d
 		return fmt.Errorf("outbound queue not available")
 	}
 	for _, rcpt := range to {
-		_, err := q.store.EnqueueOutbound(ctx, &storage.OutboundItem{
+		item, err := q.store.EnqueueOutbound(ctx, &storage.OutboundItem{
 			EnvelopeFrom: from,
 			EnvelopeTo:   rcpt,
 			MessageID:    msgid,
@@ -103,6 +105,7 @@ func (q *OutboundQueue) Enqueue(ctx context.Context, from string, to []string, d
 		if err != nil {
 			return err
 		}
+		q.writeMailLog(item, "queued", "accepted into outbound queue")
 	}
 	return nil
 }
@@ -150,13 +153,19 @@ func (q *OutboundQueue) drain(ctx context.Context, worker int) {
 
 func (q *OutboundQueue) process(ctx context.Context, it *storage.OutboundItem) {
 	data := it.Data
-	err := q.sender.Send(it.EnvelopeFrom, []string{it.EnvelopeTo}, data)
+	trace := &deliveryTrace{log: q.log, queueID: it.ID, messageID: it.MessageID, attempt: it.Attempts + 1}
+	start := time.Now()
+	err := sendTraced(q.sender, it.EnvelopeFrom, []string{it.EnvelopeTo}, data, trace)
+	if len(trace.lines) > 0 {
+		q.writeMailLog(it, "smtp_dialogue", trace.summary())
+	}
+	detail := fmt.Sprintf("peer=%s duration_ms=%d", trace.peer, time.Since(start).Milliseconds())
 	if err == nil {
 		if delErr := q.store.DeleteOutbound(ctx, it.ID); delErr != nil {
 			q.log.Warn("outbound delete after success", "id", it.ID, "err", delErr)
 		} else {
 			q.log.Info("outbound delivered", "to", it.EnvelopeTo, "attempts", it.Attempts+1)
-			q.writeMailLog(it, "sent", "")
+			q.writeMailLog(it, "sent", detail+" remote server accepted message")
 		}
 		return
 	}
@@ -165,17 +174,19 @@ func (q *OutboundQueue) process(ctx context.Context, it *storage.OutboundItem) {
 	q.log.Warn("outbound attempt failed",
 		"to", it.EnvelopeTo, "attempt", attempts, "max", it.MaxAttempts, "err", err)
 
-	if attempts >= it.MaxAttempts {
+	var reply *textproto.Error
+	permanent := errors.As(err, &reply) && reply.Code >= 500 && reply.Code < 600
+	if permanent || attempts >= it.MaxAttempts {
 		if bounceErr := q.bounceDSN(ctx, it, err); bounceErr != nil {
 			q.log.Warn("dsn bounce failed", "to", it.EnvelopeFrom, "err", bounceErr)
 		}
 		_ = q.store.DeleteOutbound(ctx, it.ID)
-		q.writeMailLog(it, "failed", truncateErr(err))
+		q.writeMailLog(it, "failed", detail+" "+truncateErr(err))
 		return
 	}
 
 	next := time.Now().UTC().Add(backoff(attempts))
-	detail := fmt.Sprintf("attempt %d/%d next %s: %s", attempts, it.MaxAttempts, next.Format(time.RFC3339), truncateErr(err))
+	detail += fmt.Sprintf(" attempt %d/%d next %s: %s", attempts, it.MaxAttempts, next.Format(time.RFC3339), truncateErr(err))
 	q.writeMailLog(it, "deferred", detail)
 	if resErr := q.store.RescheduleOutbound(ctx, it.ID, attempts, next, truncateErr(err)); resErr != nil {
 		q.log.Warn("outbound reschedule failed", "id", it.ID, "err", resErr)
@@ -186,6 +197,7 @@ func (q *OutboundQueue) writeMailLog(it *storage.OutboundItem, event, detail str
 	if q == nil || q.store == nil || it == nil {
 		return
 	}
+	detail = fmt.Sprintf("queue_id=%s attempt=%d %s", it.ID, it.Attempts+1, detail)
 	from := strings.ToLower(strings.TrimSpace(it.EnvelopeFrom))
 	to := strings.ToLower(strings.TrimSpace(it.EnvelopeTo))
 	domain := storage.DomainOfEmail(from)

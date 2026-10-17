@@ -3,6 +3,8 @@ package smtp
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net/textproto"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -143,5 +145,37 @@ func TestBackoff(t *testing.T) {
 	}
 	if backoff(99) != 8*time.Hour {
 		t.Fatal(backoff(99))
+	}
+}
+
+// A permanent recipient rejection must not stay in the queue until MaxAttempts.
+type permanentSender struct{}
+
+func (permanentSender) Send(string, []string, []byte) error {
+	return fmt.Errorf("rcpt: %w", &textproto.Error{Code: 550, Msg: "5.1.1 No such user"})
+}
+func TestOutboundPermanentReplyIsFinal(t *testing.T) {
+	ctx := context.Background()
+	st, e := storage.Open(ctx, config.StorageConfig{Driver: "sqlite", SQLite: config.SQLiteConfig{Path: filepath.Join(t.TempDir(), "db")}})
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer st.Close()
+	q := newOutboundQueue(st, permanentSender{}, nil, nil, "mail.example.com", QueueConfig{Enabled: true, MaxAttempts: 8}, nil)
+	if e = q.Enqueue(ctx, "", []string{"missing@example.net"}, []byte("Subject: test\r\n\r\nbody"), "<permanent@example.com>"); e != nil {
+		t.Fatal(e)
+	}
+	items, e := st.ClaimOutboundDue(ctx, 1)
+	if e != nil || len(items) != 1 {
+		t.Fatal(e)
+	}
+	q.process(ctx, items[0])
+	n, e := st.CountOutbound(ctx)
+	if e != nil || n != 0 {
+		t.Fatalf("permanent rejection retried: %d %v", n, e)
+	}
+	entries, e := st.SearchMailLog(ctx, storage.MailLogQuery{Q: "5.1.1"})
+	if e != nil || len(entries) == 0 {
+		t.Fatalf("failure not searchable: %v", e)
 	}
 }
