@@ -428,7 +428,6 @@ function showApp(name) {
   setMobilePane("list");
 }
 
-const LARGE_ATTACH_BYTES = 10 * 1024 * 1024;
 const WEB_UPLOAD_BYTES = 10 * 1024 * 1024 * 1024;
 
 function isMobilePane() {
@@ -441,22 +440,6 @@ function setMobilePane(mode) {
   root.classList.toggle("pane-mode-list", mode === "list");
   root.classList.toggle("pane-mode-read", mode === "read");
   root.classList.toggle("pane-mode-folders", mode === "folders");
-}
-
-async function uploadLargeAttach(file) {
-  if(file.size>WEB_UPLOAD_BYTES) throw new Error("Максимальный размер файла — 10 ГиБ");
-  const path = "mail-out/" + Date.now() + "-" + file.name.replace(/[^\w.\-]+/g, "_");
-  const headers = { "Content-Type": "application/octet-stream" };
-  if (state.tokens?.access_token) headers.Authorization = "Bearer " + state.tokens.access_token;
-  const put = await fetch("/api/v1/files/content?path=" + encodeURIComponent(path), {
-    method: "PUT", headers, body: file,
-  });
-  if (!put.ok) throw new Error(await put.text());
-  const sh = await api("/api/v1/files/shares", {
-    method: "POST",
-    body: JSON.stringify({ path, ttl_hours: 168 }),
-  });
-  return sh.url || (location.origin + "/s/" + sh.token);
 }
 
 function setMsg(el, text, kind) {
@@ -473,6 +456,7 @@ function isAuthPublicPath(path) {
 }
 
 function clearSession() {
+  resetComposeAttachments();
   disableWebPush().catch(() => {});
   stopChatLive();
   state.tokens = null;
@@ -1579,7 +1563,7 @@ function renderXMPPStatus(st) {
     el.textContent = "—";
     return;
   }
-  el.innerHTML = `<p><strong>${escapeHtml(st.enabled?t("xmpp_enabled"):t("xmpp_disabled"))}</strong></p><dl class="xmpp-status-grid"><dt>C2S</dt><dd>${escapeHtml(st.listen||"—")}</dd><dt>TLS</dt><dd>${escapeHtml(st.listen_tls||"—")}</dd><dt>${t("xmpp_components")}</dt><dd>${escapeHtml(st.component_listen||"—")}</dd><dt>${t("xmpp_webchat")}</dt><dd>${st.web_chat?"OK":"—"}</dd><dt>JID</dt><dd>${escapeHtml(st.hostname||"—")}</dd></dl>`;
+  el.innerHTML = `<p><strong>${escapeHtml(st.enabled?t("xmpp_enabled"):t("xmpp_disabled"))}</strong></p><dl class="xmpp-status-grid"><dt>C2S</dt><dd>${escapeHtml(st.listen||"—")}</dd><dt>TLS</dt><dd>${escapeHtml(st.listen_tls||"—")}</dd><dt>${t("xmpp_components")}</dt><dd>${escapeHtml(st.component_listen||"—")}</dd><dt>${t("xmpp_webchat")}</dt><dd>${st.web_chat?"OK":"—"}</dd><dt>JID</dt><dd>${escapeHtml(st.hostname||"—")}</dd><dt>XEP-0357</dt><dd>${escapeHtml((st.push_services||[]).join(", ")||mailImageText("Push-шлюз не настроен","Push gateway not configured"))}</dd><dt>${mailImageText("Регистрации / в очереди","Registrations / queued")}</dt><dd>${Number(st.push_registrations)||0} / ${Number(st.push_queued)||0}</dd></dl>`;
 }
 
 function renderXMPPComponents(list) {
@@ -2966,6 +2950,7 @@ function getComposeText() {
   if (el.isContentEditable) {
     const tmp = document.createElement("div");
     tmp.innerHTML = el.innerHTML || "";
+    tmp.querySelectorAll("a[href]").forEach(link=>{if(link.textContent!==link.getAttribute("href"))link.append(document.createTextNode(" ("+link.getAttribute("href")+")"))});
     tmp.querySelectorAll("br").forEach((br) => br.replaceWith("\n"));
     tmp.querySelectorAll("div, p, li, blockquote").forEach((n) => {
       n.prepend(document.createTextNode("\n"));
@@ -2977,6 +2962,8 @@ function getComposeText() {
 }
 
 function openCompose({ to = "", cc = "", subject = "", body = "", bodyHTML = "" } = {}) {
+  if (composeAttachments.sending) return;
+  resetComposeAttachments();
   $("compose-backdrop")?.classList.remove("hidden");
   if ($("compose-to")) $("compose-to").value = to;
  ensureComposeCC();
@@ -3019,22 +3006,15 @@ $("compose-backdrop")?.addEventListener("click", (e) => {
   if (e.target === $("compose-backdrop")) $("compose-backdrop").classList.add("hidden");
 });
 $("btn-compose-send")?.addEventListener("click", async () => {
+  if (composeAttachments.sending || composeAttachments.entries.some(item=>item.status!=="ready")) return;
+  composeAttachments.sending = true;
+  renderComposeAttachments();
   const to = ($("compose-to").value || "").split(/[,;]/).map((s) => s.trim()).filter(Boolean);
   setMsg($("compose-msg"), "…");
   try {
-    let text = getComposeText();
-    let html = getComposeHTML();
-    const file = $("compose-attach")?.files?.[0];
-    let attachments = [];
-    if (file && file.size >= LARGE_ATTACH_BYTES) {
-      setMsg($("compose-msg"), "Uploading…");
-      const url = await uploadLargeAttach(file);
-      text += `\n\n${file.name}: ${url}\n`;
-      html += `<p><a href="${escapeHtml(url)}">${escapeHtml(file.name)}</a></p>`;
-    } else if (file && file.size > 0) {
-      const data = await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=()=>reject(new Error('Не удалось прочитать файл'));reader.readAsDataURL(file)});
-      attachments = [{name:file.name,data}];
-    }
+    await prepareComposeAttachments();
+    const text = getComposeText(), html = getComposeHTML();
+    const attachments = composeAttachments.entries.filter(item=>!item.share).map(item=>item.ref);
     const payload = {
       to,
       cc: ($("compose-cc")?.value || "").split(/[,;]/).map(value=>value.trim()).filter(Boolean),
@@ -3048,11 +3028,14 @@ $("btn-compose-send")?.addEventListener("click", async () => {
       body: JSON.stringify(payload),
     });
     setMsg($("compose-msg"), "OK", "ok");
-    if ($("compose-attach")) $("compose-attach").value = "";
+    resetComposeAttachments();
     $("compose-backdrop")?.classList.add("hidden");
     refreshMail();
   } catch (err) {
     setMsg($("compose-msg"), err.message, "err");
+  } finally {
+    composeAttachments.sending = false;
+    renderComposeAttachments();
   }
 });
 $("btn-mail-delete")?.addEventListener("click", async () => {
@@ -4540,34 +4523,7 @@ function tFmt(key, vars) {
 }
 
 function putFileWithProgress(file, path, onProgress) {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open("PUT", "/api/v1/files/content?path=" + encodeURIComponent(path)+(filesState.ownerID?"&owner_id="+encodeURIComponent(filesState.ownerID):""));
-    xhr.setRequestHeader("Content-Type", "application/octet-stream");
-    if (state.tokens?.access_token) {
-      xhr.setRequestHeader("Authorization", "Bearer " + state.tokens.access_token);
-    }
-    xhr.upload.onprogress = (ev) => {
-      if (!ev.lengthComputable) return;
-      onProgress?.(ev.loaded, ev.total || file.size);
-    };
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        onProgress?.(file.size, file.size);
-        resolve();
-        return;
-      }
-      let msg = xhr.responseText || ("HTTP " + xhr.status);
-      try {
-        const j = JSON.parse(xhr.responseText);
-        if (j?.error) msg = j.error;
-      } catch {}
-      reject(new Error(msg));
-    };
-    xhr.onerror = () => reject(new Error("network error"));
-    xhr.onabort = () => reject(new Error("aborted"));
-    xhr.send(file);
-  });
+  return putFileResumable(file,path,onProgress);
 }
 
 function renderUploadPanel(jobs) {

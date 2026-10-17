@@ -1485,7 +1485,6 @@ function showApp(name) {
   setMobilePane("list");
 }
 
-const LARGE_ATTACH_BYTES = 10 * 1024 * 1024;
 const WEB_UPLOAD_BYTES = 10 * 1024 * 1024 * 1024;
 
 function isMobilePane() {
@@ -1498,22 +1497,6 @@ function setMobilePane(mode) {
   root.classList.toggle("pane-mode-list", mode === "list");
   root.classList.toggle("pane-mode-read", mode === "read");
   root.classList.toggle("pane-mode-folders", mode === "folders");
-}
-
-async function uploadLargeAttach(file) {
-  if(file.size>WEB_UPLOAD_BYTES) throw new Error("Максимальный размер файла — 10 ГиБ");
-  const path = "mail-out/" + Date.now() + "-" + file.name.replace(/[^\w.\-]+/g, "_");
-  const headers = { "Content-Type": "application/octet-stream" };
-  if (state.tokens?.access_token) headers.Authorization = "Bearer " + state.tokens.access_token;
-  const put = await fetch("/api/v1/files/content?path=" + encodeURIComponent(path), {
-    method: "PUT", headers, body: file,
-  });
-  if (!put.ok) throw new Error(await put.text());
-  const sh = await api("/api/v1/files/shares", {
-    method: "POST",
-    body: JSON.stringify({ path, ttl_hours: 168 }),
-  });
-  return sh.url || (location.origin + "/s/" + sh.token);
 }
 
 function setMsg(el, text, kind) {
@@ -1530,6 +1513,7 @@ function isAuthPublicPath(path) {
 }
 
 function clearSession() {
+  resetComposeAttachments();
   disableWebPush().catch(() => {});
   stopChatLive();
   state.tokens = null;
@@ -2636,7 +2620,7 @@ function renderXMPPStatus(st) {
     el.textContent = "—";
     return;
   }
-  el.innerHTML = `<p><strong>${escapeHtml(st.enabled?t("xmpp_enabled"):t("xmpp_disabled"))}</strong></p><dl class="xmpp-status-grid"><dt>C2S</dt><dd>${escapeHtml(st.listen||"—")}</dd><dt>TLS</dt><dd>${escapeHtml(st.listen_tls||"—")}</dd><dt>${t("xmpp_components")}</dt><dd>${escapeHtml(st.component_listen||"—")}</dd><dt>${t("xmpp_webchat")}</dt><dd>${st.web_chat?"OK":"—"}</dd><dt>JID</dt><dd>${escapeHtml(st.hostname||"—")}</dd></dl>`;
+  el.innerHTML = `<p><strong>${escapeHtml(st.enabled?t("xmpp_enabled"):t("xmpp_disabled"))}</strong></p><dl class="xmpp-status-grid"><dt>C2S</dt><dd>${escapeHtml(st.listen||"—")}</dd><dt>TLS</dt><dd>${escapeHtml(st.listen_tls||"—")}</dd><dt>${t("xmpp_components")}</dt><dd>${escapeHtml(st.component_listen||"—")}</dd><dt>${t("xmpp_webchat")}</dt><dd>${st.web_chat?"OK":"—"}</dd><dt>JID</dt><dd>${escapeHtml(st.hostname||"—")}</dd><dt>XEP-0357</dt><dd>${escapeHtml((st.push_services||[]).join(", ")||mailImageText("Push-шлюз не настроен","Push gateway not configured"))}</dd><dt>${mailImageText("Регистрации / в очереди","Registrations / queued")}</dt><dd>${Number(st.push_registrations)||0} / ${Number(st.push_queued)||0}</dd></dl>`;
 }
 
 function renderXMPPComponents(list) {
@@ -4023,6 +4007,7 @@ function getComposeText() {
   if (el.isContentEditable) {
     const tmp = document.createElement("div");
     tmp.innerHTML = el.innerHTML || "";
+    tmp.querySelectorAll("a[href]").forEach(link=>{if(link.textContent!==link.getAttribute("href"))link.append(document.createTextNode(" ("+link.getAttribute("href")+")"))});
     tmp.querySelectorAll("br").forEach((br) => br.replaceWith("\n"));
     tmp.querySelectorAll("div, p, li, blockquote").forEach((n) => {
       n.prepend(document.createTextNode("\n"));
@@ -4034,6 +4019,8 @@ function getComposeText() {
 }
 
 function openCompose({ to = "", cc = "", subject = "", body = "", bodyHTML = "" } = {}) {
+  if (composeAttachments.sending) return;
+  resetComposeAttachments();
   $("compose-backdrop")?.classList.remove("hidden");
   if ($("compose-to")) $("compose-to").value = to;
  ensureComposeCC();
@@ -4076,22 +4063,15 @@ $("compose-backdrop")?.addEventListener("click", (e) => {
   if (e.target === $("compose-backdrop")) $("compose-backdrop").classList.add("hidden");
 });
 $("btn-compose-send")?.addEventListener("click", async () => {
+  if (composeAttachments.sending || composeAttachments.entries.some(item=>item.status!=="ready")) return;
+  composeAttachments.sending = true;
+  renderComposeAttachments();
   const to = ($("compose-to").value || "").split(/[,;]/).map((s) => s.trim()).filter(Boolean);
   setMsg($("compose-msg"), "…");
   try {
-    let text = getComposeText();
-    let html = getComposeHTML();
-    const file = $("compose-attach")?.files?.[0];
-    let attachments = [];
-    if (file && file.size >= LARGE_ATTACH_BYTES) {
-      setMsg($("compose-msg"), "Uploading…");
-      const url = await uploadLargeAttach(file);
-      text += `\n\n${file.name}: ${url}\n`;
-      html += `<p><a href="${escapeHtml(url)}">${escapeHtml(file.name)}</a></p>`;
-    } else if (file && file.size > 0) {
-      const data = await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=()=>reject(new Error('Не удалось прочитать файл'));reader.readAsDataURL(file)});
-      attachments = [{name:file.name,data}];
-    }
+    await prepareComposeAttachments();
+    const text = getComposeText(), html = getComposeHTML();
+    const attachments = composeAttachments.entries.filter(item=>!item.share).map(item=>item.ref);
     const payload = {
       to,
       cc: ($("compose-cc")?.value || "").split(/[,;]/).map(value=>value.trim()).filter(Boolean),
@@ -4105,11 +4085,14 @@ $("btn-compose-send")?.addEventListener("click", async () => {
       body: JSON.stringify(payload),
     });
     setMsg($("compose-msg"), "OK", "ok");
-    if ($("compose-attach")) $("compose-attach").value = "";
+    resetComposeAttachments();
     $("compose-backdrop")?.classList.add("hidden");
     refreshMail();
   } catch (err) {
     setMsg($("compose-msg"), err.message, "err");
+  } finally {
+    composeAttachments.sending = false;
+    renderComposeAttachments();
   }
 });
 $("btn-mail-delete")?.addEventListener("click", async () => {
@@ -5597,34 +5580,7 @@ function tFmt(key, vars) {
 }
 
 function putFileWithProgress(file, path, onProgress) {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open("PUT", "/api/v1/files/content?path=" + encodeURIComponent(path)+(filesState.ownerID?"&owner_id="+encodeURIComponent(filesState.ownerID):""));
-    xhr.setRequestHeader("Content-Type", "application/octet-stream");
-    if (state.tokens?.access_token) {
-      xhr.setRequestHeader("Authorization", "Bearer " + state.tokens.access_token);
-    }
-    xhr.upload.onprogress = (ev) => {
-      if (!ev.lengthComputable) return;
-      onProgress?.(ev.loaded, ev.total || file.size);
-    };
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        onProgress?.(file.size, file.size);
-        resolve();
-        return;
-      }
-      let msg = xhr.responseText || ("HTTP " + xhr.status);
-      try {
-        const j = JSON.parse(xhr.responseText);
-        if (j?.error) msg = j.error;
-      } catch {}
-      reject(new Error(msg));
-    };
-    xhr.onerror = () => reject(new Error("network error"));
-    xhr.onabort = () => reject(new Error("aborted"));
-    xhr.send(file);
-  });
+  return putFileResumable(file,path,onProgress);
 }
 
 function renderUploadPanel(jobs) {
@@ -7620,9 +7576,160 @@ function mountFileLibrary(){
   const toolbar=document.createElement('div');toolbar.className='file-browser-tools';const search=document.createElement('input');search.id='files-search';search.type='search';search.className='field-input';search.placeholder=mailImageText('Поиск в папке','Search this folder');search.setAttribute('aria-label',search.placeholder);let timer;search.oninput=()=>{clearTimeout(timer);fileBrowser.page=0;timer=setTimeout(refreshFiles,200)};
   const global=fileAction(mailImageText('Искать везде','Search all'),openFileSearch);global.id='btn-files-search-all';toolbar.append(search,global);$('files-upload-panel').before(toolbar);
   const bulk=document.createElement('div');bulk.className='file-browser-selection';const all=document.createElement('input');all.type='checkbox';all.id='files-select-page';all.setAttribute('aria-label',mailImageText('Выбрать страницу','Select page'));all.onchange=()=>{for(const check of $('files-list').querySelectorAll('.file-row input[type=checkbox]')){check.checked=all.checked;const name=check.parentElement.querySelector('[data-name]').dataset.name;if(all.checked)fileBrowser.selected.add(name);else fileBrowser.selected.delete(name)}updateFileSelection()};const label=document.createElement('span');label.id='files-selection-label';const trash=fileAction(mailImageText('В корзину','Move to trash'),trashSelectedFiles,'delete');trash.id='btn-files-trash-selected';const nav=document.createElement('div');nav.id='files-pagination';nav.className='file-library-nav';bulk.append(all,label,trash,nav);$('files-list').before(bulk);
-  const menu=$('files-settings-menu');menu?.append(fileAction(mailImageText('Корзина','Trash'),()=>openFileHistory('trash')),fileAction(mailImageText('Подключить WebDAV','Connect WebDAV'),openFileDAVInfo));
+  const menu=$('files-settings-menu');menu?.append(fileAction(mailImageText('Незавершённые загрузки','Unfinished uploads'),openPendingFileUploads),fileAction(mailImageText('Корзина','Trash'),()=>openFileHistory('trash')),fileAction(mailImageText('Подключить WebDAV','Connect WebDAV'),openFileDAVInfo));
 }
 mountFileLibrary();
+/* Durable, account-scoped uploads. A browser reload requires selecting the file
+   again; persisted chunk hashes verify its entire already uploaded prefix. */
+const fileUploadChunkSize = 8 * 1024 * 1024;
+async function fileChunkDigest(blob) {
+  const digest=await crypto.subtle.digest('SHA-256',await blob.arrayBuffer());
+  return [...new Uint8Array(digest)].map(v=>v.toString(16).padStart(2,'0')).join('');
+}
+function uploadIdentity(file,path,owner,email) {return JSON.stringify([email,owner,path,file.size,file.lastModified]);}
+function loadUploadIDs(){try{return JSON.parse(localStorage.getItem('tayga.file-uploads')||'{}')}catch{return {}}}
+function rememberUpload(key,id){try{const all=loadUploadIDs();if(id)all[key]={id,at:Date.now()};else delete all[key];for(const [k,v] of Object.entries(all))if(!v?.at||Date.now()-v.at>86400000)delete all[k];localStorage.setItem('tayga.file-uploads',JSON.stringify(all))}catch{}}
+function forgetUpload(id){try{const all=loadUploadIDs();for(const [key,value]of Object.entries(all))if(value?.id===id)delete all[key];localStorage.setItem('tayga.file-uploads',JSON.stringify(all))}catch{}}
+async function putFileResumable(file,path,onProgress,existingID='',requestedOwner=filesState.ownerID||'',signal) {
+  const email=state.email,owner=requestedOwner,key=uploadIdentity(file,path,owner,email);
+  const ensureAccount=()=>{signal?.throwIfAborted();if(state.email!==email||!state.tokens?.access_token)throw new Error(mailImageText('Учётная запись изменилась. Загрузка приостановлена.','Account changed. Upload paused.'))};
+  const request=async(url,options={})=>{
+    ensureAccount();const res=await fetch(url,{...options,signal,headers:{Authorization:'Bearer '+state.tokens.access_token,'Content-Type':'application/json',...options.headers}});
+    let data={};try{data=await res.json()}catch{}if(!res.ok){const e=new Error(data.error||'HTTP '+res.status);e.status=res.status;throw e}return data;
+  };
+  const base='/api/v1/files/uploads';let id=existingID||loadUploadIDs()[key]?.id,upload,chunks=[];
+  if(id){try{const data=await request(base+'/'+encodeURIComponent(id));upload=data.upload;chunks=data.chunks||[]}catch(e){if(existingID||![404,410].includes(e.status))throw e;rememberUpload(key,'');id=''}}
+  if(upload){
+    if(upload.path!==path||upload.size!==file.size||(owner&&upload.owner_id!==owner))throw new Error(mailImageText('Выберите исходный файл с тем же размером.','Select the original file with the same size.'));
+    if(upload.complete){forgetUpload(id);onProgress?.(file.size,file.size);return}
+    let offset=0;
+    for(const chunk of chunks){ensureAccount();if(await fileChunkDigest(file.slice(offset,offset+chunk.size))!==chunk.sha256)throw new Error(mailImageText('Содержимое файла изменилось. Отмените старую загрузку и начните новую.','The file content changed. Cancel the old upload and start a new one.'));offset+=chunk.size;onProgress?.(offset,file.size)}
+    if(offset!==upload.offset)throw new Error(mailImageText('Не удалось проверить загруженную часть файла.','Cannot verify the uploaded file prefix.'));
+  }else{
+    upload=await request(base,{method:'POST',body:JSON.stringify({path,size:file.size,owner_id:owner})});id=upload.id;
+  }
+  rememberUpload(key,id);let retries=0;
+  while(upload.offset<file.size){
+    ensureAccount();const start=upload.offset,part=file.slice(start,Math.min(start+fileUploadChunkSize,file.size));
+    try{
+      upload=await new Promise((resolve,reject)=>{
+        const xhr=new XMLHttpRequest();xhr.open('PATCH',base+'/'+encodeURIComponent(id));xhr.timeout=120000;
+        const abort=()=>xhr.abort();signal?.addEventListener('abort',abort,{once:true});xhr.onloadend=()=>signal?.removeEventListener('abort',abort);
+        xhr.setRequestHeader('Authorization','Bearer '+state.tokens.access_token);xhr.setRequestHeader('Content-Type','application/octet-stream');xhr.setRequestHeader('Upload-Offset',String(start));
+        xhr.upload.onprogress=e=>onProgress?.(start+e.loaded,file.size);
+        xhr.onload=()=>{let data={};try{data=JSON.parse(xhr.responseText)}catch{}if(xhr.status>=200&&xhr.status<300)resolve(data);else{const error=new Error(data.error||'HTTP '+xhr.status);error.status=xhr.status;reject(error)}};
+        xhr.onerror=xhr.ontimeout=xhr.onabort=()=>reject(new Error(mailImageText('Соединение прервано. Выберите тот же файл, чтобы продолжить.','Connection interrupted. Select the same file to resume.')));xhr.send(part);
+      });retries=0;
+    }catch(e){
+      if(e.status&&e.status!==409&&e.status<500||++retries>3)throw e;
+      await new Promise(resolve=>setTimeout(resolve,retries*1000));
+      const data=await request(base+'/'+encodeURIComponent(id));upload=data.upload;
+      let checked=0;for(const chunk of data.chunks||[]){if(checked>=start&&await fileChunkDigest(file.slice(checked,checked+chunk.size))!==chunk.sha256)throw new Error(mailImageText('Содержимое загрузки изменилось в другом окне.','Upload content changed in another window.'));checked+=chunk.size}
+      // This page has already verified the prefix. The only writer holding the
+      // session is serialized server-side, and retry always uses its saved offset.
+      if(upload.offset<start||upload.offset>start+part.size)throw new Error(mailImageText('Загрузка изменена в другом окне. Выберите файл заново.','Upload changed in another window. Select the file again.'));
+    }
+    onProgress?.(upload.offset,file.size);
+  }
+  await request(base+'/'+encodeURIComponent(id)+'/complete',{method:'POST'});forgetUpload(id);onProgress?.(file.size,file.size);
+}
+async function openPendingFileUploads(){
+  const view=fileLibraryDialog(mailImageText('Незавершённые загрузки','Unfinished uploads'));
+  const hint=document.createElement('p');hint.className='muted';hint.textContent=mailImageText('Файлы до 10 ГиБ. Для продолжения выберите тот же файл — уже принятая часть будет проверена. Незавершённая загрузка хранится 24 часа.','Files up to 10 GiB. Select the original file to resume; the uploaded prefix will be verified. Unfinished uploads expire after 24 hours.');view.body.append(hint);
+  const list=document.createElement('div');view.body.append(list);
+  const load=async()=>{try{const data=await api('/api/v1/files/uploads');list.replaceChildren();if(!data.entries?.length){view.status.textContent=mailImageText('Нет незавершённых загрузок.','No unfinished uploads.');return}
+    for(const item of data.entries){const row=document.createElement('div');row.className='file-history-row';const label=document.createElement('div');label.textContent=item.path+' · '+fmtBytes(item.offset)+' / '+fmtBytes(item.size);const actions=document.createElement('div');actions.className='row';
+      const input=document.createElement('input');input.type='file';input.hidden=true;input.onchange=async()=>{const file=input.files?.[0];if(!file)return;for(const button of actions.querySelectorAll('button'))button.disabled=true;try{await putFileResumable(file,item.path,(done,total)=>{view.status.textContent=fmtBytes(done)+' / '+fmtBytes(total)},item.id,item.owner_id);await refreshFiles();await load()}catch(error){view.status.textContent=libraryMessage(error);for(const button of actions.querySelectorAll('button'))button.disabled=false}input.value=''};
+      actions.append(fileAction(mailImageText('Продолжить','Resume'),()=>input.click()),fileAction(mailImageText('Отменить загрузку','Cancel upload'),async()=>{if(!await askConfirm(mailImageText('Удалить незавершённую загрузку? Исходный файл останется без изменений.','Delete the unfinished upload? The original file will remain unchanged.')))return;try{await api('/api/v1/files/uploads/'+item.id,{method:'DELETE'});forgetUpload(item.id);await load()}catch(error){view.status.textContent=libraryMessage(error)}}),input);row.append(label,actions);list.append(row)}
+  }catch(error){view.status.textContent=libraryMessage(error)}};await load();
+}
+/* Upload on selection; Send only submits immutable file references. Files stay
+   in the user's mail-out folder, including after a draft is closed. */
+const composeAttachments = {entries:[], epoch:0, sending:false, queue:Promise.resolve(), preparing:null, limits:null};
+function resetComposeAttachments() {
+  composeAttachments.epoch++;
+  for(const item of composeAttachments.entries)item.controller?.abort();
+  composeAttachments.entries=[];composeAttachments.queue=Promise.resolve();composeAttachments.preparing=null;composeAttachments.limits=null;
+  if($('compose-attach'))$('compose-attach').value='';
+  renderComposeAttachments();
+}
+function renderComposeAttachments() {
+  const items=composeAttachments.entries, busy=composeAttachments.sending||!!composeAttachments.preparing;
+  const send=$('btn-compose-send');if(send)send.disabled=busy||items.some(item=>item.status!=='ready');
+  if($('compose-attach'))$('compose-attach').disabled=composeAttachments.sending;
+  const list=$('compose-uploads');if(!list)return;list.replaceChildren();list.hidden=!items.length;
+  for(const item of items){
+    const row=document.createElement('div');row.className='compose-upload';row.dataset.uploadId=item.id;
+    const content=document.createElement('div'),name=document.createElement('strong'),status=document.createElement('small');name.textContent=item.file.name;
+    status.textContent=item.error||({queued:mailImageText('Ожидает загрузки','Waiting to upload'),uploading:fmtBytes(item.done)+' / '+fmtBytes(item.file.size),ready:item.share?mailImageText('Ссылка в письме · действует до ','Link in message · expires ')+new Date(item.share.expires_at).toLocaleDateString():mailImageText('Загружено · вложение','Uploaded · attachment')}[item.status]||'');
+    content.append(name,status);
+    if(['queued','uploading'].includes(item.status)){
+      const progress=document.createElement('progress');progress.max=item.file.size||1;progress.value=item.done;progress.setAttribute('aria-label',mailImageText('Загрузка ','Uploading ')+item.file.name);content.append(progress);
+    }
+    const actions=document.createElement('div');actions.className='compose-upload-actions';
+    if(item.status==='error'){const retry=document.createElement('button');retry.type='button';retry.className='btn-secondary btn-sm';retry.textContent=mailImageText('Повторить','Retry');retry.disabled=busy;retry.onclick=()=>queueComposeUpload(item);actions.append(retry)}
+    const remove=document.createElement('button');remove.type='button';remove.className='btn-secondary btn-sm';remove.textContent='×';remove.title=mailImageText('Убрать из письма','Remove from message');remove.setAttribute('aria-label',remove.title+' '+item.file.name);remove.disabled=busy;
+    remove.onclick=()=>{item.controller?.abort();composeAttachments.entries=composeAttachments.entries.filter(value=>value!==item);composeBodyEl()?.querySelector('[data-upload-link="'+item.id+'"]')?.remove();renderComposeAttachments()};actions.append(remove);row.append(content,actions);list.append(row);
+  }
+}
+function addComposeFileLink(item){
+  const body=composeBodyEl();if(body.querySelector('[data-upload-link="'+item.id+'"]'))return;
+  const paragraph=document.createElement('p');paragraph.dataset.uploadLink=item.id;
+  const link=document.createElement('a');link.href=item.share.url;link.textContent=item.file.name;paragraph.append(link,document.createTextNode(' ('+fmtBytes(item.file.size)+') — '+mailImageText('ссылка до ','link expires ')+new Date(item.share.expires_at).toLocaleDateString()));body.append(paragraph);
+}
+async function prepareComposeAttachments() {
+  if(composeAttachments.preparing)return composeAttachments.preparing;
+  const epoch=composeAttachments.epoch;
+  const work=(async()=>{
+    if(!composeAttachments.entries.length)return;
+    const fetchedLimits=composeAttachments.limits||await api('/api/v1/mail/limits');
+    if(epoch!==composeAttachments.epoch)throw new Error('Draft changed');
+    composeAttachments.limits=fetchedLimits;
+    const limits=composeAttachments.limits;
+    // Reserve headers/boundaries and base64 + CRLF overhead for both body forms.
+    const bodyBytes=new TextEncoder().encode(getComposeHTML()+getComposeText()+($('compose-subject')?.value||'')).length;
+    let remaining=Math.max(0,limits.message_bytes-Math.ceil(bodyBytes/57)*78-65536),total=0;
+    for(const item of composeAttachments.entries){
+      if(item.status!=='ready')continue;
+      const encoded=Math.ceil(item.file.size/57)*78+2048;
+      if(!item.share && (item.file.size>=limits.large_attachment_bytes||total+item.file.size>limits.attachment_bytes||encoded>remaining)){
+        const share=await api('/api/v1/files/shares',{method:'POST',body:JSON.stringify({path:item.path,ttl_hours:limits.share_ttl_hours})});
+        if(epoch!==composeAttachments.epoch)throw new Error('Draft changed');
+        item.share=share;
+      }
+      if(item.share)addComposeFileLink(item);else{remaining-=encoded;total+=item.file.size}
+    }
+  })();
+  composeAttachments.preparing=work;renderComposeAttachments();
+  try{await work}finally{if(composeAttachments.preparing===work){composeAttachments.preparing=null;renderComposeAttachments()}}
+}
+function queueComposeUpload(item){
+  const epoch=composeAttachments.epoch;item.status='queued';item.error='';renderComposeAttachments();
+  composeAttachments.queue=composeAttachments.queue.catch(()=>{}).then(async()=>{
+    const current=()=>epoch===composeAttachments.epoch&&composeAttachments.entries.includes(item);
+    if(!current())return;
+    item.status='uploading';item.controller=new AbortController();renderComposeAttachments();
+    try{
+      if(!item.ref){
+        await putFileResumable(item.file,item.path,(done)=>{if(current()){item.done=done;const progress=$('compose-uploads')?.querySelector('[data-upload-id="'+item.id+'"] progress');if(progress)progress.value=done;const label=progress?.previousElementSibling;if(label)label.textContent=fmtBytes(done)+' / '+fmtBytes(item.file.size)}},'','',item.controller.signal);
+        if(!current())return;
+        item.ref=await api('/api/v1/mail/attachments',{method:'POST',body:JSON.stringify({path:item.path,name:item.file.name})});
+      }
+      if(!current())return;item.status='ready';
+      await prepareComposeAttachments();
+    }catch(error){if(current()){item.status='error';item.error=error.message}}
+    finally{if(current())renderComposeAttachments()}
+  });
+}
+$('compose-attach')?.addEventListener('change',event=>{
+  for(const file of Array.from(event.target.files||[])){
+    if(composeAttachments.entries.length>=20){setMsg($('compose-msg'),mailImageText('Не больше 20 файлов в одном письме.','Up to 20 files per message.'),'err');break}
+    if(file.size>WEB_UPLOAD_BYTES){setMsg($('compose-msg'),mailImageText('Максимальный размер файла — 10 ГиБ.','Maximum file size is 10 GiB.'),'err');continue}
+    const id=crypto.randomUUID();let filename=file.name.replace(/[\\/\x00-\x1f\x7f]/g,'_')||'file';while(new TextEncoder().encode(filename).length>180)filename=filename.slice(0,-1);
+    const item={id,file,path:'mail-out/'+id+'/'+filename,status:'queued',done:0};composeAttachments.entries.push(item);queueComposeUpload(item);
+  }
+  event.target.value='';
+});
 // Personal external mailbox collection. Credentials never enter browser storage.
 let mailSourcesGeneration = 0;
 async function refreshMailSources() {

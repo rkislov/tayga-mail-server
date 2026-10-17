@@ -15,6 +15,7 @@ type ComponentConn struct {
 // Hub tracks online C2S sessions, web SSE clients, and external components.
 type Hub struct {
 	notificationSink func(string, ChatEvent)
+	nativePushSink   func(string, ChatEvent)
 
 	mu         sync.RWMutex
 	byBare     map[string]map[string]*Session // bare JID → resource → session

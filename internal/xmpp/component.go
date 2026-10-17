@@ -159,6 +159,8 @@ func (cs *componentSession) SendRaw(b []byte) {
 	if cs.closed {
 		return
 	}
+	_ = cs.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+	defer cs.conn.SetWriteDeadline(time.Time{})
 	_, _ = cs.bw.Write(b)
 	_ = cs.bw.Flush()
 }
@@ -262,6 +264,9 @@ func (cs *componentSession) forwardStanza(se xml.StartElement) error {
 		return err
 	}
 	from := rewriteComponentFrom(rawFrom, cs.domain)
+	if name == "iq" && cs.srv.acceptPushReply(from, to, id, typ, inner) {
+		return nil
+	}
 	if to == "" {
 		return nil
 	}

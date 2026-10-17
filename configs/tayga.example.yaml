@@ -35,6 +35,7 @@ seed:
 # files:
 #   office_url: "https://office.example.com" # Optional separate Collabora server.
 # xmpp:
+#   push_services: [] # Allowlisted push gateway domains; verified TLS EXTERNAL + bidi. See docs/xmpp-push.md.
 #   enabled: false
 #   listen: ":5222"
 #   listen_tls: ":5223"

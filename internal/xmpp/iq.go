@@ -32,16 +32,31 @@ func (s *Session) handleIQ(se xml.StartElement) error {
 	if err != nil {
 		return err
 	}
-	// Replies must never be interpreted as new commands (or answered with errors).
+	// Validate before routing, including replies. Never dispatch peer IQs as
+	// local ping/roster/PEP commands or answer a reply with another reply.
+	if (typ == "result" || typ == "error") && id == "" {
+		return nil
+	}
+	if id == "" || (typ != "get" && typ != "set" && typ != "result" && typ != "error") {
+		return s.writeString(iqBadRequest(id))
+	}
+	name, valid := iqPayloadName(inner)
+	if (typ == "get" || typ == "set") && !valid {
+		return s.writeString(iqBadRequest(id))
+	}
+	if handled, err := s.routePeerIQ(id, typ, to, inner); handled {
+		return err
+	}
 	if typ == "result" || typ == "error" {
 		return nil
 	}
-	if typ != "get" && typ != "set" || id == "" {
-		return s.writeString(iqBadRequest(id))
+	request := struct{ XMLName xml.Name }{name}
+	if request.XMLName.Space == pushNamespace {
+		return s.handlePushIQ(id, typ, to, inner)
 	}
-	var request struct{ XMLName xml.Name }
-	if xml.Unmarshal([]byte(inner), &request) != nil {
-		return s.writeString(iqBadRequest(id))
+	// Roster/session commands must never target a different account.
+	if (name.Space == "jabber:iq:roster" || name.Space == "urn:ietf:params:xml:ns:xmpp-session") && to != "" && to != s.JID.Bare() && to != s.JID.Domain && to != s.srv.domain {
+		return s.writeString(iqForbidden(id))
 	}
 	if s.log != nil {
 		s.log.Info("xmpp IQ request", "type", typ, "element", request.XMLName.Local, "namespace", request.XMLName.Space, "to", to)
@@ -160,8 +175,8 @@ func (s *Session) writeDiscoInfo(id, to string) error {
 			`<feature var='http://jabber.org/protocol/pubsub#access-open'/>`+
 			`<feature var='http://jabber.org/protocol/pubsub#auto-create'/>`+
 			`<feature var='http://jabber.org/protocol/pubsub#retrieve-items'/>`+
-			`</query></iq>`,
-		xmlEscape(id), xmlEscape(from), xmlEscape(s.JID.Full()),
+			`%s</query></iq>`,
+		xmlEscape(id), xmlEscape(from), xmlEscape(s.JID.Full()), s.pushDiscoveryFeature(from),
 	))
 }
 

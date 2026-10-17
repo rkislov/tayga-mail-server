@@ -93,7 +93,11 @@ func (h *Hub) pushWeb(bare string, ev ChatEvent) {
 		}
 	}
 	sink := h.notificationSink
+	nativeSink := h.nativePushSink
 	h.mu.RUnlock()
+	if nativeSink != nil {
+		nativeSink(ParseJID(bare).Bare(), ev)
+	}
 	if sink != nil && ev.Type == "message" && ParseJID(ev.From).Bare() != ParseJID(bare).Bare() {
 		sink(ParseJID(bare).Bare(), ev)
 	}

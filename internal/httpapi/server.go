@@ -32,6 +32,7 @@ import (
 // Server exposes health, metrics, auth API, and the embedded Web UI.
 type Server struct {
 	fileMu                  sync.Mutex
+	uploadLocks             [64]sync.Mutex
 	fileDAVLocks            map[string]*fileLockSystem
 	officeSessions          map[string]officeSession
 	calendarSubscriptionsMu sync.Mutex
@@ -119,6 +120,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/files", s.handleFiles)
 	mux.HandleFunc("/dav/files/", s.handleFileDAV)
 	mux.HandleFunc("/api/v1/files/library/", s.handleFileLibrary)
+	mux.HandleFunc("/api/v1/files/uploads", s.handleFileUploads)
+	mux.HandleFunc("/api/v1/files/uploads/", s.handleFileUploads)
 	mux.HandleFunc("/api/v1/files/office", s.handleOfficeSession)
 	mux.HandleFunc("/wopi/files/", s.handleWOPI)
 	mux.HandleFunc("/calendar/public/", s.handlePublicCalendar)
@@ -194,6 +197,7 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	handler := s.Handler()
 	go s.runCalendarSubscriptions(ctx)
+	go s.runUploadCleanup(ctx)
 
 	go func() {
 		<-ctx.Done()

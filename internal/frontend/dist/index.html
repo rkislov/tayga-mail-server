@@ -275,7 +275,8 @@
             <div class="rte-surface" id="compose-body" aria-labelledby="compose-body-label" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder=""></div>
           </div>
           <label for="compose-attach" class="field-label" data-i18n="attach_file">Вложение (крупное → ссылка)</label>
-          <input class="field-input" type="file" id="compose-attach" />
+          <input class="field-input" type="file" id="compose-attach" multiple />
+          <div id="compose-uploads" class="compose-uploads" hidden></div>
           <div class="actions">
             <button type="button" class="btn-spray btn-ico btn-labeled" id="btn-compose-send" data-i18n-title="send" title="Отправить" aria-label="Отправить"><span class="ico" data-ico="send" aria-hidden="true"></span><span data-i18n="send">Отправить</span></button>
             <button type="button" class="btn-secondary btn-ico btn-labeled" id="btn-compose-close" data-i18n-title="cancel" title="Отмена" aria-label="Отмена"><span class="ico" data-ico="back" aria-hidden="true"></span><span data-i18n="cancel">Отмена</span></button>

@@ -28,6 +28,10 @@ func (s *Server) handleMail(w http.ResponseWriter, r *http.Request) {
 	parts := splitPath(path)
 
 	switch {
+	case r.Method == http.MethodGet && path == "limits":
+		s.mailAttachmentLimits(w, r, au)
+	case r.Method == http.MethodPost && path == "attachments":
+		s.mailAttachmentInfo(w, r, au)
 	case len(parts) == 1 && parts[0] == "mailboxes" && r.Method == http.MethodPost:
 		s.mailCreateFolder(w, r, au)
 	case len(parts) == 2 && parts[0] == "mailboxes" && parts[1] == "order" && r.Method == http.MethodPut:
@@ -58,9 +62,9 @@ func (s *Server) handleMail(w http.ResponseWriter, r *http.Request) {
 		s.mailDeleteMessage(w, r, au, parts[1])
 	case r.Method == http.MethodPost && len(parts) == 1 && parts[0] == "send":
 		s.mailSend(w, r, au)
-	case parts[0] == "vacation":
+	case len(parts) > 0 && parts[0] == "vacation":
 		s.handleVacation(w, r)
-	case parts[0] == "delegates":
+	case len(parts) > 0 && parts[0] == "delegates":
 		s.handleDelegates(w, r)
 	default:
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
@@ -602,9 +606,16 @@ func (s *Server) mailSend(w http.ResponseWriter, r *http.Request, au *authUser) 
 	msgid := fmt.Sprintf("<%d.%s@tayga>", time.Now().UnixNano(), strings.ReplaceAll(au.ID, "-", "")[:8])
 	raw := buildOutgoingMIME(user.Email, user.DisplayName, to, cc, bcc, req.Subject, req.Text, req.HTML, msgid)
 
-	raw, err = attachOutgoingFiles(raw, req.Attachments)
+	files, err := s.resolveOutgoingFiles(au.ID, req.Attachments)
+	if err == nil {
+		raw, err = attachOutgoingFiles(raw, files)
+	}
 	if err != nil {
 		writeJSON(w, 400, map[string]string{"error": err.Error()})
+		return
+	}
+	if int64(len(raw)) > s.mailLimits(r, user)["message_bytes"] {
+		writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "Письмо превышает лимит сервера. Отправьте вложения ссылками или уменьшите текст письма."})
 		return
 	}
 
