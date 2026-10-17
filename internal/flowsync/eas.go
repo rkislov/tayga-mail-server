@@ -158,11 +158,13 @@ func (h *easHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if useWBXML && binOut != nil {
 		w.Header().Set("Content-Type", "application/vnd.ms-sync.wbxml")
+		w.Header().Set("Content-Length", strconv.Itoa(len(binOut)))
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(binOut)
 		return
 	}
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
+	w.Header().Set("Content-Length", strconv.Itoa(len(xmlOut)))
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(xmlOut))
 }

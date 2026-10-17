@@ -17,6 +17,7 @@ type loggedResponse struct {
 	http.ResponseWriter
 	status, bytes int
 	capture       *traceBuffer
+	writeFailed   bool
 }
 
 func (w *loggedResponse) WriteHeader(status int) {
@@ -30,6 +31,9 @@ func (w *loggedResponse) Write(p []byte) (int, error) {
 		w.WriteHeader(200)
 	}
 	n, err := w.ResponseWriter.Write(p)
+	if err != nil {
+		w.writeFailed = true
+	}
 	w.bytes += n
 	if w.capture != nil {
 		w.capture.Write(p[:n])
@@ -70,12 +74,15 @@ func logRequests(log *slog.Logger, protocol string, next http.Handler, debug ...
 				status = 200
 			}
 			level := slog.LevelInfo
+			if rw.writeFailed {
+				t.Result = "response_write_failed"
+			}
 			if status >= 400 || t.Result != "" {
 				level = slog.LevelWarn
 			}
 			log.Log(r.Context(), level, "flowsync request", "request_id", requestID, "protocol", protocol, "method", r.Method, "command", t.Command, "user_id", t.User, "device_id", boundedLog(r.URL.Query().Get("DeviceId")), "client", boundedLog(r.UserAgent()), "peer", r.RemoteAddr, "version", boundedLog(r.Header.Get("MS-ASProtocolVersion")), "status", status, "result", t.Result, "folders", t.Folders, "response_bytes", rw.bytes, "duration_ms", time.Since(start).Milliseconds())
 			if debugEnabled {
-				log.Info("flowsync protocol trace", "request_id", requestID, "protocol", protocol, "command", t.Command, "request_content_type", boundedLog(r.Header.Get("Content-Type")), "response_content_type", boundedLog(w.Header().Get("Content-Type")), "request_structure", protocolStructure(requestData.data), "response_structure", protocolStructure(responseData.data), "request_truncated", requestData.truncated, "response_truncated", responseData.truncated)
+				log.Info("flowsync protocol trace", "request_id", requestID, "protocol", protocol, "command", t.Command, "http_version", r.Proto, "request_content_type", boundedLog(r.Header.Get("Content-Type")), "accept_multipart", boundedLog(r.Header.Get("MS-ASAcceptMultiPart")), "response_content_type", boundedLog(w.Header().Get("Content-Type")), "response_content_length", boundedLog(w.Header().Get("Content-Length")), "request_structure", protocolStructure(requestData.data), "response_structure", protocolStructure(responseData.data), "request_truncated", requestData.truncated, "response_truncated", responseData.truncated)
 			}
 		}()
 		next.ServeHTTP(rw, r.WithContext(context.WithValue(r.Context(), traceKey{}, t)))
