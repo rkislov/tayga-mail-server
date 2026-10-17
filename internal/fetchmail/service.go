@@ -93,7 +93,11 @@ func New(cfg *config.Config, log *slog.Logger, driver storage.Driver, ms *mailst
 	if log == nil {
 		log = slog.Default()
 	}
-	key, err := migrate.ResolveKey(cfg.Server.SecretsKey, filepath.Dir(cfg.Mailstore.Root))
+	dataDir := filepath.Dir(cfg.Mailstore.Root)
+	if dataDir == "." || dataDir == "" {
+		dataDir = "./data"
+	}
+	key, err := migrate.ResolveKey(cfg.Server.SecretsKey, dataDir)
 	if err != nil {
 		return nil, err
 	}
