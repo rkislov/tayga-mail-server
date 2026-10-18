@@ -12,6 +12,6 @@ try {
  const sent=await pages[0].evaluate(async()=>{const ev=await omemoSend(state.email,'Browser API encrypted test');appendChatBubble(ev);return ev});
  const plain=await pages[1].evaluate(m=>omemoDecrypt(m),sent);assert.equal(plain,'Browser API encrypted test');
  const count=await pages[0].evaluate(id=>Array.from(document.querySelectorAll('#chat-messages .chat-bubble')).filter(x=>x.dataset.messageKey===JSON.stringify([state.email,id])).length,sent.id);assert.equal(count,1);
- await pages[0].evaluate(()=>omemoSettings());await pages[0].getByRole('button',{name:'Отключить OMEMO для диалога'}).waitFor();await pages[0].screenshot({path:'docs/screenshots/ui-web-omemo.png'});
+ await pages[0].evaluate(()=>omemoSettings());await pages[0].getByRole('button',{name:'Выключить шифрование чата'}).waitFor();await pages[0].screenshot({path:'docs/screenshots/ui-web-omemo.png'});
  assert.deepEqual(errors,[]);console.log('Actual HTTP API: key publication, independent browser devices, ciphertext delivery, decrypt, outgoing dedup and settings UI — OK');
 }finally{await browser.close()}

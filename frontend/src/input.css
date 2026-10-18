@@ -3837,3 +3837,39 @@ html[data-theme] .card .card {background:var(--work-raised);backdrop-filter:none
 @media (prefers-reduced-transparency:reduce) {
  html[data-theme] :is(.panel,.card,.pane,.panel-pane,.app-topbar,.mail-folders,.mail-list,.mail-reader,.mail-read,.compose-panel) {background:var(--work-panel)!important;backdrop-filter:none;-webkit-backdrop-filter:none}
 }
+
+/* OMEMO device management: verification details stay inside each device card. */
+dialog.omemo-dialog{width:min(640px,calc(100vw - 24px));height:auto;max-height:90dvh;padding:0;overflow:hidden}
+dialog.omemo-dialog[open]{display:flex;flex-direction:column}
+.omemo-dialog>header,.omemo-footer{flex:none}
+.omemo-dialog>header button{width:38px;min-width:38px;padding:0;font-size:24px;flex:none}
+.omemo-body{padding:20px 24px;overflow:auto;min-height:0}
+.omemo-notice{margin:0 0 12px;overflow-wrap:anywhere}
+.omemo-notice:empty{display:none}
+.omemo-content{display:grid;gap:24px}
+.omemo-overview{padding:16px;border:1px solid var(--work-line);border-radius:10px;background:var(--work-raised)}
+.omemo-overview-heading,.omemo-device-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.omemo-overview-heading button{flex:none;width:auto}
+.omemo-overview p{margin:8px 0 0;font-size:14px;overflow-wrap:anywhere}
+.omemo-device-group h3{font-size:15px;font-weight:600;margin:0 0 10px}
+.omemo-device-list{list-style:none;padding:0;margin:0;display:grid;gap:10px}
+.omemo-device{border:1px solid var(--work-line);border-radius:10px;padding:14px;min-width:0}
+.omemo-device-heading>div{min-width:0;overflow-wrap:anywhere}
+.omemo-device-heading strong{font-size:14px}
+.omemo-device-status{font-size:12px;font-weight:600;white-space:nowrap;padding:4px 8px;border-radius:6px;background:var(--work-raised);color:var(--work-muted)}
+.omemo-device-status[data-status=trusted],.omemo-device-status[data-status=current]{color:var(--work-accent);background:var(--work-selected)}
+.omemo-device-status[data-status=changed],.omemo-device-status[data-status=unavailable]{color:var(--ui-text);border:1px solid currentColor}
+.omemo-device-warning{font-size:13px;margin:10px 0}
+.omemo-device-details{margin-top:10px;font-size:13px}
+.omemo-device-details summary{cursor:pointer;color:var(--work-accent);width:fit-content;padding:4px 0;font-weight:600}
+.omemo-key-details{display:grid;gap:12px;margin-top:12px;border-top:1px solid var(--work-line);padding-top:12px}
+.omemo-key-details p{margin:0;overflow-wrap:anywhere}
+.omemo-key-details button{justify-self:start;width:auto;max-width:100%;white-space:normal}
+.omemo-fingerprint{display:block;font-size:13px;line-height:1.7;overflow-wrap:anywhere;user-select:all;padding:12px;background:var(--work-raised);border-radius:6px;letter-spacing:.03em}
+.omemo-device-label{display:grid;gap:6px;color:var(--work-muted)}
+.omemo-device-label input{width:100%;min-width:0}
+.omemo-footer{padding:16px 24px;border-top:1px solid var(--work-line)}
+.omemo-footer .meta{font-size:12px;line-height:1.5;margin:10px 0 0}
+@media(max-width:480px){.omemo-body{padding:16px}.omemo-footer{padding:12px 16px}.omemo-device-heading{align-items:flex-start;flex-direction:column;gap:6px}.omemo-overview-heading{align-items:flex-start}.omemo-overview-heading strong{font-size:15px}}
+.omemo-dialog .btn-secondary{background:var(--work-panel);color:var(--work-text);border-color:var(--work-line)}
+.omemo-dialog .btn-secondary:hover{background:var(--work-raised)}
