@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
-	"github.com/tayga/tms/internal/avatar"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/tayga/tms/internal/avatar"
+	"github.com/tayga/tms/internal/version"
 )
 
 var (
@@ -73,6 +75,8 @@ func (s *Session) handleIQ(se xml.StartElement) error {
 	ctx := context.Background()
 
 	switch {
+	case typ == "get" && request.XMLName == (xml.Name{Space: "jabber:iq:version", Local: "query"}):
+		return s.writeSoftwareVersion(id, to)
 	case typ == "get" && request.XMLName == (xml.Name{Space: "vcard-temp", Local: "vCard"}):
 		user := s.user
 		if to != "" {
@@ -149,6 +153,19 @@ func (s *Session) iqResponder(to string) string {
 	return s.srv.domain
 }
 
+func (s *Session) writeSoftwareVersion(id, to string) error {
+	// Version queries for full JIDs are routed to that client before dispatch.
+	// Never present Tayga as the software of another account or remote server.
+	if to != "" && to != s.JID.Domain && to != s.srv.domain {
+		return s.writeString(fmt.Sprintf(`<iq type='error' id='%s' from='%s' to='%s'><query xmlns='jabber:iq:version'/><error type='cancel'><service-unavailable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/></error></iq>`,
+			xmlEscape(id), xmlEscape(to), xmlEscape(s.JID.Full())))
+	}
+	// Explicit from is essential: Monal distinguishes its server from contacts
+	// by this domain and otherwise tries to look up a missing contact resource.
+	return s.writeString(fmt.Sprintf(`<iq type='result' id='%s' from='%s' to='%s'><query xmlns='jabber:iq:version'><name>Tayga Mail</name><version>%s</version></query></iq>`,
+		xmlEscape(id), xmlEscape(s.iqResponder(to)), xmlEscape(s.JID.Full()), xmlEscape(version.Version)))
+}
+
 func (s *Session) writeDiscoInfo(id, to string) error {
 	from := s.iqResponder(to)
 	if to != "" && to != s.JID.Domain && to != s.srv.domain && to != s.JID.Bare() {
@@ -163,6 +180,10 @@ func (s *Session) writeDiscoInfo(id, to string) error {
 		}
 		// Keep the account's PEP features available to OMEMO discovery as well.
 		from = jid.Bare()
+	}
+	softwareFeature := ""
+	if from == s.JID.Domain || from == s.srv.domain {
+		softwareFeature = `<feature var='jabber:iq:version'/>`
 	}
 	return s.writeString(fmt.Sprintf(
 		`<iq type='result' id='%s' from='%s' to='%s'><query xmlns='http://jabber.org/protocol/disco#info'>`+
@@ -181,8 +202,8 @@ func (s *Session) writeDiscoInfo(id, to string) error {
 			`<feature var='http://jabber.org/protocol/pubsub#access-open'/>`+
 			`<feature var='http://jabber.org/protocol/pubsub#auto-create'/>`+
 			`<feature var='http://jabber.org/protocol/pubsub#retrieve-items'/>`+
-			`%s</query></iq>`,
-		xmlEscape(id), xmlEscape(from), xmlEscape(s.JID.Full()), s.pushDiscoveryFeature(from),
+			`%s%s</query></iq>`,
+		xmlEscape(id), xmlEscape(from), xmlEscape(s.JID.Full()), softwareFeature, s.pushDiscoveryFeature(from),
 	))
 }
 
