@@ -12,13 +12,18 @@ const resumeTTL = 2 * time.Minute
 const resumeBudget = 16 << 20
 
 type resumableStream struct {
-	rooms    []mucResumeState
-	presence *ChatPresence
-	state    streamManagement
-	jid      JID
-	userID   string
-	carbons  bool
-	expires  time.Time
+	rooms        []mucResumeState
+	presence     *ChatPresence
+	state        streamManagement
+	jid          JID
+	userID       string
+	carbons      bool
+	pepInterest  map[string]bool
+	pepCaps      string
+	pepDiscoID   string
+	pepDiscoNode string
+	pepDiscoAt   time.Time
+	expires      time.Time
 }
 
 // retainStream is called after the reader and socket have stopped.
@@ -30,6 +35,8 @@ func (s *Session) retainStream() {
 		return
 	}
 	snapshot := resumableStream{state: s.sm, jid: s.JID, userID: s.user.ID, carbons: s.carbons, expires: time.Now().Add(resumeTTL)}
+	snapshot.pepInterest = s.pepInterest // replaced, never mutated after publication
+	snapshot.pepCaps, snapshot.pepDiscoID, snapshot.pepDiscoNode, snapshot.pepDiscoAt = s.pepCaps, s.pepDiscoID, s.pepDiscoNode, s.pepDiscoAt
 	snapshot.rooms = append([]mucResumeState(nil), s.mucResume...)
 	if s.lastPresence != nil {
 		p := *s.lastPresence
@@ -102,6 +109,8 @@ func (s *Session) resumeStream(start xml.StartElement) error {
 	s.sm = old.state
 	s.carbons = old.carbons
 	s.lastPresence = old.presence
+	s.pepInterest = old.pepInterest
+	s.pepCaps, s.pepDiscoID, s.pepDiscoNode, s.pepDiscoAt = old.pepCaps, old.pepDiscoID, old.pepDiscoNode, old.pepDiscoAt
 	s.bound = true
 	s.sm.ack(uint32(n))
 	_, err = s.bw.WriteString(fmt.Sprintf(`<resumed xmlns='urn:xmpp:sm:3' previd='%s' h='%d'/>`, xmlEscape(token), s.sm.received))

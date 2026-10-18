@@ -129,8 +129,8 @@ func (s *Server) ensurePEPNode(ctx context.Context, ownerBare, node string) (str
 	}
 	id = storage.NewID()
 	_, err = s.db.ExecContext(ctx, s.rebind(
-		`INSERT INTO xmpp_pep_nodes (id, owner_bare_jid, node, access_model, updated_at) VALUES (?, ?, ?, 'presence', ?) ON CONFLICT(owner_bare_jid,node) DO NOTHING`),
-		id, ownerBare, node, time.Now().UTC(),
+		`INSERT INTO xmpp_pep_nodes (id, owner_bare_jid, node, access_model, updated_at, max_items) VALUES (?, ?, ?, 'presence', ?, ?) ON CONFLICT(owner_bare_jid,node) DO NOTHING`),
+		id, ownerBare, node, time.Now().UTC(), pepDefaultMaxItems(node),
 	)
 	if err != nil {
 		return "", err

@@ -46,6 +46,9 @@ func (s *Session) handleIQ(se xml.StartElement) error {
 	if (typ == "get" || typ == "set") && !valid {
 		return s.writeString(iqBadRequest(id))
 	}
+	if s.handlePEPFeatures(id, typ, attr(se, "from"), to, inner) {
+		return nil
+	}
 	if handled, err := s.handleMUCIQ(id, typ, to, inner); handled {
 		return err
 	}
@@ -182,13 +185,15 @@ func (s *Session) writeDiscoInfo(id, to string) error {
 		from = jid.Bare()
 	}
 	softwareFeature := ""
+	identity := `<identity category='server' type='im' name='Tayga XMPP'/>`
 	if from == s.JID.Domain || from == s.srv.domain {
 		softwareFeature = `<feature var='jabber:iq:version'/>`
+	} else {
+		identity = `<identity category='pubsub' type='pep' name='Tayga PEP'/>`
 	}
 	return s.writeString(fmt.Sprintf(
 		`<iq type='result' id='%s' from='%s' to='%s'><query xmlns='http://jabber.org/protocol/disco#info'>`+
-			`<identity category='server' type='im' name='Tayga XMPP'/>`+
-			`<identity category='pubsub' type='pep'/>`+
+			`%s`+
 			`<feature var='urn:xmpp:ping'/>`+
 			`<feature var='jabber:iq:roster'/>`+
 			`<feature var='vcard-temp'/>`+
@@ -202,8 +207,13 @@ func (s *Session) writeDiscoInfo(id, to string) error {
 			`<feature var='http://jabber.org/protocol/pubsub#access-open'/>`+
 			`<feature var='http://jabber.org/protocol/pubsub#auto-create'/>`+
 			`<feature var='http://jabber.org/protocol/pubsub#retrieve-items'/>`+
+			`<feature var='http://jabber.org/protocol/pubsub#filtered-notifications'/>`+
+			`<feature var='http://jabber.org/protocol/pubsub#subscribe'/>`+
+			`<feature var='http://jabber.org/protocol/pubsub#create-nodes'/>`+
+			`<feature var='http://jabber.org/protocol/pubsub#delete-items'/>`+
+			`<feature var='http://jabber.org/protocol/pubsub#delete-nodes'/>`+
 			`%s%s</query></iq>`,
-		xmlEscape(id), xmlEscape(from), xmlEscape(s.JID.Full()), softwareFeature, s.pushDiscoveryFeature(from),
+		xmlEscape(id), xmlEscape(from), xmlEscape(s.JID.Full()), identity, softwareFeature, s.pushDiscoveryFeature(from),
 	))
 }
 

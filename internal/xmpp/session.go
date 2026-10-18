@@ -38,6 +38,11 @@ type Session struct {
 	tlsDone      bool
 	carbons      bool
 	lastPresence *ChatPresence
+	pepInterest  map[string]bool // per-resource +notify features, protected by mu
+	pepDiscoID   string
+	pepDiscoNode string
+	pepCaps      string
+	pepDiscoAt   time.Time
 	user         *storage.User
 	JID          JID
 	streamID     string
@@ -571,7 +576,13 @@ func (s *Session) handlePresence(se xml.StartElement) error {
 		}
 	}
 	if typ == "" {
-		s.sendCurrentDeviceLists(context.Background())
+		s.requestPEPFeatures(inner)
+	} else if typ == "unavailable" {
+		s.mu.Lock()
+		s.pepInterest = nil
+		s.pepCaps = ""
+		s.pepDiscoID = ""
+		s.mu.Unlock()
 	}
 	stanza := fmt.Sprintf(`<presence from='%s'%s>%s</presence>`, xmlEscape(from), attrIf("type", typ), inner)
 	for _, other := range s.srv.hub.Sessions(s.JID.Bare()) {
