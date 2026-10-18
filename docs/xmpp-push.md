@@ -55,6 +55,15 @@ been checked against the deployed server. The account JID remains
 `user@kislovs.ru`. A blank capability screen before a successful login does
 not establish that the server lacks every listed feature.
 
+Monal 6.4.23 also crashed during `handleVersionResponse` when Tayga answered
+the server's `jabber:iq:version` query with an unsupported-operation error
+without `from`. Its client treated that response as a contact with a missing
+resource. Tayga now implements XEP-0092 at the account domain and physical
+server hostname, returning an explicit matching `from`, the authenticated
+requester's full `to`, product name and build version. It does not report
+Tayga's version on behalf of another account or a remote server. Full-JID
+queries continue through normal client routing.
+
 Monal's European production push service is `eu.prod.push.monal-im.org`.
 Only add the service actually selected by the app to `xmpp.push_services`;
 do not allow arbitrary remote domains. Without that route, Monal receives
