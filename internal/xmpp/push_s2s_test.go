@@ -83,13 +83,19 @@ func fakePushGateway(ctx context.Context, conn net.Conn, config *tls.Config, mod
 		return e
 	}
 	bidi := `<bidi xmlns='urn:xmpp:features:bidi'/>`
+	if strings.HasPrefix(mode, "monal-bidi") {
+		bidi = `<bidi xmlns='urn:xmpp:bidi'/>`
+	}
+	if mode == "wrong-bidi-namespace" {
+		bidi = `<bidi xmlns='urn:unrelated:bidi'/>`
+	}
 	if mode == "no-bidi" {
 		bidi = ""
 	}
 	if e = write(stream + `<stream:features><mechanisms xmlns='` + saslNS + `'><mechanism>EXTERNAL</mechanism></mechanisms>` + bidi + `</stream:features>`); e != nil {
 		return e
 	}
-	if mode == "no-bidi" {
+	if mode == "no-bidi" || mode == "wrong-bidi-namespace" {
 		return nil
 	}
 	se, e = nextPushElement(d)
@@ -117,7 +123,7 @@ func fakePushGateway(ctx context.Context, conn net.Conn, config *tls.Config, mod
 	if string(decoded) != "example.com" {
 		return fmt.Errorf("wrong auth identity")
 	}
-	if mode == "auth-failure" {
+	if mode == "auth-failure" || mode == "monal-bidi-auth-failure" {
 		return write(`<failure xmlns='` + saslNS + `'><not-authorized/></failure>`)
 	}
 	if e = write(`<success xmlns='` + saslNS + `'/>`); e != nil {
@@ -152,7 +158,7 @@ func fakePushGateway(ctx context.Context, conn net.Conn, config *tls.Config, mod
 }
 func TestPushS2SVerifiedTLSExternalAndReply(t *testing.T) {
 	cert, pool := pushTestCertificate(t)
-	for _, mode := range []string{"success", "untrusted", "wrong-name", "no-tls", "no-bidi", "auth-failure", "spoofed-reply"} {
+	for _, mode := range []string{"success", "monal-bidi", "monal-bidi-auth-failure", "untrusted", "wrong-name", "no-tls", "no-bidi", "wrong-bidi-namespace", "auth-failure", "spoofed-reply"} {
 		t.Run(mode, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 			defer cancel()
@@ -173,7 +179,7 @@ func TestPushS2SVerifiedTLSExternalAndReply(t *testing.T) {
 			typ, _, err := pushS2SExchange(ctx, a, cfg, "example.com", "push.example.com", "alice@example.com", "push.example.com", "request", []byte(`<iq from='alice@example.com' to='push.example.com' type='set' id='request'><pubsub xmlns='http://jabber.org/protocol/pubsub'><publish node='token'><item><notification xmlns='urn:xmpp:push:0'/></item></publish></pubsub></iq>`))
 			a.Close()
 			serverErr := <-done
-			if mode == "success" {
+			if mode == "success" || mode == "monal-bidi" {
 				if err != nil || typ != "result" || serverErr != nil {
 					t.Fatalf("exchange: %s %v gateway: %v", typ, err, serverErr)
 				}

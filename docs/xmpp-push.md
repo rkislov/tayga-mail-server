@@ -15,6 +15,7 @@ xmpp:
   # Use the service domain supplied by the application's push registration.
   push_services:
     - push.chatsecure.org
+    - eu.prod.push.monal-im.org
   # Alternative: a trusted component already configured on this server.
   # component_listen: '127.0.0.1:5347'
   # components:
@@ -45,6 +46,33 @@ Logs use `xmpp push attempt`, `xmpp push delivery failed` and `xmpp push rejecte
 On 2026-10-17, DNS lookups performed on `mail.kislovs.ru` resolved `chatsecure.org` but returned no usable address for `push.chatsecure.org` or its Heroku target. That prevents vendor registration/delivery independently of Tayga. Recheck DNS and the actual endpoint supplied by the installed app before interpreting a capability check as end-to-end success. ChatSecure's [standard push module](https://github.com/ChatSecure/ChatSecure-iOS/blob/38d6abba3e1c21156095ac3a1096d5e829df4b96/ChatSecureCore/Classes/Controllers/XMPP/OTRXMPPManager.m) is distinct from Secret-iOS's custom APNs command.
 
 ## Validation and remaining interoperability
+
+### Monal (2026-10-18)
+
+For manual connection settings, use `mail.kislovs.ru:5222` with STARTTLS
+(Direct TLS disabled), or port `5223` with Direct TLS. Both transports have
+been checked against the deployed server. The account JID remains
+`user@kislovs.ru`. A blank capability screen before a successful login does
+not establish that the server lacks every listed feature.
+
+Monal's European production push service is `eu.prod.push.monal-im.org`.
+Only add the service actually selected by the app to `xmpp.push_services`;
+do not allow arbitrary remote domains. Without that route, Monal receives
+`service-unavailable` when enabling push even if XEP-0357 is advertised for
+another configured gateway.
+
+Both European gateway nodes were checked from the mail server using TLS 1.3,
+verified certificates, SASL EXTERNAL and a discovery IQ round trip. They
+advertise bidi as `urn:xmpp:bidi` instead of XEP-0288's
+`urn:xmpp:features:bidi`. Tayga accepts both spellings after verified TLS;
+EXTERNAL authentication, the allowlist and response identity validation
+remain required. These checks did not publish notifications and do not
+prove delivery through APNs to a phone.
+
+Monal also requires a broader PEP profile than the existing OMEMO node
+support. SASL2/SCRAM/channel binding, roster versioning, blocking and external
+STUN/TURN discovery remain separate compatibility work; they are not
+advertised as implemented.
 
 Automated tests cover registration ownership, malformed forms, replacement, cancellation, restart persistence, queue coalescing, retry exhaustion, privacy and forged acknowledgements. A test gateway completes STARTTLS with mutually verified certificates, bidi, EXTERNAL, stream restart and publication acknowledgement; negative cases reject untrusted certificates, wrong hostnames, missing TLS/bidi, failed authentication and spoofed reply identities.
 
