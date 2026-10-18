@@ -129,7 +129,8 @@ func (s *Session) serve() {
 		s.retainStream()
 	}
 	if err != nil && err != io.EOF {
-		s.log.Info("xmpp session ended", "err", err, "jid", s.JID.Full(), "authenticated", s.authed, "bound", s.bound)
+		s.log.Info("xmpp session ended", "err", err, "jid", s.JID.Full(), "authenticated", s.authed, "bound", s.bound,
+			"peer", s.conn.RemoteAddr().String(), "local", s.conn.LocalAddr().String(), "tls", s.tlsDone)
 	}
 }
 

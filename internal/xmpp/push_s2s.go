@@ -254,7 +254,13 @@ func pushS2SExchange(ctx context.Context, conn net.Conn, config *tls.Config, loc
 			external = true
 		}
 	}
-	if !external || !features[xml.Name{Space: "urn:xmpp:features:bidi", Local: "bidi"}] {
+	// XEP-0288 uses features:bidi for discovery. Monal's production gateways
+	// advertise the negotiation namespace instead. Accept that variant only in
+	// the verified TLS stream; EXTERNAL authentication and reply identity checks
+	// below remain mandatory for either spelling.
+	bidi := features[xml.Name{Space: "urn:xmpp:features:bidi", Local: "bidi"}] ||
+		features[xml.Name{Space: "urn:xmpp:bidi", Local: "bidi"}]
+	if !external || !bidi {
 		return "", "", fmt.Errorf("push gateway requires unsupported authentication or lacks bidirectional S2S")
 	}
 	if err = write(`<bidi xmlns='urn:xmpp:bidi'/><auth xmlns='` + saslNS + `' mechanism='EXTERNAL'>` + base64.StdEncoding.EncodeToString([]byte(local)) + `</auth>`); err != nil {
