@@ -113,6 +113,7 @@ func migrate(ctx context.Context, db *sql.DB, dialect Dialect) error {
 			"042_inbox_rules.sqlite.sql",
 			"043_muc.sqlite.sql",
 			"044_spam_learning.sqlite.sql",
+			"045_pep_subscriptions.sqlite.sql",
 		}
 	case DialectPostgres:
 		files = []string{
@@ -160,6 +161,7 @@ func migrate(ctx context.Context, db *sql.DB, dialect Dialect) error {
 			"042_inbox_rules.postgres.sql",
 			"043_muc.postgres.sql",
 			"044_spam_learning.postgres.sql",
+			"045_pep_subscriptions.postgres.sql",
 		}
 	default:
 		return fmt.Errorf("unsupported dialect")

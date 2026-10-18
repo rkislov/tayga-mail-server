@@ -16,6 +16,8 @@ func TestResumeReplaysOnlyUnacknowledgedAndPreservesCounters(t *testing.T) {
 	var initial, resumed bytes.Buffer
 	old := &Session{srv: srv, user: u, authed: true, bound: true, JID: ParseJID(u.Email + "/phone"), bw: bufio.NewWriter(&initial)}
 	old.sm = streamManagement{enabled: true, resumable: true, token: "test-token", received: 9}
+	old.pepInterest = map[string]bool{"eu.siacs.conversations.axolotl.devicelist": true}
+	old.pepCaps = "https://monal-im.org#caps"
 	for _, body := range []string{"one", "two", "three"} {
 		if err := old.writeString(`<message><body>` + body + `</body></message>`); err != nil {
 			t.Fatal(err)
@@ -36,6 +38,9 @@ func TestResumeReplaysOnlyUnacknowledgedAndPreservesCounters(t *testing.T) {
 	}
 	if len(srv.hub.Sessions(u.Email)) != 1 {
 		t.Fatal("resumed session not routed")
+	}
+	if !fresh.pepInterest["eu.siacs.conversations.axolotl.devicelist"] || fresh.pepCaps != old.pepCaps {
+		t.Fatal("resumed stream lost PEP notification interests")
 	}
 	fresh.sm.ack(3)
 	if len(fresh.sm.pending) != 0 || fresh.sm.bytes != 0 {

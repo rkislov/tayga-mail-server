@@ -78,7 +78,7 @@ func TestOMEMONotificationsConfigurationAndPersistence(t *testing.T) {
 	ctx := context.Background()
 	var own, peer bytes.Buffer
 	sender := &Session{srv: srv, user: user, JID: ParseJID(user.Email + "/phone"), bw: bufio.NewWriter(&own)}
-	receiver := &Session{srv: srv, JID: ParseJID("bob@example.com/laptop"), bw: bufio.NewWriter(&peer)}
+	receiver := &Session{srv: srv, JID: ParseJID("bob@example.com/laptop"), bw: bufio.NewWriter(&peer), pepInterest: map[string]bool{"eu.siacs.conversations.axolotl.devicelist": true}}
 	srv.hub.Register(receiver)
 	if err := srv.upsertRoster(ctx, user.ID, rosterItem{JID: "bob@example.com", Name: "Bob", Subscription: "from", GroupsJSON: "[]"}); err != nil {
 		t.Fatal(err)

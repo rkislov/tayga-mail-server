@@ -64,6 +64,17 @@ requester's full `to`, product name and build version. It does not report
 Tayga's version on behalf of another account or a remote server. Full-JID
 queries continue through normal client routing.
 
+Monal also gates OMEMO on its basic PEP/PubSub capability check. Tayga now
+provides explicit node creation, durable self-authorized subscriptions and
+unsubscriptions, item retraction and node deletion notifications, and the
+`pubsub#notify_retract` / `pubsub#notify_delete` publish options sent by Monal.
+Per-resource `+notify` interests are obtained by a correlated discovery query
+to the authenticated client and retained across stream resumption. Events use
+`type='headline'`; presence subscriptions alone do not broadcast every PEP
+payload to uninterested resources. Explicit subscriptions continue to respect
+the node's current access policy. Migration 045 adds subscription storage and
+notification flags without replacing existing OMEMO device lists or bundles.
+
 Monal's European production push service is `eu.prod.push.monal-im.org`.
 Only add the service actually selected by the app to `xmpp.push_services`;
 do not allow arbitrary remote domains. Without that route, Monal receives
