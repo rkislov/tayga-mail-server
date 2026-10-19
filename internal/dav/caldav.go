@@ -3,6 +3,7 @@ package dav
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/emersion/go-ical"
 	"github.com/emersion/go-webdav"
 	"github.com/emersion/go-webdav/caldav"
+	"github.com/tayga/tms/internal/calutil"
 	"github.com/tayga/tms/internal/storage"
 )
 
@@ -203,7 +205,14 @@ func (b *calBackend) PutCalendarObject(ctx context.Context, p string, cal *ical.
 		return nil, webdav.NewHTTPError(http.StatusBadRequest, err)
 	}
 	dtStart, dtEnd := extractEventTimes(cal)
-	saved, err := b.store.UpsertCalendarObject(ctx, &storage.CalendarObject{
+	if compType == "VEVENT" {
+		parsed, err := calutil.ParseICS(buf.String())
+		if err != nil {
+			return nil, webdav.NewHTTPError(http.StatusBadRequest, err)
+		}
+		dtStart, dtEnd = parsed.Start, parsed.End
+	}
+	obj := &storage.CalendarObject{
 		CalendarID: dbCal.ID,
 		UID:        uid,
 		HrefName:   href,
@@ -211,11 +220,23 @@ func (b *calBackend) PutCalendarObject(ctx context.Context, p string, cal *ical.
 		Component:  compType,
 		DTStart:    dtStart,
 		DTEnd:      dtEnd,
-	})
-	if err != nil {
-		return nil, err
+		CreateOnly: existing == nil,
 	}
-	return toCalDAVObject(u.Email, calName, saved)
+	if existing != nil {
+		obj.ExpectedETag = existing.ETag
+	}
+	saved, err := b.store.SaveCalendarClientObject(ctx, u.ID, obj)
+	if err != nil {
+		return nil, calendarWriteError(err)
+	}
+	result, err := toCalDAVObject(u.Email, calName, saved)
+	if err == nil && saved.Data != buf.String() {
+		// RFC 4791 §5.3.4: the client must GET server-modified data before
+		// using its validator for another conditional write.
+		result.ETag = ""
+		result.ModTime = time.Time{}
+	}
+	return result, err
 }
 
 func (b *calBackend) DeleteCalendarObject(ctx context.Context, p string) error {
@@ -234,10 +255,51 @@ func (b *calBackend) DeleteCalendarObject(ctx context.Context, p string) error {
 	if err != nil {
 		return webdav.NewHTTPError(http.StatusNotFound, err)
 	}
-	if err := b.store.DeleteCalendarObject(ctx, cal.ID, href); err != nil {
-		return webdav.NewHTTPError(http.StatusNotFound, err)
+	obj, err := b.store.GetCalendarObject(ctx, cal.ID, href)
+	if err != nil {
+		return calendarWriteError(err)
+	}
+	if opts, ok := ctx.Value(calConditionsKey{}).(*caldav.PutCalendarObjectOptions); ok {
+		if err := checkCalConditions(opts, obj); err != nil {
+			return err
+		}
+	}
+	if err := b.store.DeleteCalendarMeeting(ctx, u.ID, obj); err != nil {
+		return calendarWriteError(err)
 	}
 	return nil
+}
+
+type calConditionsKey struct{}
+
+// The library forwards PUT validators, but its DELETE backend has no options.
+func calendarRequestConditions(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			opts := &caldav.PutCalendarObjectOptions{
+				IfMatch:     webdav.ConditionalMatch(r.Header.Get("If-Match")),
+				IfNoneMatch: webdav.ConditionalMatch(r.Header.Get("If-None-Match")),
+			}
+			r = r.WithContext(context.WithValue(r.Context(), calConditionsKey{}, opts))
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func calendarWriteError(err error) error {
+	var booking *storage.CalendarBookingError
+	switch {
+	case errors.Is(err, storage.ErrNotFound):
+		return webdav.NewHTTPError(http.StatusNotFound, err)
+	case errors.Is(err, storage.ErrUnauthorized):
+		return webdav.NewHTTPError(http.StatusForbidden, err)
+	case errors.Is(err, storage.ErrCalendarConflict):
+		return webdav.NewHTTPError(http.StatusPreconditionFailed, err)
+	case errors.As(err, &booking):
+		return webdav.NewHTTPError(http.StatusConflict, err)
+	default:
+		return err
+	}
 }
 
 func toCalDAVCalendar(email string, c *storage.Calendar) caldav.Calendar {

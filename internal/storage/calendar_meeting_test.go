@@ -143,6 +143,14 @@ func changedMeeting(t *testing.T, o *CalendarObject, summary string) *CalendarOb
 }
 
 func TestMeetingConcurrentEditsAcrossConnections(t *testing.T) {
+	testConcurrentMeetingEdits(t, false)
+}
+
+func TestCalendarClientConcurrentEditsAcrossConnections(t *testing.T) {
+	testConcurrentMeetingEdits(t, true)
+}
+
+func testConcurrentMeetingEdits(t *testing.T, client bool) {
 	f := newBookingFixture(t)
 	ctx := context.Background()
 	u := meetingUser(t, f, "participant")
@@ -164,7 +172,11 @@ func TestMeetingConcurrentEditsAcrossConnections(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-gate
-			_, err := db.SaveCalendarMeeting(ctx, f.user.ID, edit)
+			save := db.SaveCalendarMeeting
+			if client {
+				save = db.SaveCalendarClientObject
+			}
+			_, err := save(ctx, f.user.ID, edit)
 			outcomes <- err
 		}()
 	}

@@ -21,7 +21,20 @@ func (s *Store) SaveCalendarMeeting(ctx context.Context, actorID string, o *Cale
 	if !o.CreateOnly && o.ExpectedETag == "" {
 		return nil, ErrCalendarConflict
 	}
-	return s.saveCalendarObject(ctx, o, nil, actorID)
+	return s.saveCalendarObject(ctx, o, nil, actorID, false)
+}
+
+// SaveCalendarClientObject connects DAV writes to scheduling without treating
+// echoes or personal edits as new organizer invitations. Preconditions and
+// scheduling decisions are evaluated under the same database write lock.
+func (s *Store) SaveCalendarClientObject(ctx context.Context, actorID string, o *CalendarObject) (*CalendarObject, error) {
+	if actorID == "" {
+		return nil, ErrUnauthorized
+	}
+	if !o.CreateOnly && o.ExpectedETag == "" {
+		return nil, ErrCalendarConflict
+	}
+	return s.saveCalendarObject(ctx, o, nil, actorID, true)
 }
 
 func (s *Store) DeleteCalendarMeeting(ctx context.Context, actorID string, o *CalendarObject) error {
@@ -139,7 +152,7 @@ func (s *Store) syncCalendarMeetingTx(ctx context.Context, tx *sql.Tx, actorID s
 	}
 	cancelled := strings.EqualFold(p.Status, "CANCELLED")
 	current := map[string]calutil.Attendee{}
-	attendees, err := calutil.EventAttendees(source.Data)
+	attendees, err := calutil.SchedulingAttendees(source.Data)
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +166,7 @@ func (s *Store) syncCalendarMeetingTx(ctx context.Context, tx *sql.Tx, actorID s
 		all[k] = a
 	}
 	if previous != "" {
-		oldAttendees, err := calutil.EventAttendees(previous)
+		oldAttendees, err := calutil.SchedulingAttendees(previous)
 		if err != nil {
 			return nil, err
 		}

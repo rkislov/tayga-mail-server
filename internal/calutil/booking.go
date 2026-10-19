@@ -121,6 +121,9 @@ func WithResourcePartStats(data string, statuses map[string]string) (string, err
 		}
 		props := c.Props.Values("ATTENDEE")
 		for i := range props {
+			if agent := props[i].Params.Get("SCHEDULE-AGENT"); agent != "" && !strings.EqualFold(agent, "SERVER") {
+				continue
+			}
 			uri, err := url.Parse(props[i].Value)
 			if err != nil {
 				return "", err
@@ -158,6 +161,21 @@ func EventAttendees(data string) ([]Attendee, error) {
 			return nil, err
 		}
 		out = append(out, p.Attendees...)
+	}
+	return out, nil
+}
+
+// SchedulingAttendees excludes recipients whose client handles invitations.
+func SchedulingAttendees(data string) ([]Attendee, error) {
+	all, err := EventAttendees(data)
+	if err != nil {
+		return nil, err
+	}
+	out := all[:0]
+	for _, a := range all {
+		if a.ScheduleAgent == "" || strings.EqualFold(a.ScheduleAgent, "SERVER") {
+			out = append(out, a)
+		}
 	}
 	return out, nil
 }

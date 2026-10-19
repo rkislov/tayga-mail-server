@@ -284,10 +284,10 @@ func (s *Store) UpsertCalendarObject(ctx context.Context, o *CalendarObject) (*C
 }
 
 func (s *Store) SaveCalendarObjectWithMail(ctx context.Context, o *CalendarObject, mails []CalendarMail) (*CalendarObject, error) {
-	return s.saveCalendarObject(ctx, o, mails, "")
+	return s.saveCalendarObject(ctx, o, mails, "", false)
 }
 
-func (s *Store) saveCalendarObject(ctx context.Context, o *CalendarObject, mails []CalendarMail, actorID string) (*CalendarObject, error) {
+func (s *Store) saveCalendarObject(ctx context.Context, o *CalendarObject, mails []CalendarMail, actorID string, clientWrite bool) (*CalendarObject, error) {
 	if actorID != "" {
 		copy := *o
 		o = &copy
@@ -302,11 +302,77 @@ func (s *Store) saveCalendarObject(ctx context.Context, o *CalendarObject, mails
 	if err != nil && err != sql.ErrNoRows {
 		return nil, err
 	}
+	bookResources := true
+	if clientWrite {
+		email, _, e := s.calendarWriterTx(ctx, tx, actorID, o.CalendarID)
+		if e != nil {
+			return nil, e
+		}
+		if old != "" {
+			var component, uid string
+			if e = tx.QueryRowContext(ctx, s.rebind(`SELECT component,uid FROM calendar_objects WHERE calendar_id=? AND href_name=?`), o.CalendarID, o.HrefName).Scan(&component, &uid); e != nil {
+				return nil, e
+			}
+			if component != o.Component || uid != o.UID {
+				return nil, ErrCalendarConflict
+			}
+		}
+		if o.Component == "VEVENT" {
+			var schedule bool
+			o.Data, schedule, e = calutil.PrepareOrganizerWrite(o.Data, old, email)
+			if e != nil {
+				return nil, fmt.Errorf("%w: %v", ErrCalendarConflict, e)
+			}
+			if schedule && old == "" {
+				rows, e := tx.QueryContext(ctx, s.rebind(`SELECT o.data FROM calendar_objects o JOIN calendars c ON c.id=o.calendar_id WHERE c.user_id=? AND o.uid=?`), actorID, o.UID)
+				if e != nil {
+					return nil, e
+				}
+				duplicate := false
+				for rows.Next() {
+					var data string
+					if e = rows.Scan(&data); e != nil {
+						break
+					}
+					p, parseErr := calutil.ParseICS(data)
+					if parseErr == nil && strings.EqualFold(p.Organizer.Email, email) {
+						duplicate = true
+					}
+				}
+				rowErr := rows.Err()
+				rows.Close()
+				if e != nil {
+					return nil, e
+				}
+				if rowErr != nil {
+					return nil, rowErr
+				}
+				if duplicate {
+					return nil, ErrCalendarConflict
+				}
+			}
+			if !schedule {
+				actorID = ""
+				// Personal/recipient changes never schedule on behalf of another
+				// organizer, even when that organizer has an ACL on this calendar.
+				// Direct edits of a resource calendar still validate availability.
+				var direct int
+				if e = tx.QueryRowContext(ctx, s.rebind(`SELECT COUNT(*) FROM calendar_resources r JOIN calendars c ON c.user_id=r.user_id WHERE c.id=?`), o.CalendarID).Scan(&direct); e != nil {
+					return nil, e
+				}
+				bookResources = direct > 0
+			}
+		} else {
+			actorID = ""
+		}
+	}
 	if err = s.saveCalendarObjectTx(ctx, tx, o); err != nil {
 		return nil, err
 	}
-	if err = s.bookCalendarResourcesTx(ctx, tx, o, old); err != nil {
-		return nil, err
+	if bookResources {
+		if err = s.bookCalendarResourcesTx(ctx, tx, o, old); err != nil {
+			return nil, err
+		}
 	}
 	if actorID != "" {
 		mails, err = s.syncCalendarMeetingTx(ctx, tx, actorID, o, old)
@@ -363,6 +429,13 @@ func (s *Store) saveCalendarObjectTx(ctx context.Context, tx *sql.Tx, o *Calenda
 	} else {
 		if o.CreateOnly {
 			return ErrCalendarConflict
+		}
+		if o.ExpectedETag != "" && o.ExpectedETag != existing.ETag {
+			return ErrCalendarConflict
+		}
+		if o.Data == existing.Data && o.UID == existing.UID && o.Component == existing.Component {
+			*o = *existing
+			return nil
 		}
 		o.ID = existing.ID
 		q := `UPDATE calendar_objects SET uid=?, etag=?, data=?, size=?, component=?, dtstart=?, dtend=?, updated_at=? WHERE id=?`
