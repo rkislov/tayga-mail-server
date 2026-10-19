@@ -22,8 +22,10 @@ type Ticket struct {
 	Booking         string `json:"booking"`
 	Passenger       string `json:"passenger"`
 	Source          string `json:"source"`
-	DepartureOffset string `json:"departure_offset"` // explicit ISO offset only
+	DepartureOffset string `json:"departure_offset"` // explicit or verified airport ISO offset
 	ArrivalOffset   string `json:"arrival_offset"`
+	DepartureZone   string `json:"departure_zone,omitempty"` // verified airport IANA zone
+	ArrivalZone     string `json:"arrival_zone,omitempty"`
 	Cancelled       bool   `json:"cancelled"`
 	ReviewRequired  bool   `json:"review_required"`
 }
@@ -114,10 +116,13 @@ func explicitOffset(value string) string {
 	return fmt.Sprintf("%s%02d:%02d", v[:1], h, min)
 }
 
-// ParseAll treats each explicit flight/train heading as a separate segment.
-// Unlabelled PDF tables and scans are intentionally not guessed.
+// ParseAll supports explicit headings and recognized itinerary table layouts.
+// Unknown tables and scans are not guessed.
 func ParseAll(text string) []*Ticket {
 	text = strings.ReplaceAll(text, "\r\n", "\n")
+	if trips := parseAviasales(text); len(trips) > 0 {
+		return trips
+	}
 	markers := segmentMarker.FindAllStringIndex(text, 17)
 	if len(markers) == 0 {
 		if t := Parse(text); t != nil {

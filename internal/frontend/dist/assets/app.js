@@ -7540,7 +7540,7 @@ async function refreshTravelProfile() {
       const option=travelNode('option',travelText(ru,en));option.value=value;select.append(option);
     }
     select.value=preferences.mode||'off';host.append(label,select);
-    host.append(travelNode('p',travelText('Для автодобавления нужны маршрут, пассажир, бронь, время отправления и прибытия с явными смещениями UTC. Неоднозначные данные, изменения и отмены требуют проверки. Старые письма можно обработать кнопкой «Из билета» в письме.','Automatic creation requires a route, passenger, booking reference and departure/arrival times with explicit UTC offsets. Ambiguous data, changes and cancellations require review. Use “From ticket” in a message to process older mail.'),'field-hint'));
+    host.append(travelNode('p',travelText('Для автодобавления нужны маршрут, пассажир, бронь и время с известными часовыми поясами. В квитанциях Авиасейлс пояса SVO и SVX определяются по аэропортам; остальные нужно подтвердить. Неоднозначные данные, изменения и отмены требуют проверки. Старые письма можно обработать кнопкой «Из билета» в письме.','Automatic creation requires a route, passenger, booking reference and times with known timezones. Aviasales receipts resolve SVO and SVX timezones from airport codes; other airports require confirmation. Ambiguous data, changes and cancellations require review. Use “From ticket” in a message to process older mail.'),'field-hint'));
     const msg=travelNode('p','','msg');msg.setAttribute('role','status');
     const save=travelButton(t('save'),async()=>{if(state.tokens?.access_token!==owner)return;save.disabled=true;try{await api('/api/v1/travel/preferences',{method:'PUT',body:JSON.stringify({mode:select.value})});setMsg(msg,t('saved'),'ok');}catch(e){setMsg(msg,e.message,'err');}finally{save.disabled=false;}} ,true);
     const controls=travelNode('div',undefined,'actions');controls.append(save,travelButton(t('refresh'),()=>refreshTravelProfile()));host.append(controls,msg);
@@ -7548,6 +7548,7 @@ async function refreshTravelProfile() {
     for(const item of result.candidates||[]) {
       const row=travelNode('article',undefined,'travel-trip-row');
       const text=travelNode('div');text.append(travelNode('strong',travelTitle(item.ticket)+' · '+[item.ticket.origin,item.ticket.destination].filter(Boolean).join(' → ')),travelNode('p',item.ticket.departure.replace('T',' '),'meta'),travelNode('p',travelStatus(item),'meta'));
+      if(item.ticket.passenger)text.append(travelNode('p',item.ticket.passenger,'meta'));
       row.append(text,travelButton(travelText('Открыть','Open'),()=>openTravelCandidate(item.id)));list.append(row);
     }
     if(!result.total)list.append(travelNode('p',travelText('Распознанных поездок пока нет.','No recognized trips yet.'),'meta'));
@@ -7580,11 +7581,13 @@ function showTravelResults(items,warnings=[]) {
   const owner=state.tokens?.access_token;
   const dialog=travelNode('dialog',undefined,'protection-reader travel-review');
   const title=travelNode('h3',travelText('Поездки из билетов','Trips from tickets'),'heading');title.id='travel-dialog-title';dialog.setAttribute('aria-labelledby',title.id);dialog.append(title);
-  if(!items.length)dialog.append(travelNode('p',travelText('Не удалось распознать поездку. Нужны явно подписанные номер рейса или поезда и дата отправления. PDF должен содержать текстовый слой.','No trip recognized. An explicitly labeled flight/train number and departure date are required. PDFs must contain text.'),'meta'));
+  if(!items.length)dialog.append(travelNode('p',travelText('Не удалось распознать поездку. Поддерживаются квитанции Авиасейлс и билеты с явно подписанными полями рейса/поезда и дат. PDF должен содержать текстовый слой.','No trip recognized. Aviasales itineraries and tickets with explicitly labeled flight/train numbers and dates are supported. PDFs must contain text.'),'meta'));
   if(warnings.length)dialog.append(travelNode('p',travelText('Часть содержимого не обработана: для PDF нужен pdftotext; пределы — 4 файла по 8 МиБ, первые 10 страниц. Проверьте оригинал билета.','Some content was not processed: PDFs require pdftotext; limits are 4 files of 8 MiB, first 10 pages. Check the original ticket.'),'msg'));
   for(const item of items) {
     const trip=item.ticket,section=travelNode('section',undefined,'card stack-gap travel-ticket');
     section.append(travelNode('strong',travelTitle(trip)),travelNode('p',[trip.origin,trip.destination].join(' → ')),travelNode('p',travelStatus(item),'meta'));
+    if(trip.passenger)section.append(travelNode('p',trip.passenger,'meta'));
+    if(trip.departure_zone||trip.arrival_zone)section.append(travelNode('p',travelText('Часовые пояса по аэропортам: ','Airport timezones: ')+[trip.departure_zone,trip.arrival_zone].map(z=>z||travelText('нужно уточнить','confirmation needed')).join(' → '),'field-hint'));
     const details=travelNode('details');details.append(travelNode('summary',travelText('Данные билета','Ticket details')));
     details.append(travelNode('p',[trip.passenger,trip.booking?travelText('Бронь: ','Booking: ')+trip.booking:'',trip.seat?travelText('Место: ','Seat: ')+trip.seat:'',trip.coach?travelText('Вагон: ','Coach: ')+trip.coach:'',travelText('Источник: ','Source: ')+trip.source].filter(Boolean).join(' · '),'meta'));section.append(details);
     if(item.event_id&&!item.event_missing)section.append(travelButton(travelText('Открыть событие','Open event'),()=>openTravelCalendar(item,dialog)));
@@ -7611,11 +7614,11 @@ function showTravelResults(items,warnings=[]) {
         const start=utc(dates[0].value,zones[0].value),end=utc(dates[1].value,zones[1].value);
         if(!Number.isFinite(+start)||!Number.isFinite(+end)||end<=start||end-start>31*86400000){setMsg(msg,travelText('Проверьте время прибытия: оно должно быть после отправления.','Check arrival time: it must follow departure.'),'err');return;}
         save.disabled=true;
-        try{const result=await api('/api/v1/travel/'+encodeURIComponent(item.id)+'/event',{method:'POST',body:JSON.stringify({start:start.toISOString(),end:end.toISOString(),etag:item.event_etag})});item.event_id=result.event_id;item.state='saved';dialog.close();if(state.tokens?.access_token!==owner)return;await refreshTravelProfile();if(state.tokens?.access_token===owner)showTravelResults([item]);}
+        try{const result=await api('/api/v1/travel/'+encodeURIComponent(item.id)+'/event',{method:'POST',body:JSON.stringify({start:start.toISOString(),end:end.toISOString(),etag:item.event_etag})});item.event_id=result.event_id;item.state='saved';dialog.close();if(state.tokens?.access_token!==owner)return;await refreshTravelProfile();if(state.tokens?.access_token===owner)showTravelResults(items,warnings);}
         catch(e){setMsg(msg,e.message,'err');save.disabled=false;}
       },true);
       save.disabled=trip.cancelled&&!item.event_id;
-      const ignore=travelButton(travelText('Пропустить','Dismiss'),async()=>{if(ignore.disabled)return;if(state.tokens?.access_token!==owner){dialog.close();return;}ignore.disabled=true;try{await api('/api/v1/travel/'+encodeURIComponent(item.id)+'/ignore',{method:'POST'});item.state='ignored';dialog.close();if(state.tokens?.access_token!==owner)return;await refreshTravelProfile();if(state.tokens?.access_token===owner)showTravelResults([item]);}catch(e){setMsg(msg,e.message,'err');ignore.disabled=false;}});
+      const ignore=travelButton(travelText('Пропустить','Dismiss'),async()=>{if(ignore.disabled)return;if(state.tokens?.access_token!==owner){dialog.close();return;}ignore.disabled=true;try{await api('/api/v1/travel/'+encodeURIComponent(item.id)+'/ignore',{method:'POST'});item.state='ignored';dialog.close();if(state.tokens?.access_token!==owner)return;await refreshTravelProfile();if(state.tokens?.access_token===owner)showTravelResults(items,warnings);}catch(e){setMsg(msg,e.message,'err');ignore.disabled=false;}});
       const actions=travelNode('div',undefined,'actions');actions.append(save,ignore);section.append(actions,msg);
     }
     dialog.append(section);
