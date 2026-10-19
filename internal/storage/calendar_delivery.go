@@ -43,6 +43,9 @@ func calendarAttendeeMail(from, name string, attendees []calutil.Attendee, subje
 	var out []CalendarMail
 	seen := map[string]bool{}
 	for _, a := range attendees {
+		if a.ScheduleAgent != "" && !strings.EqualFold(a.ScheduleAgent, "SERVER") {
+			continue
+		}
 		to := strings.ToLower(strings.TrimSpace(a.Email))
 		if to == "" || seen[to] || strings.EqualFold(to, from) {
 			continue
@@ -55,6 +58,11 @@ func calendarAttendeeMail(from, name string, attendees []calutil.Attendee, subje
 
 func (s *Store) queueCalendarMail(ctx context.Context, tx *sql.Tx, mails []CalendarMail) error {
 	for _, m := range mails {
+		var err error
+		m.ICS, err = calutil.SchedulingMailICS(m.ICS)
+		if err != nil {
+			return err
+		}
 		// Booking resources receive calendar objects, not invitation mail.
 		if m.Method == "REQUEST" {
 			var n int
@@ -68,7 +76,7 @@ func (s *Store) queueCalendarMail(ctx context.Context, tx *sql.Tx, mails []Calen
 		// Resolve a local identity now: an account deleted before delivery must
 		// never turn a previously local invitation into an external email.
 		var userID string
-		err := tx.QueryRowContext(ctx, s.rebind(`SELECT id FROM users WHERE LOWER(email)=LOWER(?)`), m.To).Scan(&userID)
+		err = tx.QueryRowContext(ctx, s.rebind(`SELECT id FROM users WHERE LOWER(email)=LOWER(?)`), m.To).Scan(&userID)
 		if err != nil && err != sql.ErrNoRows {
 			return err
 		}

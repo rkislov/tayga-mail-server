@@ -82,3 +82,33 @@ func meetingComponentKey(c *ical.Component) (string, error) {
 	}
 	return recurrenceKey(v, dateProp(p)), nil
 }
+
+// SchedulingMailICS removes personal reminders/categories and CalDAV-only
+// delivery controls from an outgoing iTIP message, retaining its METHOD.
+func SchedulingMailICS(data string) (string, error) {
+	parsed, err := ParseICS(data)
+	if err != nil {
+		return "", err
+	}
+	data, err = MergeMeetingCopy(data, "")
+	if err != nil {
+		return "", err
+	}
+	cal, err := ical.NewDecoder(strings.NewReader(data)).Decode()
+	if err != nil {
+		return "", err
+	}
+	if parsed.Method != "" {
+		cal.Props.SetText("METHOD", parsed.Method)
+	}
+	for _, c := range cal.Children {
+		for _, name := range []string{"ATTENDEE", "ORGANIZER"} {
+			for _, prop := range c.Props.Values(name) {
+				delete(prop.Params, "SCHEDULE-AGENT")
+				delete(prop.Params, "SCHEDULE-STATUS")
+				delete(prop.Params, "SCHEDULE-FORCE-SEND")
+			}
+		}
+	}
+	return encode(cal)
+}

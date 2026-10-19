@@ -15,12 +15,13 @@ const ProdID = "-//Tayga//Calendar//EN"
 
 // Attendee is a meeting participant.
 type Attendee struct {
-	Email    string
-	Name     string
-	Role     string // REQ-PARTICIPANT, OPT-PARTICIPANT, CHAIR
-	PartStat string // NEEDS-ACTION, ACCEPTED, DECLINED, TENTATIVE
-	RSVP     bool
-	CUType   string // INDIVIDUAL
+	Email         string
+	Name          string
+	Role          string // REQ-PARTICIPANT, OPT-PARTICIPANT, CHAIR
+	PartStat      string // NEEDS-ACTION, ACCEPTED, DECLINED, TENTATIVE
+	RSVP          bool
+	CUType        string // INDIVIDUAL
+	ScheduleAgent string // SERVER (default), CLIENT, NONE
 }
 
 // Attachment is an ATTACH property (typically a download URI).
@@ -85,6 +86,9 @@ func setAttendeeProp(props ical.Props, a Attendee, isOrganizer bool) {
 	prop := ical.NewProp(name)
 	prop.Value = mailtoURL(a.Email).String()
 	prop.SetValueType(ical.ValueCalendarAddress)
+	if a.ScheduleAgent != "" {
+		prop.Params.Set("SCHEDULE-AGENT", a.ScheduleAgent)
+	}
 	if a.Name != "" {
 		prop.Params.Set(ical.ParamCommonName, a.Name)
 	}
@@ -310,14 +314,16 @@ func ParseICS(data string) (ParseResult, error) {
 				out.Organizer.Email = emailFromURI(u)
 			}
 			out.Organizer.Name = org.Params.Get(ical.ParamCommonName)
+			out.Organizer.ScheduleAgent = org.Params.Get("SCHEDULE-AGENT")
 		}
 		for _, prop := range event.Props.Values(ical.PropAttendee) {
 			a := Attendee{
-				Name:     prop.Params.Get(ical.ParamCommonName),
-				Role:     prop.Params.Get(ical.ParamRole),
-				PartStat: prop.Params.Get(ical.ParamParticipationStatus),
-				CUType:   prop.Params.Get("CUTYPE"),
-				RSVP:     strings.EqualFold(prop.Params.Get(ical.ParamRSVP), "TRUE"),
+				Name:          prop.Params.Get(ical.ParamCommonName),
+				Role:          prop.Params.Get(ical.ParamRole),
+				PartStat:      prop.Params.Get(ical.ParamParticipationStatus),
+				CUType:        prop.Params.Get("CUTYPE"),
+				ScheduleAgent: prop.Params.Get("SCHEDULE-AGENT"),
+				RSVP:          strings.EqualFold(prop.Params.Get(ical.ParamRSVP), "TRUE"),
 			}
 			if u, err := url.Parse(prop.Value); err == nil {
 				a.Email = emailFromURI(u)
@@ -414,6 +420,8 @@ func parseAttendeeLine(line string) Attendee {
 				a.RSVP = strings.EqualFold(kv[1], "TRUE")
 			case "CUTYPE":
 				a.CUType = kv[1]
+			case "SCHEDULE-AGENT":
+				a.ScheduleAgent = kv[1]
 			}
 		}
 	}

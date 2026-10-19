@@ -171,11 +171,11 @@ func (s *Store) bookCalendarResourcesTx(ctx context.Context, tx *sql.Tx, o *Cale
 			return err
 		}
 	}
-	attendees, err := calutil.EventAttendees(o.Data)
+	attendees, err := calutil.SchedulingAttendees(o.Data)
 	if err != nil {
 		return err
 	}
-	oldAttendees, _ := calutil.EventAttendees(previous)
+	oldAttendees, _ := calutil.SchedulingAttendees(previous)
 	resources := map[string]*CalendarResource{}
 	current := map[string]bool{}
 	for i, a := range append(attendees, oldAttendees...) {
@@ -224,7 +224,7 @@ func (s *Store) bookCalendarResourcesTx(ctx context.Context, tx *sql.Tx, o *Cale
 		for email := range current {
 			present := false
 			for _, a := range item.Attendees {
-				if strings.EqualFold(a.Email, email) {
+				if strings.EqualFold(a.Email, email) && (a.ScheduleAgent == "" || strings.EqualFold(a.ScheduleAgent, "SERVER")) {
 					present = true
 				}
 			}

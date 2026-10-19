@@ -198,6 +198,7 @@ type Driver interface {
 	UpsertCalendarObject(ctx context.Context, o *CalendarObject) (*CalendarObject, error)
 	SaveCalendarObjectWithMail(ctx context.Context, o *CalendarObject, mails []CalendarMail) (*CalendarObject, error)
 	SaveCalendarMeeting(ctx context.Context, actorID string, o *CalendarObject) (*CalendarObject, error)
+	SaveCalendarClientObject(ctx context.Context, actorID string, o *CalendarObject) (*CalendarObject, error)
 	DeleteCalendarMeeting(ctx context.Context, actorID string, o *CalendarObject) error
 	DeleteCalendarObjectWithMail(ctx context.Context, o *CalendarObject, mails []CalendarMail) error
 	ClaimCalendarDelivery(ctx context.Context) (*CalendarDelivery, error)
