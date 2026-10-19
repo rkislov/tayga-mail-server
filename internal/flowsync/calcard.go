@@ -11,10 +11,12 @@ import (
 	"time"
 
 	"github.com/emersion/go-vcard"
+	"github.com/tayga/tms/internal/calutil"
 	"github.com/tayga/tms/internal/storage"
 )
 
 const (
+	folderTypeTasks    = 7
 	folderTypeCalendar = 8
 	folderTypeContacts = 9
 	// folderTypeNotes is ActiveSync folder type for Notes (MS-ASCMD).
@@ -27,6 +29,7 @@ const (
 	kindCalendar
 	kindContacts
 	kindNotes
+	kindTasks
 )
 
 type calendarAdd struct {
@@ -49,6 +52,9 @@ type contactAdd struct {
 }
 
 func (h *easHandler) resolveCollection(ctx context.Context, userID, collectionID string) (collectionKind, error) {
+	if collectionID == systemFolderID(userID, "tasks") {
+		return kindTasks, nil
+	}
 	if _, err := h.mailboxByID(ctx, userID, collectionID); err == nil {
 		return kindMail, nil
 	}
@@ -73,6 +79,8 @@ func (h *easHandler) syncCollection(ctx context.Context, u *storage.User, dev *s
 
 	if collectionID == "" {
 		switch {
+		case classHint == "tasks":
+			collectionID = systemFolderID(u.ID, "tasks")
 		case classHint == "calendar":
 			cal, err := h.store.GetCalendarByName(ctx, u.ID, "default")
 			if err != nil {
@@ -105,6 +113,7 @@ func (h *easHandler) syncCollection(ctx context.Context, u *storage.User, dev *s
 		return "", nil, err
 	}
 
+	ctx = context.WithValue(ctx, taskDeviceKey{}, dev.ID)
 	wbResults := h.applyWritebacks(ctx, u, kind, collectionID, parseSyncClientOps(reqBody))
 
 	key, err := h.store.GetFlowSyncSyncKey(ctx, dev.ID, collectionID)
@@ -117,6 +126,8 @@ func (h *easHandler) syncCollection(ctx context.Context, u *storage.User, dev *s
 	}
 
 	switch kind {
+	case kindTasks:
+		return h.syncTasks(ctx, u, collectionID, next, wbxml, wbResults)
 	case kindCalendar:
 		return h.syncCalendar(ctx, collectionID, next, wbxml, wbResults)
 	case kindContacts:
@@ -382,19 +393,13 @@ type icalEvent struct {
 }
 
 func parseICalEvent(data string) icalEvent {
-	var ev icalEvent
-	for _, line := range unfoldICS(data) {
-		upper := strings.ToUpper(line)
-		switch {
-		case strings.HasPrefix(upper, "SUMMARY"):
-			ev.Summary = icsValue(line)
-		case strings.HasPrefix(upper, "LOCATION"):
-			ev.Location = icsValue(line)
-		case strings.HasPrefix(upper, "DTSTART"):
-			ev.Start, ev.AllDay = normalizeICSDate(icsValue(line), strings.Contains(upper, "VALUE=DATE"))
-		case strings.HasPrefix(upper, "DTEND"):
-			ev.End, _ = normalizeICSDate(icsValue(line), strings.Contains(upper, "VALUE=DATE"))
-		}
+	parsed, _ := calutil.ParseICS(data)
+	ev := icalEvent{Summary: parsed.Summary, Location: parsed.Location, AllDay: parsed.AllDay}
+	if parsed.Start != nil {
+		ev.Start = parsed.Start.UTC().Format("20060102T150405Z")
+	}
+	if parsed.End != nil {
+		ev.End = parsed.End.UTC().Format("20060102T150405Z")
 	}
 	return ev
 }

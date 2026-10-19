@@ -114,6 +114,12 @@ func migrate(ctx context.Context, db *sql.DB, dialect Dialect) error {
 			"043_muc.sqlite.sql",
 			"044_spam_learning.sqlite.sql",
 			"045_pep_subscriptions.sqlite.sql",
+			"046_task_progress.sqlite.sql",
+			"047_task_completion_time.sqlite.sql",
+			"048_task_assignment.sqlite.sql",
+			"049_calendar_invite_identity.sqlite.sql",
+			"050_calendar_delivery.sqlite.sql",
+			"051_travel.sqlite.sql",
 		}
 	case DialectPostgres:
 		files = []string{
@@ -162,6 +168,12 @@ func migrate(ctx context.Context, db *sql.DB, dialect Dialect) error {
 			"043_muc.postgres.sql",
 			"044_spam_learning.postgres.sql",
 			"045_pep_subscriptions.postgres.sql",
+			"046_task_progress.postgres.sql",
+			"047_task_completion_time.postgres.sql",
+			"048_task_assignment.postgres.sql",
+			"049_calendar_invite_identity.postgres.sql",
+			"050_calendar_delivery.postgres.sql",
+			"051_travel.postgres.sql",
 		}
 	default:
 		return fmt.Errorf("unsupported dialect")
@@ -230,7 +242,7 @@ func splitSQL(script string) []string {
 	out := make([]string, 0, len(parts))
 	for _, p := range parts {
 		p = strings.TrimSpace(p)
-		if p == "" || strings.HasPrefix(p, "--") {
+		if p == "" {
 			continue
 		}
 		// skip pure comment blocks

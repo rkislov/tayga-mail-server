@@ -22,7 +22,10 @@ func (h *easHandler) collectionSnapshot(ctx context.Context, u *storage.User, id
 		return nil, nil, err
 	}
 	var full string
+	var taskHashes map[string]string
 	switch kind {
+	case kindTasks:
+		full, taskHashes, err = h.taskSnapshot(ctx, u, id, "snapshot", nil)
 	case kindCalendar:
 		full, _, err = h.syncCalendar(ctx, id, "snapshot", false, nil)
 	case kindContacts:
@@ -40,6 +43,9 @@ func (h *easHandler) collectionSnapshot(ctx context.Context, u *storage.User, id
 		return nil, nil, err
 	}
 	current, previous := snapshotItemHashes(kind, doc.find("Commands"), contextPreferences(ctx), state.Items, state.itemPreferences(), state.Preferences)
+	if kind == kindTasks {
+		current = taskHashes
+	}
 	return current, previous, nil
 }
 

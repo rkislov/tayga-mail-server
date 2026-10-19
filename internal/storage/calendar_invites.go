@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"strings"
 	"time"
+
+	"github.com/tayga/tms/internal/calutil"
 )
 
 // CalendarInvite tracks RSVP state for a meeting invitee.
@@ -41,15 +43,20 @@ func (s *Store) UpsertCalendarInvite(ctx context.Context, inv *CalendarInvite) (
 		inv.CreatedAt = now
 		q := s.rebind(`INSERT INTO calendar_invites
 			(id, organizer_user_id, attendee_email, attendee_user_id, event_uid, calendar_object_id, summary, partstat, proposed_start, proposed_end, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (organizer_user_id, event_uid, attendee_email) DO UPDATE SET
+            attendee_user_id=excluded.attendee_user_id, calendar_object_id=excluded.calendar_object_id,
+            summary=excluded.summary, partstat=excluded.partstat, proposed_start=excluded.proposed_start,
+            proposed_end=excluded.proposed_end, updated_at=excluded.updated_at
+            RETURNING id, created_at`)
 		var attUID any
 		if inv.AttendeeUserID != "" {
 			attUID = inv.AttendeeUserID
 		}
-		_, err := s.db.ExecContext(ctx, q,
+		err := s.db.QueryRowContext(ctx, q,
 			inv.ID, inv.OrganizerUserID, inv.AttendeeEmail, attUID, inv.EventUID, inv.CalendarObjectID,
 			inv.Summary, inv.PartStat, inv.ProposedStart, inv.ProposedEnd, inv.CreatedAt, inv.UpdatedAt,
-		)
+		).Scan(&inv.ID, &inv.CreatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -159,6 +166,16 @@ func (s *Store) scanCalendarInvite(row interface{ Scan(dest ...any) error }) (*C
 
 // FreeBusyForUser returns busy intervals from owned and shared calendars with freebusy|read|write rights.
 func (s *Store) FreeBusyForUser(ctx context.Context, userID string, from, to time.Time) ([]BusyInterval, error) {
+	return s.FreeBusyForUserExceptMeeting(ctx, userID, from, to, "", "")
+}
+
+// Excluding a booking by both UID and organizer prevents it from conflicting
+// with itself on a reschedule, without hiding another organizer's meeting.
+func (s *Store) FreeBusyForUserExceptMeeting(ctx context.Context, userID string, from, to time.Time, uid, organizerEmail string) ([]BusyInterval, error) {
+	return s.FreeBusyForUserExceptOccurrence(ctx, userID, from, to, uid, organizerEmail, "")
+}
+
+func (s *Store) FreeBusyForUserExceptOccurrence(ctx context.Context, userID string, from, to time.Time, uid, organizerEmail, rid string) ([]BusyInterval, error) {
 	calIDs := map[string]struct{}{}
 	owned, err := s.ListCalendars(ctx, userID)
 	if err != nil {
@@ -186,8 +203,19 @@ func (s *Store) FreeBusyForUser(ctx context.Context, userID string, from, to tim
 			return nil, err
 		}
 		for _, o := range objs {
-			if !strings.Contains(strings.ToUpper(o.Data), "RRULE:") && !strings.Contains(strings.ToUpper(o.Data), "RDATE:") && o.DTStart != nil {
-				if strings.Contains(strings.ToUpper(o.Data), "STATUS:CANCELLED") || strings.Contains(strings.ToUpper(o.Data), "TRANSP:TRANSPARENT") {
+			skipRID := ""
+			if uid != "" && o.UID == uid {
+				p, err := calutil.ParseICS(o.Data)
+				if err == nil && strings.EqualFold(p.Organizer.Email, organizerEmail) {
+					if rid == "" {
+						continue
+					}
+					skipRID = rid
+				}
+			}
+			upper := strings.ToUpper(o.Data)
+			if !strings.Contains(upper, "RRULE") && !strings.Contains(upper, "RDATE") && !strings.Contains(upper, "RECURRENCE-ID") && o.DTStart != nil {
+				if strings.Contains(upper, "STATUS:CANCELLED") || strings.Contains(upper, "TRANSP:TRANSPARENT") {
 					continue
 				}
 				start := o.DTStart.UTC()
@@ -200,7 +228,7 @@ func (s *Store) FreeBusyForUser(ctx context.Context, userID string, from, to tim
 				}
 				continue
 			}
-			intervals, err := objectBusyIntervals(o.Data, from, to)
+			intervals, err := busyIntervalsExceptOccurrence(o.Data, from, to, skipRID)
 			if err != nil {
 				return nil, err
 			}

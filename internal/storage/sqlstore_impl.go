@@ -632,6 +632,16 @@ func (s *Store) insertMessage(ctx context.Context, msg *Message, sourceID, remot
 		}
 	}
 
+	if _, err := s.insertMessageTx(ctx, tx, msg, copyFrom); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return msg, nil
+}
+
+func (s *Store) insertMessageTx(ctx context.Context, tx *sql.Tx, msg *Message, copyFrom string) (*Message, error) {
 	var uid int64
 	lockQ := s.rebind(`SELECT uidnext FROM mailboxes WHERE id = ?`)
 	if s.dialect == DialectPostgres {
@@ -667,13 +677,13 @@ func (s *Store) insertMessage(ctx context.Context, msg *Message, sourceID, remot
 	if _, err := tx.ExecContext(ctx, ins, args...); err != nil {
 		return nil, mapErr(err)
 	}
+	if err := s.queueTravelMessageTx(ctx, tx, msg); err != nil {
+		return nil, err
+	}
 	if copyFrom != "" {
 		if err := s.queueSpamLearning(ctx, tx, msg.ID, copyFrom, msg.MailboxID); err != nil {
 			return nil, err
 		}
-	}
-	if err := tx.Commit(); err != nil {
-		return nil, err
 	}
 	return msg, nil
 }

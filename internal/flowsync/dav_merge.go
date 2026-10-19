@@ -20,7 +20,7 @@ func changedDAVProperties(body string, fields map[string]string) map[string]bool
 	return changed
 }
 
-// Replace only explicitly edited properties in the first component. Preserve
+// Replace only explicitly edited properties in the master component. Preserve
 // timezone definitions, recurrence, alarms, photos and additional contact data.
 func mergeDAVProperties(original, generated, component string, changed map[string]bool) string {
 	unfold := func(raw string) []string {
@@ -43,10 +43,43 @@ func mergeDAVProperties(original, generated, component string, changed map[strin
 			replacements[name(line)] = line
 		}
 	}
+	lines := unfold(original)
+	target := -1
+	// CalDAV permits detached exceptions before the recurring master.
+	for i, line := range lines {
+		if !strings.EqualFold(line, "BEGIN:"+component) {
+			continue
+		}
+		if target < 0 {
+			target = i
+		}
+		if component != "VEVENT" {
+			break
+		}
+		exception, nested := false, 1
+		for _, candidate := range lines[i+1:] {
+			if strings.HasPrefix(strings.ToUpper(candidate), "BEGIN:") {
+				nested++
+			}
+			if strings.HasPrefix(strings.ToUpper(candidate), "END:") {
+				nested--
+			}
+			if nested == 0 {
+				break
+			}
+			if nested == 1 && name(candidate) == "RECURRENCE-ID" {
+				exception = true
+			}
+		}
+		if !exception {
+			target = i
+			break
+		}
+	}
 	var out []string
 	depth, completed := 0, false
-	for _, line := range unfold(original) {
-		if !completed && strings.EqualFold(line, "BEGIN:"+component) {
+	for i, line := range lines {
+		if !completed && i == target {
 			depth = 1
 			out = append(out, line)
 			continue

@@ -1507,6 +1507,7 @@ html[data-theme="teriberka"] {
     flex-direction: column;
     gap: 0.1rem;
     min-width: 0;
+    overflow-wrap: anywhere;
   }
 
   .cal-invite-actions {
@@ -3072,6 +3073,8 @@ html[data-color-mode="light"] {
   .cal-inbox-button { position: relative; overflow: visible; }
   .cal-inbox-count { position: absolute; top: -0.45rem; right: -0.4rem; display: grid; place-items: center; min-width: 1.2rem; height: 1.2rem; padding: 0 0.2rem; border-radius: 999px; background: var(--btn-spray); color: #fff; font: 600 0.7rem/1 var(--font-body); }
   .cal-invites-dialog { width: min(100%, 42rem); }
+  .cal-invites-dialog .cal-invite-list { max-height: none; min-height: 0; flex: 1 1 auto; }
+  #cal-invite-msg:empty { display: none; }
   .cal-invite-list { overflow-y: auto; min-height: 3rem; list-style: none; padding: 0; margin: 0; }
   .cal-invite-item { border: 1px solid rgba(var(--ui-ink-rgb), 0.16); border-radius: 1rem; padding: 1rem; margin-bottom: 0.75rem; }
   .cal-day-view { padding: 0.85rem; }
@@ -3660,6 +3663,17 @@ html body { background:var(--work-bg);background-image:none;color:var(--work-tex
 .field-input,.field-input-mono {border-radius:7px;min-height:40px;font-size:14px;background:var(--work-panel);border-color:var(--work-line);color:var(--work-text);}
 :where(button,input,select,textarea,a,[tabindex]):focus-visible {outline:2px solid var(--work-accent);outline-offset:3px;}
 .create-fab,.mail-settings-toggle {border-radius:16px!important;background:var(--work-primary)!important;color:#fff!important;box-shadow:0 6px 16px #18264c25!important;}
+/* Inset floating actions from the workspace panels, including their lower edge. */
+.section-create,.mail-settings {bottom:calc(56px + env(safe-area-inset-bottom));}
+.section-create {right:32px;}
+.mail-settings {left:32px;}
+@media(max-width:900px){
+ .section-create,.mail-settings {bottom:calc(40px + env(safe-area-inset-bottom));}
+ .section-create {right:24px;}
+ .mail-settings {left:24px;}
+}
+#calendar-reader-map {min-width:0;margin-bottom:.85rem;}
+#cal-headers {background:var(--work-raised);}
 .msg-item.is-active,.nav-btn.is-active {background:var(--work-selected);color:var(--work-accent);border-radius:7px;}
 .msg-item:hover {background:var(--work-raised);}
 .admin-users-table,.protection-table,.directory-table {width:100%;border-collapse:separate;border-spacing:0;table-layout:auto;font-size:14px;color:var(--work-text);}
@@ -3817,6 +3831,12 @@ html body { background:var(--work-bg);background-image:none;color:var(--work-tex
 .protection-stat-card h4 {font-weight:600;margin-bottom:12px}.protection-stat-card dl {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px 12px;font-size:14px}.protection-stat-card dd {text-align:right;overflow-wrap:anywhere}
 
 /* Selected wallpapers remain visible through primary workspace surfaces. */
+.cal-recurrence-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 16px;min-width:0;border:1px solid var(--work-line);padding:12px;border-radius:10px;margin:10px 0}
+.cal-recurrence-fields>div{min-width:0}.cal-recurrence-fields [hidden]{display:none!important}
+.cal-recurrence-fields :is(p,code,.cal-recurrence-days){grid-column:1/-1;overflow-wrap:anywhere}
+.cal-recurrence-days{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.cal-recurrence-days>span{width:100%}.cal-recurrence-days label{display:flex;align-items:center;gap:6px;padding:6px;border:1px solid var(--work-line);border-radius:6px}
+.cal-recurrence-dialog{width:min(650px,calc(100vw - 24px));max-height:90dvh;overflow:hidden}.cal-recurrence-dialog[open],#form-cal-recurrence{display:flex;flex-direction:column;min-height:0}#form-cal-recurrence{overflow:hidden}.cal-recurrence-content{overflow:auto;min-height:0;padding-right:4px}.cal-recurrence-dialog>h3,.cal-recurrence-dialog>p,.cal-recurrence-dialog .event-editor-footer,#cal-recurrence-msg{flex:none}.cal-recurrence-dialog .event-editor-footer{position:static;background:var(--work-panel);padding:12px 0 0!important}#cal-recurrence-msg:empty{display:none}
+@media(max-width:480px){.cal-recurrence-fields{grid-template-columns:minmax(0,1fr)}.cal-recurrence-dialog{padding:12px}}
 .theme-random-shot {display:grid;place-items:center;font-size:2.5rem;color:#fff;background:linear-gradient(135deg,#30376f,#7697b0)}
 html[data-theme] body {
  background-image:linear-gradient(rgb(16 18 27/.24),rgb(16 18 27/.40)),var(--tayga-bg-image,none);
@@ -3873,3 +3893,51 @@ dialog.omemo-dialog[open]{display:flex;flex-direction:column}
 @media(max-width:480px){.omemo-body{padding:16px}.omemo-footer{padding:12px 16px}.omemo-device-heading{align-items:flex-start;flex-direction:column;gap:6px}.omemo-overview-heading{align-items:flex-start}.omemo-overview-heading strong{font-size:15px}}
 .omemo-dialog .btn-secondary{background:var(--work-panel);color:var(--work-text);border-color:var(--work-line)}
 .omemo-dialog .btn-secondary:hover{background:var(--work-raised)}
+
+/* Task progress controls retain their columns and reachable actions on mobile. */
+.task-progress-fields{display:grid;grid-template-columns:minmax(0,2fr) minmax(100px,1fr);gap:16px}
+.task-progress-fields>div{min-width:0}
+#task-dialog{overflow:auto}
+#tasks-list .task-row{display:flex;align-items:center;gap:12px;padding:12px}
+#tasks-list .task-row>input{width:20px;height:20px;flex:none}
+#tasks-list .task-row-edit{flex:1;width:auto;min-width:0;text-align:left;white-space:normal;display:block}
+.task-row-title,.task-row-detail{display:block;overflow-wrap:anywhere}
+.task-row-detail{margin-top:4px;font-size:13px}
+.task-row-completed .task-row-title{text-decoration:line-through}
+#tasks-list .task-row-delete{flex:none;width:40px;min-width:40px}
+@media(max-width:480px){.task-progress-fields{gap:12px;grid-template-columns:minmax(0,1fr) 100px}#tasks-list .task-row{gap:8px;padding:8px 0}}
+
+/* Task assignment, activity and inbox share the task editor's responsive flow. */
+.task-activity{margin-top:20px;padding-top:16px;border:0;border-top:1px solid var(--border,#dfe3ee);min-width:0}
+.task-activity summary{cursor:pointer;font-weight:600}
+.task-activity legend{padding-top:16px;font-weight:600}
+.task-pager{display:flex;align-items:center;gap:8px;margin:12px 0;flex-wrap:wrap}
+.task-pager .meta{flex:1;text-align:center}
+.task-pager button{flex:none;width:auto!important}
+#task-dialog [hidden]{display:none!important}
+#task-dialog .actions{display:flex;gap:8px;flex-wrap:wrap}
+#task-dialog .actions button{width:auto;max-width:100%}
+#task-people,#task-permissions{overflow-wrap:anywhere}
+#task-history-list,#task-notifications-list{list-style:none;padding:0;margin:12px 0}
+#task-history-list li{padding:10px 0;border-bottom:1px solid var(--border,#dfe3ee);overflow-wrap:anywhere}
+#task-history-list .meta,.task-notice span{display:block;margin-top:4px}
+#task-notifications-list .task-notice{width:100%;text-align:left;white-space:normal;margin:4px 0;overflow-wrap:anywhere}
+.task-notice.is-unread{border-left:3px solid var(--accent,#4947a0);font-weight:600}
+#task-assignee{max-width:100%}
+
+/* Single-occurrence editor shares the calendar controls and stays within mobile screens. */
+.cal-occurrence-dialog {width:min(40rem,96vw);}
+.cal-occurrence-dialog .actions {display:flex;flex-wrap:wrap;gap:.65rem;justify-content:flex-end;}
+#cal-load-msg:empty {display:none;}
+.cal-occurrence-dialog input[type="datetime-local"],.cal-occurrence-dialog input[type="date"] {color-scheme:inherit;}
+
+/* Ticket review and personal travel list */
+.travel-review { width: min(720px, calc(100vw - 24px)); max-height: calc(100dvh - 32px); overflow: auto; }
+.travel-review .travel-ticket { margin-block: 16px; min-width: 0; overflow-wrap: anywhere; }
+.travel-time-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.travel-time-row .field-label { min-width: 0; }
+.travel-time-row .field-input { width: 100%; min-width: 0; }
+.travel-trip-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-block: 14px; border-bottom: 1px solid var(--border); }
+.travel-trip-row > div { min-width: 0; overflow-wrap: anywhere; }
+.travel-trip-row > button { flex: 0 0 auto; }
+@media (max-width: 540px) { .travel-time-row { grid-template-columns: minmax(0,1fr); gap: 0; } .travel-trip-row { align-items: start; flex-direction: column; } }

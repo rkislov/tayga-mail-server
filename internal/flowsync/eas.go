@@ -196,6 +196,7 @@ func (h *easHandler) folderSync(ctx context.Context, u *storage.User, dev *stora
 	next := "snapshot"
 
 	folders := make([]folderChange, 0, len(mbs)+len(cals)+len(abs)+len(nfs))
+	folders = append(folders, folderChange{ServerID: systemFolderID(u.ID, "tasks"), ParentID: "0", DisplayName: "Tasks", Type: folderTypeTasks})
 	for _, mb := range mbs {
 		folders = append(folders, folderChange{
 			ServerID: mb.ID, ParentID: "0", DisplayName: mb.Name, Type: folderType(mb.Name),
@@ -356,7 +357,10 @@ func (h *easHandler) itemEstimate(ctx context.Context, u *storage.User, dev *sto
 				} else {
 					snapshotCtx := context.WithValue(ctx, preferencesKey{}, prefs)
 					var full string
+					var taskHashes map[string]string
 					switch kind {
+					case kindTasks:
+						full, taskHashes, e = h.taskSnapshot(snapshotCtx, u, id, "unused", nil)
 					case kindCalendar:
 						full, _, e = h.syncCalendar(snapshotCtx, id, "unused", false, nil)
 					case kindContacts:
@@ -374,6 +378,9 @@ func (h *easHandler) itemEstimate(ctx context.Context, u *storage.User, dev *sto
 						return "", nil, e
 					}
 					hashes, previous := snapshotItemHashes(kind, parsed.find("Commands"), prefs, state.Items, state.itemPreferences(), state.Preferences)
+					if kind == kindTasks {
+						hashes = taskHashes
+					}
 					if key == "0" {
 						previous = nil
 					}

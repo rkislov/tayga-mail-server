@@ -96,6 +96,8 @@ func contextPreferences(ctx context.Context) syncPreferences {
 }
 func validFilter(kind collectionKind, p syncPreferences) bool {
 	switch kind {
+	case kindTasks:
+		return p.Filter == 0 || p.Filter == 8
 	case kindMail:
 		return p.Filter <= 5
 	case kindCalendar:

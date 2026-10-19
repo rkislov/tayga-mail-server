@@ -11,6 +11,8 @@ See [docs/architecture.md](docs/architecture.md) and `configs/tayga.example.yaml
 
 **Сравнение решений (RU):** [Tayga, CommuniGate Pro, RuPost и TEGU — функции, компоненты и ограничения](docs/product-comparison.md).
 
+**План разработки (RU):** [Дорожная карта: порядок работ, зависимости и критерии готовности](docs/roadmap.md).
+
 ## Quick start
 
 ```bash
@@ -49,6 +51,7 @@ Seed: `admin@example.com` / `changeme`. TLS: `tls.auto_generate` or `scripts/gen
 - Web calendar: independent visibility checkboxes (saved per account in the browser); **Calendar → Settings → iCalendar / CalDAV subscriptions** adds read-only external calendars. Supply a public HTTPS `.ics` feed or a specific CalDAV collection URL, optionally with an app password. The server refreshes subscriptions every 15 minutes and retains the last successful snapshot on failure. Feed URLs and credentials are encrypted using `server.secrets_key` or the persisted `secrets.key` (include that key in backups). RRULE occurrences cover the past year and next two years, including EXDATE and RECURRENCE-ID exceptions; limits: 20 subscriptions per user, 20 MiB per source response, 10,000 displayed events. Subscriptions appear in the web calendar; they are not republished as local DAV collections. Redirects and private-network sources are not followed.
 - External mail: scheduled IMAP/IMAPS and POP3/POP3S collection into personal folders — [configuration](docs/external-mail.md).
 - SMTP delivery diagnostics: queue-correlated commands and server replies — [mail logs](docs/mail-delivery-logs.md).
+- Electronic tickets → personal calendar: background recognition, user review, explicit timezones and replay protection — [setup and limits](docs/travel-tickets.md).
 - Files: versioned writes, trash, search, selection, sharing and personal WebDAV `/dav/files/`; external Collabora Online integration — [setup and limits](docs/files-and-office.md).
 - Notes: `/api/v1/notes*` (folders, rich notes, attachments, drawing); folder/note ACL for multi-user edit; FlowSync Notes (type 10) + EWS sticky notes
 - FlowSync — original module by Roman Sergeyevich Kislov, separately licensed under [Apache-2.0](internal/flowsync/LICENSE): ActiveSync `/Microsoft-Server-ActiveSync`, EWS `/EWS/Exchange.asmx`, Autodiscover (POX/JSON) + Mozilla autoconfig

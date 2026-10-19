@@ -57,7 +57,7 @@
   <div id="cal-invites-backdrop" class="dialog-backdrop hidden">
     <section id="cal-invites-dialog" class="config-dialog cal-invites-dialog" role="dialog" aria-modal="true" aria-labelledby="cal-invites-title">
       <div class="config-dialog-head"><h3 class="heading" id="cal-invites-title" data-i18n="cal_invites">Приглашения</h3><button type="button" class="btn-icon" id="btn-cal-invites-close" data-i18n-title="close" aria-label="Закрыть">×</button></div>
-      <p class="meta" data-i18n="cal_inbox_hint">Ответьте на приглашения. После ответа они исчезнут из лотка.</p>
+      <p class="meta" data-i18n="cal_inbox_hint">Ответьте на приглашения и согласуйте предложения нового времени для ваших встреч.</p>
       <ul id="cal-invite-list" class="cal-invite-list"></ul>
       <p id="cal-invite-msg" class="msg" role="status"></p>
     </section>
@@ -314,6 +314,7 @@
             </div>
           </div>
           <p class="meta cal-grid-hint" data-i18n="cal_grid_hint">Клик — открыть день · двойной клик — создать событие</p>
+		  <p id="cal-load-msg" class="msg cal-grid-hint" role="status"></p>
           <div id="cal-month" class="cal-month" aria-label="Month"></div>
           <section id="cal-day-view" class="cal-day-view hidden" aria-labelledby="cal-day-title">
             <div class="cal-day-view-head"><button type="button" class="btn-secondary btn-sm" id="btn-cal-month-view" data-i18n="cal_back_month">К месяцу</button><strong id="cal-day-title"></strong></div>
@@ -330,6 +331,9 @@
             <div class="reader-actions">
               <button type="button" class="btn-secondary btn-sm btn-ico mobile-only" data-pane-back data-i18n-title="back_list" title="К списку" aria-label="К списку"><span class="ico" data-ico="back" aria-hidden="true"></span></button>
               <button type="button" class="btn-secondary btn-sm btn-ico" id="btn-cal-delete" data-i18n-title="delete" title="Удалить" aria-label="Удалить"><span class="ico" data-ico="delete" aria-hidden="true"></span></button>
+			  <button type="button" class="btn-secondary btn-sm hidden" id="btn-cal-instance-edit" data-i18n="cal_instance_edit">Изменить повторение</button>
+			  <button type="button" class="btn-secondary btn-sm hidden" id="btn-cal-recurrence" data-i18n="cal_recurrence">Повторение</button>
+			  <button type="button" class="btn-secondary btn-sm hidden" id="btn-cal-series-delete" data-i18n="cal_series_delete">Удалить всю серию</button>
             </div>
             <h2 class="heading reader-subject" id="cal-subject"></h2>
             <dl class="reader-headers" id="cal-headers">
@@ -462,12 +466,31 @@
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><h2 data-i18n="nav_tasks" style="flex:1">Задачи</h2><button id="tasks-new" class="btn-spray hidden" data-i18n="tasks_new">Новая задача</button><button id="tasks-refresh" class="btn-secondary" data-i18n="refresh">Обновить</button></div>
         <label class="field-check"><input id="tasks-completed" type="checkbox"><span data-i18n="tasks_completed">Показывать завершённые</span></label>
         <p id="tasks-msg" role="status"></p><ul id="tasks-list"></ul>
+        <details id="task-notifications" class="task-activity"><summary id="task-notifications-summary" data-i18n="task_notifications">Уведомления о задачах</summary><ul id="task-notifications-list"></ul><div class="task-pager"><button id="task-notices-prev" type="button" class="btn-secondary" data-i18n="task_prev">Назад</button><span id="task-notices-count" class="meta"></span><button id="task-notices-next" type="button" class="btn-secondary" data-i18n="task_next">Далее</button></div></details>
       </section>
       <dialog id="task-dialog" style="margin:auto;width:min(560px,92vw);border:0;border-radius:20px;padding:24px;max-height:90vh">
-        <form id="task-form"><h2 data-i18n="nav_tasks">Задачи</h2><label class="field-label" for="task-title" data-i18n="task_title">Название</label><input id="task-title" class="field-input" required maxlength="1024">
+        <form id="task-form"><h2 data-i18n="nav_tasks">Задачи</h2><p id="task-people" class="meta"></p><p id="task-permissions" class="meta"></p><div id="task-response" class="actions" hidden><button id="task-accept" type="button" class="btn-spray" data-i18n="task_accept">Принять</button><button id="task-decline" type="button" class="btn-secondary" data-i18n="task_decline">Отклонить</button></div><label class="field-label" for="task-title" data-i18n="task_title">Название</label><input id="task-title" class="field-input" required maxlength="1024">
         <label class="field-label" for="task-body" data-i18n="task_body">Описание</label><textarea id="task-body" class="field-input" rows="4" maxlength="65536"></textarea>
+        <div class="task-progress-fields">
+          <div><label class="field-label" for="task-status" data-i18n="task_status">Состояние</label><select id="task-status" class="field-input">
+            <option value="NotStarted" data-i18n="task_status_NotStarted">Не начата</option>
+            <option value="InProgress" data-i18n="task_status_InProgress">В работе</option>
+            <option value="WaitingOnOthers" data-i18n="task_status_WaitingOnOthers">Ожидает других</option>
+            <option value="Deferred" data-i18n="task_status_Deferred">Отложена</option>
+            <option value="Completed" data-i18n="task_status_Completed">Завершена</option>
+          </select></div>
+          <div><label class="field-label" for="task-percent" data-i18n="task_percent">Выполнено, %</label><input id="task-percent" class="field-input" type="number" min="0" max="100" step="any" value="0" required></div>
+        </div>
         <label class="field-label" for="task-due" data-i18n="task_due">Срок</label><input id="task-due" type="date" class="field-input"><p id="task-edit-msg" role="status"></p>
-        <div class="actions"><button id="task-save" type="submit" class="btn-spray" data-i18n="save">Сохранить</button><button id="task-cancel" type="button" class="btn-secondary" data-i18n="cancel">Отмена</button></div></form>
+        <div class="actions"><button id="task-save" type="submit" class="btn-spray" data-i18n="save">Сохранить</button><button id="task-cancel" type="button" class="btn-secondary" data-i18n="cancel">Отмена</button></div>
+        <fieldset id="task-assignment-controls" class="task-activity"><legend data-i18n="task_assignee">Исполнитель</legend>
+          <p class="meta" data-i18n="task_assignment_hint">Выберите сотрудника вашей организации. Он получит запрос на принятие задачи.</p>
+          <label class="field-label" for="task-assignee-query" data-i18n="task_assignee_search">Поиск по имени или email</label><input id="task-assignee-query" type="search" class="field-input" maxlength="256" autocomplete="off">
+          <label class="field-label" for="task-assignee" data-i18n="task_assignee">Исполнитель</label><select id="task-assignee" class="field-input"></select>
+          <div class="task-pager"><button id="task-assignees-prev" type="button" class="btn-secondary" data-i18n="task_prev">Назад</button><span id="task-assignees-count" class="meta" role="status"></span><button id="task-assignees-next" type="button" class="btn-secondary" data-i18n="task_next">Далее</button></div>
+          <div class="actions"><button id="task-assign" type="button" class="btn-secondary" data-i18n="task_assign">Назначить</button><button id="task-revoke" type="button" class="btn-secondary" data-i18n="task_revoke">Отозвать назначение</button></div><p id="task-assignment-msg" role="status"></p>
+        </fieldset></form>
+        <details id="task-history-section" class="task-activity"><summary data-i18n="task_history">История изменений</summary><p id="task-history-msg" role="status"></p><ol id="task-history-list"></ol><div class="task-pager"><button id="task-history-prev" type="button" class="btn-secondary" data-i18n="task_prev">Назад</button><span id="task-history-count" class="meta"></span><button id="task-history-next" type="button" class="btn-secondary" data-i18n="task_next">Далее</button></div></details>
       </dialog>
       <div id="app-notes" class="app-page hidden mail-layout notes-layout">
         <div class="mail-folders panel-pane">
@@ -655,6 +678,7 @@
             <button type="button" class="btn-secondary" id="btn-refresh-me" data-i18n="refresh">Обновить</button>
           </div>
         </div>
+<section class="card" id="travel-profile" aria-live="polite"></section>
 <section class="card"><h3 class="heading" data-i18n="signature_title"></h3><p class="field-hint" data-i18n="signature_hint"></p><form id="signature-form"><label class="field-label" for="profile-signature" data-i18n="signature_title"></label><textarea class="field-input" id="profile-signature" rows="5" maxlength="10000"></textarea><label class="field-check"><input type="checkbox" id="signature-new"/><span data-i18n="signature_new"></span></label><label class="field-check"><input type="checkbox" id="signature-reply"/><span data-i18n="signature_reply"></span></label><p class="field-label" data-i18n="signature_preview"></p><div id="signature-preview" class="signature-preview"></div><div class="actions"><button type="submit" class="btn-spray" data-i18n="save"></button></div><p class="msg" id="signature-msg" role="status"></p></form></section><h3 class="heading" data-i18n="nav_security"></h3>      <!-- SECURITY -->
       <div id="profile-security" class="profile-security">
         <div class="card">

@@ -5,6 +5,7 @@ package flowsync
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -13,10 +14,11 @@ import (
 )
 
 type clientOp struct {
-	Kind     string // add | change | delete
-	ClientID string
-	ServerID string
-	Fields   map[string]string
+	Kind            string // add | change | delete
+	ClientID        string
+	ServerID        string
+	Fields          map[string]string
+	ApplicationData *protocolNode
 }
 
 type writebackResult struct {
@@ -54,7 +56,7 @@ func parseXMLClientOps(src string) []clientOp {
 		if kind != "add" && kind != "change" && kind != "delete" {
 			continue
 		}
-		ops = append(ops, clientOp{Kind: kind, ClientID: n.value("ClientId"), ServerID: n.value("ServerId"), Fields: extractAppDataFields(n.render())})
+		ops = append(ops, clientOp{Kind: kind, ClientID: n.value("ClientId"), ServerID: n.value("ServerId"), Fields: extractAppDataFields(n.render()), ApplicationData: n.child("ApplicationData")})
 	}
 	return ops
 }
@@ -85,6 +87,8 @@ func (h *easHandler) applyWritebacks(ctx context.Context, u *storage.User, kind 
 		res := writebackResult{ClientID: op.ClientID, ServerID: op.ServerID, Kind: op.Kind, Status: 1}
 		var err error
 		switch kind {
+		case kindTasks:
+			res.ServerID, err = h.wbTask(ctx, u, collectionID, op)
 		case kindCalendar:
 			res.ServerID, err = h.wbCalendar(ctx, collectionID, op)
 		case kindContacts:
@@ -96,6 +100,16 @@ func (h *easHandler) applyWritebacks(ctx context.Context, u *storage.User, kind 
 		}
 		if err != nil {
 			res.Status = 6 // error
+			if kind == kindTasks {
+				switch {
+				case errors.Is(err, storage.ErrNotFound):
+					res.Status = 8
+				case errors.Is(err, errInvalidEASTask), errors.Is(err, storage.ErrUnauthorized):
+					res.Status = 6
+				default:
+					res.Status = 5
+				}
+			}
 			if res.ServerID == "" {
 				res.ServerID = op.ServerID
 			}

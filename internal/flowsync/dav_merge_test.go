@@ -22,3 +22,15 @@ func TestDAVUpdatePreservesUneditedData(t *testing.T) {
 		}
 	}
 }
+
+func TestCalendarMergeSelectsMasterAfterException(t *testing.T) {
+	original := "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:series\r\nRECURRENCE-ID:20261026T100000Z\r\nDTSTART:20261026T120000Z\r\nSUMMARY:Exception\r\nEND:VEVENT\r\nBEGIN:VEVENT\r\nUID:series\r\nDTSTART;TZID=Europe/Berlin:20261019T100000\r\nDTEND;TZID=Europe/Berlin:20261019T110000\r\nSUMMARY:Master\r\nRRULE:FREQ=WEEKLY\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+	merged := mergeDAVProperties(original, "BEGIN:VEVENT\r\nSUMMARY:Renamed\r\nEND:VEVENT\r\n", "VEVENT", map[string]bool{"SUMMARY": true})
+	if !strings.Contains(merged, "SUMMARY:Exception") || strings.Contains(merged, "SUMMARY:Master") || !strings.Contains(merged, "DTSTART;TZID=Europe/Berlin:20261019T100000") {
+		t.Fatal(merged)
+	}
+	ev := parseICalEvent(merged)
+	if ev.Summary != "Renamed" || ev.Start != "20261019T080000Z" || ev.End != "20261019T090000Z" {
+		t.Fatalf("wrong master: %+v", ev)
+	}
+}

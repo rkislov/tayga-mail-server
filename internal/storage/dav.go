@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/tayga/tms/internal/calutil"
 )
 
 // Calendar is a CalDAV collection owned by a user.
@@ -26,17 +28,20 @@ type Calendar struct {
 
 // CalendarObject is an iCalendar resource inside a calendar.
 type CalendarObject struct {
-	ID         string
-	CalendarID string
-	UID        string
-	HrefName   string
-	ETag       string
-	Data       string
-	Size       int64
-	Component  string
-	DTStart    *time.Time
-	DTEnd      *time.Time
-	UpdatedAt  time.Time
+	// Optional write preconditions; not persisted or returned to clients.
+	ExpectedETag string `json:"-"`
+	CreateOnly   bool   `json:"-"`
+	ID           string
+	CalendarID   string
+	UID          string
+	HrefName     string
+	ETag         string
+	Data         string
+	Size         int64
+	Component    string
+	DTStart      *time.Time
+	DTEnd        *time.Time
+	UpdatedAt    time.Time
 }
 
 // AddressBook is a CardDAV collection owned by a user.
@@ -156,16 +161,51 @@ func (s *Store) GetCalendarByID(ctx context.Context, userID, id string) (*Calend
 }
 
 func (s *Store) DeleteCalendar(ctx context.Context, userID, name string) error {
-	q := s.rebind(`DELETE FROM calendars WHERE user_id = ? AND name = ?`)
-	res, err := s.db.ExecContext(ctx, q, userID, name)
+	tx, err := s.beginCalendarWrite(ctx)
 	if err != nil {
 		return err
 	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		return ErrNotFound
+	defer tx.Rollback()
+	var id string
+	if err = tx.QueryRowContext(ctx, s.rebind(`SELECT id FROM calendars WHERE user_id=? AND name=?`), userID, name).Scan(&id); err != nil {
+		return mapErr(err)
 	}
-	return nil
+	rows, err := tx.QueryContext(ctx, s.rebind(`SELECT id,calendar_id,uid,href_name,etag,data,size,component,dtstart,dtend,updated_at FROM calendar_objects WHERE calendar_id=?`), id)
+	if err != nil {
+		return err
+	}
+	var objects []*CalendarObject
+	for rows.Next() {
+		o, e := s.scanCalObject(rows)
+		if e != nil {
+			rows.Close()
+			return e
+		}
+		objects = append(objects, o)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	for _, o := range objects {
+		p, e := calutil.ParseICS(o.Data)
+		if e != nil {
+			continue
+		}
+		previous := o.Data
+		o.Data, e = calutil.BuildCancelICS(p.Event)
+		if e != nil {
+			return e
+		}
+		if e = s.bookCalendarResourcesTx(ctx, tx, o, previous); e != nil {
+			return e
+		}
+	}
+	if _, err = tx.ExecContext(ctx, s.rebind(`DELETE FROM calendars WHERE id=?`), id); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) bumpCalendarCTag(ctx context.Context, calendarID string) error {
@@ -240,46 +280,124 @@ func (s *Store) GetCalendarObjectByID(ctx context.Context, id string) (*Calendar
 }
 
 func (s *Store) UpsertCalendarObject(ctx context.Context, o *CalendarObject) (*CalendarObject, error) {
+	return s.SaveCalendarObjectWithMail(ctx, o, nil)
+}
+
+func (s *Store) SaveCalendarObjectWithMail(ctx context.Context, o *CalendarObject, mails []CalendarMail) (*CalendarObject, error) {
+	return s.saveCalendarObject(ctx, o, mails, "")
+}
+
+func (s *Store) saveCalendarObject(ctx context.Context, o *CalendarObject, mails []CalendarMail, actorID string) (*CalendarObject, error) {
+	if actorID != "" {
+		copy := *o
+		o = &copy
+	}
+	tx, err := s.beginCalendarWrite(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	var old string
+	err = tx.QueryRowContext(ctx, s.rebind(`SELECT data FROM calendar_objects WHERE calendar_id=? AND href_name=?`), o.CalendarID, o.HrefName).Scan(&old)
+	if err != nil && err != sql.ErrNoRows {
+		return nil, err
+	}
+	if err = s.saveCalendarObjectTx(ctx, tx, o); err != nil {
+		return nil, err
+	}
+	if err = s.bookCalendarResourcesTx(ctx, tx, o, old); err != nil {
+		return nil, err
+	}
+	if actorID != "" {
+		mails, err = s.syncCalendarMeetingTx(ctx, tx, actorID, o, old)
+		if err != nil {
+			return nil, err
+		}
+	}
+	// The queue must contain the same accepted resource statuses as the event.
+	for i := range mails {
+		if mails[i].Method == "REQUEST" {
+			p, e := calutil.ParseICS(mails[i].ICS)
+			if e == nil && p.UID == o.UID {
+				updated, e := calutil.ParseICS(o.Data)
+				if e != nil {
+					return nil, e
+				}
+				mails[i].ICS, e = calutil.BuildRequestICS(updated.Event)
+				if e != nil {
+					return nil, e
+				}
+			}
+		}
+	}
+	if err = s.queueCalendarMail(ctx, tx, mails); err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+	o.ExpectedETag, o.CreateOnly = "", false
+	return o, nil
+}
+
+// Internal writes share the caller's scheduling transaction.
+func (s *Store) saveCalendarObjectTx(ctx context.Context, tx *sql.Tx, o *CalendarObject) error {
 	now := time.Now().UTC()
 	o.UpdatedAt = now
 	o.ETag = ContentETag(o.Data)
 	o.Size = int64(len(o.Data))
-	existing, err := s.GetCalendarObject(ctx, o.CalendarID, o.HrefName)
+	existing, err := s.scanCalObject(tx.QueryRowContext(ctx, s.rebind(`SELECT id,calendar_id,uid,href_name,etag,data,size,component,dtstart,dtend,updated_at FROM calendar_objects WHERE calendar_id=? AND href_name=?`), o.CalendarID, o.HrefName))
 	if err != nil && err != ErrNotFound {
-		return nil, err
+		return err
 	}
 	if err == ErrNotFound {
+		if o.ExpectedETag != "" {
+			return ErrCalendarConflict
+		}
 		if o.ID == "" {
 			o.ID = NewID()
 		}
 		q := s.rebind(`INSERT INTO calendar_objects (id, calendar_id, uid, href_name, etag, data, size, component, dtstart, dtend, updated_at)
 			VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
-		_, err = s.db.ExecContext(ctx, q, o.ID, o.CalendarID, o.UID, o.HrefName, o.ETag, o.Data, o.Size, o.Component, o.DTStart, o.DTEnd, now)
+		_, err = tx.ExecContext(ctx, q, o.ID, o.CalendarID, o.UID, o.HrefName, o.ETag, o.Data, o.Size, o.Component, o.DTStart, o.DTEnd, now)
 	} else {
+		if o.CreateOnly {
+			return ErrCalendarConflict
+		}
 		o.ID = existing.ID
-		q := s.rebind(`UPDATE calendar_objects SET uid=?, etag=?, data=?, size=?, component=?, dtstart=?, dtend=?, updated_at=? WHERE id=?`)
-		_, err = s.db.ExecContext(ctx, q, o.UID, o.ETag, o.Data, o.Size, o.Component, o.DTStart, o.DTEnd, now, o.ID)
+		q := `UPDATE calendar_objects SET uid=?, etag=?, data=?, size=?, component=?, dtstart=?, dtend=?, updated_at=? WHERE id=?`
+		args := []any{o.UID, o.ETag, o.Data, o.Size, o.Component, o.DTStart, o.DTEnd, now, o.ID}
+		if o.ExpectedETag != "" {
+			q += ` AND etag=?`
+			args = append(args, o.ExpectedETag)
+		}
+		var result sql.Result
+		result, err = tx.ExecContext(ctx, s.rebind(q), args...)
+		if err == nil {
+			n, e := result.RowsAffected()
+			if e != nil {
+				return e
+			}
+			if n != 1 {
+				return ErrCalendarConflict
+			}
+		}
 	}
-	if err != nil {
-		return nil, err
-	}
-	if err := s.bumpCalendarCTag(ctx, o.CalendarID); err != nil {
-		return nil, err
-	}
-	return o, nil
-}
-
-func (s *Store) DeleteCalendarObject(ctx context.Context, calendarID, hrefName string) error {
-	q := s.rebind(`DELETE FROM calendar_objects WHERE calendar_id = ? AND href_name = ?`)
-	res, err := s.db.ExecContext(ctx, q, calendarID, hrefName)
 	if err != nil {
 		return err
 	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		return ErrNotFound
+	if _, err := tx.ExecContext(ctx, s.rebind(`UPDATE calendars SET ctag=? WHERE id=?`), newCTag(), o.CalendarID); err != nil {
+		return err
 	}
-	return s.bumpCalendarCTag(ctx, calendarID)
+	return nil
+}
+
+func (s *Store) DeleteCalendarObject(ctx context.Context, calendarID, hrefName string) error {
+	o, err := s.GetCalendarObject(ctx, calendarID, hrefName)
+	if err != nil {
+		return err
+	}
+	return s.DeleteCalendarObjectWithMail(ctx, o, nil)
 }
 
 func (s *Store) scanCalObject(row interface{ Scan(dest ...any) error }) (*CalendarObject, error) {

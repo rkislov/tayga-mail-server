@@ -50,11 +50,29 @@ func (s *Server) mailTravelDrafts(w http.ResponseWriter, r *http.Request, au *au
 		writeJSON(w, code, map[string]string{"error": http.StatusText(code)})
 		return
 	}
+	if msg.Size > 32<<20 {
+		writeJSON(w, 413, map[string]string{"error": "ticket mail exceeds 32 MiB analysis limit"})
+		return
+	}
 	raw, err := s.ms.Read(msg.FilePath)
 	if err != nil {
 		writeJSON(w, 500, map[string]string{"error": "read failed"})
 		return
 	}
+	drafts, warnings := extractTravelTickets(r.Context(), raw)
+	if r.Method == http.MethodPost {
+		candidates, err := s.store.RecordTravelCandidates(r.Context(), au.ID, id, drafts)
+		if err != nil {
+			writeJSON(w, 500, map[string]string{"error": "cannot save ticket results"})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"candidates": candidates, "warnings": warnings})
+		return
+	}
+	writeJSON(w, 200, map[string]any{"trips": drafts, "warnings": warnings, "timezone_required": true})
+}
+
+func extractTravelTickets(ctx context.Context, raw []byte) ([]*travel.Ticket, []string) {
 	parsed := parseMIMEMessage(raw)
 	text := parsed.Text
 	if text == "" {
@@ -62,29 +80,33 @@ func (s *Server) mailTravelDrafts(w http.ResponseWriter, r *http.Request, au *au
 	}
 	drafts := []*travel.Ticket{}
 	warnings := []string{}
-	if trip := travel.Parse(text); trip != nil {
-		trip.Source = "message"
-		drafts = append(drafts, trip)
+	appendText := func(text, source string) {
+		for _, trip := range travel.ParseAll(text) {
+			trip.Source = source
+			drafts = append(drafts, trip)
+		}
 	}
-	PDFCount := 0
+	if len(text) > 512<<10 {
+		text = text[:512<<10]
+		warnings = append(warnings, "text_limit")
+	}
+	appendText(text, "message")
+	count := 0
 	for _, attachment := range parsed.Attachments {
 		if attachment.ContentType != "application/pdf" && !strings.HasSuffix(strings.ToLower(attachment.Filename), ".pdf") {
 			continue
 		}
-		PDFCount++
-		if PDFCount > 4 {
-			warnings = append(warnings, "Only the first four PDF attachments are processed")
+		count++
+		if count > 4 {
+			warnings = append(warnings, "pdf_count_limit")
 			break
 		}
-		text, e := pdfTicketText(r.Context(), attachment.Data)
-		if e != nil {
-			warnings = append(warnings, attachment.Filename+": PDF extraction unavailable or failed; install poppler-utils (pdftotext)")
+		text, err := pdfTicketText(ctx, attachment.Data)
+		if err != nil {
+			warnings = append(warnings, "pdf_unavailable")
 			continue
 		}
-		if trip := travel.Parse(text); trip != nil {
-			trip.Source = attachment.Filename
-			drafts = append(drafts, trip)
-		}
+		appendText(text, attachment.Filename)
 	}
-	writeJSON(w, 200, map[string]any{"trips": drafts, "warnings": warnings, "timezone_required": true})
+	return drafts, warnings
 }

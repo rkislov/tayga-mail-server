@@ -2,7 +2,8 @@ const I18N = {
   ru: {
 "presence_label":"Мой статус","presence_online":"В сети","presence_away":"Отошёл","presence_dnd":"Не беспокоить","presence_offline":"Не в сети","presence_unknown":"Статус недоступен","presence_request":"Запрашивает ваш статус","presence_accept":"Разрешить","presence_reject":"Отклонить","presence_request_action":"Запросить статус",
 
-"nav_tasks":"Задачи","task_complete":"Завершить задачу","tasks_empty":"Нет задач. Отметьте письмо флажком или создайте задачу.","task_delete_confirm":"Удалить задачу? Флажок связанного письма будет снят.","tasks_new":"Новая задача","tasks_completed":"Показывать завершённые","task_title":"Название","task_body":"Описание","task_due":"Срок",
+"task_owner":"Автор","task_assignee":"Исполнитель","task_unassigned":"Не назначен","task_assignment_pending":"Ожидает принятия","task_assignment_accepted":"Принята исполнителем","task_assignment_declined":"Отклонена исполнителем","task_accept":"Принять","task_decline":"Отклонить","task_assign":"Назначить","task_revoke":"Отозвать назначение","task_revoke_confirm":"Отозвать назначение? Исполнитель потеряет доступ к задаче.","task_assignment_hint":"Выберите сотрудника вашей организации. Он получит запрос на принятие задачи.","task_assignee_search":"Поиск по имени или email","task_assignee_choose":"Без нового назначения","task_progress_only":"Вы можете менять состояние и прогресс. Описание, срок и назначение изменяет автор.","task_pending_hint":"Примите задачу, чтобы обновлять её состояние и прогресс.","task_notifications":"Уведомления о задачах","task_unread":"непрочитано","task_history":"История изменений","task_prev":"Назад","task_next":"Далее","task_action_create":"Задача создана","task_action_assign":"Назначена задача","task_action_accept":"Исполнитель принял задачу","task_action_decline":"Исполнитель отклонил задачу","task_action_revoke":"Назначение отозвано","task_action_delete":"Задача удалена","task_action_update":"Задача изменена","task_action_complete":"Задача завершена","task_action_reopen":"Задача открыта повторно","task_history_empty":"Изменений пока нет","task_notifications_empty":"Уведомлений пока нет","task_unavailable":"Задача удалена или доступ к ней отозван.","task_change_title":"название","task_change_body":"описание","task_change_due":"срок","task_change_progress":"прогресс","task_change_properties":"параметры синхронизации","task_change_assignment":"назначение","task_change_task":"создание",
+"nav_tasks":"Задачи","task_complete":"Завершить задачу","tasks_empty":"Нет задач. Отметьте письмо флажком или создайте задачу.","task_delete_confirm":"Удалить задачу? Флажок связанного письма будет снят.","tasks_new":"Новая задача","tasks_completed":"Показывать завершённые","task_title":"Название","task_body":"Описание","task_due":"Срок","task_status":"Состояние","task_percent":"Выполнено, %","task_status_NotStarted":"Не начата","task_status_InProgress":"В работе","task_status_Completed":"Завершена","task_status_WaitingOnOthers":"Ожидает других","task_status_Deferred":"Отложена",
 
     rules_new: "Создать правило",
  mig_history: "История миграций", mig_previous: "Назад", mig_next: "Далее",
@@ -47,7 +48,7 @@ const I18N = {
     cal_grid_hint: "Клик — открыть день · двойной клик — создать событие · Shift+Enter — создать с клавиатуры",
     cal_back_month: "К месяцу",
     cal_hour_add: "Двойной клик",
-    cal_inbox_hint: "Ответьте на приглашения. После ответа они исчезнут из лотка.",
+    cal_inbox_hint: "Ответьте на приглашения и согласуйте предложения нового времени для ваших встреч.",
 
     config_search: "Поиск параметра…",
     config_catalog_search: "Поиск раздела или параметра…",
@@ -435,7 +436,10 @@ const I18N = {
     cal_freebusy_free: "свободен",
     cal_freebusy_unknown: "неизвестно",
     cal_invites: "Приглашения",
-    cal_invites_empty: "Нет ожидающих приглашений",
+    cal_instance_edit: "Изменить повторение",
+    cal_recurrence: "Повторение",
+    cal_series_delete: "Удалить всю серию",
+    cal_invites_empty: "Нет ожидающих приглашений и предложений",
     cal_accept: "Принять",
     cal_decline: "Отклонить",
     cal_tentative: "Под вопросом",
@@ -514,7 +518,8 @@ contacts_search: "Поиск контактов…",
   en: {
 "presence_label":"My status","presence_online":"Online","presence_away":"Away","presence_dnd":"Do not disturb","presence_offline":"Offline","presence_unknown":"Status unavailable","presence_request":"Requests your presence","presence_accept":"Allow","presence_reject":"Decline","presence_request_action":"Request presence",
 
-"nav_tasks":"Tasks","task_complete":"Complete task","tasks_empty":"No tasks. Flag a message or create a task.","task_delete_confirm":"Delete task? The linked message will be unflagged.","tasks_new":"New task","tasks_completed":"Show completed","task_title":"Title","task_body":"Description","task_due":"Due date",
+"task_owner":"Author","task_assignee":"Assignee","task_unassigned":"Unassigned","task_assignment_pending":"Awaiting acceptance","task_assignment_accepted":"Accepted","task_assignment_declined":"Declined","task_accept":"Accept","task_decline":"Decline","task_assign":"Assign","task_revoke":"Revoke assignment","task_revoke_confirm":"Revoke this assignment? The assignee will lose access to the task.","task_assignment_hint":"Choose a colleague in your organization. They will receive an invitation to accept the task.","task_assignee_search":"Search by name or email","task_assignee_choose":"No new assignment","task_progress_only":"You can update status and progress. The author manages details, dates and assignment.","task_pending_hint":"Accept this task to update its status and progress.","task_notifications":"Task notifications","task_unread":"unread","task_history":"Change history","task_prev":"Previous","task_next":"Next","task_action_create":"Task created","task_action_assign":"Task assigned","task_action_accept":"Assignee accepted the task","task_action_decline":"Assignee declined the task","task_action_revoke":"Assignment revoked","task_action_delete":"Task deleted","task_action_update":"Task updated","task_action_complete":"Task completed","task_action_reopen":"Task reopened","task_history_empty":"No changes yet","task_notifications_empty":"No notifications yet","task_unavailable":"Task deleted or access revoked.","task_change_title":"title","task_change_body":"description","task_change_due":"due date","task_change_progress":"progress","task_change_properties":"sync properties","task_change_assignment":"assignment","task_change_task":"creation",
+"nav_tasks":"Tasks","task_complete":"Complete task","tasks_empty":"No tasks. Flag a message or create a task.","task_delete_confirm":"Delete task? The linked message will be unflagged.","tasks_new":"New task","tasks_completed":"Show completed","task_title":"Title","task_body":"Description","task_due":"Due date","task_status":"Status","task_percent":"Complete, %","task_status_NotStarted":"Not started","task_status_InProgress":"In progress","task_status_Completed":"Completed","task_status_WaitingOnOthers":"Waiting on others","task_status_Deferred":"Deferred",
 
     rules_new: "Create rule",
  mig_history: "Migration history", mig_previous: "Previous", mig_next: "Next",
@@ -559,7 +564,7 @@ contacts_search: "Поиск контактов…",
     cal_grid_hint: "Click to open a day · double-click to create an event · Shift+Enter to create with the keyboard",
     cal_back_month: "Back to month",
     cal_hour_add: "Double-click",
-    cal_inbox_hint: "Respond to invitations. They leave the inbox after your response.",
+    cal_inbox_hint: "Respond to invitations and review proposed times for meetings you organize.",
 
     config_search: "Search parameters…",
     config_catalog_search: "Search sections or parameters…",
@@ -948,7 +953,10 @@ contacts_search: "Поиск контактов…",
     cal_freebusy_free: "free",
     cal_freebusy_unknown: "unknown",
     cal_invites: "Invitations",
-    cal_invites_empty: "No pending invitations",
+    cal_instance_edit: "Edit occurrence",
+    cal_recurrence: "Repeat",
+    cal_series_delete: "Delete entire series",
+    cal_invites_empty: "No pending invitations or proposals",
     cal_accept: "Accept",
     cal_decline: "Decline",
     cal_tentative: "Tentative",
@@ -1392,6 +1400,7 @@ const calState = {
   loadSequence: 0,
   calendarID: "",
   eventID: "",
+  currentEvent: null,
   calendars: [],
   events: [],
   month: new Date(),
@@ -1400,6 +1409,7 @@ const calState = {
   dayClickTimer: null,
   attendees: [],
   invites: [],
+  proposals: [],
   highlightInvite: "",
   resources: [],
 };
@@ -1475,7 +1485,7 @@ function showApp(name) {
   }
   $("compose-backdrop")?.classList.add("hidden");
   setNavOpen(false);
-  if (app === "profile") {loadMe();refreshSignature();refreshPasskeys();refreshMailSources();}
+  if (app === "profile") {loadMe();refreshSignature();refreshPasskeys();refreshMailSources();refreshTravelProfile();}
   const migrationPane=$("app-migration");
   if (migrationPane) {
     if (!migrationPane._originalParent) migrationPane._originalParent=migrationPane.parentElement;
@@ -1538,6 +1548,7 @@ function isAuthPublicPath(path) {
 }
 
 function clearSession() {
+  resetTasks();
   resetComposeAttachments();
   disableWebPush().catch(() => {});
   stopChatLive();
@@ -3361,7 +3372,7 @@ function enterAccount(tokens, email) {
   startNotifyLive();
 }
 
-const notifyState = { es: null };
+const notifyState = { es: null, seen: new Set() };
 
 function stopNotifyLive() {
   try { notifyState.es?.close(); } catch (_) {}
@@ -3400,6 +3411,7 @@ function showToast(ev) {
 
 function openNotifyHref(href) {
   if (!href) return;
+  if (href === "tasks") { showApp("tasks"); return; }
   if (href === "chat") { showApp("chat"); return; }
   if(href.startsWith("chat?peer=")){showApp("chat");openChatPeer(decodeURIComponent(href.slice(10)));return;}
   if (href === "mail" || href.startsWith("mail")) {
@@ -3420,7 +3432,7 @@ function startNotifyLive() {
     updatePushButton();
   }).catch(() => {});
   const notificationRoute = new URL(location.href).searchParams.get('notification');
-  if (['mail','calendar','chat'].includes(notificationRoute)) {
+  if (['mail','calendar','chat','tasks'].includes(notificationRoute)) {
     const url = new URL(location.href); url.searchParams.delete('notification'); history.replaceState(null,'',url);
     setTimeout(() => openNotifyHref(notificationRoute), 0);
   }
@@ -3431,7 +3443,12 @@ function startNotifyLive() {
   notifyState.es = es;
   es.addEventListener("notify", (e) => {
     try {
-      showToast(JSON.parse(e.data));
+      const event = JSON.parse(e.data);
+      if (notifyState.seen.has(event.id)) return;
+      notifyState.seen.add(event.id);
+      if (notifyState.seen.size > 200) notifyState.seen.delete(notifyState.seen.values().next().value);
+      showToast(event);
+      if (event.kind === 'task' && !$('app-tasks')?.classList.contains('hidden')) refreshTasks();
     } catch (_) {}
   });
   es.onerror = () => {
@@ -4172,6 +4189,12 @@ function localInputToISO(v) {
   return d.toISOString();
 }
 
+function calendarLocalInput(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return calDayKey(date) + "T" + String(date.getHours()).padStart(2, "0") + ":" + String(date.getMinutes()).padStart(2, "0");
+}
+
 function calDayKey(d) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -4181,9 +4204,23 @@ function calDayKey(d) {
 
 function calEventDayKey(ev) {
   if (!ev?.start) return "";
+  if (ev.all_day) return String(ev.start).slice(0,10);
   const d = new Date(ev.start);
   if (Number.isNaN(d.getTime())) return String(ev.start).slice(0, 10);
   return calDayKey(d);
+}
+
+function calEventOccursOnDay(ev,day) {
+  if(!ev?.start) return false;
+  if(ev.all_day) return String(ev.start).slice(0,10)<=day && String(ev.end || ev.start).slice(0,10)>day;
+  const from=new Date(day+'T00:00');
+  const to=new Date(from);to.setDate(to.getDate()+1);
+  const start=new Date(ev.start),end=new Date(ev.end || ev.start);
+  return start<to && (end>from || +start===+end && start>=from);
+}
+
+function fmtCalEventWhen(ev,value) {
+  return ev.all_day ? new Date(value).toLocaleDateString(calLocale(),{timeZone:'UTC',day:'numeric',month:'short',year:'numeric'}) : fmtCalWhen(value);
 }
 
 function calMonthStart(d) {
@@ -4197,6 +4234,7 @@ function showCalCompose(open) {
  syncEventCalendarChoice();
   if (open) {
     setMsg($("cal-msg"), "");
+    mountNewEventRecurrence();
     calState.attendees = [];
     renderCalAttendeeChips();
     const fb = $("cal-freebusy");
@@ -4392,16 +4430,34 @@ async function loadCalFreeBusy() {
 async function refreshCalInvites() {
   const list = $("cal-invite-list");
   if (!list) return;
+  const userID = state.me?.id;
+  setMsg($('cal-invite-msg'), '', '');
   try {
     const data = await api("/api/v1/calendar/invites");
+    if (state.me?.id !== userID) return;
     calState.invites = data.invites || [];
+    calState.proposals = data.proposals || [];
     updateCalInviteBadge();
-    if (!calState.invites.length) {
+    if (!calState.invites.length && !calState.proposals.length) {
       if (!$("cal-invites-backdrop").classList.contains("hidden")) $("btn-cal-invites-close").focus();
       list.innerHTML = `<li class="meta msg-empty">${escapeHtml(t("cal_invites_empty"))}</li>`;
       return;
     }
-    list.innerHTML = calState.invites.map((inv) => {
+    const proposals = calState.proposals.map(proposal => `<li class="cal-invite-item cal-proposal-item">
+      <div class="cal-invite-main">
+        <span class="meta">${escapeHtml(mailImageText('Предложение нового времени', 'New time proposal'))}</span>
+        <strong>${escapeHtml(proposal.summary || '—')}</strong>
+        <span class="meta">${escapeHtml(proposal.attendee)}</span>
+        <span>${escapeHtml(mailImageText('Сейчас: ', 'Current: ') + fmtCalWhen(proposal.start) + ' — ' + fmtCalWhen(proposal.end))}</span>
+        <strong>${escapeHtml(mailImageText('Предложено: ', 'Proposed: ') + fmtCalWhen(proposal.proposed_start) + ' — ' + fmtCalWhen(proposal.proposed_end))}</strong>
+        ${proposal.recurring ? `<span class="meta">${escapeHtml(mailImageText('Повторяющаяся встреча: изменится основное время серии.', 'Recurring meeting: the master series time will change.'))}</span>` : ''}
+      </div>
+      <div class="cal-invite-actions">
+        <button type="button" class="btn-spray btn-sm" data-proposal-act="accept" data-id="${escapeHtml(proposal.id)}">${escapeHtml(mailImageText('Принять время', 'Accept time'))}</button>
+        <button type="button" class="btn-secondary btn-sm" data-proposal-act="decline" data-id="${escapeHtml(proposal.id)}">${escapeHtml(t('cal_decline'))}</button>
+      </div>
+    </li>`).join('');
+    list.innerHTML = proposals + calState.invites.map((inv) => {
       const when = inv.start ? fmtCalWhen(inv.start) : "";
       const org = inv.organizer?.email || "";
       const hi = inv.id === calState.highlightInvite ? " is-active" : "";
@@ -4422,34 +4478,76 @@ async function refreshCalInvites() {
     list.querySelectorAll("[data-inv-act]").forEach((btn) => {
       btn.addEventListener("click", () => replyCalInvite(btn.dataset.id, btn.dataset.invAct));
     });
+    list.querySelectorAll('[data-proposal-act]').forEach(btn => btn.addEventListener('click', () => decideCalProposal(btn.dataset.id, btn.dataset.proposalAct)));
   } catch (err) {
-    list.innerHTML = `<li class="meta msg-empty">${escapeHtml(err.message)}</li>`;
+    if (state.me?.id === userID) list.innerHTML = `<li class="meta msg-empty">${escapeHtml(err.message)}</li>`;
+  }
+}
+
+let calInviteReplyBusy = false;
+async function decideCalProposal(id, action) {
+  if (calInviteReplyBusy) return;
+  const proposal = calState.proposals.find(item => item.id === id);
+  if (!proposal) return;
+  calInviteReplyBusy = true;
+  const userID = state.me?.id;
+  const currentUser = () => state.me?.id === userID;
+  $('cal-invite-list')?.querySelectorAll('button').forEach(button => button.disabled = true);
+  setMsg($('cal-invite-msg'), '', '');
+  try {
+    if (action === 'accept' && !await askConfirm(fmtCalWhen(proposal.proposed_start) + ' — ' + fmtCalWhen(proposal.proposed_end) + '\n' + mailImageText('Все участники получат обновлённое приглашение.', 'All attendees will receive an updated invitation.'), {
+      title: mailImageText('Изменить время встречи?', 'Change meeting time?')
+    })) return;
+    if (!currentUser()) return;
+    await api('/api/v1/calendar/invites/' + encodeURIComponent(id) + '/decision', {method:'POST', body:JSON.stringify({action, event_id:proposal.event_id, revision:proposal.revision, etag:proposal.etag})});
+    if (!currentUser()) return;
+    await refreshCalInvites();
+    if (!currentUser()) return;
+    await loadCalEvents();
+    if (!currentUser()) return;
+    setMsg($('cal-invite-msg'), action === 'accept' ? mailImageText('Время изменено. Участникам отправлены обновлённые приглашения.', 'Time changed. Updated invitations sent to attendees.') : mailImageText('Предложение отклонено. Время встречи не изменилось.', 'Proposal declined. The meeting time is unchanged.'), 'ok');
+  } catch (err) {
+    if (currentUser()) setMsg($('cal-invite-msg'), calendarRecurrenceError(err.message), 'err');
+  } finally {
+    calInviteReplyBusy = false;
+    $('cal-invite-list')?.querySelectorAll('button').forEach(button => button.disabled = false);
   }
 }
 
 async function replyCalInvite(id, action) {
-  const body = { action };
-  if (action === "counter") {
-    const inv = calState.invites.find((x) => x.id === id);
-    const defStart = inv?.start ? String(inv.start).slice(0, 16) : "";
-    const defEnd = inv?.end ? String(inv.end).slice(0, 16) : "";
-    const start = await askPrompt(t("col_start"), { value: defStart, body: t("cal_counter") + " (YYYY-MM-DDTHH:mm)" });
-    if (start == null || !String(start).trim()) return;
-    const end = await askPrompt(t("col_end"), { value: defEnd, body: t("cal_counter") + " (YYYY-MM-DDTHH:mm)" });
-    if (end == null || !String(end).trim()) return;
-    body.start = localInputToISO(String(start).trim()) || String(start).trim();
-    body.end = localInputToISO(String(end).trim()) || String(end).trim();
-  }
+  if (calInviteReplyBusy) return;
+  calInviteReplyBusy = true;
+  const userID = state.me?.id;
+  const currentUser = () => state.me?.id === userID;
+  $("cal-invite-list")?.querySelectorAll("button").forEach(button => button.disabled = true);
   try {
-    await api("/api/v1/calendar/invites/" + encodeURIComponent(id) + "/reply", {
-      method: "POST",
-      body: JSON.stringify(body),
-    });
+    const inv = calState.invites.find((x) => x.id === id);
+    const body = { action, etag: inv?.etag || "" };
+    if (action === "counter") {
+      const start = await askPrompt(t("col_start"), { value: calendarLocalInput(inv?.start), body: t("cal_counter") + " (YYYY-MM-DDTHH:mm)" });
+      if (start == null || !String(start).trim()) return;
+      const end = await askPrompt(t("col_end"), { value: calendarLocalInput(inv?.end), body: t("cal_counter") + " (YYYY-MM-DDTHH:mm)" });
+      if (end == null || !String(end).trim()) return;
+      body.start = localInputToISO(String(start).trim());
+      body.end = localInputToISO(String(end).trim());
+      if (!Number.isFinite(Date.parse(body.start)) || !Number.isFinite(Date.parse(body.end)) || new Date(body.end) <= new Date(body.start)) {
+        throw new Error(mailImageText("Конец должен быть позже начала", "End must be after start"));
+      }
+    }
+    if (!currentUser()) return;
+    await api("/api/v1/calendar/invites/" + encodeURIComponent(id) + "/reply", { method: "POST", body: JSON.stringify(body) });
+    if (!currentUser()) return;
     if (calState.highlightInvite === id) calState.highlightInvite = "";
     await refreshCalInvites();
+    if (!currentUser()) return;
     await loadCalEvents();
+    if (!currentUser()) return;
+    if (action === "counter") setMsg($("cal-invite-msg"), mailImageText("Предложение отправлено организатору. Время встречи пока не изменилось.", "Proposal sent to the organizer. The meeting time has not changed."), "ok");
   } catch (err) {
-    setMsg($("cal-invite-msg"), err.message, "err");
+    if (currentUser()) setMsg($("cal-invite-msg"), err.message, "err");
+  } finally {
+    calInviteReplyBusy = false;
+    $("cal-invite-list")?.querySelectorAll("button").forEach(button => button.disabled = false);
   }
 }
 
@@ -4461,12 +4559,15 @@ function shiftCalMonth(delta) {
     calState.month = calMonthStart(day);
     openCalDay(calDayKey(day));
     renderCalMonth();
+    loadCalEvents();
     return;
   }
   const m = calMonthStart(calState.month);
   calState.month = new Date(m.getFullYear(), m.getMonth() + delta, 1);
+  calState.selectedDay="";
   renderCalMonth();
   renderCalEventLog();
+  loadCalEvents();
 }
 
 function goCalToday() {
@@ -4475,6 +4576,7 @@ function goCalToday() {
   calState.selectedDay = calDayKey(now);
   renderCalMonth();
   renderCalEventLog();
+  loadCalEvents();
 }
 
 function renderCalMonth() {
@@ -4496,14 +4598,6 @@ function renderCalMonth() {
     weekdays.push(weekdayFmt.format(d));
   }
 
-  const byDay = new Map();
-  for (const ev of calState.events) {
-    const key = calEventDayKey(ev);
-    if (!key) continue;
-    if (!byDay.has(key)) byDay.set(key, []);
-    byDay.get(key).push(ev);
-  }
-
   const firstDow = (month.getDay() + 6) % 7; // 0=Mon
   const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
   const todayKey = calDayKey(new Date());
@@ -4512,7 +4606,7 @@ function renderCalMonth() {
   for (let day = 1; day <= daysInMonth; day++) {
     const date = new Date(month.getFullYear(), month.getMonth(), day);
     const key = calDayKey(date);
-    cells.push({ empty: false, day, key, events: byDay.get(key) || [] });
+    cells.push({ empty: false, day, key, events: calState.events.filter(ev=>calEventOccursOnDay(ev,key)) });
   }
   while (cells.length % 7) cells.push({ empty: true });
 
@@ -4595,10 +4689,12 @@ function renderCalDay() {
   const day = calState.selectedDay || calDayKey(new Date());
   const date = new Date(day + "T12:00");
   $("cal-day-title").textContent = date.toLocaleDateString(calLocale(), {weekday:"long",day:"numeric",month:"long"});
-  const events = calState.events.filter(event => calEventDayKey(event) === day);
-  $("cal-day-schedule").innerHTML = Array.from({length:24}, (_, hour) => {
+  const events = calState.events.filter(event => calEventOccursOnDay(event,day));
+  const allDay=events.filter(event=>event.all_day);
+  const allDayHTML=allDay.length ? `<div class="cal-hour-row"><span class="meta">${escapeHtml(mailImageText('Весь день','All day'))}</span><div class="cal-hour-events">${allDay.map(event=>`<button type="button" class="cal-agenda-event" data-ev="${escapeHtml(event.id)}"><strong>${escapeHtml(calendarEventLabel(event))}</strong></button>`).join('')}</div></div>` : '';
+  $("cal-day-schedule").innerHTML = allDayHTML+Array.from({length:24}, (_, hour) => {
     const time = String(hour).padStart(2,"0") + ":00";
-    const matching = events.filter(event => new Date(event.start).getHours() === hour);
+    const matching = events.filter(event => !event.all_day && (calEventDayKey(event)===day ? new Date(event.start).getHours()===hour : hour===0));
     return `<div class="cal-hour-row"><button type="button" class="cal-hour-slot" data-hour="${hour}" aria-label="${escapeHtml(t("new_event") + " · " + day + " " + time)}"><time>${time}</time><span>${escapeHtml(t("cal_hour_add"))}</span></button><div class="cal-hour-events">${matching.map(event => `<button type="button" class="cal-agenda-event" data-ev="${escapeHtml(event.id)}"><strong>${escapeHtml(calendarEventLabel(event))}</strong><span>${escapeHtml(fmtCalTime(event.start))}–${escapeHtml(fmtCalTime(event.end))}${event.location ? " · " + escapeHtml(event.location) : ""}</span></button>`).join("")}</div></div>`;
   }).join("");
   $("cal-day-schedule").querySelectorAll("[data-hour]").forEach(slot => {
@@ -4625,7 +4721,7 @@ function startNewCalEvent(day = calState.selectedDay || calDayKey(new Date()), h
 
 let calInboxFocus = null;
 function updateCalInviteBadge() {
-  const count = calState.invites.length;
+  const count = calState.invites.length + (calState.proposals?.length || 0);
   $("cal-invite-count").textContent = String(count);
   $("cal-invite-count").classList.toggle("hidden", count === 0);
   const label = t("cal_invites") + (count ? ` · ${count}` : "");
@@ -4669,7 +4765,7 @@ function renderCalEventLog() {
   const isPast=e=>{const end=new Date(e.end||e.start);return !Number.isNaN(end.getTime())&&end.getTime()<Date.now()};
   let events = calState.events.filter(e=>calState.showPast||!isPast(e));
   if (calState.selectedDay) {
-    events = events.filter((e) => calEventDayKey(e) === calState.selectedDay);
+    events = events.filter((e) => calEventOccursOnDay(e,calState.selectedDay));
     if (logTitle) {
       const d = new Date(calState.selectedDay + "T12:00:00");
       const dayLabel = Number.isNaN(d.getTime())
@@ -4678,15 +4774,15 @@ function renderCalEventLog() {
       logTitle.textContent = `${t("cal_day_events")} · ${dayLabel}`;
     }
   } else if (logTitle) {
-    logTitle.textContent = t("cal_event_log");
+    logTitle.textContent = t("cal_event_log") + " · " + calState.month.toLocaleDateString(calLocale(),{month:"long",year:"numeric"});
   }
 
   list.innerHTML = events.map((e) => `
     <li>
       <button type="button" class="msg-item cal-item${isPast(e) ? " is-past" : ""}${e.id === calState.eventID ? " is-active" : ""}" data-ev="${escapeHtml(e.id)}">
         <span class="msg-subject"><span class="calendar-color-dot" style="background:${calendarEventColor(e)}"></span>${escapeHtml(calendarEventLabel(e))}</span>
-        <span class="msg-date cal-start">${escapeHtml(fmtCalShort(e.start))}</span>
-        <span class="msg-date cal-end">${escapeHtml(fmtCalTime(e.end) || fmtCalShort(e.end))}</span>
+        <span class="msg-date cal-start">${escapeHtml(e.all_day ? fmtCalEventWhen(e,e.start) : fmtCalShort(e.start))}</span>
+        <span class="msg-date cal-end">${escapeHtml(e.all_day ? mailImageText("Весь день","All day") : fmtCalTime(e.end) || fmtCalShort(e.end))}</span>
       </button>
     </li>`).join("") || `<li class="meta msg-empty">${escapeHtml(t("empty_calendar"))}</li>`;
   list.querySelectorAll("[data-ev]").forEach((btn) => {
@@ -4780,20 +4876,28 @@ async function loadCalEvents() {
   const visible=calState.calendars.filter(c=>!calState.hiddenCalendars.has(c.id));
   if (title) title.textContent = visible.length===1 ? calendarDisplayLabel(visible[0]) : t("calendar_title") + " · " + visible.length;
   try {
-    const results = await Promise.all(visible.map(async c => c.external ? (c.events || []) : (await api("/api/v1/calendar/calendars/" + encodeURIComponent(c.id) + "/events")).events || []));
-    if(sequence !== calState.loadSequence) return;
-    calState.events = results.flat().sort((a,b)=>String(a.start||'').localeCompare(String(b.start||'')));
+    const userID = state.me?.id;
+    const month = calMonthStart(calState.month);
+    const from = new Date(month.getFullYear(),month.getMonth(),-6);
+    const to = new Date(month.getFullYear(),month.getMonth()+1,8);
+    const query = new URLSearchParams({expand:'true',from:from.toISOString(),to:to.toISOString()});
+    const results = await Promise.all(visible.map(async c => c.external ? {events:c.events || []} : await api("/api/v1/calendar/calendars/" + encodeURIComponent(c.id) + "/events?" + query)));
+    if(sequence !== calState.loadSequence || state.me?.id !== userID) return;
+    const warnings=results.flatMap(r=>r.warnings || []);
+    setMsg($("cal-load-msg"),warnings.length ? mailImageText("Не удалось раскрыть серий: ","Could not expand series: ")+warnings.length+". "+warnings[0].error : "",warnings.length ? "err" : "");
+    calState.events = results.flatMap(r=>r.events || []).sort((a,b)=>String(a.start||'').localeCompare(String(b.start||'')));
     if(!calState.events.some(e=>e.id===calState.eventID)) calState.eventID='';
     renderCalMonth();
     renderCalEventLog();
     if (calState.eventID && !$("cal-reader")?.classList.contains("hidden")) openCalEvent(calState.eventID);
     else showCalReader(null);
   } catch (err) {
-    setMsg($("cal-msg"), err.message, "err");
+    if(sequence===calState.loadSequence) setMsg($("cal-load-msg"), err.message, "err");
   }
 }
 
 function showCalReader(ev) {
+  calState.currentEvent = ev;
   const empty = $("cal-empty");
   const reader = $("cal-reader");
   if (!empty || !reader) return;
@@ -4810,8 +4914,8 @@ function showCalReader(ev) {
   if($('btn-cal-delete')) $('btn-cal-delete').disabled=calendar?.writable===false;
   $('cal-attach-upload')?.classList.toggle('hidden', calendar?.writable===false);
   $("cal-subject").textContent = calendarEventLabel(ev);
-  $("cal-read-start").textContent = fmtCalWhen(ev.start);
-  $("cal-read-end").textContent = fmtCalWhen(ev.end);
+  $("cal-read-start").textContent = fmtCalEventWhen(ev,ev.start);
+  $("cal-read-end").textContent = fmtCalEventWhen(ev,ev.end);
   $("cal-read-location").textContent = ev.location || "—";
   renderCalendarMap(ev.geo);
   $("cal-read-body").textContent = ev.description || "";
@@ -4831,6 +4935,105 @@ function showCalReader(ev) {
     }
   }
   renderCalReadAttachments(ev.attachments || []);
+  const recurring = !!ev.recurrence_id;
+  const canEdit = calendar?.writable !== false && !ev.busy_only && (!recurring || ev.occurrence_organizer);
+  $('btn-cal-recurrence')?.classList.toggle('hidden',!canEdit || !ev.recurrence_organizer);
+  $('btn-cal-instance-edit')?.classList.toggle('hidden',!recurring || !canEdit);
+  $('btn-cal-series-delete')?.classList.toggle('hidden',!recurring || !canEdit);
+  if($('btn-cal-delete')) {
+    $('btn-cal-delete').disabled = !canEdit;
+    const title = recurring ? mailImageText('Отменить повторение','Cancel occurrence') : t('delete');
+    $('btn-cal-delete').title=title;
+    $('btn-cal-delete').setAttribute('aria-label',title);
+  }
+  $('cal-attach-upload')?.classList.toggle('hidden', !canEdit || recurring);
+  $('cal-read-attachments')?.querySelectorAll('[data-att-del]').forEach(button=>button.disabled=!canEdit || recurring);
+
+}
+
+let calOccurrenceBusy = false;
+
+function openCalOccurrenceEditor() {
+  const ev=calState.currentEvent;
+  if(!ev?.recurrence_id || !ev.occurrence_organizer || calOccurrenceBusy) return;
+  const userID=state.me?.id;
+  const dialog=document.createElement('dialog');
+  dialog.className='calendar-editor-dialog cal-occurrence-dialog';
+  dialog.id='cal-occurrence-dialog';
+  dialog.setAttribute('aria-labelledby','cal-occurrence-title');
+  const inputType=ev.all_day ? 'date' : 'datetime-local';
+  const inputValue=value=>ev.all_day ? String(value).slice(0,10) : calendarLocalInput(value);
+  dialog.innerHTML=`<h3 class="heading" id="cal-occurrence-title">${escapeHtml(t('cal_instance_edit'))}</h3>
+    <p class="meta">${escapeHtml(mailImageText('Изменится только эта встреча. Остальные повторения останутся на месте. Участники получат уведомление.','Only this occurrence will change. Other occurrences stay in place. Attendees will be notified.'))}</p>
+    <form id="form-cal-occurrence">
+      <label class="field-label" for="cal-occ-summary">${escapeHtml(t('col_summary'))}</label>
+      <input class="field-input" id="cal-occ-summary" required value="${escapeHtml(ev.summary || '')}">
+      <div class="event-time-grid">
+        <div><label class="field-label" for="cal-occ-start">${escapeHtml(t('col_start'))}</label><input class="field-input" type="${inputType}" id="cal-occ-start" required value="${inputValue(ev.start)}"></div>
+        <div><label class="field-label" for="cal-occ-end">${escapeHtml(t('col_end'))}</label><input class="field-input" type="${inputType}" id="cal-occ-end" required value="${inputValue(ev.end)}"></div>
+      </div>
+      ${ev.all_day ? `<p class="meta">${escapeHtml(mailImageText('Дата окончания не включается в событие.','The end date is exclusive.'))}</p>` : ''}
+      <label class="field-label" for="cal-occ-location">${escapeHtml(t('col_location'))}</label>
+      <input class="field-input" id="cal-occ-location" value="${escapeHtml(ev.location || '')}">
+      <label class="field-label" for="cal-occ-description">${escapeHtml(t('col_description'))}</label>
+      <textarea class="field-input" id="cal-occ-description" rows="4">${escapeHtml(ev.description || '')}</textarea>
+      <p id="cal-occ-msg" class="msg" role="status"></p>
+      <div class="actions"><button class="btn-spray" type="submit">${escapeHtml(t('save'))}</button><button class="btn-secondary" type="button" data-occ-close>${escapeHtml(t('cancel'))}</button></div>
+    </form>`;
+  document.body.append(dialog);
+  dialog.addEventListener('close',()=>dialog.remove());
+  dialog.addEventListener('cancel',event=>{if(calOccurrenceBusy)event.preventDefault();});
+  dialog.querySelector('[data-occ-close]').onclick=()=>dialog.close();
+  dialog.querySelector('form').addEventListener('submit',async event=>{
+    event.preventDefault();
+    if(calOccurrenceBusy) return;
+    if(state.me?.id!==userID) {dialog.close();return;}
+    const readTime=id=>ev.all_day ? $(id).value+'T00:00:00.000Z' : localInputToISO($(id).value);
+    const start=readTime('cal-occ-start'),end=readTime('cal-occ-end');
+    if(!(new Date(end)>new Date(start))) {setMsg($('cal-occ-msg'),mailImageText('Конец должен быть позже начала','End must be after start'),'err');return;}
+    const location=$('cal-occ-location').value;
+    const request={action:'update',etag:ev.etag,recurrence_id:ev.recurrence_id,start,end,summary:$('cal-occ-summary').value.trim(),location,description:$('cal-occ-description').value,geo:location===(ev.location || '') ? (ev.geo || '') : ''};
+    calOccurrenceBusy=true;
+    dialog.querySelectorAll('button,input,textarea').forEach(el=>el.disabled=true);
+    setMsg($('cal-occ-msg'),mailImageText('Сохранение…','Saving…'));
+    try {
+      const saved=await api('/api/v1/calendar/events/'+encodeURIComponent(ev.object_id)+'/occurrences',{method:'POST',body:JSON.stringify(request)});
+      if(state.me?.id!==userID) {dialog.close();return;}
+      dialog.close();
+      calState.eventID=saved.id;
+      calState.selectedDay=calEventDayKey(saved);
+      calState.month=calMonthStart(new Date(calState.selectedDay+'T12:00'));
+      await loadCalEvents();
+    } catch(err) {
+      if(state.me?.id===userID) setMsg($('cal-occ-msg'),calendarRecurrenceError(err.message),'err');
+      else dialog.close();
+    } finally {
+      calOccurrenceBusy=false;
+      dialog.querySelectorAll('button,input,textarea').forEach(el=>el.disabled=false);
+    }
+  });
+  dialog.showModal();
+}
+
+async function deleteCalEvent(series) {
+  const ev=calState.currentEvent;
+  if(!ev || calOccurrenceBusy) return;
+  const userID=state.me?.id;
+  const occurrence=!!ev.recurrence_id && !series;
+  const message=occurrence ? mailImageText('Отменить только это повторение встречи? Остальные встречи сохранятся. Участники получат уведомление.','Cancel only this occurrence? Other meetings remain. Attendees will be notified.') : ev.recurrence_id ? mailImageText('Удалить всю серию, включая остальные повторения? Участникам будет отправлена отмена серии.','Delete the entire series, including all other occurrences? Attendees will receive a series cancellation.') : t('delete_confirm');
+  calOccurrenceBusy=true;
+  try {
+    if(!await askConfirm(message+'\n'+(ev.summary || '')+' · '+fmtCalWhen(ev.start),{danger:true})) return;
+    if(state.me?.id!==userID) return;
+    const path='/api/v1/calendar/events/'+encodeURIComponent(ev.object_id || ev.id);
+    if(occurrence) await api(path+'/occurrences',{method:'POST',body:JSON.stringify({action:'cancel',etag:ev.etag,recurrence_id:ev.recurrence_id})});
+    else await api(path,{method:'DELETE',headers:{'If-Match':ev.etag}});
+    if(state.me?.id!==userID) return;
+    calState.eventID='';
+    await loadCalEvents();
+  } catch(err) {
+    if(state.me?.id===userID) setMsg($('cal-load-msg'),err.message,'err');
+  } finally {calOccurrenceBusy=false;}
 }
 
 async function openCalEvent(id) {
@@ -4851,8 +5054,10 @@ async function openCalEvent(id) {
     el.classList.toggle("is-selected", el.dataset.day === calState.selectedDay);
   });
   try {
-    const d = await api("/api/v1/calendar/events/" + encodeURIComponent(id));
-    if(calState.eventID===id) showCalReader(d);
+    const userID=state.me?.id;
+    const query=cached?.recurrence_id ? '?'+new URLSearchParams({recurrence_id:cached.recurrence_id}) : '';
+    const d = await api("/api/v1/calendar/events/" + encodeURIComponent(cached?.object_id || id)+query);
+    if(calState.eventID===id && state.me?.id===userID) showCalReader(d);
   } catch (err) {
     if (!cached) setMsg($("cal-msg"), err.message, "err");
   }
@@ -4867,16 +5072,9 @@ $("btn-cal-close")?.addEventListener("click", () => showCalCompose(false));
 $("cal-backdrop")?.addEventListener("click", (e) => {
   if (e.target === $("cal-backdrop")) showCalCompose(false);
 });
-$("btn-cal-delete")?.addEventListener("click", async () => {
-  if (!calState.eventID || !await askConfirm(t("delete_confirm"), { danger: true })) return;
-  try {
-    await api("/api/v1/calendar/events/" + encodeURIComponent(calState.eventID), { method: "DELETE" });
-    calState.eventID = "";
-    await loadCalEvents();
-  } catch (err) {
-    setMsg($("cal-msg"), err.message, "err");
-  }
-});
+$("btn-cal-instance-edit")?.addEventListener("click",()=>openCalOccurrenceEditor());
+$("btn-cal-series-delete")?.addEventListener("click",()=>deleteCalEvent(true));
+$("btn-cal-delete")?.addEventListener("click",()=>deleteCalEvent(false));
 $("btn-cal-attendee-add")?.addEventListener("click", () => addCalAttendeesFromInput());
 $("cal-attendee-input")?.addEventListener("keydown", (e) => {
   if (e.key === "Enter" || e.key === ",") {
@@ -4911,7 +5109,7 @@ $("cal-read-files")?.addEventListener("change", async () => {
   if (!calState.eventID || !input?.files?.length) return;
   try {
     for (const file of Array.from(input.files)) {
-      await uploadCalAttachment(calState.eventID, file);
+      await uploadCalAttachment(calState.currentEvent?.object_id || calState.eventID, file);
     }
     input.value = "";
     await openCalEvent(calState.eventID);
@@ -4935,6 +5133,8 @@ $("form-cal-event")?.addEventListener("submit", async (e) => {
     setMsg($("cal-msg"), "no calendar", "err");
     return;
   }
+  let recurrence;
+  try {recurrence=readRecurrenceFields('cal-new-recurrence');} catch(error) {setMsg($('cal-msg'),error.message,'err');return;}
   const form=$("form-cal-event");if(form.dataset.saving==="true")return;form.dataset.saving="true";
   const saveButton=form.querySelector('[type="submit"]');if(saveButton)saveButton.disabled=true;
   setMsg($("cal-msg"), "…");
@@ -4948,6 +5148,8 @@ $("form-cal-event")?.addEventListener("submit", async (e) => {
         description: $("cal-description")?.value || "",
         start: localInputToISO($("cal-start").value),
         end: localInputToISO($("cal-end").value),
+        recurrence,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
         attendees: calState.attendees.map((a) => ({
           email: a.email,
           name: a.name || "",
@@ -4973,7 +5175,7 @@ $("form-cal-event")?.addEventListener("submit", async (e) => {
     await loadCalEvents();
     if (created?.id) openCalEvent(created.id);
   } catch (err) {
-    setMsg($("cal-msg"), form.dataset.createdEvent ? mailImageText("Событие сохранено, но не все вложения загружены. Повторите сохранение, чтобы дозагрузить файлы: ","Event saved, but some attachments failed. Save again to retry uploads: ")+err.message : err.message, "err");
+    setMsg($("cal-msg"), form.dataset.createdEvent ? mailImageText("Событие сохранено, но не все вложения загружены. Повторите сохранение, чтобы дозагрузить файлы: ","Event saved, but some attachments failed. Save again to retry uploads: ")+err.message : calendarRecurrenceError(err.message), "err");
   } finally {delete form.dataset.saving;if(saveButton)saveButton.disabled=false;}
 });
 
@@ -6274,23 +6476,217 @@ document.addEventListener('click',event=>{if(!$('topbar-language')?.contains(eve
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&$('topbar-language')?.open){$('topbar-language').open=false;$('topbar-language').querySelector('summary').focus();}});
 
 let taskRows = [];
+let taskSession = 0, taskListRequest = 0;
+let editingTask = null;
+function taskStatus(task) { return task.status || (task.completed ? 'Completed' : 'NotStarted'); }
 async function refreshTasks() {
- try {
-  const data=await api('/api/v1/tasks');taskRows=data.tasks||[];
-  const showDone=$('tasks-completed').checked;
-  $('tasks-list').innerHTML=taskRows.filter(x=>showDone||!x.completed).map(x=>`<li class="list-row" style="display:flex;align-items:center;gap:12px;padding:12px;${x.completed?'opacity:.65':''}"><input type="checkbox" data-task-toggle="${escapeHtml(x.id)}" ${x.completed?'checked':''} aria-label="${escapeHtml(t('task_complete'))}"><button class="btn-secondary" style="flex:1;text-align:left;${x.completed?'text-decoration:line-through':''}" data-task-edit="${escapeHtml(x.id)}">${escapeHtml(x.title)}${x.due?` <span class="meta">${escapeHtml(new Date(x.due).toLocaleDateString())}</span>`:''}${x.source_message_id?' <span aria-label="Mail">✉</span>':''}</button><button class="btn-secondary btn-ico" data-task-delete="${escapeHtml(x.id)}" title="${escapeHtml(t('delete'))}" aria-label="${escapeHtml(t('delete'))}">×</button></li>`).join('')||`<li class="meta" style="padding:16px">${escapeHtml(t('tasks_empty'))}</li>`;
-  $('tasks-list').querySelectorAll('[data-task-toggle]').forEach(el=>el.onchange=async()=>{el.disabled=true;const task=taskRows.find(x=>x.id===el.dataset.taskToggle);try{await api('/api/v1/tasks/'+encodeURIComponent(task.id),{method:'PUT',body:JSON.stringify({...task,completed:el.checked})});await refreshTasks()}catch(e){el.checked=!el.checked;setMsg($('tasks-msg'),e.message,'err')}finally{el.disabled=false}});
-  $('tasks-list').querySelectorAll('[data-task-edit]').forEach(el=>el.onclick=()=>editTask(taskRows.find(x=>x.id===el.dataset.taskEdit)));
-  $('tasks-list').querySelectorAll('[data-task-delete]').forEach(el=>el.onclick=async()=>{if(!confirm(t('task_delete_confirm')))return;try{await api('/api/v1/tasks/'+encodeURIComponent(el.dataset.taskDelete),{method:'DELETE'});await refreshTasks()}catch(e){setMsg($('tasks-msg'),e.message,'err')}});
- }catch(e){setMsg($('tasks-msg'),e.message,'err')}
+  const request = ++taskListRequest;
+  try {
+    const data = await api('/api/v1/tasks');
+    if (request !== taskListRequest) return;
+    taskRows = data.tasks || [];
+    const showDone = $('tasks-completed').checked;
+    $('tasks-list').innerHTML = taskRows.filter(x => showDone || !x.completed).map(x => `
+      <li class="list-row task-row ${x.completed ? 'task-row-completed' : ''}">
+        <input type="checkbox" data-task-toggle="${escapeHtml(x.id)}" ${x.completed ? 'checked' : ''} ${x.can_update === false ? 'disabled' : ''} aria-label="${escapeHtml(t('task_complete') + ': ' + x.title)}">
+        <button class="btn-secondary task-row-edit" data-task-edit="${escapeHtml(x.id)}">
+          <span class="task-row-title">${escapeHtml(x.title)}${x.source_message_id ? ' <span aria-label="Mail">✉</span>' : ''}</span>
+          <span class="meta task-row-detail">${escapeHtml(t('task_status_' + taskStatus(x)))} · ${Number(x.percent_complete ?? (x.completed ? 100 : 0))}%${x.due ? ' · ' + escapeHtml(new Date(x.due).toLocaleDateString()) : ''}</span><span class="meta task-row-detail">${escapeHtml(taskPeople(x))}</span>
+        </button>
+        ${x.can_manage === false ? '' : `<button class="btn-secondary btn-ico task-row-delete" data-task-delete="${escapeHtml(x.id)}" title="${escapeHtml(t('delete'))}" aria-label="${escapeHtml(t('delete') + ': ' + x.title)}">×</button>`}
+      </li>`).join('') || `<li class="meta" style="padding:16px">${escapeHtml(t('tasks_empty'))}</li>`;
+    $('tasks-list').querySelectorAll('[data-task-toggle]').forEach(el => el.onchange = async () => {
+      el.disabled = true;
+      const task = taskRows.find(x => x.id === el.dataset.taskToggle);
+      try {
+        await api('/api/v1/tasks/' + encodeURIComponent(task.id), {method: 'PUT', body: JSON.stringify({...task, completed: el.checked, status: el.checked ? 'Completed' : 'NotStarted', percent_complete: el.checked ? 100 : 0})});
+        await refreshTasks();
+      } catch (e) {
+        el.checked = !el.checked;
+        setMsg($('tasks-msg'), e.message, 'err');
+      } finally { el.disabled = false; }
+    });
+    $('tasks-list').querySelectorAll('[data-task-edit]').forEach(el => el.onclick = () => editTask(taskRows.find(x => x.id === el.dataset.taskEdit)));
+    $('tasks-list').querySelectorAll('[data-task-delete]').forEach(el => el.onclick = async () => {
+      if (!confirm(t('task_delete_confirm'))) return;
+      try {
+        await api('/api/v1/tasks/' + encodeURIComponent(el.dataset.taskDelete), {method: 'DELETE'});
+        await refreshTasks();
+      } catch (e) { setMsg($('tasks-msg'), e.message, 'err'); }
+    });
+    setMsg($('tasks-msg'), '', '');
+    await refreshTaskNotifications();
+  } catch (e) { if (request === taskListRequest) setMsg($('tasks-msg'), e.message, 'err'); }
 }
-let editingTask=null;
-function editTask(task=null){editingTask=task;$('task-title').value=task?.title||'';$('task-body').value=task?.body||'';$('task-due').value=task?.due?task.due.slice(0,10):'';$('task-dialog').showModal();$('task-title').focus()}
-$('tasks-new')?.addEventListener('click',()=>editTask());
-$('tasks-refresh')?.addEventListener('click',refreshTasks);
-$('tasks-completed')?.addEventListener('change',refreshTasks);
-$('task-cancel')?.addEventListener('click',()=>$('task-dialog').close());
-$('task-form')?.addEventListener('submit',async e=>{e.preventDefault();const button=$('task-save');button.disabled=true;try{await api('/api/v1/tasks'+(editingTask?'/'+encodeURIComponent(editingTask.id):''),{method:editingTask?'PUT':'POST',body:JSON.stringify({...editingTask,title:$('task-title').value,body:$('task-body').value,due:$('task-due').value?$('task-due').value+'T12:00:00Z':''})});$('task-dialog').close();await refreshTasks()}catch(err){setMsg($('task-edit-msg'),err.message,'err')}finally{button.disabled=false}});
+function editTask(task = null) {
+  if (taskAssignmentBusy) return;
+  editingTask = task;
+  $('task-title').value = task?.title || '';
+  $('task-body').value = task?.body || '';
+  $('task-due').value = task?.due ? task.due.slice(0, 10) : '';
+  $('task-status').value = taskStatus(task || {});
+  $('task-percent').value = task?.percent_complete ?? (task?.completed ? 100 : 0);
+  setMsg($('task-edit-msg'), '', '');
+  $('task-dialog').showModal();
+  taskAssigneeOffset=0; taskHistoryOffset=0;
+  $('task-assignee-query').value='';
+  $('task-assignee').innerHTML=`<option value="">${escapeHtml(t('task_assignee_choose'))}</option>`;
+  $('task-history-section').open=false;
+  renderTaskPermissions();
+  if(task?.can_manage !== false) loadTaskAssignees();
+  loadTaskHistory();
+  (task?.can_manage === false ? $('task-status') : $('task-title')).focus();
+}
+$('task-status')?.addEventListener('change', () => {
+  const status = $('task-status').value;
+  if (status === 'Completed') $('task-percent').value = 100;
+  else if (status === 'NotStarted' || Number($('task-percent').value) === 100) $('task-percent').value = 0;
+});
+$('task-percent')?.addEventListener('input', () => {
+  if (!$('task-percent').validity.valid || $('task-percent').value === '') return;
+  const percent = Number($('task-percent').value);
+  if (percent === 100) $('task-status').value = 'Completed';
+  else if (['NotStarted', 'Completed'].includes($('task-status').value)) $('task-status').value = percent > 0 ? 'InProgress' : 'NotStarted';
+});
+$('tasks-new')?.addEventListener('click', () => editTask());
+$('tasks-refresh')?.addEventListener('click', refreshTasks);
+$('tasks-completed')?.addEventListener('change', refreshTasks);
+$('task-cancel')?.addEventListener('click', () => $('task-dialog').close());
+$('task-form')?.addEventListener('submit', async e => {
+  e.preventDefault();
+  const button = $('task-save');
+  if (button.disabled || taskAssignmentBusy) return;
+  const session = taskSession;
+  taskAssignmentBusy = true; renderTaskPermissions();
+  try {
+    const status = $('task-status').value;
+    await api('/api/v1/tasks' + (editingTask ? '/' + encodeURIComponent(editingTask.id) : ''), {
+      method: editingTask ? 'PUT' : 'POST',
+      body: JSON.stringify({...editingTask, assignee_id:editingTask?.assignee_id || $('task-assignee').value, title: $('task-title').value, body: $('task-body').value, status, percent_complete: Number($('task-percent').value), completed: status === 'Completed', due: editingTask?.can_manage === false ? editingTask.due : ($('task-due').value ? $('task-due').value + 'T12:00:00Z' : '')})
+    });
+    if (session !== taskSession) return;
+    $('task-dialog').close();
+    await refreshTasks();
+  } catch (err) { if(session === taskSession) setMsg($('task-edit-msg'), err.message, 'err'); }
+  finally { if(session === taskSession) { taskAssignmentBusy = false; renderTaskPermissions(); } }
+});
+
+let taskAssigneeOffset = 0, taskHistoryOffset = 0, taskNoticeOffset = 0;
+let taskCandidateRequest = 0, taskHistoryRequest = 0, taskNoticeRequest = 0, taskSearchTimer;
+let taskAssignmentBusy = false;
+function resetTasks() {
+  ++taskSession; ++taskListRequest; ++taskCandidateRequest; ++taskHistoryRequest; ++taskNoticeRequest;
+  clearTimeout(taskSearchTimer);
+  taskRows=[]; editingTask=null; taskAssignmentBusy=false;
+  taskAssigneeOffset=0; taskHistoryOffset=0; taskNoticeOffset=0;
+  $('task-dialog')?.close(); $('task-form')?.reset();
+  for(const id of ['tasks-list','task-notifications-list','task-history-list','task-people','tasks-msg','task-edit-msg']) $(id)?.replaceChildren();
+  if($('task-notifications-summary')) $('task-notifications-summary').textContent=t('task_notifications');
+}
+function taskPeople(task) {
+  const text = [];
+  if (task?.owner_name || task?.owner_email) text.push(t('task_owner') + ': ' + (task.owner_name || task.owner_email));
+  if (task?.assignee_id) text.push(t('task_assignee') + ': ' + (task.assignee_name || task.assignee_email || task.assignee_id) + ' · ' + t('task_assignment_' + task.assignment_state));
+  return text.join(' · ');
+}
+function taskPager(prefix, offset, total, size = 10) {
+  $(prefix + '-prev').disabled = offset === 0;
+  $(prefix + '-next').disabled = offset + size >= total;
+  $(prefix + '-count').textContent = total ? `${Math.min(offset + 1, total)}–${Math.min(offset + size, total)} / ${total}` : '0';
+}
+function renderTaskPermissions() {
+  const task = editingTask, manage = task?.can_manage !== false, update = task?.can_update !== false;
+  $('task-people').textContent = taskPeople(task);
+  $('task-permissions').textContent = manage ? '' : t(update ? 'task_progress_only' : 'task_pending_hint');
+  for (const field of ['task-title','task-body','task-due']) $(field).disabled = !manage;
+  for (const field of ['task-status','task-percent','task-save']) $(field).disabled = !update || taskAssignmentBusy;
+  $('task-assignment-controls').hidden = !manage;
+  $('task-response').hidden = manage || task?.assignment_state !== 'pending' || task.completed;
+  for (const field of ['task-accept','task-decline','task-assign','task-revoke']) $(field).disabled = taskAssignmentBusy;
+  $('task-cancel').disabled = taskAssignmentBusy;
+  $('task-assign').hidden = !task;
+  $('task-assign').disabled ||= !$('task-assignee').value || !!task?.completed;
+  $('task-revoke').hidden = !task?.assignee_id;
+  $('task-history-section').hidden = !task;
+}
+async function loadTaskAssignees() {
+  const request = ++taskCandidateRequest;
+  $('task-assignee').innerHTML = `<option value="">${escapeHtml(t('task_assignee_choose'))}</option>`;
+  renderTaskPermissions();
+  try {
+    const data = await api('/api/v1/tasks/assignees?limit=10&offset=' + taskAssigneeOffset + '&q=' + encodeURIComponent($('task-assignee-query').value));
+    if (request !== taskCandidateRequest || !$('task-dialog').open) return;
+    for (const user of data.users || []) {
+      const option = document.createElement('option'); option.value = user.id; option.textContent = `${user.name || user.email} · ${user.email}`; $('task-assignee').append(option);
+    }
+    taskPager('task-assignees', taskAssigneeOffset, data.total || 0);
+    setMsg($('task-assignment-msg'), '', '');
+  } catch (e) { if (request === taskCandidateRequest) setMsg($('task-assignment-msg'), e.message, 'err'); }
+}
+async function loadTaskHistory() {
+  const request = ++taskHistoryRequest, id = editingTask?.id;
+  $('task-history-list').replaceChildren();
+  setMsg($('task-history-msg'), '', '');
+  if (!id) return;
+  try {
+    const data = await api('/api/v1/tasks/' + encodeURIComponent(id) + '/history?limit=10&offset=' + taskHistoryOffset);
+    if (request !== taskHistoryRequest || id !== editingTask?.id) return;
+    $('task-history-list').innerHTML = (data.events || []).map(e => `<li><strong>${escapeHtml(t('task_action_' + e.action))}</strong><span class="meta">${escapeHtml(e.actor_name)} · ${escapeHtml(new Date(e.created_at).toLocaleString())}</span><span class="meta">${escapeHtml((e.detail.changes || []).map(c => t('task_change_' + c)).join(', '))} · ${escapeHtml(t('task_status_' + e.detail.status))} · ${Number(e.detail.percent_complete)}%${e.detail.assignee_id ? ' · ' + escapeHtml(t('task_assignee') + ': ' + (e.detail.assignee_name || e.detail.assignee_email || e.detail.assignee_id)) : ''}${e.detail.changes?.includes('title') ? ' · ' + escapeHtml(e.detail.title) : ''}${e.detail.due ? ' · ' + escapeHtml(new Date(e.detail.due).toLocaleDateString()) : ''}</span></li>`).join('') || `<li class="meta">${escapeHtml(t('task_history_empty'))}</li>`;
+    taskPager('task-history', taskHistoryOffset, data.total || 0);
+  } catch (e) { if (request === taskHistoryRequest) setMsg($('task-history-msg'), e.message, 'err'); }
+}
+async function changeTaskAssignment(action) {
+  if (!editingTask || taskAssignmentBusy) return;
+  if (action === 'revoke' && !confirm(t('task_revoke_confirm'))) return;
+  const session = taskSession;
+  taskAssignmentBusy = true; renderTaskPermissions();
+  try {
+    const data = await api('/api/v1/tasks/' + encodeURIComponent(editingTask.id) + '/assignment', {method:'POST',body:JSON.stringify({action, assignee_id:$('task-assignee').value, revision:editingTask.revision})});
+    if (session !== taskSession) return;
+    if (data.task) { editingTask = data.task; $('task-assignee').value = ''; taskHistoryOffset = 0; await loadTaskHistory(); }
+    else $('task-dialog').close();
+    setMsg($('task-edit-msg'), '', '');
+    await refreshTasks();
+  } catch (e) { if(session === taskSession) setMsg($('task-edit-msg'), e.message, 'err'); }
+  finally { if(session === taskSession) { taskAssignmentBusy = false; renderTaskPermissions(); } }
+}
+async function refreshTaskNotifications() {
+  const request = ++taskNoticeRequest;
+  try {
+    const data = await api('/api/v1/tasks/notifications?limit=10&offset=' + taskNoticeOffset);
+    if (request !== taskNoticeRequest) return;
+    $('task-notifications-summary').textContent = t('task_notifications') + (data.unread ? ` · ${data.unread} ${t('task_unread')}` : '');
+    $('task-notifications-list').innerHTML = (data.notifications || []).map(n => `<li><button type="button" class="btn-secondary task-notice ${n.read_at ? '' : 'is-unread'}" data-task-notice="${escapeHtml(n.id)}" data-task-id="${escapeHtml(n.task_id)}"><span>${escapeHtml(t('task_action_' + n.action))}${taskRows.find(x=>x.id===n.task_id) ? ' · ' + escapeHtml(taskRows.find(x=>x.id===n.task_id).title) : ''}</span><span class="meta">${escapeHtml(new Date(n.created_at).toLocaleString())}</span></button></li>`).join('') || `<li class="meta">${escapeHtml(t('task_notifications_empty'))}</li>`;
+    taskPager('task-notices', taskNoticeOffset, data.total || 0);
+    $('task-notifications-list').querySelectorAll('[data-task-notice]').forEach(el => el.onclick = async () => {
+      el.disabled = true;
+      try {
+        await api('/api/v1/tasks/notifications', {method:'POST',body:JSON.stringify({id:el.dataset.taskNotice})});
+        await refreshTaskNotifications();
+        const task = await api('/api/v1/tasks/' + encodeURIComponent(el.dataset.taskId)); editTask(task);
+      } catch (_) { setMsg($('tasks-msg'), t('task_unavailable'), 'err'); }
+      finally { el.disabled = false; }
+    });
+  } catch (e) { if (request === taskNoticeRequest) setMsg($('tasks-msg'), e.message, 'err'); }
+}
+$('task-assignee')?.addEventListener('change', renderTaskPermissions);
+$('task-assignee-query')?.addEventListener('input', () => {
+  clearTimeout(taskSearchTimer); ++taskCandidateRequest;
+  // Discard a choice from the previous search immediately, before debounce.
+  $('task-assignee').value = ''; renderTaskPermissions();
+  taskSearchTimer = setTimeout(() => { taskAssigneeOffset=0; loadTaskAssignees(); },250);
+});
+for (const [prefix, load, getOffset, setOffset] of [
+  ['task-assignees',loadTaskAssignees,()=>taskAssigneeOffset,v=>taskAssigneeOffset=v],
+  ['task-history',loadTaskHistory,()=>taskHistoryOffset,v=>taskHistoryOffset=v],
+  ['task-notices',refreshTaskNotifications,()=>taskNoticeOffset,v=>taskNoticeOffset=v]
+]) {
+  $(prefix+'-prev')?.addEventListener('click',()=>{setOffset(Math.max(0,getOffset()-10));load();});
+  $(prefix+'-next')?.addEventListener('click',()=>{setOffset(getOffset()+10);load();});
+}
+for (const action of ['assign','revoke','accept','decline']) $('task-'+action)?.addEventListener('click',()=>changeTaskAssignment(action));
+$('task-dialog')?.addEventListener('cancel',e=>{if(taskAssignmentBusy)e.preventDefault();});
+$('task-dialog')?.addEventListener('close',()=>{clearTimeout(taskSearchTimer);++taskCandidateRequest;++taskHistoryRequest;});
 
 async function chatSubscription(jid,action){try{await api('/api/v1/chat/subscription',{method:'POST',body:JSON.stringify({jid,action})});await refreshChat()}catch(e){setMsg($('chat-roster-msg'),e.message,'err')}}
 $('chat-presence-toggle')?.addEventListener('click', () => setChatPresenceMenu($('chat-presence-menu').hidden));
@@ -6772,14 +7168,38 @@ function replyToMessage(message, all=false, dialog=null) {
   ensureComposeCC();
   openCompose({to,cc:all?(message.reply_all_cc || []).join(', '):'',subject:/^re\s*:/i.test(message.subject || '')?message.subject:'Re: '+(message.subject || ''),body:'\n\n---\n'+quoted.slice(0,10000)});
 }
+function forwardMailMessage(message, dialog=null) {
+  if (composeAttachments.sending) return;
+  if (dialog?.open) dialog.close();
+  let text=message.text || '';
+  if (!text && message.html) {
+    const doc=new DOMParser().parseFromString(message.html,'text/html');
+    doc.querySelectorAll('script,style,iframe,object,template').forEach(node=>node.remove());
+    doc.querySelectorAll('br').forEach(node=>node.replaceWith('\n'));
+    doc.querySelectorAll('p,div,tr,li,h1,h2,h3').forEach(node=>node.append('\n'));
+    text=doc.body.textContent || '';
+  }
+  const headers=[mailImageText('---------- Пересылаемое письмо ----------','---------- Forwarded message ----------'),
+    mailImageText('От: ','From: ')+(message.from || ''),mailImageText('Дата: ','Date: ')+(message.date || message.internal_date || ''),
+    mailImageText('Тема: ','Subject: ')+(message.subject || ''),mailImageText('Кому: ','To: ')+(message.to || '')];
+  if(message.cc)headers.push(mailImageText('Копия: ','Cc: ')+message.cc);
+  openCompose({to:'',cc:'',subject:/^(fwd?|пересл)\s*:/i.test(message.subject || '')?message.subject:'Fwd: '+(message.subject || ''),body:'\n\n'+headers.join('\n')+'\n\n'+text});
+  for(const attachment of message.attachments || []) {
+    const id=crypto.randomUUID();
+    const item={id,file:{name:attachment.filename,size:attachment.size},forward:{message:message.id,attachment:attachment.id},status:'queued',done:0};
+    composeAttachments.entries.push(item);queueComposeUpload(item);
+  }
+  $('compose-to')?.focus();
+}
 function createMailActionBar(message, dialog=null) {
   const bar=document.createElement('div');bar.className='reader-actions';
-  for (const [action,label] of [['trip',mailImageText('Поездка в календарь','Trip to calendar')],['reply',mailImageText('Ответить','Reply')],['reply-all',mailImageText('Ответить всем','Reply all')],['spam',mailImageText('В спам','Mark as spam')],['archive',mailImageText('В архив','Archive')],['delete',mailImageText('Удалить','Delete')]]) {
+  for (const [action,label] of [['trip',mailImageText('Поездка в календарь','Trip to calendar')],['reply',mailImageText('Ответить','Reply')],['reply-all',mailImageText('Ответить всем','Reply all')],['forward',mailImageText('Переслать','Forward')],['spam',mailImageText('В спам','Mark as spam')],['archive',mailImageText('В архив','Archive')],['delete',mailImageText('Удалить','Delete')]]) {
     const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.title=label;button.setAttribute('aria-label',label);button.classList.add('action-icon');button.innerHTML=designIcon(action);button.dataset.mailAction=action;if(!dialog)button.id='btn-mail-'+action;
     if(action==='spam' && (mailState.mailboxes || []).some(folder=>folder.id===message.mailbox_id&&folder.name==='Junk'))button.disabled=true;
     button.addEventListener('click',async()=>{
       if(action==='trip'){if(dialog?.open)dialog.close();await openTravelDrafts(message.id);return;}
       if(action==='reply'||action==='reply-all'){replyToMessage(message,action==='reply-all',dialog);return;}
+      if(action==='forward'){forwardMailMessage(message,dialog);return;}
       if(action==='delete'){if(dialog?.open)dialog.close();if(!await askConfirm(t('delete_confirm'),{danger:true})){if(dialog)dialog.showModal();return;}}
       button.disabled=true;
       try {
@@ -6890,6 +7310,124 @@ document.addEventListener('dblclick',event=>{
   const contact=event.target.closest('#contact-list [data-card]');if(contact){event.preventDefault();openEntityModal('contact',contact.dataset.card);return}
   const calendar=event.target.closest('#app-calendar [data-ev]');if(calendar){event.preventDefault();openEntityModal('calendar',calendar.dataset.ev)}
 });
+// Recurrence controls share one contract for creation and whole-series edits.
+function createRecurrenceFields(prefix, info = {}, timezone = '') {
+  const host=document.createElement('fieldset');host.className='cal-recurrence-fields';host.id=prefix;
+  const rule=info.rule || {frequency:'',interval:1};
+  const field=(key,label,type='text')=>{
+    const wrap=document.createElement('div'),caption=document.createElement('label'),input=document.createElement(type==='select'?'select':'input');
+    caption.className='field-label';caption.htmlFor=prefix+'-'+key;caption.textContent=label;
+    input.id=caption.htmlFor;input.className='field-input';if(type!=='select')input.type=type;
+    wrap.append(caption,input);host.append(wrap);return input;
+  };
+  const option=(select,value,label)=>{const opt=document.createElement('option');opt.value=value;opt.textContent=label;select.append(opt);};
+  const frequency=field('frequency',mailImageText('Повторение','Repeat'),'select');
+  for(const [value,ru,en] of [['','Не повторяется','Does not repeat'],['DAILY','Ежедневно','Daily'],['WEEKLY','Еженедельно','Weekly'],['MONTHLY','Ежемесячно','Monthly'],['YEARLY','Ежегодно','Yearly']])option(frequency,value,mailImageText(ru,en));
+  frequency.value=rule.frequency || '';
+  const interval=field('interval',mailImageText('Интервал повторения','Repeat interval'),'number');interval.min=1;interval.max=99;interval.step=1;interval.value=rule.interval || 1;
+  const dayGroup=document.createElement('div');dayGroup.className='cal-recurrence-days';const dayTitle=document.createElement('span');dayTitle.textContent=mailImageText('Дни недели','Days of the week');dayGroup.append(dayTitle);host.append(dayGroup);
+  for(const [value,ru,en] of [['MO','Пн','Mon'],['TU','Вт','Tue'],['WE','Ср','Wed'],['TH','Чт','Thu'],['FR','Пт','Fri'],['SA','Сб','Sat'],['SU','Вс','Sun']]){
+    const label=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.value=value;input.name=prefix+'-day';input.checked=(rule.weekdays || []).includes(value);label.append(input,document.createTextNode(mailImageText(ru,en)));dayGroup.append(label);
+  }
+  const end=field('end',mailImageText('Окончание серии','Ends'),'select');
+  for(const [value,ru,en] of [['never','Без окончания','Never'],['count','После числа встреч','After a number of events'],['until','В указанную дату','On a date']])option(end,value,mailImageText(ru,en));
+  end.value=rule.count?'count':rule.until?'until':'never';
+  const count=field('count',mailImageText('Количество встреч, включая первую','Number of events, including the first'),'number');count.min=1;count.max=1000;count.step=1;count.value=rule.count || 10;
+  const until=field('until',mailImageText('Последний день включительно','Last day, inclusive'),'date');until.value=rule.until || '';
+  const hint=document.createElement('p');hint.className='meta cal-recurrence-hint';host.append(hint);
+  const bookingHint=document.createElement('p');bookingHint.className='meta';bookingHint.textContent=mailImageText('Для бронирования помещения задайте окончание серии: до 1000 встреч в пределах 5 лет. При конфликте ни одна встреча не будет забронирована.','Room bookings require a series end: up to 1000 events within 5 years. A conflict cancels the entire booking.');host.append(bookingHint);
+  if(info.exceptions){const note=document.createElement('p');note.className='meta';note.textContent=mailImageText('Отдельно изменённых или отменённых встреч: ','Edited or cancelled occurrences: ')+info.exceptions+'. '+mailImageText('Они сохранятся. Правило, исключающее их исходные даты, будет отклонено.','They are preserved. A rule that removes their original dates will be rejected.');host.append(note);}
+  if(info.editable===false){const note=document.createElement('p');note.className='msg';note.textContent=mailImageText('Это правило создано в другом календарном клиенте и не представимо в простом редакторе. Измените его в исходном клиенте; данные сохранены.','This imported rule cannot be represented by the simple editor. Edit it in the original client; its data is preserved.');host.append(note);if(info.raw){const code=document.createElement('code');code.textContent=info.raw;host.append(code);}}
+  function update(){
+    const active=!!frequency.value,weekly=frequency.value==='WEEKLY';
+    const units={DAILY:mailImageText('Интервал, дней','Interval, days'),WEEKLY:mailImageText('Интервал, недель','Interval, weeks'),MONTHLY:mailImageText('Интервал, месяцев','Interval, months'),YEARLY:mailImageText('Интервал, лет','Interval, years')};
+    interval.previousElementSibling.textContent=units[frequency.value] || mailImageText('Интервал повторения','Repeat interval');
+    hint.textContent=mailImageText('Часовой пояс серии: ','Series timezone: ')+(info.timezone==='floating'?mailImageText('локальное время без часового пояса','floating local time'):info.timezone || timezone || 'UTC')+'. '+(weekly?mailImageText('Включите день первой встречи. Без выбора дней используется он.','Include the first event’s weekday. Leaving all days unchecked uses it.'):['MONTHLY','YEARLY'].includes(frequency.value)?mailImageText('В число первой встречи. Несуществующие даты пропускаются.','Uses the first event’s date. Nonexistent dates are skipped.'):'');
+    for(const input of [interval,end]){input.parentElement.hidden=!active;input.disabled=!active;}
+    dayGroup.hidden=!weekly;dayGroup.querySelectorAll('input').forEach(input=>input.disabled=!weekly);
+    count.parentElement.hidden=!active || end.value!=='count';count.disabled=count.parentElement.hidden;count.required=!count.disabled;
+    until.parentElement.hidden=!active || end.value!=='until';until.disabled=until.parentElement.hidden;until.required=!until.disabled;
+    interval.required=active;hint.hidden=!active;
+    if(info.editable===false)host.querySelectorAll('input,select').forEach(input=>input.disabled=true);
+  }
+  frequency.addEventListener('change',update);end.addEventListener('change',update);host.addEventListener('reset-fields',update);update();
+  return host;
+}
+
+function readRecurrenceFields(prefix) {
+  const frequency=$(prefix+'-frequency')?.value || '';
+  if(!frequency)return {frequency:'',interval:1};
+  const rule={frequency,interval:Number($(prefix+'-interval').value)};
+  if(!Number.isInteger(rule.interval)||rule.interval<1||rule.interval>99)throw Error(mailImageText('Интервал должен быть от 1 до 99','Interval must be 1–99'));
+  if(frequency==='WEEKLY')rule.weekdays=[...$(prefix).querySelectorAll('input[type=checkbox]:checked')].map(input=>input.value);
+  const end=$(prefix+'-end').value;
+  if(end==='count'){rule.count=Number($(prefix+'-count').value);if(!Number.isInteger(rule.count)||rule.count<1||rule.count>1000)throw Error(mailImageText('Укажите от 1 до 1000 встреч','Choose 1–1000 events'));}
+  if(end==='until'){rule.until=$(prefix+'-until').value;if(!rule.until)throw Error(mailImageText('Укажите дату окончания','Choose an end date'));}
+  return rule;
+}
+
+function mountNewEventRecurrence() {
+  const form=$('form-cal-event');if(!form)return;
+  $('cal-new-recurrence')?.remove();
+  const host=createRecurrenceFields('cal-new-recurrence',{},Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
+  const anchor=$('event-calendar-choice')?.closest('.event-compose-row');
+  if(anchor)anchor.after(host);else form.prepend(host);
+}
+
+let calRecurrenceLoading=false;
+async function openCalRecurrenceEditor() {
+  const selected=calState.currentEvent;
+  if(!selected || selected.busy_only || !selected.recurrence_organizer || calRecurrenceLoading)return;
+  const userID=state.me?.id,objectID=selected.object_id || selected.id;
+  calRecurrenceLoading=true;
+  const dialog=document.createElement('dialog');dialog.className='calendar-editor-dialog cal-recurrence-dialog';dialog.id='cal-recurrence-dialog';
+  const title=document.createElement('h3');title.className='heading';title.id='cal-recurrence-title';title.textContent=mailImageText('Повторение события','Event recurrence');dialog.setAttribute('aria-labelledby',title.id);
+  const status=document.createElement('p');status.className='msg';status.id='cal-recurrence-msg';status.setAttribute('role','status');status.textContent=mailImageText('Загрузка…','Loading…');
+  const close=document.createElement('button');close.type='button';close.className='btn-secondary';close.textContent=t('cancel');close.onclick=()=>dialog.close();dialog.append(title,status,close);
+  let saving=false;dialog.addEventListener('cancel',event=>{if(saving)event.preventDefault();});dialog.addEventListener('close',()=>{dialog.remove();calRecurrenceLoading=false;},{once:true});document.body.append(dialog);dialog.showModal();
+  try{
+    const event=await api('/api/v1/calendar/events/'+encodeURIComponent(objectID));
+    if(!dialog.open || state.me?.id!==userID){dialog.close();return;}
+    if(!event.recurrence_organizer)throw Error(mailImageText('Изменять серию может только организатор','Only the organizer can change the series'));
+    const context=document.createElement('p');context.className='meta';
+    let when=fmtCalEventWhen(event,event.start);try{if(!event.all_day && event.recurrence?.timezone && event.recurrence.timezone!=='floating')when=new Date(event.start).toLocaleString(undefined,{timeZone:event.recurrence.timezone});}catch{}
+    context.textContent=event.summary+' · '+mailImageText('Начало серии: ','First event: ')+when;title.after(context);
+    const form=document.createElement('form');form.id='form-cal-recurrence';const content=document.createElement('div');content.className='cal-recurrence-content';const fields=createRecurrenceFields('cal-rule',event.recurrence);content.append(fields);form.append(content);
+    const note=document.createElement('p');note.className='meta';note.textContent=mailImageText('Изменится вся серия. Участникам будут отправлены обновлённые приглашения.','The entire series will change. Attendees will receive updated invitations.');content.append(note);
+    const footer=document.createElement('div');footer.className='event-editor-footer';const save=document.createElement('button');save.type='submit';save.className='btn-spray';save.textContent=t('save');save.disabled=event.recurrence?.editable!==true;footer.append(save,close);form.append(status,footer);dialog.append(form);setMsg(status,'');
+    form.addEventListener('submit',async e=>{
+      e.preventDefault();if(saving || event.recurrence?.editable!==true)return;
+      if(state.me?.id!==userID){dialog.close();return;}
+      let rule;try{rule=readRecurrenceFields('cal-rule');}catch(error){setMsg(status,error.message,'err');return;}
+      if(!form.reportValidity())return;
+      saving=true;save.disabled=close.disabled=true;fields.disabled=true;setMsg(status,'…');
+      try{
+        await api('/api/v1/calendar/events/'+encodeURIComponent(objectID)+'/recurrence',{method:'PUT',body:JSON.stringify({etag:event.etag,rule})});
+        dialog.close();if(state.me?.id===userID){calState.eventID='';await loadCalEvents();}
+      }catch(error){if(state.me?.id===userID&&dialog.open)setMsg(status,calendarRecurrenceError(error.message),'err');else dialog.close();}
+      finally{saving=false;save.disabled=close.disabled=false;fields.disabled=false;}
+    });
+  }catch(error){if(dialog.open)setMsg(status,error.message,'err');}
+}
+
+function calendarRecurrenceError(message) {
+  if(message.includes('resource booking requires a recurrence end'))return mailImageText('Для бронирования помещения укажите дату окончания серии или количество встреч.','Choose an end date or occurrence count to book a room.');
+  if(message.includes('1000 occurrences within 5 years'))return mailImageText('Можно забронировать до 1000 встреч в пределах 5 лет. Сократите серию.','Book up to 1000 events within 5 years. Shorten the series.');
+  if(message.startsWith('resource is busy: ')){
+    const detail=message.slice('resource is busy: '.length),match=detail.match(/^(.*) \(([^()]+)\)$/);
+    const when=match && new Date(match[2]);
+    return mailImageText('Помещение занято: ','Room is busy: ')+(match && !Number.isNaN(when.getTime())?match[1]+' · '+when.toLocaleString():detail)+'. '+mailImageText('Выберите другое время или помещение. Изменения не сохранены.','Choose another time or room. Changes were not saved.');
+  }
+  if(message.includes('cannot verify availability'))return mailImageText('Не удалось проверить занятость помещения. Бронирование не сохранено.','Room availability could not be verified. The booking was not saved.');
+  if(message.includes('use the same resources'))return mailImageText('В каждом повторении должны быть выбраны те же помещения.','Use the same rooms for every occurrence.');
+  if(message.includes('edited or cancelled occurrence') || message.includes('separate dates or exceptions'))return mailImageText('Новое правило исключает отдельно изменённые или отменённые встречи. Сохраните их исходные даты в серии.','The new rule removes edited or cancelled occurrences. Keep their original dates in the series.');
+  if(message.includes('first event\'s day'))return mailImageText('Включите в дни недели день первой встречи.','Include the first event’s weekday.');
+  if(message.includes('recurrence end date'))return mailImageText('Дата окончания должна быть не раньше первой встречи.','The end date must not precede the first event.');
+
+  return message;
+}
+
+$('btn-cal-recurrence')?.addEventListener('click',()=>openCalRecurrenceEditor());
 /* Keep technical reports out of the message list. Never render quarantine HTML. */
 async function refreshProtectionMessages() {
   refreshProtectionDiagnostics();
@@ -6969,38 +7507,120 @@ async function refreshProtectionDiagnostics(){
  for(const e of [d.rspamd_error,d.antivirus_error])if(e){const p=document.createElement('p');p.className='msg err';p.textContent=e;content.append(p)}
  }catch(e){content.textContent=e.message}
 }
-async function openTravelDrafts(messageID) {
+const travelView = { offset: 0, owner: '', request: 0 };
+function travelText(ru, en) { return mailImageText(ru, en); }
+function travelNode(tag, text, className) {
+  const node=document.createElement(tag); if(text!==undefined)node.textContent=text;
+  if(className)node.className=className; return node;
+}
+function travelButton(text, action, primary=false) {
+  const button=travelNode('button',text,primary?'btn-spray':'btn-secondary');button.type='button';
+  button.addEventListener('click',action);return button;
+}
+function travelTitle(ticket) { return (ticket.kind==='train'?travelText('Поезд ','Train '):travelText('Рейс ','Flight '))+ticket.number; }
+function travelStatus(item) {
+  if(item.event_missing)return travelText('Событие удалено. Автоматическое восстановление отключено.','Event deleted. It will not be recreated automatically.');
+  if(item.state==='saved')return travelText('Добавлено в личный календарь','Added to personal calendar');
+  if(item.state==='ignored')return travelText('Пропущено','Dismissed');
+  if(item.ticket.cancelled)return travelText('Отмена поездки — проверьте перед применением','Trip cancellation — review before applying');
+  if(item.event_id)return travelText('Новые сведения — требуется проверка','Updated itinerary — review required');
+  return travelText('Проверьте сведения и часовые пояса','Review details and timezones');
+}
+async function refreshTravelProfile() {
+  const host=$('travel-profile');if(!host)return;
+  const request=++travelView.request;const owner=state.tokens?.access_token||'';if(travelView.owner!==owner){travelView.owner=owner;travelView.offset=0;}
+  host.replaceChildren(travelNode('h3',travelText('Билеты и поездки','Tickets and trips'),'heading'));
   try {
-    const result=await api('/api/v1/mail/messages/'+encodeURIComponent(messageID)+'/travel');
-    const trips=result.trips||[];
-    if(!trips.length) {await askAlert(mailImageText('Не удалось распознать поездку. Поддерживаются билеты с явно указанными рейсом/поездом и датой отправления, PDF с текстовым слоем. Сканированные билеты пока не поддерживаются.','No trip recognized. Tickets must include an explicit flight/train number and departure date. Text PDFs are supported; scanned tickets are not yet supported.')+(result.warnings?.length?'\n'+result.warnings.join('\n'):''));return;}
-    const dialog=document.createElement('dialog');dialog.className='protection-reader';
-    const heading=document.createElement('h3');heading.className='heading';heading.textContent=mailImageText('Поездки из билета','Trips from ticket');dialog.append(heading);
-    const hint=document.createElement('p');hint.className='meta';hint.textContent=mailImageText('Проверьте сведения и часовые пояса отправления и прибытия. Событие сохраняется после проверки.','Review the data and departure/arrival timezones. The event is saved after review.');dialog.append(hint);
-    for(const trip of trips) {
-      const section=document.createElement('section');section.className='card stack-gap';
-      const title=document.createElement('strong');title.textContent=(trip.kind==='flight'?mailImageText('Рейс ','Flight '):mailImageText('Поезд ','Train '))+trip.number;section.append(title);
-      const details=document.createElement('p');details.textContent=[trip.origin+' → '+trip.destination,trip.departure+(trip.arrival?' → '+trip.arrival:''),trip.seat?mailImageText('Место: ','Seat: ')+trip.seat:'',trip.coach?mailImageText('Вагон: ','Coach: ')+trip.coach:''].filter(Boolean).join('\n');details.style.whiteSpace='pre-wrap';section.append(details);
-      const zones=[];
-      for(const label of [mailImageText('Часовой пояс отправления','Departure timezone'),mailImageText('Часовой пояс прибытия','Arrival timezone')]) {const field=document.createElement('label');field.className='field-label';field.textContent=label;const select=document.createElement('select');select.className='field-input';select.required=true;const blank=document.createElement('option');blank.value='';blank.textContent=mailImageText('Выберите смещение UTC','Choose UTC offset');select.append(blank);for(let offset=-720;offset<=840;offset+=15){const option=document.createElement('option');option.value=offset;option.textContent='UTC'+(offset<0?'-':'+')+String(Math.floor(Math.abs(offset)/60)).padStart(2,'0')+':'+String(Math.abs(offset)%60).padStart(2,'0');select.append(option);}field.append(select);section.append(field);zones.push(select);}
-      const open=document.createElement('button');open.type='button';open.className='btn-spray';open.textContent=mailImageText('Создать событие','Create event');
-      const status=document.createElement('p');status.className='msg';status.setAttribute('role','status');
-      open.addEventListener('click',async()=>{
-        if(!zones[0].value||(trip.arrival&&!zones[1].value)) {status.textContent=mailImageText('Укажите часовые пояса.','Specify timezones.');return;}
-        const utc=(value,offset)=>new Date(Date.parse(value+'Z')-Number(offset)*60000);
-        const start=utc(trip.departure,zones[0].value);const end=trip.arrival?utc(trip.arrival,zones[1].value):null;
-        if(end&&end<=start){status.textContent=mailImageText('Прибытие должно быть после отправления. Проверьте часовые пояса.','Arrival must follow departure. Check the timezones.');return;}
-        dialog.close();showApp('calendar');await refreshCalendar();startNewCalEvent(trip.departure.slice(0,10));
-        $('cal-summary').value=title.textContent+' · '+[trip.origin,trip.destination].filter(Boolean).join(' → ');
-        $('cal-location').value=trip.origin;
-        const local=date=>{const d=new Date(date.getTime()-date.getTimezoneOffset()*60000);return d.toISOString().slice(0,16)};
-        $('cal-start').value=local(start);$('cal-end').value=end?local(end):'';
-        $('cal-description').value=[trip.origin+' → '+trip.destination,trip.seat?'Место: '+trip.seat:'',trip.coach?'Вагон: '+trip.coach:'',trip.booking?'Бронирование: '+trip.booking:'',trip.passenger?'Пассажир: '+trip.passenger:'','Источник: '+trip.source,'Часовой пояс отправления: '+zones[0].selectedOptions[0].textContent,trip.arrival?'Часовой пояс прибытия: '+zones[1].selectedOptions[0].textContent:'','Письмо: '+messageID].filter(Boolean).join('\n');
-        setMsg($('cal-msg'),end?mailImageText('Проверьте данные билета перед сохранением.','Review ticket data before saving.'):mailImageText('В билете не найдено время прибытия. Укажите окончание поездки.','Arrival time is missing; enter the end time.'));
-      });section.append(open,status);dialog.append(section);
+    const [preferences,result]=await Promise.all([api('/api/v1/travel/preferences'),api('/api/v1/travel?offset='+travelView.offset)]);
+    if(travelView.owner!==owner||state.tokens?.access_token!==owner||travelView.request!==request)return;
+    host.append(travelNode('p',travelText('Распознавание авиабилетов и железнодорожных билетов в новых письмах и текстовых PDF. События сохраняются в вашем личном календаре.','Recognize flights and train journeys in new mail and text PDFs. Events are saved to your personal calendar.'),'field-hint'));
+    const label=travelNode('label',travelText('Обработка новых писем','New mail processing'),'field-label');label.htmlFor='travel-mode';
+    const select=travelNode('select',undefined,'field-input');select.id='travel-mode';
+    for(const [value,ru,en] of [['off','Выключено','Disabled'],['suggest','Предлагать события','Suggest events'],['auto','Автодобавление при полных данных','Automatically add complete itineraries']]) {
+      const option=travelNode('option',travelText(ru,en));option.value=value;select.append(option);
     }
-    const close=document.createElement('button');close.type='button';close.className='btn-secondary';close.textContent=t('close');close.addEventListener('click',()=>dialog.close());dialog.append(close);dialog.addEventListener('close',()=>dialog.remove());document.body.append(dialog);dialog.showModal();
-  }catch(error){await askAlert(error.message);}
+    select.value=preferences.mode||'off';host.append(label,select);
+    host.append(travelNode('p',travelText('Для автодобавления нужны маршрут, пассажир, бронь, время отправления и прибытия с явными смещениями UTC. Неоднозначные данные, изменения и отмены требуют проверки. Старые письма можно обработать кнопкой «Из билета» в письме.','Automatic creation requires a route, passenger, booking reference and departure/arrival times with explicit UTC offsets. Ambiguous data, changes and cancellations require review. Use “From ticket” in a message to process older mail.'),'field-hint'));
+    const msg=travelNode('p','','msg');msg.setAttribute('role','status');
+    const save=travelButton(t('save'),async()=>{if(state.tokens?.access_token!==owner)return;save.disabled=true;try{await api('/api/v1/travel/preferences',{method:'PUT',body:JSON.stringify({mode:select.value})});setMsg(msg,t('saved'),'ok');}catch(e){setMsg(msg,e.message,'err');}finally{save.disabled=false;}} ,true);
+    const controls=travelNode('div',undefined,'actions');controls.append(save,travelButton(t('refresh'),()=>refreshTravelProfile()));host.append(controls,msg);
+    const list=travelNode('div',undefined,'travel-trip-list');list.id='travel-trip-list';
+    for(const item of result.candidates||[]) {
+      const row=travelNode('article',undefined,'travel-trip-row');
+      const text=travelNode('div');text.append(travelNode('strong',travelTitle(item.ticket)+' · '+[item.ticket.origin,item.ticket.destination].filter(Boolean).join(' → ')),travelNode('p',item.ticket.departure.replace('T',' '),'meta'),travelNode('p',travelStatus(item),'meta'));
+      row.append(text,travelButton(travelText('Открыть','Open'),()=>openTravelCandidate(item.id)));list.append(row);
+    }
+    if(!result.total)list.append(travelNode('p',travelText('Распознанных поездок пока нет.','No recognized trips yet.'),'meta'));
+    host.append(list);
+    const paging=travelNode('div',undefined,'actions');
+    const prev=travelButton(travelText('Назад','Previous'),()=>{travelView.offset=Math.max(0,travelView.offset-10);refreshTravelProfile();});prev.disabled=travelView.offset===0;
+    const next=travelButton(travelText('Далее','Next'),()=>{travelView.offset+=10;refreshTravelProfile();});next.disabled=travelView.offset+10>=result.total;
+    paging.append(prev,travelNode('span',`${Math.min(travelView.offset+1,result.total||0)}–${Math.min(travelView.offset+10,result.total||0)} / ${result.total||0}`,'meta'),next);host.append(paging);
+  }catch(e){host.append(travelNode('p',e.message,'msg err'));}
+}
+async function openTravelCalendar(item,dialog) {
+  dialog?.close();showApp('calendar');await refreshCalendar();await openCalEvent(item.event_id);
+}
+async function openTravelCandidate(id) {
+  const owner=state.tokens?.access_token;
+  try{const item=await api('/api/v1/travel/'+encodeURIComponent(id));if(state.tokens?.access_token===owner)showTravelResults([item]);}catch(e){await askAlert(e.message);}
+}
+async function openTravelDrafts(messageID) {
+  const owner=state.tokens?.access_token;
+  try {
+    const result=await api('/api/v1/mail/messages/'+encodeURIComponent(messageID)+'/travel',{method:'POST'});
+    if(state.tokens?.access_token===owner)showTravelResults(result.candidates||[],result.warnings||[]);
+  }catch(e){await askAlert(e.message);}
+}
+function travelOffset(value) {
+  if(!/^[+-]\d{2}:\d{2}$/.test(value||''))return '';
+  return String((value[0]==='-'?-1:1)*(Number(value.slice(1,3))*60+Number(value.slice(4))));
+}
+function showTravelResults(items,warnings=[]) {
+  const owner=state.tokens?.access_token;
+  const dialog=travelNode('dialog',undefined,'protection-reader travel-review');
+  const title=travelNode('h3',travelText('Поездки из билетов','Trips from tickets'),'heading');title.id='travel-dialog-title';dialog.setAttribute('aria-labelledby',title.id);dialog.append(title);
+  if(!items.length)dialog.append(travelNode('p',travelText('Не удалось распознать поездку. Нужны явно подписанные номер рейса или поезда и дата отправления. PDF должен содержать текстовый слой.','No trip recognized. An explicitly labeled flight/train number and departure date are required. PDFs must contain text.'),'meta'));
+  if(warnings.length)dialog.append(travelNode('p',travelText('Часть содержимого не обработана: для PDF нужен pdftotext; пределы — 4 файла по 8 МиБ, первые 10 страниц. Проверьте оригинал билета.','Some content was not processed: PDFs require pdftotext; limits are 4 files of 8 MiB, first 10 pages. Check the original ticket.'),'msg'));
+  for(const item of items) {
+    const trip=item.ticket,section=travelNode('section',undefined,'card stack-gap travel-ticket');
+    section.append(travelNode('strong',travelTitle(trip)),travelNode('p',[trip.origin,trip.destination].join(' → ')),travelNode('p',travelStatus(item),'meta'));
+    const details=travelNode('details');details.append(travelNode('summary',travelText('Данные билета','Ticket details')));
+    details.append(travelNode('p',[trip.passenger,trip.booking?travelText('Бронь: ','Booking: ')+trip.booking:'',trip.seat?travelText('Место: ','Seat: ')+trip.seat:'',trip.coach?travelText('Вагон: ','Coach: ')+trip.coach:'',travelText('Источник: ','Source: ')+trip.source].filter(Boolean).join(' · '),'meta'));section.append(details);
+    if(item.event_id&&!item.event_missing)section.append(travelButton(travelText('Открыть событие','Open event'),()=>openTravelCalendar(item,dialog)));
+    if(item.state==='review'&&!item.event_missing) {
+      const dates=[],zones=[];
+      for(const [index,ru,en] of [[0,'Отправление','Departure'],[1,'Прибытие','Arrival']]) {
+        const group=travelNode('div',undefined,'travel-time-row');
+        const label=travelNode('label',travelText(ru,en),'field-label');
+        const input=travelNode('input',undefined,'field-input');input.type='datetime-local';input.value=index===0?trip.departure:trip.arrival;input.required=true;label.append(input);group.append(label);dates.push(input);
+        const zoneLabel=travelNode('label',travelText('Часовой пояс','Timezone'),'field-label');
+        const select=travelNode('select',undefined,'field-input');select.required=true;
+        const blank=travelNode('option',travelText('Выберите UTC','Choose UTC offset'));blank.value='';select.append(blank);
+        const explicit=travelOffset(index===0?trip.departure_offset:trip.arrival_offset);
+        const offsets=new Set();for(let n=-720;n<=840;n+=15)offsets.add(n);if(explicit!=='')offsets.add(Number(explicit));
+        for(const offset of [...offsets].sort((a,b)=>a-b)) {const option=travelNode('option','UTC'+(offset<0?'-':'+')+String(Math.floor(Math.abs(offset)/60)).padStart(2,'0')+':'+String(Math.abs(offset)%60).padStart(2,'0'));option.value=offset;select.append(option);}
+        select.value=explicit;zoneLabel.append(select);group.append(zoneLabel);zones.push(select);section.append(group);
+      }
+      const msg=travelNode('p','','msg');msg.setAttribute('role','status');
+      const save=travelButton(trip.cancelled?travelText('Подтвердить отмену','Confirm cancellation'):item.event_id?travelText('Обновить событие','Update event'):travelText('Добавить в личный календарь','Add to personal calendar'),async()=>{
+        if(save.disabled)return;
+        if(state.tokens?.access_token!==owner){dialog.close();return;}
+        if(dates.some(d=>!d.value)||zones.some(z=>z.value==='')){setMsg(msg,travelText('Укажите даты, время и оба часовых пояса.','Specify dates, times and both timezones.'),'err');return;}
+        const utc=(value,offset)=>new Date(Date.parse(value+'Z')-Number(offset)*60000);
+        const start=utc(dates[0].value,zones[0].value),end=utc(dates[1].value,zones[1].value);
+        if(!Number.isFinite(+start)||!Number.isFinite(+end)||end<=start||end-start>31*86400000){setMsg(msg,travelText('Проверьте время прибытия: оно должно быть после отправления.','Check arrival time: it must follow departure.'),'err');return;}
+        save.disabled=true;
+        try{const result=await api('/api/v1/travel/'+encodeURIComponent(item.id)+'/event',{method:'POST',body:JSON.stringify({start:start.toISOString(),end:end.toISOString(),etag:item.event_etag})});item.event_id=result.event_id;item.state='saved';dialog.close();if(state.tokens?.access_token!==owner)return;await refreshTravelProfile();if(state.tokens?.access_token===owner)showTravelResults([item]);}
+        catch(e){setMsg(msg,e.message,'err');save.disabled=false;}
+      },true);
+      save.disabled=trip.cancelled&&!item.event_id;
+      const ignore=travelButton(travelText('Пропустить','Dismiss'),async()=>{if(ignore.disabled)return;if(state.tokens?.access_token!==owner){dialog.close();return;}ignore.disabled=true;try{await api('/api/v1/travel/'+encodeURIComponent(item.id)+'/ignore',{method:'POST'});item.state='ignored';dialog.close();if(state.tokens?.access_token!==owner)return;await refreshTravelProfile();if(state.tokens?.access_token===owner)showTravelResults([item]);}catch(e){setMsg(msg,e.message,'err');ignore.disabled=false;}});
+      const actions=travelNode('div',undefined,'actions');actions.append(save,ignore);section.append(actions,msg);
+    }
+    dialog.append(section);
+  }
+  dialog.append(travelButton(t('close'),()=>dialog.close()));dialog.addEventListener('close',()=>dialog.remove());document.body.append(dialog);dialog.showModal();
 }
 // Visual rules are stored with their generated Sieve script, so they survive reloads.
 const visualRules = {rules:[], scripts:[], dirty:false, unreadable:false};
@@ -7084,7 +7704,7 @@ async function boundedPreviewBlob(response,limit) {
 }
 // Shared stroke language for reader actions and document previews.
 function designIcon(name) {
-  const paths={settings:'M9 3h6l1 4 4 1v6l-4 1-1 4H9l-1-4-4-1V8l4-1zM9 11a3 3 0 1 0 6 0 3 3 0 0 0-6 0',key:'M15 7a5 5 0 1 0-7 7l-5 5v3h3v-3h3l3-3M15 7h.01',shield:'M12 3 3 7v5c0 5 9 9 9 9s9-4 9-9V7zM9 12l2 2 4-4',refresh:'M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-1l2 6M4 12l2 6a7 7 0 0 0 12-1',disconnect:'M9 5H4v14h5M12 12h9m-4-4 4 4-4 4',reply:'M9 5 3 11l6 6M3 11h9a8 8 0 0 1 8 8','reply-all':'m8 4-6 6 6 6m5-12-6 6 6 6M7 10h6a8 8 0 0 1 8 8',trip:'M8 2h8v4H8zM5 6h14v15H5zM9 10v6m6-6v6',spam:'m7 3-4 4v10l4 4h10l4-4V7l-4-4zM12 7v6m0 4h.01',archive:'M3 3h18v5H3zM5 8v13h14V8M9 12h6',delete:'M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7',download:'M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4',close:'m6 6 12 12M18 6 6 18'};
+  const paths={settings:'M9 3h6l1 4 4 1v6l-4 1-1 4H9l-1-4-4-1V8l4-1zM9 11a3 3 0 1 0 6 0 3 3 0 0 0-6 0',key:'M15 7a5 5 0 1 0-7 7l-5 5v3h3v-3h3l3-3M15 7h.01',shield:'M12 3 3 7v5c0 5 9 9 9 9s9-4 9-9V7zM9 12l2 2 4-4',refresh:'M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-1l2 6M4 12l2 6a7 7 0 0 0 12-1',disconnect:'M9 5H4v14h5M12 12h9m-4-4 4 4-4 4',forward:'m15 5 6 6-6 6M21 11h-9a8 8 0 0 0-8 8',reply:'M9 5 3 11l6 6M3 11h9a8 8 0 0 1 8 8','reply-all':'m8 4-6 6 6 6m5-12-6 6 6 6M7 10h6a8 8 0 0 1 8 8',trip:'M8 2h8v4H8zM5 6h14v15H5zM9 10v6m6-6v6',spam:'m7 3-4 4v10l4 4h10l4-4V7l-4-4zM12 7v6m0 4h.01',archive:'M3 3h18v5H3zM5 8v13h14V8M9 12h6',delete:'M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7',download:'M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4',close:'m6 6 12 12M18 6 6 18'};
   return '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="'+(paths[name]||paths.download)+'"/></svg>';
 }
 function documentPreviewType(name) {
@@ -7285,7 +7905,7 @@ function renderCalendarMap(geo){
  document.getElementById('calendar-reader-map')?.remove();
  const parts=String(geo||'').split(';').map(Number);if(parts.length!==2||!parts.every(Number.isFinite)||Math.abs(parts[0])>90||Math.abs(parts[1])>180)return;
  const container=document.createElement('div');container.id='calendar-reader-map';
- const map=document.createElement('iframe');map.title=mailImageText('Место события на Яндекс Картах','Event location on Yandex Maps');map.loading='lazy';map.referrerPolicy='no-referrer';map.setAttribute('sandbox','allow-scripts allow-same-origin allow-popups');map.style.cssText='width:100%;height:240px;border:0;border-radius:12px';const point=parts[1]+','+parts[0];map.src='https://yandex.ru/map-widget/v1/?ll='+encodeURIComponent(point)+'&z=16&pt='+encodeURIComponent(point+',pm2rdm');container.append(map);$('cal-read-location')?.parentElement.after(container);
+ const map=document.createElement('iframe');map.title=mailImageText('Место события на Яндекс Картах','Event location on Yandex Maps');map.loading='lazy';map.referrerPolicy='no-referrer';map.setAttribute('sandbox','allow-scripts allow-same-origin allow-popups');map.style.cssText='display:block;width:100%;height:240px;border:0;border-radius:12px';const point=parts[1]+','+parts[0];map.src='https://yandex.ru/map-widget/v1/?ll='+encodeURIComponent(point)+'&z=16&pt='+encodeURIComponent(point+',pm2rdm');container.append(map);$('cal-headers')?.after(container);
 }
 
 async function openFileAccess(path){
@@ -7741,10 +8361,11 @@ function renderComposeAttachments() {
   for(const item of items){
     const row=document.createElement('div');row.className='compose-upload';row.dataset.uploadId=item.id;
     const content=document.createElement('div'),name=document.createElement('strong'),status=document.createElement('small');name.textContent=item.file.name;
-    status.textContent=item.error||({queued:mailImageText('Ожидает загрузки','Waiting to upload'),uploading:fmtBytes(item.done)+' / '+fmtBytes(item.file.size),ready:item.share?mailImageText('Ссылка в письме · действует до ','Link in message · expires ')+new Date(item.share.expires_at).toLocaleDateString():mailImageText('Загружено · вложение','Uploaded · attachment')}[item.status]||'');
+    status.textContent=item.error||({queued:mailImageText('Ожидает загрузки','Waiting to upload'),uploading:item.forward?mailImageText('Подготовка вложения на сервере…','Preparing attachment on server…'):fmtBytes(item.done)+' / '+fmtBytes(item.file.size),ready:item.share?mailImageText('Ссылка в письме · действует до ','Link in message · expires ')+new Date(item.share.expires_at).toLocaleDateString():mailImageText('Загружено · вложение','Uploaded · attachment')}[item.status]||'');
     content.append(name,status);
     if(['queued','uploading'].includes(item.status)){
       const progress=document.createElement('progress');progress.max=item.file.size||1;progress.value=item.done;progress.setAttribute('aria-label',mailImageText('Загрузка ','Uploading ')+item.file.name);content.append(progress);
+      if(item.forward)progress.removeAttribute('value');
     }
     const actions=document.createElement('div');actions.className='compose-upload-actions';
     if(item.status==='error'){const retry=document.createElement('button');retry.type='button';retry.className='btn-secondary btn-sm';retry.textContent=mailImageText('Повторить','Retry');retry.disabled=busy;retry.onclick=()=>queueComposeUpload(item);actions.append(retry)}
@@ -7784,16 +8405,22 @@ async function prepareComposeAttachments() {
   try{await work}finally{if(composeAttachments.preparing===work){composeAttachments.preparing=null;renderComposeAttachments()}}
 }
 function queueComposeUpload(item){
-  const epoch=composeAttachments.epoch;item.status='queued';item.error='';renderComposeAttachments();
+  const epoch=composeAttachments.epoch,account=state.me?.id;item.status='queued';item.error='';renderComposeAttachments();
   composeAttachments.queue=composeAttachments.queue.catch(()=>{}).then(async()=>{
-    const current=()=>epoch===composeAttachments.epoch&&composeAttachments.entries.includes(item);
+    const current=()=>epoch===composeAttachments.epoch&&account===state.me?.id&&composeAttachments.entries.includes(item);
     if(!current())return;
     item.status='uploading';item.controller=new AbortController();renderComposeAttachments();
     try{
       if(!item.ref){
+        if(item.forward){
+          const ref=await api('/api/v1/mail/messages/'+encodeURIComponent(item.forward.message)+'/attachments/'+encodeURIComponent(item.forward.attachment)+'/prepare',{method:'POST',signal:item.controller.signal});
+          if(!current())return;
+          item.ref=ref;item.path=ref.path;item.file={name:ref.name,size:ref.size};
+        }else{
         await putFileResumable(item.file,item.path,(done)=>{if(current()){item.done=done;const progress=$('compose-uploads')?.querySelector('[data-upload-id="'+item.id+'"] progress');if(progress)progress.value=done;const label=progress?.previousElementSibling;if(label)label.textContent=fmtBytes(done)+' / '+fmtBytes(item.file.size)}},'','',item.controller.signal);
         if(!current())return;
         item.ref=await api('/api/v1/mail/attachments',{method:'POST',body:JSON.stringify({path:item.path,name:item.file.name})});
+        }
       }
       if(!current())return;item.status='ready';
       await prepareComposeAttachments();

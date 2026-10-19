@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/tayga/tms/internal/calutil"
 	"github.com/tayga/tms/internal/config"
 	"github.com/tayga/tms/internal/storage"
 )
@@ -68,9 +69,13 @@ func TestCalendarResourcesCRUDAndBusy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	data, err := calutil.BuildSimpleVEVENT(calutil.Event{UID: "r1", Start: &start, End: &end})
+	if err != nil {
+		t.Fatal(err)
+	}
 	_, err = store.UpsertCalendarObject(ctx, &storage.CalendarObject{
 		CalendarID: cal.ID, UID: "r1", HrefName: "r1.ics",
-		Data: "x", Size: 1, Component: "VEVENT",
+		Data: data, Component: "VEVENT",
 		DTStart: &start, DTEnd: &end, ETag: `"e"`,
 	})
 	if err != nil {

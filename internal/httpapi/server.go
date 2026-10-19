@@ -100,6 +100,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/me/avatar", s.handleAvatar)
 	mux.HandleFunc("/api/v1/me/password", s.handleChangePassword)
 	mux.HandleFunc("/api/v1/mail/signature", s.handleSignature)
+	mux.HandleFunc("/api/v1/travel", s.handleTravel)
+	mux.HandleFunc("/api/v1/travel/", s.handleTravel)
 	mux.HandleFunc("/api/v1/mail/image-preferences", s.handleMailImages)
 	mux.HandleFunc("/api/v1/mail/", s.handleMail)
 	mux.HandleFunc("/api/v1/mail", s.handleMail)
@@ -198,6 +200,8 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	handler := s.Handler()
 	go s.runCalendarSubscriptions(ctx)
+	go s.runCalendarDeliveries(ctx)
+	go s.runTravelJobs(ctx)
 	go s.runUploadCleanup(ctx)
 
 	go func() {

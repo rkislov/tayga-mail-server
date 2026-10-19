@@ -131,6 +131,8 @@ func (s *Service) Enqueue(user string, ev notify.Event) error {
 	switch ev.Kind {
 	case notify.KindMail:
 		title = "Новое письмо"
+	case notify.KindTask:
+		title = "Изменение задачи"
 	case notify.KindCalendar:
 		title = "Напоминание о событии"
 	case "chat":

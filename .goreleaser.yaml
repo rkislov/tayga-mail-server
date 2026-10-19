@@ -52,6 +52,9 @@ archives:
       - docs/files-and-office.md
       - docs/external-mail.md
       - docs/mail-delivery-logs.md
+      - docs/travel-tickets.md
+      - docs/calendar-scheduling.md
+      - docs/roadmap.md
       - docs/mail-dlp.md
       - docs/outlook-gal.md
       - frontend/LICENSE
