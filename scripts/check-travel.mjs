@@ -44,5 +44,16 @@ try {
  await page.getByRole('button',{name:'Открыть событие',exact:true}).click();assert.equal(await page.evaluate(()=>opened),'event1');
  await page.evaluate(()=>openTravelCandidate('trip1'));await page.waitForSelector('dialog');await page.locator('dialog select').nth(0).selectOption('180');await page.locator('dialog select').nth(1).selectOption('330');
  const count=await page.evaluate(()=>requests.length);await page.evaluate(()=>state.tokens.access_token='other');await save.click();await page.waitForSelector('dialog',{state:'detached'});assert.equal(await page.locator('dialog').count(),0);assert.equal(await page.evaluate(()=>requests.length),count);
+ await page.evaluate(()=>{state.tokens.access_token='owner';for(const item of items.slice(2,4)){item.ticket.departure_offset='+03:00';item.ticket.arrival_offset='+05:30';item.ticket.departure_zone='Europe/Moscow';item.ticket.arrival_zone='Asia/Kolkata';}showTravelResults(structuredClone(items.slice(2,4)));});
+ assert.equal(await page.locator('dialog .travel-ticket').count(),2);
+ assert.equal(await page.locator('dialog select').first().inputValue(),'180');
+ assert.match(await page.locator('dialog .travel-ticket').first().textContent(),/Часовые пояса по аэропортам/);
+ await page.locator('dialog .travel-ticket').first().getByRole('button',{name:'Добавить в личный календарь',exact:true}).click();
+ await page.locator('dialog .travel-ticket').first().getByRole('button',{name:'Открыть событие',exact:true}).waitFor();
+ assert.equal(await page.locator('dialog .travel-ticket').count(),2);
+ assert.equal(await page.locator('dialog .travel-ticket').nth(1).locator('input').count(),2);
+ await page.locator('dialog .travel-ticket').nth(1).getByRole('button',{name:'Пропустить',exact:true}).click();
+ await page.waitForFunction(()=>document.querySelector('dialog')?.textContent.includes('Пропущено'));
+ assert.equal(await page.locator('dialog .travel-ticket').count(),2);
  assert.deepEqual(errors,[]);console.log('PASS: travel modes/pagination, review/save/retry/dedup, UTC offsets across browser zones, account isolation, escaped content, 1440/390px');
 } finally {await browser.close();}

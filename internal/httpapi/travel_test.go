@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
@@ -191,4 +192,80 @@ func TestTravelPDFUnavailableAndOutputLimits(t *testing.T) {
 	if _, err := buf.Write(make([]byte, (512<<10)+1)); err == nil {
 		t.Fatal("extraction unbounded")
 	}
+}
+
+func TestTravelAviasalesWorkerRoundTrip(t *testing.T) {
+	f := newFileFixture(t)
+	ctx := context.Background()
+	text, err := os.ReadFile("../travel/testdata/aviasales-layout.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.call(0, "PUT", "/api/v1/travel/preferences", `{"mode":"auto"}`, 200)
+	msg := insertTicketMail(t, f, string(text), "text/plain", "INBOX")
+	if err = f.s.drainTravelJobs(ctx); err != nil {
+		t.Fatal(err)
+	}
+	items := travelList(t, f)
+	if len(items) != 4 {
+		t.Fatalf("got %d trips", len(items))
+	}
+	events := map[string]bool{}
+	for _, item := range items {
+		if item.State != "saved" || item.EventID == "" || events[item.EventID] {
+			t.Fatal("missing or conflated personal event")
+		}
+		events[item.EventID] = true
+		object, err := f.s.store.GetCalendarObjectByID(ctx, item.EventID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ev, err := calutil.ParseICS(object.Data)
+		if err != nil || ev.Start == nil || ev.End == nil {
+			t.Fatal("invalid event")
+		}
+		start, end, err := item.Ticket.Times()
+		if err != nil || !ev.Start.Equal(start) || !ev.End.Equal(end) {
+			t.Fatal("local airport time shifted")
+		}
+		for _, secret := range []string{"0000000001", "0000000002", "01JAN90", "01JAN85"} {
+			if strings.Contains(object.Data, secret) {
+				t.Fatal("document data copied to calendar")
+			}
+		}
+	}
+	f.call(0, "POST", "/api/v1/mail/messages/"+msg.ID+"/travel", "", 200)
+	if len(travelList(t, f)) != 4 {
+		t.Fatal("repeat analysis duplicated trips")
+	}
+	if count, err := f.s.store.CountOutbound(ctx); err != nil || count != 0 {
+		t.Fatal("travel sent an invitation")
+	}
+}
+
+// Opt-in local integration check: private receipts stay outside the repository.
+// The normal fixture above is anonymized; no customer PDF is committed to Git.
+func TestTravelPrivateAviasalesPDF(t *testing.T) {
+	path := os.Getenv("TAYGA_TEST_TRAVEL_PDF")
+	if path == "" {
+		t.Skip("private receipt not supplied")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal("cannot read local receipt")
+	}
+	raw, err := attachOutgoingFiles([]byte("From: travel@example.com\r\nMIME-Version: 1.0\r\nContent-Type: text/plain\r\n\r\nAttached itinerary."), []outgoingAttachment{{Name: "ticket.pdf", Data: base64.StdEncoding.EncodeToString(data)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	trips, warnings := extractTravelTickets(context.Background(), raw)
+	if len(warnings) != 0 || len(trips) != 4 {
+		t.Fatalf("got %d trips, %d warnings", len(trips), len(warnings))
+	}
+	for _, trip := range trips {
+		if !trip.Automatic() || trip.Source != "ticket.pdf" {
+			t.Fatal("incomplete extracted itinerary")
+		}
+	}
+	t.Log("PDF/MIME extraction: four complete segments with verified airport times")
 }
