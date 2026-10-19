@@ -16,10 +16,11 @@ function renderComposeAttachments() {
   for(const item of items){
     const row=document.createElement('div');row.className='compose-upload';row.dataset.uploadId=item.id;
     const content=document.createElement('div'),name=document.createElement('strong'),status=document.createElement('small');name.textContent=item.file.name;
-    status.textContent=item.error||({queued:mailImageText('Ожидает загрузки','Waiting to upload'),uploading:fmtBytes(item.done)+' / '+fmtBytes(item.file.size),ready:item.share?mailImageText('Ссылка в письме · действует до ','Link in message · expires ')+new Date(item.share.expires_at).toLocaleDateString():mailImageText('Загружено · вложение','Uploaded · attachment')}[item.status]||'');
+    status.textContent=item.error||({queued:mailImageText('Ожидает загрузки','Waiting to upload'),uploading:item.forward?mailImageText('Подготовка вложения на сервере…','Preparing attachment on server…'):fmtBytes(item.done)+' / '+fmtBytes(item.file.size),ready:item.share?mailImageText('Ссылка в письме · действует до ','Link in message · expires ')+new Date(item.share.expires_at).toLocaleDateString():mailImageText('Загружено · вложение','Uploaded · attachment')}[item.status]||'');
     content.append(name,status);
     if(['queued','uploading'].includes(item.status)){
       const progress=document.createElement('progress');progress.max=item.file.size||1;progress.value=item.done;progress.setAttribute('aria-label',mailImageText('Загрузка ','Uploading ')+item.file.name);content.append(progress);
+      if(item.forward)progress.removeAttribute('value');
     }
     const actions=document.createElement('div');actions.className='compose-upload-actions';
     if(item.status==='error'){const retry=document.createElement('button');retry.type='button';retry.className='btn-secondary btn-sm';retry.textContent=mailImageText('Повторить','Retry');retry.disabled=busy;retry.onclick=()=>queueComposeUpload(item);actions.append(retry)}
@@ -59,16 +60,22 @@ async function prepareComposeAttachments() {
   try{await work}finally{if(composeAttachments.preparing===work){composeAttachments.preparing=null;renderComposeAttachments()}}
 }
 function queueComposeUpload(item){
-  const epoch=composeAttachments.epoch;item.status='queued';item.error='';renderComposeAttachments();
+  const epoch=composeAttachments.epoch,account=state.me?.id;item.status='queued';item.error='';renderComposeAttachments();
   composeAttachments.queue=composeAttachments.queue.catch(()=>{}).then(async()=>{
-    const current=()=>epoch===composeAttachments.epoch&&composeAttachments.entries.includes(item);
+    const current=()=>epoch===composeAttachments.epoch&&account===state.me?.id&&composeAttachments.entries.includes(item);
     if(!current())return;
     item.status='uploading';item.controller=new AbortController();renderComposeAttachments();
     try{
       if(!item.ref){
+        if(item.forward){
+          const ref=await api('/api/v1/mail/messages/'+encodeURIComponent(item.forward.message)+'/attachments/'+encodeURIComponent(item.forward.attachment)+'/prepare',{method:'POST',signal:item.controller.signal});
+          if(!current())return;
+          item.ref=ref;item.path=ref.path;item.file={name:ref.name,size:ref.size};
+        }else{
         await putFileResumable(item.file,item.path,(done)=>{if(current()){item.done=done;const progress=$('compose-uploads')?.querySelector('[data-upload-id="'+item.id+'"] progress');if(progress)progress.value=done;const label=progress?.previousElementSibling;if(label)label.textContent=fmtBytes(done)+' / '+fmtBytes(item.file.size)}},'','',item.controller.signal);
         if(!current())return;
         item.ref=await api('/api/v1/mail/attachments',{method:'POST',body:JSON.stringify({path:item.path,name:item.file.name})});
+        }
       }
       if(!current())return;item.status='ready';
       await prepareComposeAttachments();

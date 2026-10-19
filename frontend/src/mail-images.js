@@ -185,14 +185,38 @@ function replyToMessage(message, all=false, dialog=null) {
   ensureComposeCC();
   openCompose({to,cc:all?(message.reply_all_cc || []).join(', '):'',subject:/^re\s*:/i.test(message.subject || '')?message.subject:'Re: '+(message.subject || ''),body:'\n\n---\n'+quoted.slice(0,10000)});
 }
+function forwardMailMessage(message, dialog=null) {
+  if (composeAttachments.sending) return;
+  if (dialog?.open) dialog.close();
+  let text=message.text || '';
+  if (!text && message.html) {
+    const doc=new DOMParser().parseFromString(message.html,'text/html');
+    doc.querySelectorAll('script,style,iframe,object,template').forEach(node=>node.remove());
+    doc.querySelectorAll('br').forEach(node=>node.replaceWith('\n'));
+    doc.querySelectorAll('p,div,tr,li,h1,h2,h3').forEach(node=>node.append('\n'));
+    text=doc.body.textContent || '';
+  }
+  const headers=[mailImageText('---------- Пересылаемое письмо ----------','---------- Forwarded message ----------'),
+    mailImageText('От: ','From: ')+(message.from || ''),mailImageText('Дата: ','Date: ')+(message.date || message.internal_date || ''),
+    mailImageText('Тема: ','Subject: ')+(message.subject || ''),mailImageText('Кому: ','To: ')+(message.to || '')];
+  if(message.cc)headers.push(mailImageText('Копия: ','Cc: ')+message.cc);
+  openCompose({to:'',cc:'',subject:/^(fwd?|пересл)\s*:/i.test(message.subject || '')?message.subject:'Fwd: '+(message.subject || ''),body:'\n\n'+headers.join('\n')+'\n\n'+text});
+  for(const attachment of message.attachments || []) {
+    const id=crypto.randomUUID();
+    const item={id,file:{name:attachment.filename,size:attachment.size},forward:{message:message.id,attachment:attachment.id},status:'queued',done:0};
+    composeAttachments.entries.push(item);queueComposeUpload(item);
+  }
+  $('compose-to')?.focus();
+}
 function createMailActionBar(message, dialog=null) {
   const bar=document.createElement('div');bar.className='reader-actions';
-  for (const [action,label] of [['trip',mailImageText('Поездка в календарь','Trip to calendar')],['reply',mailImageText('Ответить','Reply')],['reply-all',mailImageText('Ответить всем','Reply all')],['spam',mailImageText('В спам','Mark as spam')],['archive',mailImageText('В архив','Archive')],['delete',mailImageText('Удалить','Delete')]]) {
+  for (const [action,label] of [['trip',mailImageText('Поездка в календарь','Trip to calendar')],['reply',mailImageText('Ответить','Reply')],['reply-all',mailImageText('Ответить всем','Reply all')],['forward',mailImageText('Переслать','Forward')],['spam',mailImageText('В спам','Mark as spam')],['archive',mailImageText('В архив','Archive')],['delete',mailImageText('Удалить','Delete')]]) {
     const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.title=label;button.setAttribute('aria-label',label);button.classList.add('action-icon');button.innerHTML=designIcon(action);button.dataset.mailAction=action;if(!dialog)button.id='btn-mail-'+action;
     if(action==='spam' && (mailState.mailboxes || []).some(folder=>folder.id===message.mailbox_id&&folder.name==='Junk'))button.disabled=true;
     button.addEventListener('click',async()=>{
       if(action==='trip'){if(dialog?.open)dialog.close();await openTravelDrafts(message.id);return;}
       if(action==='reply'||action==='reply-all'){replyToMessage(message,action==='reply-all',dialog);return;}
+      if(action==='forward'){forwardMailMessage(message,dialog);return;}
       if(action==='delete'){if(dialog?.open)dialog.close();if(!await askConfirm(t('delete_confirm'),{danger:true})){if(dialog)dialog.showModal();return;}}
       button.disabled=true;
       try {

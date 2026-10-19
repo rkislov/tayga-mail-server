@@ -9,7 +9,8 @@ const {chromium}=require('playwright-core');const fs=require('fs');
  else if(url.pathname==='/api/v1/migration')body={allowed:true,jobs:Array.from({length:7},(_,i)=>({id:'job'+i,kind:'imap',status:'done',copied:i}))};
  else if(url.pathname==='/api/v1/admin/quarantine')body={items:[item]};
  else if(url.pathname==='/api/v1/admin/quarantine/q1')body=item;
- else if(url.pathname.endsWith('/travel'))body={trips:[{kind:'flight',number:'SU1234',origin:'Москва',destination:'Сочи',departure:'2026-10-09T23:55',arrival:'2026-10-10T03:10',seat:'12A',source:'ticket.pdf'}]};
+ else if(url.pathname.endsWith('/travel'))body={candidates:[{id:'trip',state:'review',ticket:{kind:'flight',number:'SU1234',origin:'Москва',destination:'Сочи',departure:'2026-10-09T23:55',arrival:'2026-10-10T03:10',seat:'12A',source:'ticket.pdf'}}]};
+ else if(url.pathname==='/api/v1/travel/trip/event')body={event_id:'saved',calendar_id:'personal',etag:'v1'};
  else if(url.pathname==='/api/v1/calendar/calendars')body={calendars:[{id:'cal',name:'default',display_name:'Личный',writable:true}]};
  else if(url.pathname.endsWith('/events'))body={events:[]};
  else if(url.pathname.endsWith('/invites'))body={invites:[]};
@@ -20,7 +21,7 @@ const {chromium}=require('playwright-core');const fs=require('fs');
  await page.goto('http://tayga.test/');await page.evaluate(()=>{state.tokens={access_token:'test'};show('view-account');showApp('antispam')});await page.locator('[data-q-details="q1"]').first().waitFor();
  for(const width of [1280,390]){await page.setViewportSize({width,height:900});const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1);if(overflow)throw Error('Protection page horizontal overflow at '+width);}
  await page.setViewportSize({width:1280,height:900});await page.locator('[data-q-details="q1"]').first().click();if(!await page.locator('#protection-reader').evaluate(e=>e.open))throw Error('Preview missing');if(await page.locator('#protection-reader img').count())throw Error('Unsafe preview markup rendered');await page.screenshot({path:'/private/tmp/protection-details.png'});await page.keyboard.press('Escape');
- await page.evaluate(()=>openTravelDrafts('ticket'));await page.locator('dialog[open] select').nth(0).selectOption('180');await page.locator('dialog[open] select').nth(1).selectOption('180');await page.locator('dialog[open]').getByRole('button',{name:'Создать событие',exact:true}).click();await page.locator('#cal-backdrop[open]').waitFor();if(!await page.locator('#cal-description').inputValue().then(v=>v.includes('12A')))throw Error('Seat missing from event');
+ await page.evaluate(()=>openTravelDrafts('ticket'));await page.locator('dialog[open] select').nth(0).selectOption('180');await page.locator('dialog[open] select').nth(1).selectOption('180');await page.locator('dialog[open]').getByRole('button',{name:'Добавить в личный календарь',exact:true}).click();await page.locator('dialog[open]').getByRole('button',{name:'Открыть событие',exact:true}).waitFor();if(!await page.locator('dialog[open]').textContent().then(v=>v.includes('12A')))throw Error('Seat missing from ticket');
  await page.keyboard.press('Escape');
  for(const kind of ['cal','card','imap'])if(await page.locator('#mig-'+kind+'-skip-tls').isChecked())throw Error('Certificate bypass enabled by default');
  await page.evaluate(()=>{showApp('migration');window.testMigrationJobs=Array.from({length:7},(_,i)=>({id:'job'+i,kind:'imap',status:'done',copied:i}));renderMigJobs($('mig-job-list'),window.testMigrationJobs)});

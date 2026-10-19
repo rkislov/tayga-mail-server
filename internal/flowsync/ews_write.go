@@ -211,6 +211,9 @@ func (h *ewsHandler) deleteItem(ctx context.Context, u *storage.User, body strin
 	}
 	if taskID(id) {
 		if err := h.store.DeleteTask(ctx, u.ID, id); err != nil {
+			if err == storage.ErrUnauthorized {
+				return ewsFault("ErrorAccessDenied", "Only the author can delete the task"), nil
+			}
 			return ewsFault("ErrorItemNotFound", "task unavailable"), nil
 		}
 		return ewsDeleteResponse(), nil

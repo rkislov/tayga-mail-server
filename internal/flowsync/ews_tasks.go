@@ -17,19 +17,29 @@ func taskID(id string) bool {
 	return strings.HasPrefix(id, "task:") || strings.HasPrefix(id, "mailtask:")
 }
 func taskXML(t storage.Task, user string) string {
-	status, percent := "NotStarted", "0"
-	if t.Completed {
-		status, percent = "Completed", "100"
+	if t.Status == "" {
+		status := storage.TaskNotStarted
+		if t.Completed {
+			status = storage.TaskCompleted
+		}
+		_ = t.SetStatus(status)
 	}
+	percent := strconv.FormatFloat(t.PercentComplete, 'f', -1, 64)
 	due := ""
 	if t.Due != "" {
 		due = "<t:DueDate>" + xmlEscape(t.Due) + "</t:DueDate>"
 	}
-	raw := fmt.Sprintf(`<t:Task><t:ItemId Id="%s" ChangeKey="%d"/><t:ParentFolderId Id="%s"/><t:ItemClass>IPM.Task</t:ItemClass><t:Subject>%s</t:Subject><t:Body BodyType="Text">%s</t:Body><t:Status>%s</t:Status><t:PercentComplete>%s</t:PercentComplete><t:IsComplete>%t</t:IsComplete>%s</t:Task>`, xmlEscape(t.ID), t.Revision, xmlEscape(systemFolderID(user, "tasks")), xmlEscape(t.Title), xmlEscape(t.Body), status, percent, t.Completed, due)
+	raw := fmt.Sprintf(`<t:Task><t:ItemId Id="%s" ChangeKey="%d"/><t:ParentFolderId Id="%s"/><t:ItemClass>IPM.Task</t:ItemClass><t:Subject>%s</t:Subject><t:Body BodyType="Text">%s</t:Body><t:Status>%s</t:Status><t:PercentComplete>%s</t:PercentComplete><t:IsComplete>%t</t:IsComplete>%s</t:Task>`, xmlEscape(t.ID), t.Revision, xmlEscape(systemFolderID(user, "tasks")), xmlEscape(t.Title), xmlEscape(t.Body), t.Status, percent, t.Completed, due)
 	props := map[string]string{}
 	_ = json.Unmarshal([]byte(t.EWSProperties), &props)
 	keys := []string{}
 	for k := range props {
+		if strings.HasPrefix(k, "_eas:") {
+			continue
+		}
+		if k == "task:CompleteDate" && !t.Completed {
+			continue
+		}
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
@@ -69,15 +79,15 @@ func applyTaskField(t *storage.Task, field, value string) bool {
 	case "item:Body":
 		t.Body = value
 	case "task:Status":
-		if value != "NotStarted" && value != "Completed" {
-			return false
-		}
-		t.Completed = value == "Completed"
+		return t.SetStatus(strings.TrimSpace(value)) == nil
 	case "task:PercentComplete":
-		if value != "0" && value != "100" {
+		percent, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+		return err == nil && t.SetPercentComplete(percent) == nil
+	case "task:CompleteDate":
+		if _, err := time.Parse(time.RFC3339, value); err != nil {
 			return false
 		}
-		t.Completed = value == "100"
+		return t.SetStatus(storage.TaskCompleted) == nil
 	case "task:DueDate":
 		if value != "" {
 			if _, err := time.Parse(time.RFC3339, value); err != nil {
@@ -107,6 +117,12 @@ func (h *ewsHandler) writeTask(ctx context.Context, u *storage.User, body string
 	if err != nil {
 		return "", err
 	}
+	props := map[string]string{}
+	if t.EWSProperties != "" {
+		if err := json.Unmarshal([]byte(t.EWSProperties), &props); err != nil {
+			return "", err
+		}
+	}
 	if create {
 		if folder := extractAttr(body, "FolderId", "Id"); folder != "" && systemFolderName(u, folder) != "tasks" {
 			return ewsFault("ErrorFolderNotFound", "task folder unavailable"), nil
@@ -124,17 +140,17 @@ func (h *ewsHandler) writeTask(ctx context.Context, u *storage.User, body string
 				slog.Warn("flowsync unsupported task field", "field", field)
 				return ewsFault("ErrorInvalidPropertySet", "unsupported task field: "+field), nil
 			}
+			if field == "task:CompleteDate" {
+				props[field] = metadataXML(c)
+			}
+			if !t.Completed {
+				delete(props, "task:CompleteDate")
+			}
 		}
 	} else {
 		updates := doc.find("Updates")
 		if updates == nil {
 			return ewsFault("ErrorInvalidRequest", "missing updates"), nil
-		}
-		props := map[string]string{}
-		if t.EWSProperties != "" {
-			if err := json.Unmarshal([]byte(t.EWSProperties), &props); err != nil {
-				return "", err
-			}
 		}
 		for _, up := range updates.Children {
 			deleting := up.Name.Local == "DeleteItemField"
@@ -205,24 +221,35 @@ func (h *ewsHandler) writeTask(ctx context.Context, u *storage.User, body string
 					return ewsFault("ErrorInvalidPropertySet", "task property too large"), nil
 				}
 				props[field] = metadataXML(n)
+				if field == "task:CompleteDate" {
+					_ = t.SetStatus(storage.TaskCompleted)
+				}
 			default:
 				if !applyTaskField(t, field, value) {
 					slog.Warn("flowsync unsupported task field", "field", field)
 					return ewsFault("ErrorInvalidPropertySet", "unsupported task field: "+field), nil
 				}
 			}
+			if !t.Completed {
+				delete(props, "task:CompleteDate")
+			}
 		}
-		encoded, err := json.Marshal(props)
-		if err != nil {
-			return "", err
-		}
-		t.EWSProperties = string(encoded)
-
 	}
+	encoded, err := json.Marshal(props)
+	if err != nil {
+		return "", err
+	}
+	t.EWSProperties = string(encoded)
 	if strings.TrimSpace(t.Title) == "" {
 		t.Title = "Task"
 	}
 	if err = h.store.SaveTask(ctx, u.ID, t); err != nil {
+		if err == storage.ErrUnauthorized {
+			return ewsFault("ErrorAccessDenied", "Only accepted assignees may update progress; task details belong to the author"), nil
+		}
+		if err == storage.ErrNotFound {
+			return ewsFault("ErrorIrresolvableConflict", "Task changed or access revoked; reload"), nil
+		}
 		return "", err
 	}
 	op := "UpdateItem"

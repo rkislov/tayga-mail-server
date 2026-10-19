@@ -32,6 +32,9 @@ type Attachment struct {
 
 // Event holds fields for REQUEST / REPLY / COUNTER VEVENT payloads.
 type Event struct {
+	// source preserves recurrence, time zones, alarms and extension properties on edits.
+	source string
+
 	UID         string
 	Summary     string
 	Location    string
@@ -80,7 +83,8 @@ func setAttendeeProp(props ical.Props, a Attendee, isOrganizer bool) {
 		name = ical.PropOrganizer
 	}
 	prop := ical.NewProp(name)
-	prop.SetURI(mailtoURL(a.Email))
+	prop.Value = mailtoURL(a.Email).String()
+	prop.SetValueType(ical.ValueCalendarAddress)
 	if a.Name != "" {
 		prop.Params.Set(ical.ParamCommonName, a.Name)
 	}
@@ -187,6 +191,9 @@ func buildCalendar(method string, ev Event) (*ical.Calendar, error) {
 		event.Props.Add(prop)
 	}
 	cal.Children = append(cal.Children, event.Component)
+	if ev.source != "" {
+		return mergeStoredEvent(ev, cal, method)
+	}
 	return cal, nil
 }
 
@@ -203,6 +210,7 @@ func BuildRequestICS(ev Event) (string, error) {
 	if ev.Status == "" {
 		ev.Status = "CONFIRMED"
 	}
+	ev.Attendees = append([]Attendee(nil), ev.Attendees...)
 	for i := range ev.Attendees {
 		if ev.Attendees[i].PartStat == "" {
 			ev.Attendees[i].PartStat = "NEEDS-ACTION"
@@ -236,6 +244,16 @@ func BuildCounterICS(ev Event, responder Attendee) (string, error) {
 	return encode(cal)
 }
 
+// BuildDeclineCounterICS notifies only the attendee who proposed another time.
+func BuildDeclineCounterICS(ev Event, attendee Attendee) (string, error) {
+	ev.Attendees = []Attendee{attendee}
+	cal, err := buildCalendar("DECLINECOUNTER", ev)
+	if err != nil {
+		return "", err
+	}
+	return encode(cal)
+}
+
 // BuildSimpleVEVENT builds a plain VEVENT (no METHOD) for local storage.
 func BuildSimpleVEVENT(ev Event) (string, error) {
 	cal, err := buildCalendar("", ev)
@@ -256,7 +274,12 @@ func ParseICS(data string) (ParseResult, error) {
 	if m, err := cal.Props.Text(ical.PropMethod); err == nil {
 		out.Method = strings.ToUpper(m)
 	}
-	for _, event := range cal.Events() {
+	master := MasterEvent(cal)
+	if master == nil {
+		return out, nil
+	}
+	for _, event := range []ical.Event{{Component: master}} {
+		out.source = data
 		out.UID, _ = event.Props.Text(ical.PropUID)
 		out.Summary, _ = event.Props.Text(ical.PropSummary)
 		if prop := event.Props.Get("GEO"); prop != nil {
@@ -273,14 +296,17 @@ func ParseICS(data string) (ParseResult, error) {
 				fmt.Sscanf(prop.Value, "%d", &out.Sequence)
 			}
 		}
-		if t, err := event.Props.DateTime(ical.PropDateTimeStart, time.UTC); err == nil {
+		if prop := event.Props.Get(ical.PropDateTimeStart); prop != nil {
+			out.AllDay = prop.Params.Get("VALUE") == "DATE" || len(prop.Value) == 8
+		}
+		if t, err := event.DateTimeStart(time.UTC); err == nil {
 			out.Start = &t
 		}
-		if t, err := event.Props.DateTime(ical.PropDateTimeEnd, time.UTC); err == nil {
+		if t, err := event.DateTimeEnd(time.UTC); err == nil {
 			out.End = &t
 		}
 		if org := event.Props.Get(ical.PropOrganizer); org != nil {
-			if u, err := org.URI(); err == nil {
+			if u, err := url.Parse(org.Value); err == nil {
 				out.Organizer.Email = emailFromURI(u)
 			}
 			out.Organizer.Name = org.Params.Get(ical.ParamCommonName)
@@ -293,7 +319,7 @@ func ParseICS(data string) (ParseResult, error) {
 				CUType:   prop.Params.Get("CUTYPE"),
 				RSVP:     strings.EqualFold(prop.Params.Get(ical.ParamRSVP), "TRUE"),
 			}
-			if u, err := prop.URI(); err == nil {
+			if u, err := url.Parse(prop.Value); err == nil {
 				a.Email = emailFromURI(u)
 			}
 			if a.Email != "" {

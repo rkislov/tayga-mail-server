@@ -5,6 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"time"
+
+	"github.com/tayga/tms/internal/calutil"
+	"github.com/tayga/tms/internal/travel"
 )
 
 var (
@@ -16,8 +19,27 @@ var (
 
 // Driver is the storage abstraction shared by protocol handlers.
 type Driver interface {
+	TravelMode(context.Context, string) (string, error)
+	SetTravelMode(context.Context, string, string) error
+	ClaimTravelJob(context.Context) (*TravelJob, error)
+	FinishTravelJob(context.Context, *TravelJob, string, bool) error
+	RecordTravelCandidates(context.Context, string, string, []*travel.Ticket) ([]TravelCandidate, error)
+	ListTravelCandidates(context.Context, string, string, int, int) ([]TravelCandidate, int, error)
+	GetTravelCandidate(context.Context, string, string) (*TravelCandidate, error)
+	SaveTravelEvent(context.Context, string, string, time.Time, time.Time, string, bool) (*CalendarObject, error)
+	IgnoreTravelCandidate(context.Context, string, string) error
+
 	ListTasks(context.Context, string) ([]Task, error)
+	GetTask(context.Context, string, string) (*Task, error)
+	TaskAssignees(context.Context, string, string, int, int) ([]TaskPerson, int, error)
+	AssignTask(context.Context, string, string, string, string, int64) (*Task, error)
+	TaskHistory(context.Context, string, string, int, int) ([]TaskEvent, int, error)
+	TaskNotifications(context.Context, string, int, int) ([]TaskNotification, int, int, error)
+	ReadTaskNotification(context.Context, string, string) error
+	PendingTaskNotifications(context.Context) ([]TaskNotification, error)
+	DispatchTaskNotification(context.Context, string) error
 	SaveTask(context.Context, string, *Task) error
+	CreateFlowSyncTask(context.Context, string, string, string, *Task) (string, error)
 	DeleteTask(context.Context, string, string) error
 
 	EWSMailMetadata(context.Context, string) (string, error)
@@ -174,12 +196,27 @@ type Driver interface {
 	GetCalendarObject(ctx context.Context, calendarID, hrefName string) (*CalendarObject, error)
 	GetCalendarObjectByID(ctx context.Context, id string) (*CalendarObject, error)
 	UpsertCalendarObject(ctx context.Context, o *CalendarObject) (*CalendarObject, error)
+	SaveCalendarObjectWithMail(ctx context.Context, o *CalendarObject, mails []CalendarMail) (*CalendarObject, error)
+	SaveCalendarMeeting(ctx context.Context, actorID string, o *CalendarObject) (*CalendarObject, error)
+	DeleteCalendarMeeting(ctx context.Context, actorID string, o *CalendarObject) error
+	DeleteCalendarObjectWithMail(ctx context.Context, o *CalendarObject, mails []CalendarMail) error
+	ClaimCalendarDelivery(ctx context.Context) (*CalendarDelivery, error)
+	RetryCalendarDelivery(ctx context.Context, job *CalendarDelivery, cause string) error
+	CommitCalendarDelivery(ctx context.Context, job *CalendarDelivery, message *Message) error
+	CompleteCalendarDelivery(ctx context.Context, job *CalendarDelivery) error
 	DeleteCalendarObject(ctx context.Context, calendarID, hrefName string) error
 	UpsertCalendarInvite(ctx context.Context, inv *CalendarInvite) (*CalendarInvite, error)
 	GetCalendarInvite(ctx context.Context, id string) (*CalendarInvite, error)
 	ListCalendarInvitesForUser(ctx context.Context, userID string, pendingOnly bool) ([]*CalendarInvite, error)
 	ListCalendarInvitesByEventUID(ctx context.Context, eventUID string) ([]*CalendarInvite, error)
 	UpdateCalendarInvitePartStat(ctx context.Context, id, partstat string, proposedStart, proposedEnd *time.Time) error
+	ReplyCalendarInvite(ctx context.Context, userID, inviteID, status string, proposedStart, proposedEnd *time.Time, etag string, comment ...string) (*CalendarInvite, error)
+	ListCalendarProposals(ctx context.Context, userID string) ([]*CalendarProposal, error)
+	FreeBusyForUserExceptMeeting(ctx context.Context, userID string, from, to time.Time, uid, organizerEmail string) ([]BusyInterval, error)
+	DecideCalendarProposal(ctx context.Context, userID, inviteID, objectID, revision, etag string, accept bool) (*CalendarProposal, error)
+	ChangeCalendarOccurrence(ctx context.Context, userID, objectID, etag, rid string, change calutil.OccurrenceChange) (*CalendarObject, error)
+	ChangeCalendarRecurrence(ctx context.Context, userID, objectID, etag string, rule calutil.RecurrenceRule) (*CalendarObject, error)
+	FreeBusyForUserExceptOccurrence(ctx context.Context, userID string, from, to time.Time, uid, organizerEmail, rid string) ([]BusyInterval, error)
 	FreeBusyForUser(ctx context.Context, userID string, from, to time.Time) ([]BusyInterval, error)
 
 	EnsureAddressBook(ctx context.Context, userID, name, displayName string) (*AddressBook, error)

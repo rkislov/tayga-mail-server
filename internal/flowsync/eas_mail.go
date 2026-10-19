@@ -56,6 +56,27 @@ func (h *easHandler) itemOperations(ctx context.Context, u *storage.User, body [
 				continue
 			}
 			id := fetch.value("ServerId")
+			if taskID(id) {
+				task, err := helper.getTask(ctx, u, id)
+				collection := systemFolderID(u.ID, "tasks")
+				if err != nil || (fetch.value("CollectionId") != "" && fetch.value("CollectionId") != collection) {
+					out.WriteString(`<Fetch><Status>6</Status></Fetch>`)
+					continue
+				}
+				prefs, err := preferencesFrom(fetch, syncPreferences{Bodies: []bodyPreference{{Type: "1"}}})
+				if err != nil {
+					out.WriteString(`<Fetch><Status>2</Status></Fetch>`)
+					continue
+				}
+				properties, err := parseProtocolXML([]byte(taskApplicationData(*task, prefs)))
+				if err != nil {
+					return "", err
+				}
+				properties.Children[0].Name.Local = "Properties"
+				properties.Children[0].Name.Space = "ItemOperations:"
+				fmt.Fprintf(&out, `<Fetch><Status>1</Status><CollectionId xmlns="AirSync:">%s</CollectionId><ServerId xmlns="AirSync:">%s</ServerId>%s</Fetch>`, xmlEscape(collection), xmlEscape(id), properties.render())
+				continue
+			}
 			msg, err := h.store.GetMessageByID(ctx, id)
 			if err != nil {
 				out.WriteString(`<Fetch><Status>6</Status></Fetch>`)

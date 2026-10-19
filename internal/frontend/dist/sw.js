@@ -7,7 +7,7 @@ self.addEventListener('push', event => {
     try { data = event.data.json(); } catch (_) { return; }
     const windows = await self.clients.matchAll({type: 'window', includeUncontrolled: true});
     if (windows.some(window => window.visibilityState === 'visible')) return;
-    const href = ['mail', 'calendar', 'chat'].includes(data.href) ? data.href : 'mail';
+    const href = ['mail', 'calendar', 'chat', 'tasks'].includes(data.href) ? data.href : 'mail';
     await self.registration.showNotification(data.title || 'Tayga Mail', {
       tag: data.tag || 'tayga', data: {href}, body: 'Откройте Tayga Mail для просмотра.'
     });

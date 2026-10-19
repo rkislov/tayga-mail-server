@@ -12,6 +12,7 @@ const (
 	KindMail     = "mail"
 	KindCalendar = "calendar"
 	KindSystem   = "system"
+	KindTask     = "task"
 )
 
 // Event is pushed to the web UI (SSE + toast / browser Notification).
@@ -31,7 +32,7 @@ type sub struct {
 
 // Hub fans in-process notifications to online web sessions.
 type Hub struct {
-	sink func(string, Event)
+	sink func(string, Event) error
 	mu   sync.Mutex
 	subs map[string]map[*sub]struct{} // userID → set
 	ring map[string][]Event           // recent per user
@@ -111,9 +112,9 @@ func (h *Hub) Recent(userID string, limit int) []Event {
 }
 
 // Publish sends an event to a user's subscribers and keeps a short ring buffer.
-func (h *Hub) Publish(userID string, ev Event) {
+func (h *Hub) Publish(userID string, ev Event) error {
 	if h == nil || userID == "" {
-		return
+		return nil
 	}
 	if ev.ID == "" {
 		ev.ID = storage.NewID()
@@ -136,9 +137,9 @@ func (h *Hub) Publish(userID string, ev Event) {
 	sink := h.sink
 	h.mu.Unlock()
 	if sink != nil {
-		sink(userID, ev)
+		return sink(userID, ev)
 	}
-
+	return nil
 }
 
 // PublishMail notifies about a newly delivered message.
@@ -183,4 +184,4 @@ func Marshal(ev Event) []byte {
 }
 
 // SetSink connects durable delivery. The sink runs outside the hub lock.
-func (h *Hub) SetSink(sink func(string, Event)) { h.mu.Lock(); h.sink = sink; h.mu.Unlock() }
+func (h *Hub) SetSink(sink func(string, Event) error) { h.mu.Lock(); h.sink = sink; h.mu.Unlock() }

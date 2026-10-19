@@ -40,7 +40,10 @@ func cachedFetchOnly(response string) bool {
 	return true
 }
 
-func (h *easHandler) repairSyncFetchReplay(ctx context.Context, kind collectionKind, collectionID string, request *protocolNode, state collectionState) (string, error) {
+func (h *easHandler) repairSyncFetchReplay(ctx context.Context, u *storage.User, kind collectionKind, collectionID string, request *protocolNode, state collectionState) (string, error) {
+	if kind != kindMail {
+		return state.Response, nil
+	}
 	commands := request.child("Commands")
 	if commands == nil || commands.child("Fetch") == nil {
 		return state.Response, nil
@@ -66,7 +69,7 @@ func (h *easHandler) repairSyncFetchReplay(ctx context.Context, kind collectionK
 	if err != nil {
 		return "", err
 	}
-	fetches, err := h.fetchSyncMail(context.WithValue(ctx, preferencesKey{}, preferences), kind, collectionID, request)
+	fetches, err := h.fetchSyncItems(context.WithValue(ctx, preferencesKey{}, preferences), u, kind, collectionID, request)
 	if err != nil {
 		return "", err
 	}
@@ -106,7 +109,7 @@ func (h *easHandler) repairSyncFetchReplay(ctx context.Context, kind collectionK
 // Sync/Fetch is distinct from ItemOperations/Fetch. Apple Mail uses it to
 // retrieve a truncated message even when GetChanges is zero (MS-ASCMD 2.2.3.67.2).
 // The collection has already been authorized and its sync key validated.
-func (h *easHandler) fetchSyncMail(ctx context.Context, kind collectionKind, collectionID string, request *protocolNode) ([]writebackResult, error) {
+func (h *easHandler) fetchSyncItems(ctx context.Context, u *storage.User, kind collectionKind, collectionID string, request *protocolNode) ([]writebackResult, error) {
 	commands := request.child("Commands")
 	if commands == nil {
 		return nil, nil
@@ -118,6 +121,18 @@ func (h *easHandler) fetchSyncMail(ctx context.Context, kind collectionKind, col
 		}
 		id := fetch.value("ServerId")
 		result := writebackResult{Kind: "fetch", ServerID: id, Status: 1}
+		if kind == kindTasks && id != "" {
+			task, err := (&ewsHandler{store: h.store}).getTask(ctx, u, id)
+			if errors.Is(err, storage.ErrNotFound) {
+				result.Status = 8
+			} else if err != nil {
+				return nil, err
+			} else {
+				result.ApplicationData = taskApplicationData(*task, contextPreferences(ctx))
+			}
+			results = append(results, result)
+			continue
+		}
 		if kind != kindMail || id == "" {
 			result.Status = 4
 			results = append(results, result)

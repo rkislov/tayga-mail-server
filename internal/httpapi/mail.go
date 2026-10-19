@@ -48,7 +48,9 @@ func (s *Server) handleMail(w http.ResponseWriter, r *http.Request) {
 		s.mailSearch(w, r, au)
 	case r.Method == http.MethodGet && len(parts) == 4 && parts[0] == "messages" && parts[2] == "attachments":
 		s.mailDownloadAttachment(w, r, au, parts[1], parts[3])
-	case r.Method == http.MethodGet && len(parts) == 3 && parts[0] == "messages" && parts[2] == "travel":
+	case r.Method == http.MethodPost && len(parts) == 5 && parts[0] == "messages" && parts[2] == "attachments" && parts[4] == "prepare":
+		s.mailPrepareForwardAttachment(w, r, au, parts[1], parts[3])
+	case (r.Method == http.MethodGet || r.Method == http.MethodPost) && len(parts) == 3 && parts[0] == "messages" && parts[2] == "travel":
 		s.mailTravelDrafts(w, r, au, parts[1])
 	case r.Method == http.MethodGet && len(parts) == 2 && parts[0] == "messages":
 		s.mailGetMessage(w, r, au, parts[1])

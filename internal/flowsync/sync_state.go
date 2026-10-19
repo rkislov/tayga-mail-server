@@ -169,7 +169,7 @@ func (h *easHandler) syncOne(ctx context.Context, u *storage.User, dev *storage.
 		if err != nil || !validFilter(kind, preferences) {
 			return syncStatus(id, 4), nil
 		}
-		fetches, err := h.fetchSyncMail(context.WithValue(ctx, preferencesKey{}, preferences), kind, id, request)
+		fetches, err := h.fetchSyncItems(context.WithValue(ctx, preferencesKey{}, preferences), u, kind, id, request)
 		if err != nil {
 			return "", err
 		}
@@ -186,7 +186,7 @@ func (h *easHandler) syncOne(ctx context.Context, u *storage.User, dev *storage.
 	if key != "0" && key == state.PreviousKey && fingerprint == state.RequestHash && state.Response != "" {
 		// Older builds cached successful responses that silently omitted Fetch.
 		// Repair only the read response; never reapply Add/Change/Delete on retry.
-		repaired, err := h.repairSyncFetchReplay(ctx, kind, id, request, state)
+		repaired, err := h.repairSyncFetchReplay(ctx, u, kind, id, request, state)
 		if err != nil {
 			return "", err
 		}
@@ -221,12 +221,18 @@ func (h *easHandler) syncOne(ctx context.Context, u *storage.User, dev *storage.
 		return result, err
 	}
 	// The key is validated before accepting any client changes.
+	ctx = context.WithValue(ctx, taskDeviceKey{}, dev.ID)
 	writes := h.applyWritebacks(context.WithValue(ctx, deleteMovesKey{}, request.value("DeletesAsMoves") != "0"), u, kind, id, parseXMLClientOps(request.render()))
-	fetches, err := h.fetchSyncMail(ctx, kind, id, request)
+	fetches, err := h.fetchSyncItems(ctx, u, kind, id, request)
 	if err != nil {
 		return "", err
 	}
 	writes = append(writes, fetches...)
+	if kind == kindTasks {
+		// A successful Add response already supplies the server ID. Including
+		// it again as a server Add would create a duplicate on some clients.
+		acknowledgeTaskAdds(writes, &state)
+	}
 	if request.value("GetChanges") == "0" {
 		next := storage.NewID()
 		out := fmt.Sprintf(`<Collection xmlns="AirSync:"><SyncKey>%s</SyncKey><CollectionId>%s</CollectionId><Status>1</Status>%s</Collection>`, next, xmlEscape(id), renderWritebackResponses(writes))
@@ -234,7 +240,10 @@ func (h *easHandler) syncOne(ctx context.Context, u *storage.User, dev *storage.
 		return out, saveCollectionState(ctx, h.store, u.ID, dev.ID, id, collectionState{Preferences: preferences, ItemPreferences: &p, ReadKeys: state.nextReadKeys(), Key: next, Items: state.Items, PreviousKey: key, RequestHash: fingerprint, Response: out})
 	}
 	var full string
+	var taskHashes map[string]string
 	switch kind {
+	case kindTasks:
+		full, taskHashes, err = h.taskSnapshot(ctx, u, id, "unused", writes)
 	case kindCalendar:
 		full, _, err = h.syncCalendar(ctx, id, "unused", false, writes)
 	case kindContacts:
@@ -254,6 +263,9 @@ func (h *easHandler) syncOne(ctx context.Context, u *storage.User, dev *storage.
 	commands := document.find("Commands")
 	items := map[string]*protocolNode{}
 	hashes, previous := snapshotItemHashes(kind, commands, preferences, state.Items, state.itemPreferences(), state.Preferences)
+	if kind == kindTasks {
+		hashes = taskHashes
+	}
 	if commands != nil {
 		for _, add := range commands.Children {
 			sid := add.value("ServerId")
@@ -303,6 +315,11 @@ func (h *easHandler) syncOne(ctx context.Context, u *storage.User, dev *storage.
 			op := "Delete"
 			if kind == kindMail {
 				if msg, e := h.store.GetMessageByID(ctx, sid); e == nil && msg.MailboxID == id {
+					op = "SoftDelete"
+				}
+			}
+			if kind == kindTasks && preferences.Filter == 8 {
+				if _, e := (&ewsHandler{store: h.store}).getTask(ctx, u, sid); e == nil {
 					op = "SoftDelete"
 				}
 			}

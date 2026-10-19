@@ -399,10 +399,12 @@ func run(cfgPath string) error {
 		if err != nil {
 			return fmt.Errorf("initialize web push: %w", err)
 		}
-		notifyHub.SetSink(func(user string, event notify.Event) {
-			if err := pushService.Enqueue(user, event); err != nil {
+		notifyHub.SetSink(func(user string, event notify.Event) error {
+			err := pushService.Enqueue(user, event)
+			if err != nil {
 				log.Warn("queue web push", "error", err)
 			}
+			return err
 		})
 		pushService.Start(ctx)
 	}
@@ -423,6 +425,7 @@ func run(cfgPath string) error {
 		reminders.AdditionalUsers = pushService.UserIDs
 	}
 	reminders.Start(ctx)
+	(&notify.TaskLoop{Store: store, Hub: notifyHub, Log: log}).Start(ctx)
 
 	if cfg.Storage.Driver == "postgres" {
 		if sqlStore, ok := store.(*storage.Store); ok {
