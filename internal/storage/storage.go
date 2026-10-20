@@ -139,6 +139,10 @@ type Driver interface {
 
 	CreateAlias(ctx context.Context, domainID, userID, localPart string) (*Alias, error)
 	ResolveRecipient(ctx context.Context, email string) (*User, error)
+	ResolveRecipients(ctx context.Context, email string) ([]*User, error)
+	ListDirectoryGroups(ctx context.Context, domainID string) ([]*DirectoryGroup, error)
+	SaveDirectoryGroup(ctx context.Context, group *DirectoryGroup) (*DirectoryGroup, error)
+	DeleteDirectoryGroup(ctx context.Context, domainID, id string, revision int64) error
 
 	EnsureMailbox(ctx context.Context, userID, name, path string) (*Mailbox, error)
 	GetMailbox(ctx context.Context, userID, name string) (*Mailbox, error)

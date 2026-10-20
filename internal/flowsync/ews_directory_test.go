@@ -84,3 +84,32 @@ func TestEWSDirectoryIsolationAndRooms(t *testing.T) {
 		t.Fatal(out)
 	}
 }
+
+func TestEWSDistributionGroupSearchAndExpansion(t *testing.T) {
+	ctx, st, u, _, _, _ := syncFixture(t)
+	h := &ewsHandler{store: st}
+	group, err := st.SaveDirectoryGroup(ctx, &storage.DirectoryGroup{DomainID: u.DomainID, LocalPart: "engineering", Name: "Engineering", MemberIDs: []string{u.ID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = st.PutSetting(ctx, "domain.gal."+u.DomainID, "true"); err != nil {
+		t.Fatal(err)
+	}
+	out, err := h.directoryEWS(ctx, u, "ResolveNames", "<ResolveNames><UnresolvedEntry>engineering</UnresolvedEntry></ResolveNames>")
+	if err != nil || !strings.Contains(out, "<t:MailboxType>PublicDL</t:MailboxType>") || !strings.Contains(out, group.Email) {
+		t.Fatal(out, err)
+	}
+	body := "<ExpandDL><Mailbox><EmailAddress>" + group.Email + "</EmailAddress></Mailbox></ExpandDL>"
+	out, err = h.directoryEWS(ctx, u, "ExpandDL", body)
+	if err != nil || !strings.Contains(out, u.Email) || !strings.Contains(out, "<m:DLExpansion ") {
+		t.Fatal(out, err)
+	}
+	requireXML(t, out)
+	if err = st.PutSetting(ctx, "domain.gal."+u.DomainID, "false"); err != nil {
+		t.Fatal(err)
+	}
+	out, err = h.directoryEWS(ctx, u, "ExpandDL", body)
+	if err != nil || strings.Contains(out, u.Email) || !strings.Contains(out, "ErrorNameResolutionNoResults") {
+		t.Fatal(out, err)
+	}
+}

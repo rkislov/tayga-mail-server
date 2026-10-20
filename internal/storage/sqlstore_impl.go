@@ -232,7 +232,7 @@ func (s *Store) DeleteDomain(ctx context.Context, tenantID, domainID string) err
 		}
 	}
 
-	q := s.rebind(`DELETE FROM domains WHERE id = ? AND tenant_id = ? AND NOT EXISTS (SELECT 1 FROM users WHERE domain_id = domains.id)`)
+	q := s.rebind(`DELETE FROM domains WHERE id = ? AND tenant_id = ? AND NOT EXISTS (SELECT 1 FROM users WHERE domain_id = domains.id) AND NOT EXISTS (SELECT 1 FROM directory_groups WHERE domain_id = domains.id)`)
 	res, err := tx.ExecContext(ctx, q, domainID, tenantID)
 	if err != nil {
 		return mapErr(err)
@@ -272,6 +272,17 @@ func (s *Store) DeleteTenant(ctx context.Context, id string) error {
 }
 
 func (s *Store) CreateUser(ctx context.Context, u *User) (*User, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	if err = s.lockDirectoryDomain(ctx, tx, u.DomainID); err != nil {
+		return nil, err
+	}
+	if err = s.checkGroupAddress(ctx, tx, u.DomainID, u.LocalPart); err != nil {
+		return nil, err
+	}
 	now := time.Now().UTC()
 	u.Email = strings.ToLower(u.Email)
 	u.LocalPart = strings.ToLower(u.LocalPart)
@@ -300,8 +311,11 @@ func (s *Store) CreateUser(ctx context.Context, u *User) (*User, error) {
 		u.ID, u.TenantID, u.DomainID, u.Email, u.LocalPart, u.DisplayName, u.PasswordHash,
 		u.AuthSource, u.QuotaBytes, enabled, u.Roles, u.ServiceClassID, u.MigrationEnabled, now,
 	}
-	if _, err := s.db.ExecContext(ctx, q, args...); err != nil {
+	if _, err := tx.ExecContext(ctx, q, args...); err != nil {
 		return nil, mapErr(err)
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
 	}
 	return u, nil
 }
@@ -486,12 +500,26 @@ func (s *Store) SumMailboxBytes(ctx context.Context, userID string) (int64, erro
 }
 
 func (s *Store) CreateAlias(ctx context.Context, domainID, userID, localPart string) (*Alias, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	if err = s.lockDirectoryDomain(ctx, tx, domainID); err != nil {
+		return nil, err
+	}
+	if err = s.checkGroupAddress(ctx, tx, domainID, localPart); err != nil {
+		return nil, err
+	}
 	now := time.Now().UTC()
 	localPart = strings.ToLower(localPart)
 	a := &Alias{ID: NewID(), DomainID: domainID, UserID: userID, LocalPart: localPart, CreatedAt: now}
 	q := s.rebind(`INSERT INTO aliases(id, domain_id, user_id, local_part, created_at) VALUES (?, ?, ?, ?, ?)`)
-	if _, err := s.db.ExecContext(ctx, q, a.ID, domainID, userID, localPart, now); err != nil {
+	if _, err := tx.ExecContext(ctx, q, a.ID, domainID, userID, localPart, now); err != nil {
 		return nil, mapErr(err)
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
 	}
 	return a, nil
 }

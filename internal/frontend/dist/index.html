@@ -406,6 +406,7 @@
             <button type="button" class="btn-spray btn-sm btn-ico" id="btn-contact-new" data-i18n-title="new_contact" title="Контакт" aria-label="Контакт"><span class="ico" data-ico="contact" aria-hidden="true"></span></button>
           </div>
           <ul id="contact-book-list" class="folder-list"></ul>
+          <button type="button" id="btn-org-structure" class="folder-btn hidden">Оргструктура</button>
         </div>
         <div class="mail-list panel-pane mail-list-pane">
           <div class="pane-head mail-list-toolbar">
@@ -925,6 +926,7 @@ keep;</textarea>
           </div>
 
           <div id="tenant-level-users" class="hidden">
+            <div class="actions"><button type="button" id="btn-org-structure-admin" class="btn-secondary">Оргструктура и группы рассылки</button></div>
             <details class="admin-create"><summary data-i18n="users_create"></summary><form id="form-create-user">
               <label class="field-label" for="nu-email" data-i18n="email">Email</label>
               <input class="field-input" id="nu-email" type="email" required />

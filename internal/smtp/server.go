@@ -489,6 +489,7 @@ type session struct {
 	user          *storage.User
 	from          string
 	toLocal       []string
+	localSeen     map[string]bool
 	toRemote      []string
 	opts          *gosmtp.MailOptions
 }
@@ -575,6 +576,7 @@ func (s *session) Mail(from string, opts *gosmtp.MailOptions) (result error) {
 	s.from = from
 	s.opts = opts
 	s.toLocal = nil
+	s.localSeen = nil
 	s.toRemote = nil
 	return nil
 }
@@ -587,10 +589,31 @@ func (s *session) Rcpt(to string, _ *gosmtp.RcptOptions) (result error) {
 		}
 	}()
 	to = normalizeAddr(to)
-	_, err := s.backend.store.ResolveRecipient(context.Background(), to)
+	users, err := s.backend.store.ResolveRecipients(context.Background(), to)
 	if err == nil {
-		s.toLocal = append(s.toLocal, to)
+		if s.localSeen == nil {
+			s.localSeen = map[string]bool{}
+		}
+		direct := false
+		if len(users) == 1 {
+			_, e := s.backend.store.ResolveRecipient(context.Background(), to)
+			direct = e == nil
+		}
+		for _, user := range users {
+			if !s.localSeen[user.ID] {
+				address := user.Email
+				if direct {
+					// Preserve alias RCPT TO for existing Sieve envelope rules.
+					address = to
+				}
+				s.toLocal = append(s.toLocal, address)
+				s.localSeen[user.ID] = true
+			}
+		}
 		return nil
+	}
+	if errors.Is(err, storage.ErrNoRecipients) {
+		return &gosmtp.SMTPError{Code: 550, EnhancedCode: gosmtp.EnhancedCode{5, 1, 1}, Message: "Distribution group has no active recipients"}
 	}
 	if !errors.Is(err, storage.ErrNotFound) {
 		s.backend.log.Error("rcpt resolve failed", "to", to, "err", err)
@@ -921,6 +944,7 @@ func (s *session) deliver(ctx context.Context, rcpt string, data []byte, msgid s
 func (s *session) Reset() {
 	s.from = ""
 	s.toLocal = nil
+	s.localSeen = nil
 	s.toRemote = nil
 	s.opts = nil
 }

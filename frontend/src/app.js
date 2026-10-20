@@ -4149,6 +4149,8 @@ async function refreshContacts() {
   try {
     const data = await api("/api/v1/contacts/books");
     contactState.books = data.books || [];
+    const orgButton=$("btn-org-structure");
+    if(orgButton){orgButton.classList.toggle("hidden",!contactState.books.some(b=>b.id==="gal"));orgButton.textContent=mailImageText("Оргструктура","Organization");}
     if (!contactState.bookID && contactState.books.length) {
       contactState.bookID = contactState.books[0].id;
     }
