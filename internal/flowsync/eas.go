@@ -30,7 +30,7 @@ type easHandler struct {
 func (h *easHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("MS-Server-ActiveSync", "18.0")
 	w.Header().Set("MS-ASProtocolVersions", "14.0,14.1,16.0,16.1")
-	w.Header().Set("MS-ASProtocolCommands", "FolderSync,FolderCreate,FolderDelete,FolderUpdate,Sync,MoveItems,Ping,Provision,GetItemEstimate,ItemOperations,SendMail,Settings")
+	w.Header().Set("MS-ASProtocolCommands", "FolderSync,FolderCreate,FolderDelete,FolderUpdate,Sync,MoveItems,Ping,Provision,GetItemEstimate,ItemOperations,SendMail,SmartReply,SmartForward,Settings")
 	w.Header().Set("X-FlowSync", "Tayga-FlowSync")
 	w.Header().Set("X-FlowSync-Engine", "FlowSync/1.0")
 
@@ -110,6 +110,10 @@ func (h *easHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch strings.ToLower(cmd) {
 	case "sendmail":
 		xmlOut, err = h.sendMail(r.Context(), u, body)
+	case "smartreply":
+		xmlOut, err = h.composeMail(r.Context(), u, body, "SmartReply")
+	case "smartforward":
+		xmlOut, err = h.composeMail(r.Context(), u, body, "SmartForward")
 	case "itemoperations":
 		xmlOut, err = h.itemOperations(r.Context(), u, body)
 	case "settings":
