@@ -55,6 +55,9 @@ archives:
       - docs/travel-tickets.md
       - docs/calendar-scheduling.md
       - docs/roadmap.md
+      - docs/organization-directory.md
+      - docs/migration.md
+      - docs/product-comparison.md
       - docs/mail-dlp.md
       - docs/outlook-gal.md
       - frontend/LICENSE
