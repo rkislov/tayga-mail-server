@@ -13,6 +13,7 @@ var (
 	ErrDirectoryConflict = errors.New("directory changed; reload before saving")
 	ErrDirectoryInvalid  = errors.New("invalid department")
 	ErrDirectoryChildren = errors.New("department contains child departments")
+	ErrDirectoryManaged  = errors.New("directory is managed by LDAP; select manual mode to edit")
 	ErrNoRecipients      = errors.New("distribution group has no active recipients")
 	groupLocalPart       = regexp.MustCompile(`^[a-z0-9!#$%&'*+/=?^_` + "`" + `{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_` + "`" + `{|}~-]+)*$`)
 )
@@ -29,6 +30,7 @@ type DirectoryGroup struct {
 	Email       string   `json:"email"`
 	Revision    int64    `json:"revision"`
 	MemberIDs   []string `json:"member_ids"`
+	ExternalID  string   `json:"-"`
 }
 
 // Domain locking serializes hierarchy changes and all mailbox/alias creations.
@@ -55,9 +57,17 @@ func (s *Store) checkGroupAddress(ctx context.Context, tx *sql.Tx, domainID, loc
 }
 
 func (s *Store) ListDirectoryGroups(ctx context.Context, domainID string) ([]*DirectoryGroup, error) {
+	return s.listDirectoryGroups(ctx, s.db, domainID)
+}
+
+type directoryQueryer interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}
+
+func (s *Store) listDirectoryGroups(ctx context.Context, db directoryQueryer, domainID string) ([]*DirectoryGroup, error) {
 	// A single query gives a consistent hierarchy/membership snapshot.
-	rows, err := s.db.QueryContext(ctx, s.rebind(`SELECT g.id,g.domain_id,COALESCE(g.parent_id,''),g.local_part,g.name,g.description,
-		g.revision,d.name,COALESCE(m.user_id,'') FROM directory_groups g
+	rows, err := db.QueryContext(ctx, s.rebind(`SELECT g.id,g.domain_id,COALESCE(g.parent_id,''),g.local_part,g.name,g.description,
+		g.revision,d.name,COALESCE(m.user_id,''),g.external_id FROM directory_groups g
 		JOIN domains d ON d.id=g.domain_id LEFT JOIN directory_group_members m ON m.group_id=g.id
 		WHERE g.domain_id=? ORDER BY g.name,g.id,m.user_id`), domainID)
 	if err != nil {
@@ -69,7 +79,7 @@ func (s *Store) ListDirectoryGroups(ctx context.Context, domainID string) ([]*Di
 	for rows.Next() {
 		g := &DirectoryGroup{MemberIDs: []string{}}
 		var domain, member string
-		if err := rows.Scan(&g.ID, &g.DomainID, &g.ParentID, &g.LocalPart, &g.Name, &g.Description, &g.Revision, &domain, &member); err != nil {
+		if err := rows.Scan(&g.ID, &g.DomainID, &g.ParentID, &g.LocalPart, &g.Name, &g.Description, &g.Revision, &domain, &member, &g.ExternalID); err != nil {
 			return nil, err
 		}
 		g.Email = g.LocalPart + "@" + domain
@@ -107,6 +117,9 @@ func (s *Store) SaveDirectoryGroup(ctx context.Context, input *DirectoryGroup) (
 	}
 	defer tx.Rollback()
 	if err = s.lockDirectoryDomain(ctx, tx, g.DomainID); err != nil {
+		return nil, err
+	}
+	if err = s.requireManualDirectory(ctx, tx, g.DomainID); err != nil {
 		return nil, err
 	}
 	parents := map[string]string{}
@@ -227,6 +240,9 @@ func (s *Store) DeleteDirectoryGroup(ctx context.Context, domainID, id string, r
 	}
 	defer tx.Rollback()
 	if err = s.lockDirectoryDomain(ctx, tx, domainID); err != nil {
+		return err
+	}
+	if err = s.requireManualDirectory(ctx, tx, domainID); err != nil {
 		return err
 	}
 	var current int64

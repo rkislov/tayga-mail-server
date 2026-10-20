@@ -120,4 +120,37 @@ func TestOrganizationDirectoryAPIAndWebDelivery(t *testing.T) {
 	if got := call(memberToken, "GET", "/api/v1/directory", nil, 200); strings.Contains(string(got), group.ID) {
 		t.Fatal("deleted group retained")
 	}
+	source := storage.DefaultDirectorySource()
+	source.Mode, source.BaseDN = "ldap", "ou=Groups,dc=example,dc=com"
+	call(domainToken, "PUT", base+"/source"+query, source, 400)
+	layer.LDAP = auth.NewDirectory(st, config.LDAPConfig{Domains: map[string]config.LDAPDomainConfig{
+		"example.com": {Enabled: true, URL: "ldap://127.0.0.1:1", BaseDN: "ou=People,dc=example,dc=com", OrganizationBaseDN: "ou=Groups,dc=example,dc=com", BindPassword: "test-secret"},
+	}})
+	call(domainToken, "PUT", base+"/source?domain_id="+other.ID, source, 403)
+	call(memberToken, "PUT", base+"/source"+query, source, 403)
+	bad := source
+	bad.BaseDN = "dc=example,dc=com"
+	call(domainToken, "PUT", base+"/source"+query, bad, 400)
+	// Status timestamps are server-owned, even if a client supplies them.
+	source.LastError = "forged"
+	saved := call(domainToken, "PUT", base+"/source"+query, source, 200)
+	if bytes.Contains(saved, []byte("forged")) {
+		t.Fatal("client supplied sync status", string(saved))
+	}
+	call(domainToken, "PUT", base+"/source"+query, source, 409)
+	for _, action := range []string{"preview", "sync"} {
+		call(memberToken, "POST", base+"/"+action+query, nil, 403)
+		call(domainToken, "POST", base+"/"+action+"?domain_id="+other.ID, nil, 403)
+	}
+	call(domainToken, "POST", base+query, payload, 409)
+	adminView := call(domainToken, "GET", base+query, nil, 200)
+	if !bytes.Contains(adminView, []byte(`"ldap_available":true`)) || !bytes.Contains(adminView, []byte(`"editable":false`)) || bytes.Contains(adminView, []byte("test-secret")) {
+		t.Fatal(string(adminView))
+	}
+	own = call(memberToken, "GET", "/api/v1/directory", nil, 200)
+	for _, private := range []string{"source", "ldap_root", "base_dn", "test-secret"} {
+		if bytes.Contains(own, []byte(private)) {
+			t.Fatal("LDAP configuration exposed to normal user", string(own))
+		}
+	}
 }

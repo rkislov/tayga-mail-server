@@ -385,18 +385,19 @@ type LDAPConfig struct {
 }
 
 type LDAPDomainConfig struct {
-	Enabled      bool             `yaml:"enabled"`
-	URL          string           `yaml:"url"` // ldap:// or ldaps://
-	StartTLS     bool             `yaml:"start_tls"`
-	BindDN       string           `yaml:"bind_dn"`
-	BindPassword string           `yaml:"bind_password"`
-	BaseDN       string           `yaml:"base_dn"`
-	Filter       string           `yaml:"filter"` // {email}, {user}
-	AttrEmail    string           `yaml:"attr_email"`
-	AttrName     string           `yaml:"attr_name"`
-	Timeout      time.Duration    `yaml:"timeout"`
-	Groups       LDAPGroupsConfig `yaml:"groups"`
-	Sync         LDAPSyncConfig   `yaml:"sync"`
+	Enabled            bool             `yaml:"enabled"`
+	URL                string           `yaml:"url"` // ldap:// or ldaps://
+	StartTLS           bool             `yaml:"start_tls"`
+	BindDN             string           `yaml:"bind_dn"`
+	BindPassword       string           `yaml:"bind_password"`
+	BaseDN             string           `yaml:"base_dn"`
+	OrganizationBaseDN string           `yaml:"organization_base_dn"` // allowed org branch root; defaults to base_dn
+	Filter             string           `yaml:"filter"`               // {email}, {user}
+	AttrEmail          string           `yaml:"attr_email"`
+	AttrName           string           `yaml:"attr_name"`
+	Timeout            time.Duration    `yaml:"timeout"`
+	Groups             LDAPGroupsConfig `yaml:"groups"`
+	Sync               LDAPSyncConfig   `yaml:"sync"`
 }
 
 // LDAPGroupsConfig maps LDAP group membership to Tayga roles at login.

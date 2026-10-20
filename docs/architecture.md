@@ -284,6 +284,8 @@ Per-domain `ldap.domains.*.groups` maps membership to Tayga roles (`admin`) via 
 
 With `groups.nested: true`, membership is expanded transitively: `nested_mode: walk` BFS via group `memberOf` (or parent search on `member`), or `nested_mode: chain` using AD `LDAP_MATCHING_RULE_IN_CHAIN` (`1.2.840.113556.1.4.1941`). Depth is capped by `max_depth` (default 8).
 
+Organization import is independent of role mapping and account provisioning. The domain administrator chooses manual management or nested LDAP groups in the organization source dialog. `organization_base_dn` in the domain LDAP connection bounds the allowed group branch (defaults to `base_dn`). Per-domain source settings and revisions live in `settings`; migration 053 adds private stable external IDs to `directory_groups`. A validated, complete snapshot replaces LDAP-owned groups atomically while retaining manual groups and mailbox identities. Failed/partial reads preserve the old tree. A minute-based scheduler runs due imports at the configured interval. See [organization directory](organization-directory.md).
+
 ## ARC (Authenticated Received Chain)
 
 `arc:` uses `github.com/rest-mail/go-arc` (RFC 8617). Verify runs before DMARC so `dmarc.arc_trust` can override disposition; seal runs after so the sealed set includes DMARC results.

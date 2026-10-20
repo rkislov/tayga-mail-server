@@ -3950,6 +3950,7 @@ dialog.omemo-dialog[open]{display:flex;flex-direction:column}
 .org-toolbar { margin: 12px 0; }
 .org-toolbar > input[type="search"] { flex: 1 1 220px; min-width: 0; }
 .org-dialog > .msg:empty { display: none; }
+.org-dialog [hidden] { display: none !important; }
 .org-layout { display: grid; grid-template-columns: minmax(240px, 32%) minmax(0, 1fr); gap: 24px; height: min(660px, calc(100dvh - 240px)); min-height: 240px; }
 .org-tree { border-right: 1px solid var(--ui-text-15, #dfe3ee); padding-right: 16px; overflow: auto; overflow-wrap: anywhere; }
 .org-tree ul { list-style: none; padding-left: 14px; margin: 4px 0; border-left: 1px solid var(--ui-text-15, #dfe3ee); }
@@ -3972,10 +3973,15 @@ dialog.omemo-dialog[open]{display:flex;flex-direction:column}
 .org-member-picker label { padding: 8px 0; }
 .org-member-picker input { flex: 0 0 auto; }
 .org-member-picker span { overflow-wrap: anywhere; }
+.org-source-status, .org-source-fields .meta { overflow-wrap: anywhere; }
+.org-source-fields { min-width: 0; border: 0; padding: 0; }
+.org-source-fields[hidden] { display: none; }
+.org-source-attributes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 @media (max-width: 760px) {
   .org-dialog { padding: 16px; width: calc(100vw - 16px); max-height: calc(100dvh - 16px); }
   .org-layout { grid-template-columns: minmax(0, 1fr); height: auto; min-height: 0; }
   .org-tree { border-right: 0; border-bottom: 1px solid var(--ui-text-15, #dfe3ee); padding: 0 0 16px; max-height: 40dvh; overflow: auto; }
   .org-detail { overflow: visible; padding-right: 0; }
   .org-toolbar > button, .org-dialog > header button { width: auto; flex: 0 0 auto; }
+  .org-source-attributes { grid-template-columns: minmax(0, 1fr); }
 }

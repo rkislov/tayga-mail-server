@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/tayga/tms/internal/auth"
 	"github.com/tayga/tms/internal/storage"
 )
 
@@ -62,7 +63,20 @@ func (s *Server) writeDirectory(w http.ResponseWriter, r *http.Request, domainID
 		}
 		group.MemberIDs = ids
 	}
-	writeJSON(w, 200, map[string]any{"domain": map[string]string{"id": domain.ID, "name": domain.Name}, "groups": groups, "users": members, "editable": admin})
+	source, err := s.store.GetDirectorySource(r.Context(), domainID)
+	if err != nil {
+		directoryError(w, err)
+		return
+	}
+	result := map[string]any{"domain": map[string]string{"id": domain.ID, "name": domain.Name}, "groups": groups, "users": members, "editable": admin && source.Mode == "manual"}
+	if admin {
+		root, available := "", false
+		if directory, ok := s.authn.LDAP.(*auth.Directory); ok {
+			root, available = directory.OrganizationLDAPRoot(domain.Name)
+		}
+		result["source"], result["ldap_available"], result["ldap_root"] = source, available, root
+	}
+	writeJSON(w, 200, result)
 }
 
 func directoryError(w http.ResponseWriter, err error) {
@@ -72,7 +86,7 @@ func directoryError(w http.ResponseWriter, err error) {
 		code = 404
 	case errors.Is(err, storage.ErrDirectoryInvalid):
 		code = 400
-	case errors.Is(err, storage.ErrAlreadyExists), errors.Is(err, storage.ErrDirectoryConflict), errors.Is(err, storage.ErrDirectoryChildren):
+	case errors.Is(err, storage.ErrAlreadyExists), errors.Is(err, storage.ErrDirectoryConflict), errors.Is(err, storage.ErrDirectoryChildren), errors.Is(err, storage.ErrDirectoryManaged):
 		code = 409
 	}
 	message := err.Error()
@@ -97,6 +111,44 @@ func (s *Server) handleAdminDirectory(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == http.MethodGet && id == "":
 		s.writeDirectory(w, r, domainID, true)
+	case r.Method == http.MethodPut && id == "source":
+		source := storage.DefaultDirectorySource()
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&source); err != nil {
+			writeJSON(w, 400, map[string]string{"error": "invalid json"})
+			return
+		}
+		if source.Mode != "manual" {
+			directory, ok := s.authn.LDAP.(*auth.Directory)
+			if !ok {
+				writeJSON(w, 400, map[string]string{"error": "LDAP authentication is not enabled for this domain"})
+				return
+			}
+			if err := directory.ValidateOrganizationSource(domain.Name, source); err != nil {
+				directoryError(w, err)
+				return
+			}
+		}
+		saved, err := s.store.SaveDirectorySource(r.Context(), domainID, source)
+		if err != nil {
+			directoryError(w, err)
+			return
+		}
+		writeJSON(w, 200, saved)
+	case r.Method == http.MethodPost && (id == "preview" || id == "sync"):
+		directory, ok := s.authn.LDAP.(*auth.Directory)
+		if !ok {
+			writeJSON(w, 400, map[string]string{"error": "LDAP authentication is not enabled for this domain"})
+			return
+		}
+		report, err := directory.LoadOrganization(r.Context(), domainID, id == "sync")
+		if err != nil {
+			if s.log != nil {
+				s.log.Warn("LDAP organization request failed; previous directory retained", "domain", domain.Name, "action", id, "error", err)
+			}
+			directoryError(w, err)
+			return
+		}
+		writeJSON(w, 200, report)
 	case (r.Method == http.MethodPost && id == "") || (r.Method == http.MethodPut && id != "" && !strings.Contains(id, "/")):
 		var group storage.DirectoryGroup
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&group); err != nil {
