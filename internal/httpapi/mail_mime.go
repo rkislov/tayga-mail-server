@@ -14,8 +14,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/tayga/tms/internal/mailcharset"
 	"github.com/tayga/tms/internal/mailsearch"
-	"golang.org/x/net/html/charset"
 )
 
 type mailAttachment struct {
@@ -94,7 +94,7 @@ func parseMIMEMessage(raw []byte) parsedMsg {
 			return
 		}
 		if label := params["charset"]; label != "" {
-			if converted, err := charset.NewReaderLabel(label, r); err == nil {
+			if converted, err := mailcharset.Reader(label, r); err == nil {
 				r = converted
 			}
 		}

@@ -6,13 +6,15 @@ import (
 	"io"
 	"mime"
 	"mime/multipart"
+	"mime/quotedprintable"
 	"net/mail"
+	"net/textproto"
 	"regexp"
 	"strings"
 	"unicode"
 
+	"github.com/tayga/tms/internal/mailcharset"
 	xhtml "golang.org/x/net/html"
-	"golang.org/x/net/html/charset"
 )
 
 // Document holds denormalized headers plus body text for FTS indexing.
@@ -43,40 +45,64 @@ func ParseDocument(raw []byte) Document {
 	doc.To = DecodeHeader(strings.TrimSpace(m.Header.Get("To")))
 	doc.Date = strings.TrimSpace(m.Header.Get("Date"))
 
-	ct := m.Header.Get("Content-Type")
-	media, params, _ := mime.ParseMediaType(ct)
 	var plain, html string
-	if strings.HasPrefix(media, "multipart/") {
-		mr := multipart.NewReader(m.Body, params["boundary"])
-		for {
-			p, err := mr.NextPart()
-			if err == io.EOF {
-				break
+	parts, remaining := 0, int64(2<<20)
+	var walk func(textproto.MIMEHeader, io.Reader, int)
+	walk = func(h textproto.MIMEHeader, r io.Reader, depth int) {
+		if depth > 20 || parts >= 256 || remaining <= 0 || plain != "" {
+			return
+		}
+		parts++
+		media, params, _ := mime.ParseMediaType(h.Get("Content-Type"))
+		if media == "" {
+			media = "text/plain"
+		}
+		disposition, dp, _ := mime.ParseMediaType(h.Get("Content-Disposition"))
+		// A text attachment (or attached multipart message) is not the body.
+		if disposition == "attachment" || dp["filename"] != "" || params["name"] != "" {
+			return
+		}
+		if strings.HasPrefix(media, "multipart/") {
+			if params["boundary"] == "" {
+				return
 			}
-			if err != nil {
-				break
+			mr := multipart.NewReader(r, params["boundary"])
+			for parts < 256 && remaining > 0 && plain == "" {
+				p, err := mr.NextRawPart()
+				if err != nil {
+					break
+				}
+				walk(p.Header, p, depth+1)
 			}
-			body, _ := io.ReadAll(io.LimitReader(p, 2<<20))
-			pct, _, _ := mime.ParseMediaType(p.Header.Get("Content-Type"))
-			switch {
-			case pct == "text/plain" && plain == "":
-				plain = string(body)
-			case pct == "text/html" && html == "":
-				html = string(body)
+			return
+		}
+		if media != "text/plain" && media != "text/html" || media == "text/html" && html != "" {
+			return
+		}
+		switch strings.ToLower(strings.TrimSpace(h.Get("Content-Transfer-Encoding"))) {
+		case "base64":
+			r = base64.NewDecoder(base64.StdEncoding, r)
+		case "quoted-printable":
+			r = quotedprintable.NewReader(r)
+		}
+		if label := params["charset"]; label != "" {
+			if decoded, err := mailcharset.Reader(label, r); err == nil {
+				r = decoded
 			}
 		}
-	} else {
-		body, _ := io.ReadAll(io.LimitReader(m.Body, 2<<20))
+		body, _ := io.ReadAll(io.LimitReader(r, remaining))
+		remaining -= int64(len(body))
 		if media == "text/html" {
 			html = string(body)
 		} else {
 			plain = string(body)
 		}
 	}
+	walk(textproto.MIMEHeader(m.Header), m.Body, 0)
 	if plain != "" {
 		doc.Body = normalizeText(plain)
 	} else if html != "" {
-		doc.Body = normalizeText(stripHTML(html))
+		doc.Body = normalizeText(ExtractHTMLText(html))
 	}
 	return doc
 }
@@ -123,9 +149,7 @@ func normalizeText(s string) string {
 
 // DecodeHeader decodes RFC 2047 words, including legacy mail character sets.
 func DecodeHeader(value string) string {
-	decoder := mime.WordDecoder{CharsetReader: func(label string, input io.Reader) (io.Reader, error) {
-		return charset.NewReaderLabel(label, input)
-	}}
+	decoder := mime.WordDecoder{CharsetReader: mailcharset.Reader}
 	decoded, err := decoder.DecodeHeader(value)
 	if err != nil || strings.Contains(decoded, "=?") {
 		// Some older senders add excessive Base64 padding to encoded words.
