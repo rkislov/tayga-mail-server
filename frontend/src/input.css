@@ -3941,3 +3941,41 @@ dialog.omemo-dialog[open]{display:flex;flex-direction:column}
 .travel-trip-row > div { min-width: 0; overflow-wrap: anywhere; }
 .travel-trip-row > button { flex: 0 0 auto; }
 @media (max-width: 540px) { .travel-time-row { grid-template-columns: minmax(0,1fr); gap: 0; } .travel-trip-row { align-items: start; flex-direction: column; } }
+/* Organization directory: scroll inside the dialog, never outside the viewport. */
+.org-dialog { inset: 0; margin: auto; width: min(1160px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 24px; border: 1px solid var(--ui-text-15, #dfe3ee); border-radius: 20px; background: var(--panel-bg); color: var(--ui-text); overflow: auto; }
+.org-dialog::backdrop { background: rgb(15 23 42 / .45); }
+.org-dialog > header, .org-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.org-dialog > header { justify-content: space-between; margin-bottom: 20px; }
+.org-dialog > header h2 { margin: 0; }
+.org-toolbar { margin: 12px 0; }
+.org-toolbar > input[type="search"] { flex: 1 1 220px; min-width: 0; }
+.org-dialog > .msg:empty { display: none; }
+.org-layout { display: grid; grid-template-columns: minmax(240px, 32%) minmax(0, 1fr); gap: 24px; height: min(660px, calc(100dvh - 240px)); min-height: 240px; }
+.org-tree { border-right: 1px solid var(--ui-text-15, #dfe3ee); padding-right: 16px; overflow: auto; overflow-wrap: anywhere; }
+.org-tree ul { list-style: none; padding-left: 14px; margin: 4px 0; border-left: 1px solid var(--ui-text-15, #dfe3ee); }
+.org-tree > ul { padding-left: 0; border: 0; }
+.org-tree summary { cursor: pointer; padding: 10px 6px; border-radius: 8px; }
+.org-tree summary > span { display: inline; }
+.org-tree small { display: block; font-size: .78rem; opacity: .72; margin-top: 3px; }
+.org-tree summary:hover, .org-person-row:hover, .org-mailbox:hover, .org-tree .is-active { background: color-mix(in srgb, var(--ui-text) 8%, transparent); }
+.org-root, .org-mailbox { display: block; width: 100%; padding: 10px; border: 0; border-radius: 8px; background: transparent; color: inherit; text-align: left; overflow-wrap: anywhere; cursor: pointer; }
+.org-root { font-weight: 700; }
+.org-detail { min-width: 0; overflow: auto; padding-right: 4px; }
+.org-person-row { cursor: pointer; }
+.org-person-row:focus-visible, .org-tree summary:focus-visible { outline: 2px solid var(--accent, #4f46ad); outline-offset: -2px; }
+.org-table-wrap { width: 100%; overflow-x: auto; }
+.org-table-wrap td { overflow-wrap: anywhere; }
+.org-sort { border: 0; padding: 4px 0; background: transparent; color: inherit; text-align: left; font: inherit; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.org-editor { width: min(680px, calc(100vw - 32px)); }
+.org-editor .field { display: grid; gap: 6px; }
+.org-member-picker { max-height: 280px; overflow: auto; border: 1px solid var(--ui-text-15, #dfe3ee); border-radius: 10px; padding: 12px; }
+.org-member-picker label { padding: 8px 0; }
+.org-member-picker input { flex: 0 0 auto; }
+.org-member-picker span { overflow-wrap: anywhere; }
+@media (max-width: 760px) {
+  .org-dialog { padding: 16px; width: calc(100vw - 16px); max-height: calc(100dvh - 16px); }
+  .org-layout { grid-template-columns: minmax(0, 1fr); height: auto; min-height: 0; }
+  .org-tree { border-right: 0; border-bottom: 1px solid var(--ui-text-15, #dfe3ee); padding: 0 0 16px; max-height: 40dvh; overflow: auto; }
+  .org-detail { overflow: visible; padding-right: 0; }
+  .org-toolbar > button, .org-dialog > header button { width: auto; flex: 0 0 auto; }
+}

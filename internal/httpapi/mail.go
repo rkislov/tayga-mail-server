@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"mime"
 	"net/http"
@@ -621,6 +622,46 @@ func (s *Server) mailSend(w http.ResponseWriter, r *http.Request, au *authUser) 
 		return
 	}
 
+	// Resolve the complete envelope before saving or delivering anything.
+	all := append(append(append([]string{}, to...), cc...), bcc...)
+	var local, remote []string
+	seen := map[string]bool{}
+	for _, addr := range all {
+		users, err := s.store.ResolveRecipients(r.Context(), addr)
+		if err == nil {
+			direct := false
+			if len(users) == 1 {
+				_, e := s.store.ResolveRecipient(r.Context(), addr)
+				direct = e == nil
+			}
+			for _, recipient := range users {
+				key := "local:" + recipient.ID
+				if !seen[key] {
+					address := recipient.Email
+					if direct {
+						address = addr
+					}
+					local = append(local, address)
+					seen[key] = true
+				}
+			}
+		} else if errors.Is(err, storage.ErrNotFound) {
+			if !seen["remote:"+addr] {
+				remote = append(remote, addr)
+				seen["remote:"+addr] = true
+			}
+		} else {
+			code := http.StatusServiceUnavailable
+			message := "recipient lookup unavailable"
+			if errors.Is(err, storage.ErrNoRecipients) {
+				code = http.StatusBadRequest
+				message = err.Error()
+			}
+			writeJSON(w, code, map[string]string{"error": message})
+			return
+		}
+	}
+
 	// Save copy to Sent
 	sentPath, _ := s.ms.EnsureFolder(user.Email, "Sent")
 	sentMB, err := s.store.EnsureMailbox(r.Context(), user.ID, "Sent", sentPath)
@@ -637,16 +678,6 @@ func (s *Server) mailSend(w http.ResponseWriter, r *http.Request, au *authUser) 
 		}
 	}
 
-	all := append(append([]string{}, to...), cc...)
-	all = append(all, bcc...)
-	var local, remote []string
-	for _, addr := range all {
-		if _, err := s.store.ResolveRecipient(r.Context(), addr); err == nil {
-			local = append(local, addr)
-		} else {
-			remote = append(remote, addr)
-		}
-	}
 	for _, rcpt := range local {
 		ru, err := s.store.ResolveRecipient(r.Context(), rcpt)
 		if err != nil {

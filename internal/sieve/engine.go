@@ -168,12 +168,17 @@ func (e *Engine) FileInto(ctx context.Context, user *storage.User, folder string
 
 func (e *Engine) redirectLocal(ctx context.Context, fromUser *storage.User, addr string, data []byte, msgid string) error {
 	addr = strings.ToLower(strings.Trim(addr, "<> "))
-	u, err := e.Store.ResolveRecipient(ctx, addr)
+	users, err := e.Store.ResolveRecipients(ctx, addr)
 	if err != nil {
 		return fmt.Errorf("non-local redirect not supported yet: %w", err)
 	}
 	_ = fromUser
-	return e.FileInto(ctx, u, "INBOX", nil, data, msgid)
+	for _, user := range users {
+		if err := e.FileInto(ctx, user, "INBOX", nil, data, msgid); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Execute loads and runs a Sieve script, returning normalized actions.

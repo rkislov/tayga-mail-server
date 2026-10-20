@@ -3,6 +3,7 @@ package flowsync
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -91,6 +92,13 @@ func (h *ewsHandler) directoryEWS(ctx context.Context, u *storage.User, op, body
 			entries = append(entries, directoryEntry{name: room.DisplayName, email: room.Email, kind: "Mailbox", displayType: displayType})
 		}
 		rooms = visibleRooms
+		groups, e := h.store.ListDirectoryGroups(ctx, u.DomainID)
+		if e != nil {
+			return "", e
+		}
+		for _, group := range groups {
+			entries = append(entries, directoryEntry{name: group.Name, email: group.Email, kind: "PublicDL", displayType: 1})
+		}
 	}
 	var b strings.Builder
 	switch op {
@@ -104,6 +112,22 @@ func (h *ewsHandler) directoryEWS(ctx context.Context, u *storage.User, op, body
 		return ewsDirectResponse(op, "NoError", "", "<m:RoomLists>"+b.String()+"</m:RoomLists>"), nil
 	case "GetRooms", "ExpandDL":
 		requested := strings.TrimSpace(req.findValue("EmailAddress"))
+		if op == "ExpandDL" && enabled == "true" {
+			// Only groups in the caller's visible directory may be expanded.
+			for _, entry := range entries {
+				if entry.kind != "PublicDL" || !strings.EqualFold(entry.email, requested) {
+					continue
+				}
+				members, e := h.store.ResolveRecipients(ctx, entry.email)
+				if e != nil && !errors.Is(e, storage.ErrNoRecipients) {
+					return "", e
+				}
+				for _, member := range members {
+					b.WriteString("<t:Mailbox>" + (directoryEntry{name: member.DisplayName, email: member.Email, kind: "Mailbox"}).mailbox() + "</t:Mailbox>")
+				}
+				return ewsDLExpansion(b.String()), nil
+			}
+		}
 		if enabled != "true" || !strings.EqualFold(requested, roomList) {
 			if op == "GetRooms" {
 				return ewsDirectResponse(op, "ErrorNameResolutionNoResults", "Room list not found", ""), nil
@@ -124,7 +148,7 @@ func (h *ewsHandler) directoryEWS(ctx context.Context, u *storage.User, op, body
 		if op == "GetRooms" {
 			return ewsDirectResponse(op, "NoError", "", "<m:Rooms>"+b.String()+"</m:Rooms>"), nil
 		}
-		return `<m:ExpandDLResponse` + ewsNamespaces + `><m:ResponseMessages><m:ExpandDLResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:DLExpansion IncludesLastItemInRange="true">` + b.String() + `</m:DLExpansion></m:ExpandDLResponseMessage></m:ResponseMessages></m:ExpandDLResponse>`, nil
+		return ewsDLExpansion(b.String()), nil
 	}
 	query := strings.ToLower(strings.TrimSpace(req.value("UnresolvedEntry")))
 	query = strings.TrimPrefix(query, "smtp:")
@@ -237,6 +261,9 @@ func (h *ewsHandler) directoryEWS(ctx context.Context, u *storage.User, op, body
 		class, code = "Warning", "ErrorNameResolutionMultipleResults"
 	}
 	return fmt.Sprintf(`<m:ResolveNamesResponse%s><m:ResponseMessages><m:ResolveNamesResponseMessage ResponseClass="%s"><m:ResponseCode>%s</m:ResponseCode><m:ResolutionSet TotalItemsInView="%d" IncludesLastItemInRange="%t">%s</m:ResolutionSet></m:ResolveNamesResponseMessage></m:ResponseMessages></m:ResolveNamesResponse>`, ewsNamespaces, class, code, len(matches), last, b.String()), nil
+}
+func ewsDLExpansion(payload string) string {
+	return `<m:ExpandDLResponse` + ewsNamespaces + `><m:ResponseMessages><m:ExpandDLResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:DLExpansion IncludesLastItemInRange="true">` + payload + `</m:DLExpansion></m:ExpandDLResponseMessage></m:ResponseMessages></m:ExpandDLResponse>`
 }
 func (n *protocolNode) findValue(name string) string {
 	if child := n.find(name); child != nil {
