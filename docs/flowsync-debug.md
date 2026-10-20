@@ -21,3 +21,5 @@ journalctl -u tayga --since '10 minutes ago' -o cat | grep 'flowsync'
 ```
 
 После диагностики установите `protocol_debug: false` и перезапустите службу, чтобы прекратить подробные записи. Обычный журнал запросов остаётся включённым. HTTP 200 не означает успешную операцию Exchange: проверяйте `result` и `ResponseCode`.
+
+Для SendMail/SmartReply/SmartForward поле `result=compose_accepted` означает приём в очередь отправки, а не доставку внешнему получателю. `compose_source_not_found`, `compose_invalid_mime`, `compose_merge_failed` и `compose_submission_failed` различают причины отказа; окончательная доставка проверяется в почтовом журнале. MIME и содержимое писем в эти диагностические сообщения не попадают.

@@ -83,7 +83,12 @@ func parseMessageContent(raw []byte) (messageContent, error) {
 			}
 			if media != "text/plain" && media != "text/html" {
 				_, params, _ := h.ContentType()
-				out.Attachments = append(out.Attachments, messageAttachment{Name: params["name"], ContentType: media, ContentID: strings.Trim(h.Get("Content-ID"), " <>"), ContentLocation: h.Get("Content-Location"), Inline: true, Data: data})
+				_, disposition, _ := h.ContentDisposition()
+				name := disposition["filename"]
+				if name == "" {
+					name = params["name"]
+				}
+				out.Attachments = append(out.Attachments, messageAttachment{Name: name, ContentType: media, ContentID: strings.Trim(h.Get("Content-ID"), " <>"), ContentLocation: h.Get("Content-Location"), Inline: true, Data: data})
 			}
 		case *msgmail.AttachmentHeader:
 			name, _ := h.Filename()

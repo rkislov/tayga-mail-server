@@ -10,22 +10,7 @@ import (
 )
 
 func (h *easHandler) sendMail(ctx context.Context, u *storage.User, body []byte) (string, error) {
-	if extractTag(string(body), "ClientId") == "" {
-		return `<SendMail xmlns="ComposeMail:"><Status>101</Status></SendMail>`, nil
-	}
-	raw, err := base64.StdEncoding.DecodeString(extractTag(string(body), "Mime"))
-	if err != nil {
-		return `<SendMail xmlns="ComposeMail:"><Status>101</Status></SendMail>`, nil
-	}
-	doc, err := parseProtocolXML(body)
-	if err != nil {
-		return "", err
-	}
-	if err = h.sender.send(ctx, u, extractTag(string(body), "ClientId"), raw, doc.find("SaveInSentItems") != nil); err != nil {
-		return `<SendMail xmlns="ComposeMail:"><Status>110</Status></SendMail>`, nil
-	}
-	// MS-ASCMD: successful SendMail is HTTP 200 with an empty body.
-	return "", nil
+	return h.composeMail(ctx, u, body, "SendMail")
 }
 func (h *easHandler) itemOperations(ctx context.Context, u *storage.User, body []byte) (string, error) {
 	doc, err := parseProtocolXML(body)
