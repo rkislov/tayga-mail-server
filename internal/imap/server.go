@@ -75,6 +75,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	for _, sp := range specs {
 		srv := imapserv.New(be)
+		srv.Enable(charsetSearchExtension{})
 		srv.Addr = sp.addr
 		srv.AllowInsecureAuth = tlsCfg == nil
 		if tlsCfg != nil {

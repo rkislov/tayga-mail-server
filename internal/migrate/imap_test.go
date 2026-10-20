@@ -15,9 +15,24 @@ import (
 	"github.com/tayga/tms/internal/config"
 	"github.com/tayga/tms/internal/mailstore"
 	"github.com/tayga/tms/internal/storage"
+	"github.com/tayga/tms/internal/testutil/mailfixture"
 )
 
 func TestIMAPArchiveImportIndexedAndReadable(t *testing.T) {
+	raw := []byte("From: source@ex.com\r\nTo: u@ex.com\r\nSubject: Migrated archive\r\nMessage-ID: <archive@ex.com>\r\n\r\n" + string(bytes.Repeat([]byte("archive body "), 100)))
+	testIMAPArchiveImport(t, raw, "Migrated archive", "archive")
+}
+
+func TestIMAPLegacyImport(t *testing.T) {
+	for _, cs := range mailfixture.Charsets {
+		t.Run(cs.Label, func(t *testing.T) {
+			testIMAPArchiveImport(t, mailfixture.Message(t, cs.Label, "quoted-printable", true), mailfixture.Subject, "октябрь")
+		})
+	}
+}
+
+func testIMAPArchiveImport(t *testing.T, raw []byte, subject, query string) {
+	t.Helper()
 	ctx := context.Background()
 	dir := t.TempDir()
 	st, err := storage.Open(ctx, config.StorageConfig{Driver: "sqlite", SQLite: config.SQLiteConfig{Path: filepath.Join(dir, "db")}})
@@ -35,8 +50,8 @@ func TestIMAPArchiveImportIndexedAndReadable(t *testing.T) {
 	source, _ := be.Login(nil, "username", "password")
 	_ = source.CreateMailbox("Archive")
 	box, _ := source.GetMailbox("Archive")
-	raw := []byte("From: source@ex.com\r\nTo: u@ex.com\r\nSubject: Migrated archive\r\nMessage-ID: <archive@ex.com>\r\n\r\n" + string(bytes.Repeat([]byte("archive body "), 100)))
-	if err = box.CreateMessage([]string{imap.SeenFlag}, time.Now(), bytes.NewReader(raw)); err != nil {
+	when := time.Date(2023, 12, 19, 8, 15, 0, 0, time.UTC)
+	if err = box.CreateMessage([]string{imap.SeenFlag}, when, bytes.NewReader(raw)); err != nil {
 		t.Fatal(err)
 	}
 	srv := imapserver.New(be)
@@ -76,12 +91,16 @@ func TestIMAPArchiveImportIndexedAndReadable(t *testing.T) {
 	if err != nil || len(msgs) != 1 {
 		t.Fatalf("messages %d: %v", len(msgs), err)
 	}
-	if !msgs[0].Archived || msgs[0].Subject != "Migrated archive" {
+	if !msgs[0].Archived || msgs[0].Subject != subject || !msgs[0].InternalDate.Equal(when) || msgs[0].Flags != imap.SeenFlag {
 		t.Fatalf("headers %+v", msgs[0])
 	}
 	data, err := ms.Read(msgs[0].FilePath)
 	if err != nil || !bytes.Equal(raw, data) {
 		t.Fatalf("read archive %v", err)
+	}
+	hits, err := st.SearchMessages(ctx, user.ID, mb.ID, "", "", "", query, 50)
+	if err != nil || len(hits) != 1 {
+		t.Fatalf("imported message search %d: %v", len(hits), err)
 	}
 	// A second migration must skip the already imported compressed message.
 	job.Copied = 0
