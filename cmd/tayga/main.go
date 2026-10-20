@@ -362,6 +362,7 @@ func run(cfgPath string) error {
 	authn := auth.NewLayer(store, cfg.LDAP, cfg.MFA, cfg.OIDC)
 	if dir, ok := authn.LDAP.(*auth.Directory); ok {
 		dir.StartGroupSyncLoop(ctx, log)
+		dir.StartOrganizationSyncLoop(ctx, log)
 	}
 	ms := mailstore.New(cfg.Mailstore.Root)
 	var objBlob mailstore.Blob

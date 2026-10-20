@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"strings"
 	"time"
@@ -183,16 +184,22 @@ func (d *Directory) dial(dc config.LDAPDomainConfig) (*ldap.Conn, error) {
 		addr = dc.URL
 	}
 
+	timeout := dc.Timeout
+	if timeout <= 0 {
+		timeout = 10 * time.Second
+	}
+	options := []ldap.DialOpt{ldap.DialWithDialer(&net.Dialer{Timeout: timeout})}
 	var conn *ldap.Conn
 	switch strings.ToLower(u.Scheme) {
 	case "ldaps":
-		conn, err = ldap.DialURL(dc.URL, ldap.DialWithTLSConfig(&tls.Config{MinVersion: tls.VersionTLS12}))
+		conn, err = ldap.DialURL(dc.URL, append(options, ldap.DialWithTLSConfig(&tls.Config{MinVersion: tls.VersionTLS12}))...)
 	default:
-		conn, err = ldap.DialURL(dc.URL)
+		conn, err = ldap.DialURL(dc.URL, options...)
 	}
 	if err != nil {
 		return nil, err
 	}
+	conn.SetTimeout(timeout)
 	if dc.StartTLS && strings.ToLower(u.Scheme) != "ldaps" {
 		if err := conn.StartTLS(&tls.Config{MinVersion: tls.VersionTLS12, ServerName: u.Hostname()}); err != nil {
 			conn.Close()

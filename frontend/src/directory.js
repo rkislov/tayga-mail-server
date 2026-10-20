@@ -20,6 +20,9 @@ function directoryErrorText(message) {
     'already exists':['Адрес уже занят пользователем, алиасом или группой.','Address is already in use.'],
     'directory changed; reload before saving':['Оргструктура изменилась. Обновите её и повторите действие.','The directory changed. Refresh it and try again.'],
     'department contains child departments':['Сначала перенесите или удалите вложенные отделы.','Move or remove child departments first.'],
+    'directory is managed by LDAP; select manual mode to edit':['Оргструктура обновляется из LDAP. Для редактирования выберите ручной режим.','The directory is managed by LDAP. Select manual mode to edit.'],
+    'LDAP authentication is not enabled for this domain':['Для этого домена не настроена авторизация LDAP/AD.','LDAP/AD authentication is not configured for this domain.'],
+    'directory unavailable':['Не удалось прочитать или обновить справочник. Прежнее дерево сохранено. Проверьте подключение и настройки источника.','Could not read or update the directory. The previous tree was retained. Check the connection and source settings.'],
     'distribution group has no active recipients':['В группе нет активных получателей.','The group has no active recipients.']
   };
   return errors[message]?directoryLabel(...errors[message]):message;
@@ -46,8 +49,37 @@ async function openOrganization(domainID='') {
   const expanded=new Set(['']),limits=new Map();
   const refresh=directoryButton(t('refresh'),()=>load());
   toolbar.append(search,refresh);
-  if(admin)toolbar.append(directoryButton(directoryLabel('Добавить подразделение','Add department'),()=>editDepartment(data,null,selected==='unassigned'?'':selected,load),true));
-  layout.append(tree,detail);dialog.append(toolbar,status,layout);
+  const add=directoryButton(directoryLabel('Добавить подразделение','Add department'),()=>editDepartment(data,null,selected==='unassigned'?'':selected,load),true);
+  const sourceButton=directoryButton(directoryLabel('Источник','Source'),()=>editDirectorySource(data,load));
+  const preview=directoryButton(directoryLabel('Проверить LDAP','Preview LDAP'),()=>runImport(false));
+  const sync=directoryButton(directoryLabel('Синхронизировать','Synchronize'),()=>runImport(true));
+  const sourceStatus=document.createElement('p');sourceStatus.className='meta org-source-status';
+  if(admin)toolbar.append(sourceButton,preview,sync,add);
+  layout.append(tree,detail);dialog.append(toolbar,sourceStatus,status,layout);
+  let importing=false;
+  function sourceControls(){
+    if(!admin)return;
+    add.disabled=!data?.editable||importing;sourceButton.disabled=!data||importing;
+    preview.hidden=sync.hidden=data?.source?.mode!=='ldap';
+    preview.disabled=sync.disabled=!data?.ldap_available||importing;
+    refresh.disabled=importing;
+    const source=data?.source;
+    sourceStatus.textContent=!source?'':source.mode==='ldap'
+      ?directoryLabel('Источник: группы LDAP/AD. ','Source: LDAP/AD groups. ')+(source.last_success?directoryLabel('Обновлено: ','Updated: ')+new Date(source.last_success).toLocaleString()+'. ':directoryLabel('Синхронизация ещё не выполнялась. ','Not synchronized yet. '))+(source.last_error?directoryLabel('Последняя попытка не удалась; прежнее дерево сохранено.','Last attempt failed; the previous tree was retained.'):'')
+      :directoryLabel('Источник: ручное управление администратором домена.','Source: managed manually by the domain administrator.');
+  }
+  async function runImport(apply){
+    if(importing)return;
+    if(apply&&!await askConfirm(directoryLabel('Обновить подразделения из LDAP? Удалённые из выбранной ветки группы исчезнут из справочника. Ручные группы и почтовые ящики сохранятся.','Update departments from LDAP? Groups removed from the selected branch will disappear from the directory. Manual groups and mailboxes will be kept.')))return;
+    importing=true;sourceControls();status.textContent=directoryLabel('Чтение групп и проверка дерева…','Reading groups and validating the hierarchy…');
+    try{
+      const report=await api(endpoint+(apply?'/sync':'/preview')+'?domain_id='+encodeURIComponent(domainID),{method:'POST'});
+      if(apply){composeContactsCache=null;await load();}
+      status.textContent='';showDirectoryPreview(report,apply);
+    }catch(e){await load();status.textContent=directoryErrorText(e.message);}
+    finally{importing=false;sourceControls();}
+  }
+  sourceControls();
   function compose(email){dialog.close();openCompose({to:email});}
   function select(id){selected=id;page=0;render();}
   function render(){
@@ -106,7 +138,7 @@ async function openOrganization(domainID='') {
     const actions=document.createElement('div');actions.className='org-toolbar';
     if(group){
       actions.append(directoryButton(directoryLabel('Написать подразделению','Email department'),()=>compose(group.email)));
-      if(admin){
+      if(admin&&data.editable){
         actions.append(directoryButton(directoryLabel('Изменить','Edit'),()=>editDepartment(data,group,'',load)));
         const remove=directoryButton(directoryLabel('Удалить','Delete'),async()=>{
           if(!await askConfirm(directoryLabel('Удалить подразделение и его адрес рассылки? Почтовые ящики сотрудников сохранятся.','Delete this department and its distribution address? Employee mailboxes will be kept.'),{danger:true}))return;
@@ -162,17 +194,17 @@ async function openOrganization(domainID='') {
       data=result;
       data.users.sort((a,b)=>(a.name||a.email).localeCompare(b.name||b.email,lang,{numeric:true,sensitivity:'base'}));
       if(selected&&selected!=='unassigned'&&!data.groups.some(g=>g.id===selected))selected='';
-      status.textContent='';render();
+      status.textContent='';sourceControls();render();
     }
     catch(e){status.textContent=directoryErrorText(e.message);}
-    finally{refresh.disabled=false;}
+    finally{refresh.disabled=importing;}
   }
   search.oninput=()=>{page=0;render();};
   await load();
 }
 
 function editDepartment(data, group, parent, saved) {
-  if(!data)return;
+  if(!data?.editable)return;
   const dialog=directoryDialog(directoryLabel(group?'Изменить подразделение':'Новое подразделение',group?'Edit department':'New department'),'org-editor');
   const form=document.createElement('form');form.className='stack-gap';
   function field(title,control){const label=document.createElement('label');label.className='field';const text=document.createElement('span');text.className='field-label';text.textContent=title;label.append(text,control);form.append(label);return control;}
@@ -208,6 +240,84 @@ function editDepartment(data, group, parent, saved) {
       composeContactsCache=null;dialog.close();await saved();
     }catch(e){status.textContent=directoryErrorText(e.message);save.disabled=false;}
   };name.focus();
+}
+function editDirectorySource(data,saved){
+  if(!data?.source)return;
+  const dialog=directoryDialog(directoryLabel('Источник оргструктуры','Organization source'),'org-editor');
+  const form=document.createElement('form');form.className='stack-gap';
+  const source=data.source;
+  const field=(title,control,host=form)=>{
+    const label=document.createElement('label'),text=document.createElement('span');label.className='field';text.className='field-label';text.textContent=title;
+    control.className='field-input';label.append(text,control);host.append(label);return control;
+  };
+  const mode=field(directoryLabel('Способ управления','Management mode'),document.createElement('select'));
+  mode.append(new Option(directoryLabel('Вручную администратором домена','Manually by domain administrator'),'manual'),new Option(directoryLabel('Группы LDAP / Active Directory','LDAP / Active Directory groups'),'ldap'));
+  mode.options[1].disabled=!data.ldap_available;mode.value=source.mode;
+  const hint=document.createElement('p');hint.className='meta';
+  hint.textContent=data.ldap_available
+    ?directoryLabel('Вложенные группы образуют дерево отделов. Участники связываются с существующими почтовыми ящиками этого домена.','Nested groups form the department hierarchy. Members are matched to existing mailboxes in this domain.')
+    :directoryLabel('Импорт станет доступен после настройки LDAP/AD-авторизации этого домена на сервере.','Import becomes available when LDAP/AD authentication is configured for this domain on the server.');
+  form.append(hint);
+  const ldapFields=document.createElement('fieldset');ldapFields.className='org-source-fields stack-gap';
+  const legend=document.createElement('legend');legend.textContent=directoryLabel('Настройки групп','Group settings');ldapFields.append(legend);
+  const base=field(directoryLabel('Ветка групп (Base DN)','Group branch (Base DN)'),document.createElement('input'),ldapFields);base.value=source.base_dn||data.ldap_root||'';base.required=true;base.maxLength=2000;
+  const boundary=document.createElement('p');boundary.className='meta';boundary.textContent=directoryLabel('Доступная ветка: ','Allowed branch: ')+(data.ldap_root||'—');ldapFields.append(boundary);
+  const filter=field(directoryLabel('Фильтр групп LDAP','LDAP group filter'),document.createElement('input'),ldapFields);filter.value=source.filter;filter.required=true;filter.maxLength=2000;
+  const attrs=document.createElement('div');attrs.className='org-source-attributes';ldapFields.append(attrs);
+  const inputs={};
+  for(const [key,title] of [['name_attr',directoryLabel('Название отдела','Department name')],['email_attr',directoryLabel('Адрес группы','Group email')],['member_attr',directoryLabel('Состав группы','Group members')]]){
+    const input=field(title,document.createElement('input'),attrs);input.value=source[key];input.required=true;input.pattern='[a-zA-Z][a-zA-Z0-9-]{0,63}';inputs[key]=input;
+  }
+  const interval=field(directoryLabel('Обновление по расписанию','Scheduled updates'),document.createElement('select'),ldapFields);
+  for(const [n,title] of [[0,directoryLabel('Только по кнопке','On demand only')],[5,directoryLabel('Каждые 5 минут','Every 5 minutes')],[15,directoryLabel('Каждые 15 минут','Every 15 minutes')],[60,directoryLabel('Каждый час','Every hour')],[360,directoryLabel('Каждые 6 часов','Every 6 hours')],[1440,directoryLabel('Раз в сутки','Daily')]])interval.append(new Option(title,String(n)));
+  if(![0,5,15,60,360,1440].includes(source.interval_minutes))interval.append(new Option(directoryLabel('Каждые ','Every ')+source.interval_minutes+directoryLabel(' минут',' minutes'),String(source.interval_minutes)));
+  interval.value=String(source.interval_minutes);
+  const warning=document.createElement('p');warning.className='meta';
+  warning.textContent=directoryLabel('В режиме LDAP дерево редактируется в каталоге. Импорт сохраняет ручные группы. При возврате в ручной режим текущее дерево остаётся; следующее включение LDAP заменит изменения импортированных групп.','In LDAP mode, edit the hierarchy in the directory. Import preserves manual groups. Switching to manual mode retains the current tree; re-enabling LDAP will replace edits to imported groups.');
+  form.append(ldapFields,warning);
+  const status=document.createElement('p');status.className='msg';status.setAttribute('role','status');
+  const actions=document.createElement('div');actions.className='org-toolbar';
+  const save=directoryButton(directoryLabel('Сохранить','Save'),null,true);save.type='submit';
+  actions.append(directoryButton(t('cancel'),()=>dialog.close()),save);form.append(status,actions);dialog.append(form);
+  const change=()=>{ldapFields.hidden=ldapFields.disabled=mode.value!=='ldap';};mode.onchange=change;change();
+  form.onsubmit=async event=>{
+    event.preventDefault();if(save.disabled)return;save.disabled=true;
+    try{
+      await api('/api/v1/admin/directory/source?domain_id='+encodeURIComponent(data.domain.id),{method:'PUT',body:JSON.stringify({
+        mode:mode.value,base_dn:base.value,filter:filter.value,name_attr:inputs.name_attr.value,email_attr:inputs.email_attr.value,member_attr:inputs.member_attr.value,interval_minutes:Number(interval.value),revision:source.revision
+      })});
+      dialog.close();await saved();
+    }catch(e){status.textContent=directoryErrorText(e.message);save.disabled=false;}
+  };
+}
+
+function showDirectoryPreview(report,applied){
+  const dialog=directoryDialog(directoryLabel(applied?'Оргструктура обновлена':'Предварительный просмотр LDAP',applied?'Organization updated':'LDAP preview'));
+  const summary=document.createElement('p');summary.setAttribute('role','status');
+  summary.textContent=directoryLabel('Подразделений: ','Departments: ')+report.groups.length+directoryLabel(' · Участий сотрудников: ',' · Employee memberships: ')+report.memberships+directoryLabel(' · Без местного ящика: ',' · Without a local mailbox: ')+report.skipped_members;
+  const note=document.createElement('p');note.className='meta';note.textContent=applied
+    ?directoryLabel('Импорт применён. Почтовые ящики и ручные группы сохранены.','Import applied. Mailboxes and manual groups have been retained.')
+    :directoryLabel('Проверка завершена, дерево не изменено. Кнопка «Синхронизировать» повторно прочитает каталог и применит актуальное дерево.','Validation completed; the tree is unchanged. Synchronize reads the directory again and applies the current hierarchy.');
+  dialog.append(summary,note);
+  if(report.warnings?.length){const warnings=document.createElement('details'),title=document.createElement('summary'),list=document.createElement('ul');title.textContent=directoryLabel('Участники без почтового ящика','Members without mailboxes');
+    for(const warning of report.warnings){const item=document.createElement('li');item.textContent=warning;list.append(item);}warnings.append(title,list);dialog.append(warnings);}
+  const toolbar=document.createElement('div');toolbar.className='org-toolbar';
+  const search=document.createElement('input');search.type='search';search.className='field-input';search.placeholder=directoryLabel('Поиск подразделения или адреса','Search department or address');search.setAttribute('aria-label',search.placeholder);toolbar.append(search);
+  const wrap=document.createElement('div');wrap.className='org-table-wrap';
+  const table=document.createElement('table');table.className='admin-users-table';const head=document.createElement('thead'),row=document.createElement('tr');
+  for(const title of [directoryLabel('Подразделение','Department'),'Email',directoryLabel('Родительский отдел','Parent department'),directoryLabel('Сотрудников','Members')]){const th=document.createElement('th');th.scope='col';th.textContent=title;row.append(th);}head.append(row);table.append(head);
+  const body=document.createElement('tbody');table.append(body);wrap.append(table);
+  const pager=document.createElement('div');pager.className='org-toolbar';dialog.append(toolbar,wrap,pager);
+  let page=0;
+  function render(){
+    const q=search.value.trim().toLocaleLowerCase(),groups=report.groups.filter(g=>!q||[g.name,g.email,g.parent].join(' ').toLocaleLowerCase().includes(q));
+    page=Math.max(0,Math.min(page,Math.ceil(groups.length/25)-1));body.replaceChildren();
+    for(const group of groups.slice(page*25,(page+1)*25)){const tr=document.createElement('tr');for(const value of [group.name,group.email,group.parent||'—',group.member_count]){const td=document.createElement('td');td.textContent=String(value);tr.append(td);}body.append(tr);}
+    pager.replaceChildren();const prev=directoryButton('‹',()=>{page--;render();}),next=directoryButton('›',()=>{page++;render();}),range=document.createElement('span');
+    prev.setAttribute('aria-label',directoryLabel('Предыдущая страница','Previous page'));next.setAttribute('aria-label',directoryLabel('Следующая страница','Next page'));
+    prev.disabled=page===0;next.disabled=(page+1)*25>=groups.length;range.textContent=(groups.length?page*25+1:0)+'–'+Math.min((page+1)*25,groups.length)+' / '+groups.length;pager.append(prev,range,next);
+  }
+  search.oninput=()=>{page=0;render();};render();
 }
 $('btn-org-structure')?.addEventListener('click',()=>openOrganization());
 $('btn-org-structure-admin')?.addEventListener('click',()=>{if(tenantNav.domainID)openOrganization(tenantNav.domainID);});

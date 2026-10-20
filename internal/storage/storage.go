@@ -143,6 +143,11 @@ type Driver interface {
 	ListDirectoryGroups(ctx context.Context, domainID string) ([]*DirectoryGroup, error)
 	SaveDirectoryGroup(ctx context.Context, group *DirectoryGroup) (*DirectoryGroup, error)
 	DeleteDirectoryGroup(ctx context.Context, domainID, id string, revision int64) error
+	GetDirectorySource(ctx context.Context, domainID string) (*DirectorySource, error)
+	SaveDirectorySource(ctx context.Context, domainID string, source DirectorySource) (*DirectorySource, error)
+	ApplyDirectoryImport(ctx context.Context, domainID string, revision int64, groups []DirectoryImportGroup) (*DirectorySource, error)
+	ValidateDirectoryImport(ctx context.Context, domainID string, revision int64, groups []DirectoryImportGroup) error
+	RecordDirectoryImportError(ctx context.Context, domainID string, revision int64, message string) error
 
 	EnsureMailbox(ctx context.Context, userID, name, path string) (*Mailbox, error)
 	GetMailbox(ctx context.Context, userID, name string) (*Mailbox, error)
