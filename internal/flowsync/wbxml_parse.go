@@ -176,7 +176,7 @@ func wbFieldName(page, tagID byte) string {
 	case cpEmail:
 		return map[byte]string{0x16: "To", 0x18: "From", 0x14: "Subject", 0x17: "Cc", 0x19: "ReplyTo", 0x0F: "DateReceived", 0x12: "Importance", 0x15: "Read", 0x13: "MessageClass"}[tagID]
 	case cpCalendar:
-		return map[byte]string{0x06: "AllDayEvent", 0x0D: "BusyStatus", 0x11: "DTStamp", 0x12: "EndTime", 0x17: "Location", 0x18: "MeetingStatus", 0x19: "OrganizerEmail", 0x1A: "OrganizerName", 0x26: "Subject", 0x28: "UID", 0x27: "StartTime", 0x25: "Sensitivity", 0x05: "Timezone"}[tagID]
+		return map[byte]string{0x06: "AllDayEvent", 0x0D: "BusyStatus", 0x11: "DTStamp", 0x12: "EndTime", 0x17: "Location", 0x18: "MeetingStatus", 0x19: "OrganizerEmail", 0x1A: "OrganizerName", 0x26: "Subject", 0x28: "UID", 0x27: "StartTime", 0x25: "Sensitivity", 0x05: "Timezone", 0x3C: "ClientUid"}[tagID]
 	case cpContacts:
 		return map[byte]string{0x05: "Anniversary", 0x06: "AssistantName", 0x08: "Birthday", 0x0D: "BusinessAddressCity", 0x11: "BusinessAddressStreet", 0x12: "BusinessFaxNumber", 0x13: "BusinessPhoneNumber", 0x19: "CompanyName", 0x1A: "Department", 0x1B: "Email1Address", 0x1C: "Email2Address", 0x1D: "Email3Address", 0x1E: "FileAs", 0x1F: "FirstName", 0x27: "HomePhoneNumber", 0x28: "JobTitle", 0x29: "LastName", 0x2A: "MiddleName", 0x2B: "MobilePhoneNumber", 0x2C: "OfficeLocation", 0x37: "WebPage"}[tagID]
 	case 12:

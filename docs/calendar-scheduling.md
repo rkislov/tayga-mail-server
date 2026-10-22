@@ -184,3 +184,20 @@ Calendar Sync Add/Change/Delete использует авторизованны�
 Проверки: реальный кодировщик/декодировщик WBXML и HTTP Sync Add/Change, обратная передача координат в 16.1, очистка и частичная правка, совместимость 14.1; API редактирования импортированного события с повторением, напоминанием и участниками; браузерная форма на 1440 и 390 px, часовой пояс, события на весь день, повторное нажатие, конфликт ETag и смена аккаунта. Проверки используют тестовые данные и не отправляют приглашения рабочим пользователям.
 
 Источники: [структурированная Location](https://learn.microsoft.com/en-us/openspecs/exchange_server_protocols/ms-asairs/b3701557-6306-4293-8b87-a796b4a3f9e0), [типы папок](https://learn.microsoft.com/en-us/openspecs/exchange_server_protocols/ms-ascmd/8f3efbfb-9a60-4f6c-a031-f0c863b9d4b7), [проверка поведения вторичных календарей iOS поставщиком Exchange-совместимого сервера](https://portal.smartertools.com/community/a94968/when-will-you-improve-fix-calendar-features.aspx).
+## Идентификаторы событий iPhone (ActiveSync 16.x)
+
+При создании события FlowSync возвращает серверный `UID` непосредственно в
+`Responses/Add/ApplicationData`. Поле `ClientUid` (WBXML Calendar, `0x3C`)
+связывает повторные запросы создания с уже сохранённым событием, в том числе
+после смены временного `ClientId`, переподключения или перезапуска сервера.
+Повторный Add не перезаписывает более новые изменения и не рассылает приглашения
+заново. Обычное редактирование выполняется через Change с прежним `ServerId`.
+
+Разные `ClientUid` считаются разными событиями даже при совпадении названия,
+времени и места. Уже возникшие дубликаты автоматически не объединяются:
+совпадение этих полей само по себе не подтверждает, что события одинаковые.
+Исправление не требует сброса SyncKey или удаления учётной записи.
+
+Основание: [MS-ASCAL ClientUid](https://learn.microsoft.com/en-us/openspecs/exchange_server_protocols/ms-ascal/d22282da-0cc5-4fba-b4b4-5aef341a6c8e),
+[MS-ASCAL UID](https://learn.microsoft.com/en-us/openspecs/exchange_server_protocols/ms-ascal/8f1fb00c-a156-49e8-9f54-478ecb0ce743),
+[MS-ASCMD Add](https://learn.microsoft.com/en-us/openspecs/exchange_server_protocols/ms-ascmd/22628ffe-b14a-4300-aec7-187b0c37a1dc).
