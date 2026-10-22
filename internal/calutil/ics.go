@@ -317,17 +317,7 @@ func ParseICS(data string) (ParseResult, error) {
 			out.Organizer.ScheduleAgent = org.Params.Get("SCHEDULE-AGENT")
 		}
 		for _, prop := range event.Props.Values(ical.PropAttendee) {
-			a := Attendee{
-				Name:          prop.Params.Get(ical.ParamCommonName),
-				Role:          prop.Params.Get(ical.ParamRole),
-				PartStat:      prop.Params.Get(ical.ParamParticipationStatus),
-				CUType:        prop.Params.Get("CUTYPE"),
-				ScheduleAgent: prop.Params.Get("SCHEDULE-AGENT"),
-				RSVP:          strings.EqualFold(prop.Params.Get(ical.ParamRSVP), "TRUE"),
-			}
-			if u, err := url.Parse(prop.Value); err == nil {
-				a.Email = emailFromURI(u)
-			}
+			a := attendeeFromProp(prop)
 			if a.Email != "" {
 				out.Attendees = append(out.Attendees, a)
 			}
@@ -349,6 +339,21 @@ func ParseICS(data string) (ParseResult, error) {
 		break
 	}
 	return out, nil
+}
+
+func attendeeFromProp(prop ical.Prop) Attendee {
+	a := Attendee{
+		Name:          prop.Params.Get(ical.ParamCommonName),
+		Role:          prop.Params.Get(ical.ParamRole),
+		PartStat:      prop.Params.Get(ical.ParamParticipationStatus),
+		CUType:        prop.Params.Get("CUTYPE"),
+		ScheduleAgent: prop.Params.Get("SCHEDULE-AGENT"),
+		RSVP:          strings.EqualFold(prop.Params.Get(ical.ParamRSVP), "TRUE"),
+	}
+	if u, err := url.Parse(prop.Value); err == nil {
+		a.Email = emailFromURI(u)
+	}
+	return a
 }
 
 // ParseAttendees extracts ATTENDEE lines from ICS text.

@@ -90,7 +90,7 @@ func (h *easHandler) applyWritebacks(ctx context.Context, u *storage.User, kind 
 		case kindTasks:
 			res.ServerID, err = h.wbTask(ctx, u, collectionID, op)
 		case kindCalendar:
-			res.ServerID, err = h.wbCalendar(ctx, collectionID, op)
+			res.ServerID, err = h.wbCalendar(ctx, u, collectionID, op)
 		case kindContacts:
 			res.ServerID, err = h.wbContacts(ctx, collectionID, op)
 		case kindNotes:
@@ -117,90 +117,6 @@ func (h *easHandler) applyWritebacks(ctx context.Context, u *storage.User, kind 
 		out = append(out, res)
 	}
 	return out
-}
-
-func (h *easHandler) wbCalendar(ctx context.Context, calendarID string, op clientOp) (string, error) {
-	switch op.Kind {
-	case "add":
-		uid := op.Fields["UID"]
-		if uid == "" {
-			uid = storage.NewID()
-		}
-		href := uid + ".ics"
-		start, end := parseASTime(op.Fields["StartTime"]), parseASTime(op.Fields["EndTime"])
-		data := buildVEVENT(uid, op.Fields["Subject"], op.Fields["Location"], start, end, op.Fields["AllDayEvent"] == "1")
-		o, err := h.store.UpsertCalendarObject(ctx, &storage.CalendarObject{
-			CalendarID: calendarID,
-			UID:        uid,
-			HrefName:   href,
-			Component:  "VEVENT",
-			DTStart:    start,
-			DTEnd:      end,
-			Data:       data,
-		})
-		if err != nil {
-			return "", err
-		}
-		return o.ID, nil
-	case "change":
-		existing, err := h.store.GetCalendarObjectByID(ctx, op.ServerID)
-		if err != nil {
-			return op.ServerID, err
-		}
-		if existing.CalendarID != calendarID {
-			return op.ServerID, storage.ErrUnauthorized
-		}
-		uid := existing.UID
-		if v := op.Fields["UID"]; v != "" {
-			uid = v
-		}
-		start, end := existing.DTStart, existing.DTEnd
-		if t := parseASTime(op.Fields["StartTime"]); t != nil {
-			start = t
-		}
-		if t := parseASTime(op.Fields["EndTime"]); t != nil {
-			end = t
-		}
-		subject := fieldOr(op.Fields["Subject"], parseICalEvent(existing.Data).Summary)
-		location := fieldOr(op.Fields["Location"], parseICalEvent(existing.Data).Location)
-		allDay := existing.DTStart != nil && op.Fields["AllDayEvent"] == "1"
-		if op.Fields["AllDayEvent"] == "" {
-			allDay = parseICalEvent(existing.Data).AllDay
-		}
-		data := buildVEVENT(uid, subject, location, start, end, allDay)
-		changed := map[string]bool{}
-		for field, property := range map[string]string{"Subject": "SUMMARY", "Location": "LOCATION", "StartTime": "DTSTART", "EndTime": "DTEND", "UID": "UID"} {
-			if _, ok := op.Fields[field]; ok {
-				changed[property] = true
-			}
-		}
-		if _, ok := op.Fields["AllDayEvent"]; ok {
-			changed["DTSTART"], changed["DTEND"] = true, true
-		}
-		data = mergeDAVProperties(existing.Data, data, "VEVENT", changed)
-		_, err = h.store.UpsertCalendarObject(ctx, &storage.CalendarObject{
-			ID:         existing.ID,
-			CalendarID: calendarID,
-			UID:        uid,
-			HrefName:   existing.HrefName,
-			Component:  "VEVENT",
-			DTStart:    start,
-			DTEnd:      end,
-			Data:       data,
-		})
-		return existing.ID, err
-	case "delete":
-		existing, err := h.store.GetCalendarObjectByID(ctx, op.ServerID)
-		if err != nil {
-			return op.ServerID, err
-		}
-		if existing.CalendarID != calendarID {
-			return op.ServerID, storage.ErrUnauthorized
-		}
-		return op.ServerID, h.store.DeleteCalendarObject(ctx, calendarID, existing.HrefName)
-	default:
-		return op.ServerID, fmt.Errorf("unknown op")
-	}
 }
 
 func (h *easHandler) wbContacts(ctx context.Context, addressBookID string, op clientOp) (string, error) {

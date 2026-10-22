@@ -27,7 +27,7 @@ func (h *easHandler) collectionSnapshot(ctx context.Context, u *storage.User, id
 	case kindTasks:
 		full, taskHashes, err = h.taskSnapshot(ctx, u, id, "snapshot", nil)
 	case kindCalendar:
-		full, _, err = h.syncCalendar(ctx, id, "snapshot", false, nil)
+		full, _, err = h.syncCalendar(ctx, u, id, "snapshot", false, nil)
 	case kindContacts:
 		full, _, err = h.syncContacts(ctx, id, "snapshot", false, nil)
 	case kindNotes:

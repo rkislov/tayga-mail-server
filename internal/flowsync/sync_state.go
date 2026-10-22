@@ -233,6 +233,18 @@ func (h *easHandler) syncOne(ctx context.Context, u *storage.User, dev *storage.
 		// it again as a server Add would create a duplicate on some clients.
 		acknowledgeTaskAdds(writes, &state)
 	}
+	if kind == kindCalendar {
+		if state.Items == nil {
+			state.Items = map[string]string{}
+		}
+		for _, w := range writes {
+			if w.Kind == "add" && w.Status == 1 {
+				// The Add response already maps the client item to its server ID.
+				// Canonical scheduling metadata may follow as Change, never Add.
+				state.Items[w.ServerID] = "calendar-created"
+			}
+		}
+	}
 	if request.value("GetChanges") == "0" {
 		next := storage.NewID()
 		out := fmt.Sprintf(`<Collection xmlns="AirSync:"><SyncKey>%s</SyncKey><CollectionId>%s</CollectionId><Status>1</Status>%s</Collection>`, next, xmlEscape(id), renderWritebackResponses(writes))
@@ -245,7 +257,7 @@ func (h *easHandler) syncOne(ctx context.Context, u *storage.User, dev *storage.
 	case kindTasks:
 		full, taskHashes, err = h.taskSnapshot(ctx, u, id, "unused", writes)
 	case kindCalendar:
-		full, _, err = h.syncCalendar(ctx, id, "unused", false, writes)
+		full, _, err = h.syncCalendar(ctx, u, id, "unused", false, writes)
 	case kindContacts:
 		full, _, err = h.syncContacts(ctx, id, "unused", false, writes)
 	case kindNotes:
