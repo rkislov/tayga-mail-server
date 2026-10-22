@@ -45,6 +45,10 @@ archives:
       - configs/tayga.example.yaml
       - deploy/systemd/tayga.service
       - docs/setup.md
+      - docs/ha.md
+      - docs/ha-single-site.md
+      - docs/ha-two-sites.md
+      - deploy/ha/*
       - docs/setup-filters.md
       - docs/web-omemo.md
       - docs/xmpp-compatibility-plan.md
