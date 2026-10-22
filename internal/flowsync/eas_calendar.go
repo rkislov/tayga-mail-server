@@ -4,7 +4,9 @@ package flowsync
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/mail"
+	"strconv"
 	"strings"
 	"time"
 
@@ -112,8 +114,8 @@ func editEASCalendar(data string, u *storage.User, op clientOp) (string, error) 
 			}
 		}
 	}
-	if location := op.ApplicationData.child("Location"); location != nil && location.Name.Space == "AirSyncBase:" {
-		fields["Location"] = location.value("DisplayName")
+	if err := editEASLocation(ev, op.ApplicationData, fields); err != nil {
+		return "", err
 	}
 	storedUID, _ := ev.Props.Text("UID")
 	if uid, ok := fields["UID"]; ok && uid != storedUID {
@@ -262,6 +264,71 @@ func editEASCalendar(data string, u *storage.User, op clientOp) (string, error) 
 		return "", err
 	}
 	return out.String(), nil
+}
+
+// MS-ASAIRS Location (16.x) is a replacement property. An omitted property
+// preserves the old point; an empty location clears it. Do not confuse nested
+// DisplayName/Latitude fields with properties of the calendar event itself.
+func editEASLocation(ev *ical.Component, app *protocolNode, fields map[string]string) error {
+	location := app.child("Location")
+	if location != nil && location.Name.Space == "AirSyncBase:" {
+		name := location.value("DisplayName")
+		if name == "" {
+			var address []string
+			for _, key := range []string{"Street", "City", "State", "PostalCode", "Country"} {
+				if value := location.value(key); value != "" {
+					address = append(address, value)
+				}
+			}
+			name = strings.Join(address, ", ")
+		}
+		fields["Location"] = name
+		lat, lon := location.child("Latitude"), location.child("Longitude")
+		geo := ""
+		if lat != nil || lon != nil {
+			if lat == nil || lon == nil {
+				return fmt.Errorf("incomplete calendar coordinates")
+			}
+			a, e1 := strconv.ParseFloat(strings.TrimSpace(lat.Text), 64)
+			b, e2 := strconv.ParseFloat(strings.TrimSpace(lon.Text), 64)
+			if e1 != nil || e2 != nil || math.IsNaN(a) || math.IsNaN(b) || math.Abs(a) > 90 || math.Abs(b) > 180 {
+				return fmt.Errorf("invalid calendar coordinates")
+			}
+			geo = strconv.FormatFloat(a, 'f', -1, 64) + ";" + strconv.FormatFloat(b, 'f', -1, 64)
+		}
+		delete(ev.Props, "GEO")
+		delete(ev.Props, "X-APPLE-STRUCTURED-LOCATION")
+		if geo != "" {
+			ev.Props.Set(&ical.Prop{Name: "GEO", Value: geo})
+		}
+	} else if name, changed := fields["Location"]; changed {
+		old, _ := ev.Props.Text("LOCATION")
+		if name != old {
+			delete(ev.Props, "GEO")
+			delete(ev.Props, "X-APPLE-STRUCTURED-LOCATION")
+		}
+	}
+	return nil
+}
+
+func calendarLocationXML(ctx context.Context, data string) string {
+	version, _ := ctx.Value(easVersionKey{}).(string)
+	if version != "16.0" && version != "16.1" {
+		return ""
+	}
+	p, _ := calutil.ParseICS(data)
+	var out strings.Builder
+	out.WriteString(`<Location xmlns="AirSyncBase:"><DisplayName>` + xmlEscape(p.Location) + `</DisplayName>`)
+	parts := strings.Split(p.Geo, ";")
+	if len(parts) == 2 {
+		lat, e1 := strconv.ParseFloat(parts[0], 64)
+		lon, e2 := strconv.ParseFloat(parts[1], 64)
+		if e1 == nil && e2 == nil && !math.IsNaN(lat) && !math.IsNaN(lon) && math.Abs(lat) <= 90 && math.Abs(lon) <= 180 {
+			out.WriteString(`<Latitude>` + strconv.FormatFloat(lat, 'f', -1, 64) + `</Latitude><Longitude>` + strconv.FormatFloat(lon, 'f', -1, 64) + `</Longitude>`)
+		}
+	}
+	out.WriteString(`</Location>`)
+	return out.String()
 }
 
 func calendarMeetingXML(data, viewer string) string {

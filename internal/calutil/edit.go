@@ -93,6 +93,10 @@ func mergeStoredEvent(ev Event, generated *ical.Calendar, method string) (*ical.
 	if changed["DTEND"] {
 		delete(target.Props, "DURATION")
 	}
+	if changed["GEO"] || changed["LOCATION"] {
+		// Apple clients otherwise keep displaying the previous pinned place.
+		delete(target.Props, "X-APPLE-STRUCTURED-LOCATION")
+	}
 	// Editing the whole meeting's participants also updates detached instances.
 	// Otherwise a removed participant remains invited by an old exception.
 	if method == "REQUEST" || method == "" {

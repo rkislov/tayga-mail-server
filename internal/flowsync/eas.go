@@ -27,6 +27,8 @@ type easHandler struct {
 	ms     *mailstore.Store
 }
 
+type easVersionKey struct{}
+
 func (h *easHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("MS-Server-ActiveSync", "18.0")
 	w.Header().Set("MS-ASProtocolVersions", "14.0,14.1,16.0,16.1")
@@ -66,6 +68,7 @@ func (h *easHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	version := r.Header.Get("MS-ASProtocolVersion")
+	r = r.WithContext(context.WithValue(r.Context(), easVersionKey{}, version))
 	if err = h.store.TouchFlowSyncDevice(r.Context(), dev.ID, r.RemoteAddr, r.UserAgent(), version, false); err != nil {
 		http.Error(w, "device update failed", 500)
 		return
