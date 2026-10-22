@@ -3,12 +3,14 @@ package flowsync
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"net/mail"
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/emersion/go-ical"
 	"github.com/tayga/tms/internal/calutil"
@@ -19,6 +21,13 @@ import (
 // particular an attendee-only edit must not be acknowledged and discarded.
 func (h *easHandler) wbCalendar(ctx context.Context, u *storage.User, calendarID string, op clientOp) (string, error) {
 	var obj *storage.CalendarObject
+	clientUID := op.Fields["ClientUid"]
+	if n := op.ApplicationData.child("ClientUid"); n != nil {
+		clientUID = n.Text
+	}
+	if utf8.RuneCountInString(clientUID) > 300 || strings.ContainsAny(clientUID, "\r\n\x00") {
+		return op.ServerID, fmt.Errorf("invalid calendar client UID")
+	}
 	if op.Kind == "add" {
 		uid := op.Fields["UID"]
 		device, _ := ctx.Value(taskDeviceKey{}).(string)
@@ -33,6 +42,20 @@ func (h *easHandler) wbCalendar(ctx context.Context, u *storage.User, calendarID
 				return old.ID, nil // retry after an accepted Add, including a restart
 			}
 			if err != storage.ErrNotFound {
+				return "", err
+			}
+		}
+		if clientUID != "" {
+			// ClientId identifies a request; ClientUid identifies the event
+			// across retries with a new ClientId/device (MS-ASCAL 2.2.2.13).
+			// Scope to the authenticated user and collection. Never compare
+			// titles/times or overwrite a newer edit when replaying an Add.
+			href = "eas-clientuid-" + digest(u.ID+"\x00"+clientUID) + ".ics"
+			old, err := h.store.GetCalendarObject(ctx, calendarID, href)
+			if err == nil {
+				return old.ID, nil
+			}
+			if !errors.Is(err, storage.ErrNotFound) {
 				return "", err
 			}
 		}
@@ -69,6 +92,13 @@ func (h *easHandler) wbCalendar(ctx context.Context, u *storage.User, calendarID
 	obj.Data, obj.DTStart, obj.DTEnd = data, p.Start, p.End
 	saved, err := h.store.SaveCalendarClientObject(ctx, u.ID, obj)
 	if err != nil {
+		// The unique href and CreateOnly constraint arbitrate simultaneous
+		// retries from different devices; return the winner's identity.
+		if op.Kind == "add" && clientUID != "" && errors.Is(err, storage.ErrCalendarConflict) {
+			if old, lookupErr := h.store.GetCalendarObject(ctx, calendarID, obj.HrefName); lookupErr == nil {
+				return old.ID, nil
+			}
+		}
 		return op.ServerID, err
 	}
 	return saved.ID, nil
