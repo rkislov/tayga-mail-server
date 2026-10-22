@@ -398,6 +398,20 @@ func calendarMeetingXML(data, viewer string) string {
 		status |= 4
 	}
 	field("MeetingStatus", fmt.Sprint(status))
+	response := "0"
+	if len(p.Attendees) > 0 {
+		response = "5"
+		if strings.EqualFold(p.Organizer.Email, viewer) {
+			response = "1"
+		} else {
+			for _, a := range p.Attendees {
+				if strings.EqualFold(a.Email, viewer) {
+					response = fieldOr(map[string]string{"ACCEPTED": "3", "TENTATIVE": "2", "DECLINED": "4"}[strings.ToUpper(a.PartStat)], "5")
+				}
+			}
+		}
+	}
+	field("ResponseType", response)
 	if p.Organizer.Email != "" {
 		field("OrganizerEmail", p.Organizer.Email)
 		field("OrganizerName", fieldOr(p.Organizer.Name, p.Organizer.Email))

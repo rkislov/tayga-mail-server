@@ -201,3 +201,35 @@ Calendar Sync Add/Change/Delete использует авторизованны�
 Основание: [MS-ASCAL ClientUid](https://learn.microsoft.com/en-us/openspecs/exchange_server_protocols/ms-ascal/d22282da-0cc5-4fba-b4b4-5aef341a6c8e),
 [MS-ASCAL UID](https://learn.microsoft.com/en-us/openspecs/exchange_server_protocols/ms-ascal/8f1fb00c-a156-49e8-9f54-478ecb0ce743),
 [MS-ASCMD Add](https://learn.microsoft.com/en-us/openspecs/exchange_server_protocols/ms-ascmd/22628ffe-b14a-4300-aec7-187b0c37a1dc).
+
+## Ответы iPhone/iPad на приглашения (23.10.2026)
+
+FlowSync принимает отдельную команду ActiveSync `MeetingResponse` (WBXML,
+страница 8). Для локальных встреч ответ обновляет запись приглашения и обе
+копии календаря в одной транзакции. Организатор получает `AttendeeStatus`,
+участник — `ResponseType`; изменения доходят через обычные Ping/Sync без сброса
+SyncKey. Повтор команды с тем же ответом не создаёт событие или второе письмо.
+
+Поддерживаются ответы из календаря (14.1, 16.0, 16.1) и из письма REQUEST,
+сопоставленного с локальной встречей. Принимаются «принять», «под вопросом» и
+«отклонить». Отклонённая копия исключается из ActiveSync и свободно/занято;
+сервер сохраняет RSVP для повторного запроса и последующего принятия.
+В 16.x письмо-ответ ставится в очередь только при наличии `SendResponse`;
+в 14.x письмо отправляет сам клиент. Доступ к папке и объекту, организатор,
+участник, актуальная версия встречи и ETag проверяются до изменения.
+
+Отдельные экземпляры повторений (`InstanceId`), поиск через `LongId`,
+предложение другого времени в этой команде и импорт внешней встречи без
+локальной записи приглашения пока возвращают ошибку элемента; они не должны
+молча менять всю серию или чужую встречу. Предложение времени доступно через
+существующий веб-механизм согласования.
+
+Проверки охватывают HTTP/WBXML, обе копии события, инкрементальный Sync,
+почтовый REQUEST, повтор после перезапуска обработчика, отклонение и повторное
+принятие, свободно/занято, запрет чужих объектов, отменённые встречи и откат
+при ошибке БД. Журнал содержит число успешных и неуспешных ответов без текста
+письма или комментария участника.
+
+Источники: [MS-ASCMD MeetingResponse](https://learn.microsoft.com/en-us/openspecs/exchange_server_protocols/ms-ascmd/42ececcd-37df-4340-aa50-783ba714facb),
+[MS-ASCAL ResponseType](https://learn.microsoft.com/en-us/openspecs/exchange_server_protocols/ms-ascal/00069422-927f-41ad-b068-90007a1b0d45),
+[MS-ASWBXML](https://learn.microsoft.com/en-us/openspecs/exchange_server_protocols/ms-aswbxml/39973eb1-1e40-4eb5-ac74-42781c5a33bc).

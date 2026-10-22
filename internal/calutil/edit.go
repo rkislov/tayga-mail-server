@@ -171,3 +171,18 @@ func WithAttendeeStatus(data, email, status string) (string, error) {
 	}
 	return encode(cal)
 }
+
+// DeclinedBy identifies a declined local attendee copy. The organizer's event
+// remains visible even when every guest declines it.
+func DeclinedBy(data, email string) bool {
+	p, err := ParseICS(data)
+	if err != nil || strings.EqualFold(p.Organizer.Email, email) {
+		return false
+	}
+	for _, a := range p.Attendees {
+		if strings.EqualFold(a.Email, email) && strings.EqualFold(a.PartStat, "DECLINED") {
+			return true
+		}
+	}
+	return false
+}
