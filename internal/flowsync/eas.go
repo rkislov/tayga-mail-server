@@ -30,7 +30,7 @@ type easHandler struct {
 func (h *easHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("MS-Server-ActiveSync", "18.0")
 	w.Header().Set("MS-ASProtocolVersions", "14.0,14.1,16.0,16.1")
-	w.Header().Set("MS-ASProtocolCommands", "FolderSync,FolderCreate,FolderDelete,FolderUpdate,Sync,MoveItems,Ping,Provision,GetItemEstimate,ItemOperations,SendMail,SmartReply,SmartForward,Settings")
+	w.Header().Set("MS-ASProtocolCommands", "FolderSync,FolderCreate,FolderDelete,FolderUpdate,Sync,MoveItems,Ping,Provision,GetItemEstimate,ItemOperations,SendMail,SmartReply,SmartForward,Settings,ResolveRecipients,Search")
 	w.Header().Set("X-FlowSync", "Tayga-FlowSync")
 	w.Header().Set("X-FlowSync-Engine", "FlowSync/1.0")
 
@@ -116,6 +116,10 @@ func (h *easHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		xmlOut, err = h.composeMail(r.Context(), u, body, "SmartForward")
 	case "itemoperations":
 		xmlOut, err = h.itemOperations(r.Context(), u, body)
+	case "search":
+		xmlOut, err = h.searchGAL(r.Context(), u, body)
+	case "resolverecipients":
+		xmlOut, err = h.resolveRecipients(r.Context(), u, body)
 	case "settings":
 		xmlOut, err = settingsResponse(u, body)
 	case "foldersync":
@@ -366,7 +370,7 @@ func (h *easHandler) itemEstimate(ctx context.Context, u *storage.User, dev *sto
 					case kindTasks:
 						full, taskHashes, e = h.taskSnapshot(snapshotCtx, u, id, "unused", nil)
 					case kindCalendar:
-						full, _, e = h.syncCalendar(snapshotCtx, id, "unused", false, nil)
+						full, _, e = h.syncCalendar(snapshotCtx, u, id, "unused", false, nil)
 					case kindContacts:
 						full, _, e = h.syncContacts(snapshotCtx, id, "unused", false, nil)
 					case kindNotes:

@@ -152,15 +152,14 @@ func EventAttendees(data string) ([]Attendee, error) {
 		if c.Name != "VEVENT" {
 			continue
 		}
-		wire, err := encode(componentCalendar(cal, c))
-		if err != nil {
-			return nil, err
+		// Reading attendees must also work for old client events without
+		// DTSTAMP; serializing a whole event here needlessly rejects them.
+		for _, prop := range c.Props.Values(ical.PropAttendee) {
+			a := attendeeFromProp(prop)
+			if a.Email != "" {
+				out = append(out, a)
+			}
 		}
-		p, err := ParseICS(wire)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, p.Attendees...)
 	}
 	return out, nil
 }

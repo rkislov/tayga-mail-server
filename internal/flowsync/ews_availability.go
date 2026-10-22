@@ -57,27 +57,9 @@ func (h *ewsHandler) availabilityEWS(ctx context.Context, u *storage.User, body 
 	default:
 		return availabilityError("ErrorInvalidRequest", "Unsupported free/busy view"), nil
 	}
-	allowed := map[string]*storage.User{strings.ToLower(u.Email): u}
-	if enabled, e := h.galEnabled(ctx, u); e != nil {
-		return "", e
-	} else if enabled {
-		users, e := h.store.ListUsersByDomain(ctx, u.DomainID)
-		if e != nil {
-			return "", e
-		}
-		resources, e := h.store.ListCalendarResourcesByDomain(ctx, u.DomainID, true)
-		if e != nil {
-			return "", e
-		}
-		activeResource := map[string]bool{}
-		for _, r := range resources {
-			activeResource[r.UserID] = true
-		}
-		for _, peer := range users {
-			if peer.Enabled && peer.TenantID == u.TenantID && (peer.AuthSource != "resource" || activeResource[peer.ID]) {
-				allowed[strings.ToLower(peer.Email)] = peer
-			}
-		}
+	allowed, err := h.availabilityUsers(ctx, u)
+	if err != nil {
+		return "", err
 	}
 	var out strings.Builder
 	out.WriteString(`<m:GetUserAvailabilityResponse` + ewsNamespaces + `><m:FreeBusyResponseArray>`)
@@ -123,6 +105,33 @@ func (h *ewsHandler) availabilityEWS(ctx context.Context, u *storage.User, body 
 	}
 	out.WriteString(`</m:FreeBusyResponseArray></m:GetUserAvailabilityResponse>`)
 	return out.String(), nil
+}
+
+// availabilityUsers is the common directory/privacy boundary for EWS and EAS.
+func (h *ewsHandler) availabilityUsers(ctx context.Context, u *storage.User) (map[string]*storage.User, error) {
+	allowed := map[string]*storage.User{strings.ToLower(u.Email): u}
+	if enabled, e := h.galEnabled(ctx, u); e != nil {
+		return nil, e
+	} else if enabled {
+		users, e := h.store.ListUsersByDomain(ctx, u.DomainID)
+		if e != nil {
+			return nil, e
+		}
+		resources, e := h.store.ListCalendarResourcesByDomain(ctx, u.DomainID, true)
+		if e != nil {
+			return nil, e
+		}
+		activeResource := map[string]bool{}
+		for _, r := range resources {
+			activeResource[r.UserID] = true
+		}
+		for _, peer := range users {
+			if peer.Enabled && peer.TenantID == u.TenantID && (peer.AuthSource != "resource" || activeResource[peer.ID]) {
+				allowed[strings.ToLower(peer.Email)] = peer
+			}
+		}
+	}
+	return allowed, nil
 }
 
 func availabilityMailboxError(code, message string) string {

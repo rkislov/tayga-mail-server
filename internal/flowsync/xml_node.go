@@ -57,6 +57,9 @@ func parseProtocolXML(body []byte) (*protocolNode, error) {
 	return root, nil
 }
 func (n *protocolNode) child(name string) *protocolNode {
+	if n == nil {
+		return nil
+	}
 	for _, c := range n.Children {
 		if c.Name.Local == name {
 			return c

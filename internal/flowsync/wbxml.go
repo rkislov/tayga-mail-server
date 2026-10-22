@@ -247,39 +247,8 @@ func encodeSyncWBXML(syncKey, collectionID, class string, adds []syncAdd) []byte
 }
 
 func encodeCalendarSyncWBXML(syncKey, collectionID string, adds []calendarAdd) []byte {
-	e := newWBEncoder()
-	e.start(tagSync)
-	e.start(tagCollections)
-	e.start(tagCollection)
-	e.taggedStr(tagClass, "Calendar")
-	e.taggedStr(tagSyncKey, syncKey)
-	e.taggedStr(tagCollectionID, collectionID)
-	e.taggedStr(tagStatus, "1")
-	e.start(tagCommands)
-	for _, a := range adds {
-		e.start(tagAdd)
-		e.taggedStr(tagServerID, a.ServerID)
-		e.start(tagApplicationData)
-		e.taggedStr(tagCalSubject, a.Subject)
-		if a.Location != "" {
-			e.taggedStr(tagCalLocation, a.Location)
-		}
-		if a.StartTime != "" {
-			e.taggedStr(tagCalStartTime, calendarWireTime(a.StartTime))
-		}
-		if a.EndTime != "" {
-			e.taggedStr(tagCalEndTime, calendarWireTime(a.EndTime))
-		}
-		e.taggedStr(tagCalUID, a.UID)
-		e.taggedStr(tagCalAllDay, fmt.Sprintf("%d", bool01(a.AllDay)))
-		e.end()
-		e.end()
-	}
-	e.end()
-	e.end()
-	e.end()
-	e.end()
-	return e.bytes()
+	data, _ := encodeWire(renderCalendarSyncXML(syncKey, collectionID, adds, nil))
+	return data
 }
 
 func encodeContactsSyncWBXML(syncKey, collectionID string, adds []contactAdd) []byte {

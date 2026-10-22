@@ -33,13 +33,14 @@ const (
 )
 
 type calendarAdd struct {
-	ServerID  string
-	Subject   string
-	Location  string
-	StartTime string
-	EndTime   string
-	UID       string
-	AllDay    bool
+	ServerID   string
+	Subject    string
+	Location   string
+	StartTime  string
+	EndTime    string
+	UID        string
+	AllDay     bool
+	MeetingXML string
 }
 
 type contactAdd struct {
@@ -129,7 +130,7 @@ func (h *easHandler) syncCollection(ctx context.Context, u *storage.User, dev *s
 	case kindTasks:
 		return h.syncTasks(ctx, u, collectionID, next, wbxml, wbResults)
 	case kindCalendar:
-		return h.syncCalendar(ctx, collectionID, next, wbxml, wbResults)
+		return h.syncCalendar(ctx, u, collectionID, next, wbxml, wbResults)
 	case kindContacts:
 		return h.syncContacts(ctx, collectionID, next, wbxml, wbResults)
 	case kindNotes:
@@ -197,7 +198,7 @@ func (h *easHandler) syncMailCollection(ctx context.Context, u *storage.User, co
 	return renderMailSyncXML(next, collectionID, adds, wb), nil, nil
 }
 
-func (h *easHandler) syncCalendar(ctx context.Context, collectionID, next string, wbxml bool, wb []writebackResult) (string, []byte, error) {
+func (h *easHandler) syncCalendar(ctx context.Context, u *storage.User, collectionID, next string, wbxml bool, wb []writebackResult) (string, []byte, error) {
 	objs, err := h.store.ListCalendarObjects(ctx, collectionID)
 	if err != nil {
 		return "", nil, err
@@ -221,17 +222,19 @@ func (h *easHandler) syncCalendar(ctx context.Context, collectionID, next string
 			subject = o.UID
 		}
 		adds = append(adds, calendarAdd{
-			ServerID:  o.ID, // calendar object UUID
-			Subject:   subject,
-			Location:  ev.Location,
-			StartTime: start,
-			EndTime:   end,
-			UID:       o.UID,
-			AllDay:    ev.AllDay,
+			ServerID:   o.ID, // calendar object UUID
+			Subject:    subject,
+			Location:   ev.Location,
+			StartTime:  start,
+			EndTime:    end,
+			UID:        o.UID,
+			AllDay:     ev.AllDay,
+			MeetingXML: calendarMeetingXML(o.Data, u.Email),
 		})
 	}
 	if wbxml {
-		return "", encodeCalendarSyncWBXML(next, collectionID, adds), nil
+		binary, err := encodeWire(renderCalendarSyncXML(next, collectionID, adds, wb))
+		return "", binary, err
 	}
 	return renderCalendarSyncXML(next, collectionID, adds, wb), nil, nil
 }
@@ -346,6 +349,7 @@ func renderCalendarSyncXML(syncKey, collectionID string, adds []calendarAdd, wb 
 		}
 		fmt.Fprintf(&b, `<Calendar:UID xmlns:Calendar="Calendar:">%s</Calendar:UID>`, xmlEscape(a.UID))
 		fmt.Fprintf(&b, `<Calendar:AllDayEvent xmlns:Calendar="Calendar:">%d</Calendar:AllDayEvent>`, bool01(a.AllDay))
+		b.WriteString(a.MeetingXML)
 		b.WriteString(`</ApplicationData></Add>`)
 	}
 	b.WriteString(`</Commands></Collection></Collections></Sync>`)
