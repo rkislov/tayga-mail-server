@@ -207,6 +207,11 @@ func (h *easHandler) syncCalendar(ctx context.Context, u *storage.User, collecti
 	adds := make([]calendarAdd, 0, len(objs))
 	cutoff := filterCutoff(contextPreferences(ctx).Filter, time.Now().UTC())
 	for _, o := range objs {
+		// Retain the RSVP record for safe retries/reacceptance, but expose a
+		// deletion to ActiveSync as required for a declined meeting.
+		if calutil.DeclinedBy(o.Data, u.Email) {
+			continue
+		}
 		if !cutoff.IsZero() && o.DTEnd != nil && o.DTEnd.Before(cutoff) && !strings.Contains(strings.ToUpper(o.Data), "RRULE:") {
 			continue
 		}

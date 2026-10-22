@@ -14,6 +14,16 @@ var ErrCalendarConflict = errors.New("calendar changed; refresh before retrying"
 // ReplyCalendarInvite commits participation and both local calendar copies
 // together. A COUNTER stores a proposal; only the organizer can move a meeting.
 func (s *Store) ReplyCalendarInvite(ctx context.Context, userID, inviteID, status string, proposedStart, proposedEnd *time.Time, etag string, comment ...string) (*CalendarInvite, error) {
+	return s.replyCalendarInvite(ctx, userID, inviteID, status, proposedStart, proposedEnd, etag, true, false, comment...)
+}
+
+// RespondCalendarInvite applies a mobile RSVP without implicitly sending mail.
+// Repeated transport requests are idempotent after validating the current event.
+func (s *Store) RespondCalendarInvite(ctx context.Context, userID, inviteID, status, etag string, sendMail bool, comment string) (*CalendarInvite, error) {
+	return s.replyCalendarInvite(ctx, userID, inviteID, status, nil, nil, etag, sendMail, true, comment)
+}
+
+func (s *Store) replyCalendarInvite(ctx context.Context, userID, inviteID, status string, proposedStart, proposedEnd *time.Time, etag string, sendMail, idempotent bool, comment ...string) (*CalendarInvite, error) {
 	if status != "ACCEPTED" && status != "DECLINED" && status != "TENTATIVE" {
 		return nil, ErrUnauthorized
 	}
@@ -83,6 +93,7 @@ func (s *Store) ReplyCalendarInvite(ctx context.Context, userID, inviteID, statu
 		return nil, ErrNotFound
 	}
 	foundOrganizer := false
+	unchanged := idempotent && inv.PartStat == status && inv.ProposedStart == nil && inv.ProposedEnd == nil
 	now := time.Now().UTC()
 	for _, o := range objects {
 		parsed, err := calutil.ParseICS(o.Data)
@@ -95,6 +106,16 @@ func (s *Store) ReplyCalendarInvite(ctx context.Context, userID, inviteID, statu
 		if parsed.Sequence != reference.Sequence || strings.EqualFold(parsed.Status, "CANCELLED") {
 			return nil, ErrCalendarConflict
 		}
+		matchingAttendee := false
+		for _, a := range parsed.Attendees {
+			if strings.EqualFold(a.Email, inv.AttendeeEmail) {
+				matchingAttendee = true
+				unchanged = unchanged && strings.EqualFold(a.PartStat, status)
+			}
+		}
+		if !matchingAttendee {
+			return nil, ErrCalendarConflict
+		}
 		data, err := calutil.WithAttendeeStatus(o.Data, inv.AttendeeEmail, status)
 		if err != nil {
 			return nil, ErrCalendarConflict
@@ -102,7 +123,7 @@ func (s *Store) ReplyCalendarInvite(ctx context.Context, userID, inviteID, statu
 		if o.ID != inv.CalendarObjectID {
 			foundOrganizer = true
 		}
-		if proposedStart != nil {
+		if proposedStart != nil || (idempotent && data == o.Data) {
 			continue
 		}
 		// The predicate protects against an edit between the read and write on
@@ -124,6 +145,9 @@ func (s *Store) ReplyCalendarInvite(ctx context.Context, userID, inviteID, statu
 	}
 	if !foundOrganizer {
 		return nil, ErrNotFound
+	}
+	if unchanged {
+		return inv, nil
 	}
 	var attendeeName string
 	if err = tx.QueryRowContext(ctx, s.rebind(`SELECT display_name FROM users WHERE id=?`), userID).Scan(&attendeeName); err != nil {
@@ -147,8 +171,10 @@ func (s *Store) ReplyCalendarInvite(ctx context.Context, userID, inviteID, statu
 		return nil, err
 	}
 	m := CalendarMail{From: inv.AttendeeEmail, FromName: attendeeName, To: organizerEmail, Subject: "Re: " + inv.Summary + " (" + strings.ToLower(status) + ")", Text: inv.AttendeeEmail + " responded: " + status + "\n" + ev.Comment, ICS: ics, Method: method}
-	if err = s.queueCalendarMail(ctx, tx, []CalendarMail{m}); err != nil {
-		return nil, err
+	if sendMail {
+		if err = s.queueCalendarMail(ctx, tx, []CalendarMail{m}); err != nil {
+			return nil, err
+		}
 	}
 	// Proposing a time does not imply accepting or tentatively accepting the
 	// existing time. Keep the previous RSVP until the attendee changes it.
