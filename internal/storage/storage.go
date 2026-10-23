@@ -204,6 +204,8 @@ type Driver interface {
 	ListCalendarObjects(ctx context.Context, calendarID string) ([]*CalendarObject, error)
 	GetCalendarObject(ctx context.Context, calendarID, hrefName string) (*CalendarObject, error)
 	GetCalendarObjectByID(ctx context.Context, id string) (*CalendarObject, error)
+	GetCalendarObjectByUID(ctx context.Context, calendarID, uid string) (*CalendarObject, error)
+	MoveCalendarObject(ctx context.Context, userID, id, source, destination string) (*CalendarObject, error)
 	UpsertCalendarObject(ctx context.Context, o *CalendarObject) (*CalendarObject, error)
 	SaveCalendarObjectWithMail(ctx context.Context, o *CalendarObject, mails []CalendarMail) (*CalendarObject, error)
 	SaveCalendarMeeting(ctx context.Context, actorID string, o *CalendarObject) (*CalendarObject, error)

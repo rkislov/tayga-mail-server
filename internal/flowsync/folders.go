@@ -159,6 +159,22 @@ func (h *easHandler) moveItems(ctx context.Context, u *storage.User, body []byte
 		}
 		sid, src, dst := move.value("SrcMsgId"), move.value("SrcFldId"), move.value("DstFldId")
 		r := moveRes{Src: sid, Status: 1}
+		if _, e := h.store.GetCalendarByID(ctx, u.ID, src); e == nil {
+			if obj, e := h.store.GetCalendarObjectByID(ctx, sid); e == nil && (obj.CalendarID == src || obj.CalendarID == dst) {
+				r.Status = 2
+				if _, e = h.store.GetCalendarByID(ctx, u.ID, dst); e == nil {
+					r.Status = 4
+					if src != dst {
+						r.Status = 5
+						if moved, err := h.store.MoveCalendarObject(ctx, u.ID, sid, src, dst); err == nil {
+							r.Status, r.Dst = 3, moved.ID
+						}
+					}
+				}
+			}
+			results = append(results, r)
+			continue
+		}
 		msg, e := h.store.GetMessageByID(ctx, sid)
 		if e == nil && msg.MailboxID == src {
 			if _, e = h.mailboxByID(ctx, u.ID, src); e == nil {
