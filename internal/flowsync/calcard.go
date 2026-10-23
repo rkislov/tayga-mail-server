@@ -33,15 +33,16 @@ const (
 )
 
 type calendarAdd struct {
-	ServerID    string
-	Subject     string
-	Location    string
-	LocationXML string
-	StartTime   string
-	EndTime     string
-	UID         string
-	AllDay      bool
-	MeetingXML  string
+	ServerID       string
+	Subject        string
+	Location       string
+	LocationXML    string
+	StartTime      string
+	EndTime        string
+	UID            string
+	AllDay         bool
+	MeetingXML     string
+	AttachmentsXML string
 }
 
 type contactAdd struct {
@@ -227,16 +228,21 @@ func (h *easHandler) syncCalendar(ctx context.Context, u *storage.User, collecti
 		if subject == "" {
 			subject = o.UID
 		}
+		attachments, err := h.calendarAttachmentsXML(ctx, o.ID)
+		if err != nil {
+			return "", nil, err
+		}
 		adds = append(adds, calendarAdd{
-			ServerID:    o.ID, // calendar object UUID
-			Subject:     subject,
-			Location:    ev.Location,
-			LocationXML: calendarLocationXML(ctx, o.Data),
-			StartTime:   start,
-			EndTime:     end,
-			UID:         o.UID,
-			AllDay:      ev.AllDay,
-			MeetingXML:  calendarMeetingXML(o.Data, u.Email),
+			ServerID:       o.ID, // calendar object UUID
+			Subject:        subject,
+			Location:       ev.Location,
+			LocationXML:    calendarLocationXML(ctx, o.Data),
+			StartTime:      start,
+			EndTime:        end,
+			UID:            o.UID,
+			AllDay:         ev.AllDay,
+			MeetingXML:     calendarMeetingXML(o.Data, u.Email),
+			AttachmentsXML: attachments,
 		})
 	}
 	if wbxml {
@@ -359,6 +365,7 @@ func renderCalendarSyncXML(syncKey, collectionID string, adds []calendarAdd, wb 
 		fmt.Fprintf(&b, `<Calendar:UID xmlns:Calendar="Calendar:">%s</Calendar:UID>`, xmlEscape(a.UID))
 		fmt.Fprintf(&b, `<Calendar:AllDayEvent xmlns:Calendar="Calendar:">%d</Calendar:AllDayEvent>`, bool01(a.AllDay))
 		b.WriteString(a.MeetingXML)
+		b.WriteString(a.AttachmentsXML)
 		b.WriteString(`</ApplicationData></Add>`)
 	}
 	b.WriteString(`</Commands></Collection></Collections></Sync>`)
