@@ -14,6 +14,7 @@ var invitationTemplate = template.Must(template.New("invitation").Parse(invitati
 
 type invitationView struct {
 	Title, Label, Hint, When, Location, Organizer, Comment string
+	Attachments                                            []Attachment
 	Description                                            []string
 	Attendees                                              []string
 }
@@ -94,7 +95,15 @@ func renderInvitationHTML(ics, method, subject, fallback string) string {
 			v.Attendees = append(v.Attendees, attendeeLabel(a))
 		}
 	}
+	for _, a := range p.Attachments {
+		if (strings.HasPrefix(a.URI, "https://") || strings.HasPrefix(a.URI, "http://")) && strings.Contains(a.URI, "/calendar-download/") {
+			v.Attachments = append(v.Attachments, a)
+		}
+	}
 	description := p.Description
+	if len(p.Attachments) > 0 {
+		description = strings.TrimSpace(strings.TrimSuffix(description, DownloadDescription("", p.Attachments)))
+	}
 	if p.UID == "" {
 		description = fallback
 	}

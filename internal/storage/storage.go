@@ -94,6 +94,8 @@ type Driver interface {
 	ListCalendarAttachments(ctx context.Context, calendarObjectID string) ([]*CalendarAttachment, error)
 	ListCalendarEventAttachments(ctx context.Context, calendarObjectID string) ([]*CalendarAttachment, error)
 	CalendarAttachmentSharedWith(ctx context.Context, attachmentID, userID string) (bool, error)
+	CalendarAttachmentLinks(ctx context.Context, objectID, userID string) ([]CalendarAttachmentLink, error)
+	CalendarDownloadAttachment(ctx context.Context, token string) (*CalendarAttachment, error)
 	DeleteCalendarAttachment(ctx context.Context, id string) error
 	SumMailboxBytes(ctx context.Context, userID string) (int64, error)
 	MessageExistsByMessageID(ctx context.Context, mailboxID, messageID string, size int64) (bool, error)

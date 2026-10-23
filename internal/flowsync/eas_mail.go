@@ -35,7 +35,7 @@ func (h *easHandler) itemOperations(ctx context.Context, u *storage.User, body [
 			if ref != "" {
 				var a messageAttachment
 				var err error
-				if strings.HasPrefix(ref, "calendar:") {
+				if strings.HasPrefix(ref, "calendar:") || calendarDownloadToken(ref) != "" {
 					a, err = h.calendarAttachment(ctx, u, ref)
 				} else {
 					a, err = helper.attachment(ctx, u, ref)

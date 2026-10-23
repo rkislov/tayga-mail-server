@@ -90,6 +90,9 @@ func (s *Store) queueCalendarMail(ctx context.Context, tx *sql.Tx, mails []Calen
 				return err
 			}
 		}
+		if err = s.calendarMailDownloadLinks(ctx, tx, &m); err != nil {
+			return err
+		}
 		id, now := NewID(), time.Now().UTC()
 		raw := calutil.IMIPMessage(m.From, m.FromName, m.To, m.Subject, m.Text, m.ICS, m.Method, id, now)
 		_, err = tx.ExecContext(ctx, s.rebind(`INSERT INTO calendar_deliveries(id,sender,recipient,recipient_user_id,subject,data,next_attempt,created_at) VALUES(?,?,?,?,?,?,?,?)`), id, m.From, m.To, userID, m.Subject, raw, now.UnixMilli(), now.UnixNano())

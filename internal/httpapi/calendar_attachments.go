@@ -145,7 +145,12 @@ func (s *Server) handleCalendarEventAttachments(w http.ResponseWriter, r *http.R
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
-		_ = s.syncEventAttachmentsICS(r, o)
+		if err = s.syncEventAttachmentsICS(r, au.ID, o); err != nil {
+			_ = s.store.DeleteCalendarAttachment(r.Context(), saved.ID)
+			_ = os.Remove(abs)
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "event changed; reload and retry upload"})
+			return
+		}
 		writeJSON(w, http.StatusCreated, attachmentToJSON(saved))
 
 	default:
@@ -172,34 +177,7 @@ func (s *Server) handleCalendarAttachmentByID(w http.ResponseWriter, r *http.Req
 
 	switch r.Method {
 	case http.MethodGet:
-		if s.ms == nil {
-			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "storage unavailable"})
-			return
-		}
-		root, err := s.calendarAttachRoot()
-		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-			return
-		}
-		abs := filepath.Join(root, filepath.FromSlash(a.StoragePath))
-		f, err := os.Open(abs)
-		if err != nil {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "file missing"})
-			return
-		}
-		defer f.Close()
-		st, err := f.Stat()
-		if err != nil {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "file missing"})
-			return
-		}
-		ct := a.ContentType
-		if ct == "" {
-			ct = "application/octet-stream"
-		}
-		w.Header().Set("Content-Type", ct)
-		w.Header().Set("Content-Disposition", `attachment; filename="`+strings.ReplaceAll(a.Filename, `"`, "")+`"`)
-		http.ServeContent(w, r, a.Filename, st.ModTime(), f)
+		s.serveCalendarFile(w, r, a)
 
 	case http.MethodDelete:
 		if _, err := s.store.GetCalendarByID(r.Context(), au.ID, o.CalendarID); err != nil && a.UserID != au.ID {
@@ -215,7 +193,10 @@ func (s *Server) handleCalendarAttachmentByID(w http.ResponseWriter, r *http.Req
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
-		_ = s.syncEventAttachmentsICS(r, o)
+		if err = s.syncEventAttachmentsICS(r, au.ID, o); err != nil {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "file removed; reload the event to refresh attachments"})
+			return
+		}
 		writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 
 	default:
@@ -244,7 +225,7 @@ func sanitizeAttachName(name string) string {
 	return out
 }
 
-func (s *Server) syncEventAttachmentsICS(r *http.Request, o *storage.CalendarObject) error {
+func (s *Server) syncEventAttachmentsICS(r *http.Request, actorID string, o *storage.CalendarObject) error {
 	list, err := s.store.ListCalendarAttachments(r.Context(), o.ID)
 	if err != nil {
 		return err
@@ -269,10 +250,11 @@ func (s *Server) syncEventAttachmentsICS(r *http.Request, o *storage.CalendarObj
 	if err != nil {
 		return err
 	}
+	o.ExpectedETag = o.ETag
 	o.Data = ics
 	o.Size = int64(len(ics))
 	o.ETag = storage.ContentETag(ics)
-	_, err = s.store.UpsertCalendarObject(r.Context(), o)
+	_, err = s.store.SaveCalendarClientObject(r.Context(), actorID, o)
 	return err
 }
 

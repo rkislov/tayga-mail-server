@@ -16,6 +16,7 @@
 </td></tr></table>
 {{if .Organizer}}<p class="muted" style="margin:24px 0 6px;color:#656b84;font-size:12px;font-weight:bold;letter-spacing:.6px">ОРГАНИЗАТОР</p><p class="text" style="margin:0;color:#22253d;font-size:15px;line-height:1.6;overflow-wrap:anywhere">{{.Organizer}}</p>{{end}}
 {{if .Attendees}}<p class="muted" style="margin:20px 0 6px;color:#656b84;font-size:12px;font-weight:bold;letter-spacing:.6px">УЧАСТНИКИ</p>{{range .Attendees}}<p class="text" style="margin:0 0 4px;color:#22253d;font-size:15px;line-height:1.6;overflow-wrap:anywhere">{{.}}</p>{{end}}{{end}}
+{{if .Attachments}}<p class="muted" style="margin:24px 0 8px;color:#656b84;font-size:12px;font-weight:bold;letter-spacing:.6px">ВЛОЖЕНИЯ</p>{{range .Attachments}}<p style="margin:8px 0"><a href="{{.URI}}" style="display:inline-block;padding:12px 18px;border:1px solid #dfe2ef;border-radius:10px;color:#484ca4;font-size:15px;text-decoration:none;overflow-wrap:anywhere">Скачать {{.Filename}}</a></p>{{end}}{{end}}
 {{if .Description}}<div class="text" style="margin-top:24px;padding-top:20px;border-top:1px solid #dfe2ef;font-size:15px;line-height:1.65;color:#22253d;overflow-wrap:anywhere">{{range .Description}}{{.}}<br>{{end}}</div>{{end}}
 {{if .Comment}}<p class="text" style="margin:20px 0 0;font-size:15px;line-height:1.65;color:#22253d;white-space:pre-line;overflow-wrap:anywhere">{{.Comment}}</p>{{end}}
 <p class="muted" style="margin:28px 0 0;padding-top:20px;border-top:1px solid #dfe2ef;color:#656b84;font-size:13px;line-height:1.6">{{.Hint}}</p>
