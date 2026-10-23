@@ -279,6 +279,11 @@ func (s *Store) GetCalendarObjectByID(ctx context.Context, id string) (*Calendar
 	return s.scanCalObject(s.db.QueryRowContext(ctx, q, id))
 }
 
+func (s *Store) GetCalendarObjectByUID(ctx context.Context, calendarID, uid string) (*CalendarObject, error) {
+	q := s.rebind(`SELECT id,calendar_id,uid,href_name,etag,data,size,component,dtstart,dtend,updated_at FROM calendar_objects WHERE calendar_id=? AND uid=?`)
+	return s.scanCalObject(s.db.QueryRowContext(ctx, q, calendarID, uid))
+}
+
 func (s *Store) UpsertCalendarObject(ctx context.Context, o *CalendarObject) (*CalendarObject, error) {
 	return s.SaveCalendarObjectWithMail(ctx, o, nil)
 }

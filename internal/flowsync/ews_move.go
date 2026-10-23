@@ -25,12 +25,32 @@ func (h *ewsHandler) moveItem(ctx context.Context, u *storage.User, body string)
 	if err != nil {
 		return ewsFault("ErrorFolderNotFound", "destination unavailable"), nil
 	}
-	if err = h.ensureMailboxOwned(ctx, u.ID, dst); err != nil {
-		return ewsFault("ErrorAccessDenied", "destination unavailable"), nil
-	}
 	ids := doc.find("ItemIds")
 	if ids == nil || len(ids.Children) != 1 || ids.Children[0].Name.Local != "ItemId" {
 		return ewsFault("ErrorInvalidId", "missing ItemId"), nil
+	}
+	if obj, e := h.store.GetCalendarObjectByID(ctx, nodeAttr(ids.Children[0], "Id")); e == nil {
+		if _, e = h.store.GetCalendarByID(ctx, u.ID, obj.CalendarID); e != nil {
+			return ewsFault("ErrorAccessDenied", "event unavailable"), nil
+		}
+		if _, e = h.store.GetCalendarByID(ctx, u.ID, dst); e != nil {
+			return ewsFault("ErrorAccessDenied", "destination unavailable"), nil
+		}
+		moved, e := h.store.MoveCalendarObject(ctx, u.ID, obj.ID, obj.CalendarID, dst)
+		if e == storage.ErrCalendarConflict {
+			return ewsFault("ErrorItemSave", "event already exists in destination"), nil
+		}
+		if e != nil {
+			return "", e
+		}
+		files, e := h.store.ListCalendarAttachments(ctx, moved.ID)
+		if e != nil {
+			return "", e
+		}
+		return ewsNotificationSuccess("MoveItem", fmt.Sprintf(`<m:Items><t:CalendarItem><t:ItemId Id="%s" ChangeKey="%s"/></t:CalendarItem></m:Items>`, xmlEscape(moved.ID), xmlEscape(ewsCalendarChangeKey(moved, files)))), nil
+	}
+	if err = h.ensureMailboxOwned(ctx, u.ID, dst); err != nil {
+		return ewsFault("ErrorAccessDenied", "destination unavailable"), nil
 	}
 	msg, err := h.store.GetMessageByID(ctx, nodeAttr(ids.Children[0], "Id"))
 	if err != nil {

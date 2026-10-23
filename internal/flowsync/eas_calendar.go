@@ -46,6 +46,14 @@ func (h *easHandler) wbCalendar(ctx context.Context, u *storage.User, calendarID
 			}
 		}
 		if clientUID != "" {
+			// After MoveItems the same event may be retried as Add. Its href
+			// can predate EAS (web/ticket import), so also match its actual UID
+			// within this collection. Never collapse similar titles or times.
+			if old, err := h.store.GetCalendarObjectByUID(ctx, calendarID, clientUID); err == nil {
+				return old.ID, nil
+			} else if !errors.Is(err, storage.ErrNotFound) {
+				return "", err
+			}
 			// ClientId identifies a request; ClientUid identifies the event
 			// across retries with a new ClientId/device (MS-ASCAL 2.2.2.13).
 			// Scope to the authenticated user and collection. Never compare
