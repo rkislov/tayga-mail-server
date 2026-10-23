@@ -146,7 +146,11 @@ func (h *ewsHandler) notificationSnapshot(ctx context.Context, u *storage.User, 
 				return nil, e
 			}
 			for _, v := range items {
-				add(v.ID, v.ETag)
+				files, err := h.store.ListCalendarAttachments(ctx, v.ID)
+				if err != nil {
+					return nil, err
+				}
+				add(v.ID, ewsCalendarChangeKey(v, files))
 			}
 		case "IPF.Contact":
 			var items []*storage.AddressObject
