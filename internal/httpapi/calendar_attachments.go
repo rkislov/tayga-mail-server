@@ -70,14 +70,16 @@ func (s *Server) handleCalendarEventAttachments(w http.ResponseWriter, r *http.R
 
 	switch r.Method {
 	case http.MethodGet:
-		list, err := s.store.ListCalendarAttachments(r.Context(), o.ID)
+		list, err := s.store.ListCalendarEventAttachments(r.Context(), o.ID)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
 		out := make([]map[string]any, 0, len(list))
 		for _, a := range list {
-			out = append(out, attachmentToJSON(a))
+			item := attachmentToJSON(a)
+			item["read_only"] = a.CalendarObjectID != o.ID
+			out = append(out, item)
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"attachments": out})
 
@@ -158,6 +160,11 @@ func (s *Server) handleCalendarAttachmentByID(w http.ResponseWriter, r *http.Req
 		return
 	}
 	o, err := s.eventOwnedOrAccessible(r, au, a.CalendarObjectID)
+	if err != nil && r.Method == http.MethodGet {
+		if shared, e := s.store.CalendarAttachmentSharedWith(r.Context(), a.ID, au.ID); e == nil && shared {
+			err = nil
+		}
+	}
 	if err != nil {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 		return
@@ -270,13 +277,15 @@ func (s *Server) syncEventAttachmentsICS(r *http.Request, o *storage.CalendarObj
 }
 
 func (s *Server) attachmentsForEventJSON(r *http.Request, objectID string) []map[string]any {
-	list, err := s.store.ListCalendarAttachments(r.Context(), objectID)
+	list, err := s.store.ListCalendarEventAttachments(r.Context(), objectID)
 	if err != nil || len(list) == 0 {
 		return nil
 	}
 	out := make([]map[string]any, 0, len(list))
 	for _, a := range list {
-		out = append(out, attachmentToJSON(a))
+		item := attachmentToJSON(a)
+		item["read_only"] = a.CalendarObjectID != objectID
+		out = append(out, item)
 	}
 	return out
 }

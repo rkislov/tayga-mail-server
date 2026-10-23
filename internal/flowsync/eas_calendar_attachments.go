@@ -19,7 +19,7 @@ func (h *easHandler) calendarAttachmentsXML(ctx context.Context, objectID string
 	if version != "16.0" && version != "16.1" {
 		return "", nil
 	}
-	files, err := h.store.ListCalendarAttachments(ctx, objectID)
+	files, err := h.store.ListCalendarEventAttachments(ctx, objectID)
 	if err != nil {
 		return "", err
 	}
@@ -55,7 +55,23 @@ func readCalendarAttachment(ctx context.Context, store storage.Driver, ms *mails
 	if err != nil {
 		return messageAttachment{}, err
 	}
-	if file.CalendarObjectID != object.ID || !filepath.IsLocal(file.StoragePath) || file.Size < 0 || file.Size > 32<<20 {
+	if file.CalendarObjectID != object.ID {
+		files, err := store.ListCalendarEventAttachments(ctx, object.ID)
+		if err != nil {
+			return messageAttachment{}, err
+		}
+		allowed := false
+		for _, shared := range files {
+			if shared.ID == file.ID {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			return messageAttachment{}, storage.ErrNotFound
+		}
+	}
+	if !filepath.IsLocal(file.StoragePath) || file.Size < 0 || file.Size > 32<<20 {
 		return messageAttachment{}, storage.ErrNotFound
 	}
 	root, err := os.OpenRoot(filepath.Join(ms.Root, "calendar-attachments"))

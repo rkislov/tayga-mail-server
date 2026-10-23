@@ -146,7 +146,7 @@ func (h *ewsHandler) notificationSnapshot(ctx context.Context, u *storage.User, 
 				return nil, e
 			}
 			for _, v := range items {
-				files, err := h.store.ListCalendarAttachments(ctx, v.ID)
+				files, err := h.store.ListCalendarEventAttachments(ctx, v.ID)
 				if err != nil {
 					return nil, err
 				}
