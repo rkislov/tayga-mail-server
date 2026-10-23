@@ -43,7 +43,7 @@ func (h *ewsHandler) moveItem(ctx context.Context, u *storage.User, body string)
 		if e != nil {
 			return "", e
 		}
-		files, e := h.store.ListCalendarAttachments(ctx, moved.ID)
+		files, e := h.store.ListCalendarEventAttachments(ctx, moved.ID)
 		if e != nil {
 			return "", e
 		}

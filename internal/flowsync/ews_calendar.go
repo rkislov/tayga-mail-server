@@ -47,7 +47,7 @@ func ewsCalendarMailbox(a calutil.Attendee) string {
 // Used by GetItem, FindItem and consequently the durable SyncFolderItems diff.
 // Serialize the same meeting data on all paths, with EWS ItemType fields first.
 func (h *ewsHandler) calendarItemXML(ctx context.Context, u *storage.User, o *storage.CalendarObject, includeBody bool) (string, error) {
-	files, err := h.store.ListCalendarAttachments(ctx, o.ID)
+	files, err := h.store.ListCalendarEventAttachments(ctx, o.ID)
 	if err != nil {
 		return "", err
 	}
