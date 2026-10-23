@@ -43,6 +43,7 @@ type calendarAdd struct {
 	AllDay         bool
 	MeetingXML     string
 	AttachmentsXML string
+	Body           string
 }
 
 type contactAdd struct {
@@ -228,7 +229,11 @@ func (h *easHandler) syncCalendar(ctx context.Context, u *storage.User, collecti
 		if subject == "" {
 			subject = o.UID
 		}
-		attachments, err := h.calendarAttachmentsXML(ctx, o.ID)
+		links, err := h.store.CalendarAttachmentLinks(ctx, o.ID, u.ID)
+		if err != nil {
+			return "", nil, err
+		}
+		attachments, err := h.calendarAttachmentsXML(ctx, o.ID, links...)
 		if err != nil {
 			return "", nil, err
 		}
@@ -243,6 +248,7 @@ func (h *easHandler) syncCalendar(ctx context.Context, u *storage.User, collecti
 			AllDay:         ev.AllDay,
 			MeetingXML:     calendarMeetingXML(o.Data, u.Email),
 			AttachmentsXML: attachments,
+			Body:           calendarDownloadDescription(ev.Description, links),
 		})
 	}
 	if wbxml {
@@ -366,6 +372,7 @@ func renderCalendarSyncXML(syncKey, collectionID string, adds []calendarAdd, wb 
 		fmt.Fprintf(&b, `<Calendar:AllDayEvent xmlns:Calendar="Calendar:">%d</Calendar:AllDayEvent>`, bool01(a.AllDay))
 		b.WriteString(a.MeetingXML)
 		b.WriteString(a.AttachmentsXML)
+		fmt.Fprintf(&b, `<Body xmlns="AirSyncBase:"><Type>1</Type><EstimatedDataSize>%d</EstimatedDataSize><Truncated>0</Truncated><Data>%s</Data></Body>`, len([]byte(a.Body)), xmlEscape(a.Body))
 		b.WriteString(`</ApplicationData></Add>`)
 	}
 	b.WriteString(`</Commands></Collection></Collections></Sync>`)
@@ -405,16 +412,17 @@ func renderContactsSyncXML(syncKey, collectionID string, adds []contactAdd, wb [
 }
 
 type icalEvent struct {
-	Summary  string
-	Location string
-	Start    string
-	End      string
-	AllDay   bool
+	Description string
+	Summary     string
+	Location    string
+	Start       string
+	End         string
+	AllDay      bool
 }
 
 func parseICalEvent(data string) icalEvent {
 	parsed, _ := calutil.ParseICS(data)
-	ev := icalEvent{Summary: parsed.Summary, Location: parsed.Location, AllDay: parsed.AllDay}
+	ev := icalEvent{Description: parsed.Description, Summary: parsed.Summary, Location: parsed.Location, AllDay: parsed.AllDay}
 	if parsed.Start != nil {
 		ev.Start = parsed.Start.UTC().Format("20060102T150405Z")
 	}

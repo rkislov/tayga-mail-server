@@ -120,3 +120,84 @@ func TestInvitedCalendarFilesSyncDownloadAndRevocation(t *testing.T) {
 		t.Fatal("revocation lost owner's file", err)
 	}
 }
+
+func TestInvitedCalendarSignedDownloadWire(t *testing.T) {
+	f := newMeetingFixture(t)
+	st := f.st.(*storage.Store)
+	if err := st.SetCalendarAttachmentLinks("https://mail.example.com", bytes.Repeat([]byte{13}, 32)); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.WithValue(f.ctx, easVersionKey{}, "16.1")
+	data := []byte("%PDF-1.7\nshared through an invitation\n")
+	root := filepath.Join(f.h.ms.Root, "calendar-attachments")
+	if err := os.MkdirAll(root, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "signed.pdf"), data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	file, err := st.CreateCalendarAttachment(ctx, &storage.CalendarAttachment{CalendarObjectID: f.original.ID, UserID: f.owner.ID, Filename: "Билет.pdf", ContentType: "application/pdf", Size: int64(len(data)), StoragePath: "signed.pdf"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, wire, err := f.h.syncCalendar(ctx, f.guest, f.received.CalendarID, "key", true, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := decodeWire(wire)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, err := parseProtocolXML(decoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref := doc.find("FileReference").Text
+	if !strings.HasPrefix(ref, "https://mail.example.com/calendar-download/") || !strings.Contains(doc.find("Body").value("Data"), ref) {
+		t.Fatal("missing native and browser download paths")
+	}
+	// Repeat serialization is byte-stable; polling must not cause resync loops.
+	_, again, err := f.h.syncCalendar(ctx, f.guest, f.received.CalendarID, "key", true, nil)
+	if err != nil || !bytes.Equal(wire, again) {
+		t.Fatal("unstable calendar sync", err)
+	}
+	for _, reference := range []string{ref, "calendar:" + f.received.ID + ":" + file.ID} {
+		request := `<ItemOperations xmlns="ItemOperations:"><Fetch><Store>Mailbox</Store><FileReference xmlns="AirSyncBase:">` + xmlEscape(reference) + `</FileReference></Fetch></ItemOperations>`
+		wire, err := encodeWire(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		decoded, err := decodeWire(wire)
+		if err != nil {
+			t.Fatal(err)
+		}
+		result, err := f.h.itemOperations(ctx, f.guest, decoded)
+		if err != nil {
+			t.Fatal(err)
+		}
+		wire, err = encodeWire(result)
+		if err != nil {
+			t.Fatal(err)
+		}
+		decoded, err = decodeWire(wire)
+		if err != nil {
+			t.Fatal(err)
+		}
+		doc, _ := parseProtocolXML(decoded)
+		got, err := base64.StdEncoding.DecodeString(doc.find("Data").Text)
+		if err != nil || !bytes.Equal(got, data) {
+			t.Fatal("wire download failed", err)
+		}
+	}
+	ews := &ewsHandler{store: f.st, ms: f.h.ms}
+	xml, err := ews.calendarItemXML(ctx, f.guest, f.received, true)
+	if err != nil || !strings.Contains(xml, ref) {
+		t.Fatal("EWS body misses link", err)
+	}
+	if _, err = f.h.wbCalendar(ctx, f.owner, f.original.CalendarID, calendarOp(t, "change", f.original.ID, `<Attendees/>`)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = f.h.calendarAttachment(ctx, f.guest, ref); err == nil {
+		t.Fatal("removed guest still downloads with signed native reference")
+	}
+}

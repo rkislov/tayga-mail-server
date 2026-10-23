@@ -18,9 +18,11 @@ const (
 
 // Store implements storage.Driver for SQLite and PostgreSQL.
 type Store struct {
-	db             *sql.DB
-	dialect        Dialect
-	learningPolicy func() (bool, string) // configured once before serving; callback reads live settings
+	db               *sql.DB
+	dialect          Dialect
+	learningPolicy   func() (bool, string) // configured once before serving; callback reads live settings
+	calendarLinkKey  []byte
+	calendarLinkBase string
 }
 
 var _ Driver = (*Store)(nil)

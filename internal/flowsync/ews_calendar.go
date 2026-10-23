@@ -69,7 +69,11 @@ func (h *ewsHandler) calendarItemXML(ctx context.Context, u *storage.User, o *st
 	var b strings.Builder
 	fmt.Fprintf(&b, `<t:CalendarItem><t:ItemId Id="%s" ChangeKey="%s"/><t:ParentFolderId Id="%s"/><t:ItemClass>IPM.Appointment</t:ItemClass><t:Subject>%s</t:Subject>`, xmlEscape(o.ID), xmlEscape(ewsCalendarChangeKey(o, files)), xmlEscape(o.CalendarID), xmlEscape(subject))
 	if includeBody {
-		fmt.Fprintf(&b, `<t:Body BodyType="Text">%s</t:Body>`, xmlEscape(ev.Description))
+		links, err := h.store.CalendarAttachmentLinks(ctx, o.ID, u.ID)
+		if err != nil {
+			return "", err
+		}
+		fmt.Fprintf(&b, `<t:Body BodyType="Text">%s</t:Body>`, xmlEscape(calendarDownloadDescription(ev.Description, links)))
 	}
 	// Empty collections explicitly clear cached participants/files after removal.
 	b.WriteString(`<t:Attachments>`)
