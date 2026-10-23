@@ -267,3 +267,31 @@ HTML-карточку и исходный `text/calendar` с METHOD, UID и SEQU
 
 Источники: [MS-ASAIRS Attachment](https://learn.microsoft.com/en-us/openspecs/exchange_server_protocols/ms-asairs/359c0c61-e900-49d8-a855-d132a2e0edda),
 [MS-ASCMD Range](https://learn.microsoft.com/en-us/openspecs/exchange_server_protocols/ms-ascmd/f20562a5-0b21-45fa-81aa-f8cedb3f6a4a).
+
+### Получение изменений через EWS / Outlook
+
+`FindItem`, `GetItem` и `SyncFolderItems` используют общее представление
+события: организатор, обязательные/необязательные участники, ресурсы,
+индивидуальные `ResponseType`, собственный `MyResponseType`, признак отмены,
+номер последовательности и метаданные файлов. Ответы участников, принятые
+через ActiveSync или веб, выдаются организатору по EWS как `Update` того же
+`ItemId`. При удалении участников или файлов возвращаются пустые коллекции,
+чтобы клиент удалял устаревшие данные.
+
+Файлы собственного события скачиваются через авторизованный `GetAttachment`
+с теми же проверками доступа, что и ActiveSync. Изменение только метаданных
+вложений учитывается в `ChangeKey`, инкрементальном Sync и потоковых
+`ModifiedEvent`; наличие изменений внутри VEVENT для этого не требуется.
+Внешние ATTACH-URL и доступ участников к файлам чужой копии события не
+расширяются. Эта доработка относится к получению изменений по EWS;
+создание файлов и изменение состава встречи из Outlook требуют отдельной
+реализации EWS-команд записи.
+
+Интеграционные проверки выполняют HTTP SOAP и EAS MeetingResponse: принятие,
+предварительный ответ, отказ, добавление и удаление участника, сохранение
+идентификатора, продолжение Sync после переподключения, добавление и удаление
+PDF, бинарное скачивание, отзыв доступа и потоковое уведомление об изменении
+файла. Реальное отображение проверяется отдельно в клиенте Outlook.
+
+Источники: [EWS CalendarItem](https://learn.microsoft.com/en-us/exchange/client-developer/web-service-reference/calendaritem),
+[EWS attachments](https://learn.microsoft.com/en-us/exchange/client-developer/exchange-web-services/attachments-and-ews-in-exchange).

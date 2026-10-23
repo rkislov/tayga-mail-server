@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/tayga/tms/internal/mailstore"
 	"github.com/tayga/tms/internal/storage"
 )
 
@@ -32,27 +33,32 @@ func (h *easHandler) calendarAttachmentsXML(ctx context.Context, objectID string
 }
 
 func (h *easHandler) calendarAttachment(ctx context.Context, u *storage.User, reference string) (messageAttachment, error) {
+	return readCalendarAttachment(ctx, h.store, h.ms, u, reference)
+}
+
+// Both EAS and EWS apply the same current-event ownership and file checks.
+func readCalendarAttachment(ctx context.Context, store storage.Driver, ms *mailstore.Store, u *storage.User, reference string) (messageAttachment, error) {
 	parts := strings.Split(reference, ":")
-	if len(parts) != 3 || parts[0] != "calendar" || h.ms == nil {
+	if len(parts) != 3 || parts[0] != "calendar" || ms == nil {
 		return messageAttachment{}, storage.ErrNotFound
 	}
-	object, err := h.store.GetCalendarObjectByID(ctx, parts[1])
+	object, err := store.GetCalendarObjectByID(ctx, parts[1])
 	if err != nil {
 		return messageAttachment{}, err
 	}
 	// A known file ID grants no access. Match the current, owned event as well
 	// as the attachment; removal of either revokes an old reference immediately.
-	if _, err = h.store.GetCalendarByID(ctx, u.ID, object.CalendarID); err != nil {
+	if _, err = store.GetCalendarByID(ctx, u.ID, object.CalendarID); err != nil {
 		return messageAttachment{}, err
 	}
-	file, err := h.store.GetCalendarAttachment(ctx, parts[2])
+	file, err := store.GetCalendarAttachment(ctx, parts[2])
 	if err != nil {
 		return messageAttachment{}, err
 	}
 	if file.CalendarObjectID != object.ID || !filepath.IsLocal(file.StoragePath) || file.Size < 0 || file.Size > 32<<20 {
 		return messageAttachment{}, storage.ErrNotFound
 	}
-	root, err := os.OpenRoot(filepath.Join(h.ms.Root, "calendar-attachments"))
+	root, err := os.OpenRoot(filepath.Join(ms.Root, "calendar-attachments"))
 	if err != nil {
 		return messageAttachment{}, err
 	}
