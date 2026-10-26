@@ -1,5 +1,18 @@
 const I18N = {
   ru: {
+ branding_enabled: "Свой брендинг", branding_tenant: "Брендинг тенанта", branding_domain: "Брендинг домена",
+    branding_title: "Брендинг шапки",
+    branding_hint: "Брендинг домена заменяет брендинг тенанта. Если свой брендинг выключен, используется оформление тенанта или Тайга Майл. Подпись платформы всегда видна.",
+    branding_name: "Название",
+    branding_image: "Картинка для шапки",
+    branding_file_hint: "PNG или JPEG до 1 МБ, до 4096 × 4096 пикселей. Картинка вписывается целиком.",
+    branding_attribution: "Работает на платформе Тайга Майл",
+    branding_remove_image: "Убрать картинку",
+    branding_reset: "Сбросить брендинг",
+    branding_invalid: "Выберите PNG или JPEG до 1 МБ, до 4096 × 4096 пикселей.",
+    branding_save_error: "Не удалось сохранить брендинг. Попробуйте ещё раз.",
+
+    edit: "Редактировать",
 "presence_label":"Мой статус","presence_online":"В сети","presence_away":"Отошёл","presence_dnd":"Не беспокоить","presence_offline":"Не в сети","presence_unknown":"Статус недоступен","presence_request":"Запрашивает ваш статус","presence_accept":"Разрешить","presence_reject":"Отклонить","presence_request_action":"Запросить статус",
 
 "task_owner":"Автор","task_assignee":"Исполнитель","task_unassigned":"Не назначен","task_assignment_pending":"Ожидает принятия","task_assignment_accepted":"Принята исполнителем","task_assignment_declined":"Отклонена исполнителем","task_accept":"Принять","task_decline":"Отклонить","task_assign":"Назначить","task_revoke":"Отозвать назначение","task_revoke_confirm":"Отозвать назначение? Исполнитель потеряет доступ к задаче.","task_assignment_hint":"Выберите сотрудника вашей организации. Он получит запрос на принятие задачи.","task_assignee_search":"Поиск по имени или email","task_assignee_choose":"Без нового назначения","task_progress_only":"Вы можете менять состояние и прогресс. Описание, срок и назначение изменяет автор.","task_pending_hint":"Примите задачу, чтобы обновлять её состояние и прогресс.","task_notifications":"Уведомления о задачах","task_unread":"непрочитано","task_history":"История изменений","task_prev":"Назад","task_next":"Далее","task_action_create":"Задача создана","task_action_assign":"Назначена задача","task_action_accept":"Исполнитель принял задачу","task_action_decline":"Исполнитель отклонил задачу","task_action_revoke":"Назначение отозвано","task_action_delete":"Задача удалена","task_action_update":"Задача изменена","task_action_complete":"Задача завершена","task_action_reopen":"Задача открыта повторно","task_history_empty":"Изменений пока нет","task_notifications_empty":"Уведомлений пока нет","task_unavailable":"Задача удалена или доступ к ней отозван.","task_change_title":"название","task_change_body":"описание","task_change_due":"срок","task_change_progress":"прогресс","task_change_properties":"параметры синхронизации","task_change_assignment":"назначение","task_change_task":"создание",
@@ -10,6 +23,7 @@ const I18N = {
  mig_skip_tls: "Не проверять сертификат старого сервера", mig_skip_tls_hint: "Только для этой задачи. Для доверенного сервера с самоподписанным сертификатом.",
  nav_antispam: "Антиспам",
 "saved":"Сохранено","ca_self_hint":"Временный сертификат для тестовой установки. Браузер не доверяет ему автоматически.","ca_pem_hint":"Импорт готового сертификата и закрытого ключа. Ключ должен соответствовать сертификату.","ca_acme_hint":"Домен должен указывать на этот сервер в публичном DNS. Порт 80 должен быть доступен снаружи.","ca_configure":"Открыть настройки →","users_status":"Состояние","users_active":"Активен","users_disabled":"Отключён","users_storage":"Использовано / квота","users_actions":"Действия","users_quota_action":"Квота","language_topbar_hint":"Выберите язык с помощью значка глобуса справа сверху.","profile_admin":"Администратор","profile_user":"Пользователь","profile_auth":"Способ входа","profile_unlimited":"Без ограничения объёма","signature_title":"Подпись к письму","signature_hint":"Подпись сохраняется в учётной записи и доступна на других устройствах. Переносы строк сохраняются.","signature_new":"Добавлять в новые письма","signature_reply":"Добавлять в ответы","signature_preview":"Предпросмотр","signature_empty":"Подпись пока не задана","nav_mailsecurity":"Защита почты","security_filters_hint":"Антиспам, антивирус и письма, помещённые в карантин.","security_antivirus":"Антивирус ClamAV","security_antispam":"Антиспам Rspamd","monitor_messages":"Количество писем","monitor_bytes":"Объём писем","monitor_queue":"Исходящая очередь","monitor_history_hint":"Наблюдения каждые 5 секунд, пока открыта страница. Это количество сохранённых писем, а не счётчик всего принятого трафика.",
+    note_history: "История версий", note_history_empty: "Предыдущих версий пока нет.", note_restore: "Восстановить",
     note_copy_local: "Копировать мой текст", note_load_server: "Загрузить серверную версию", note_keep_local: "Сохранить мою версию", note_reload_confirm: "Заменить текст в редакторе версией с сервера? Локальные изменения будут потеряны.",
     note_bullets: "Маркированный список",
     note_numbers: "Нумерованный список",
@@ -516,6 +530,19 @@ contacts_search: "Поиск контактов…",
     save: "Сохранить",
   },
   en: {
+ branding_enabled: "Custom branding", branding_tenant: "Tenant branding", branding_domain: "Domain branding",
+    branding_title: "Header branding",
+    branding_hint: "Domain branding overrides tenant branding. When disabled, tenant branding or Tayga Mail is used. Platform attribution always stays visible.",
+    branding_name: "Name",
+    branding_image: "Header image",
+    branding_file_hint: "PNG or JPEG up to 1 MB, at most 4096 × 4096 pixels. The entire image is displayed.",
+    branding_attribution: "Powered by Tayga Mail",
+    branding_remove_image: "Remove image",
+    branding_reset: "Reset branding",
+    branding_invalid: "Choose a PNG or JPEG up to 1 MB, at most 4096 × 4096 pixels.",
+    branding_save_error: "Could not save branding. Please try again.",
+
+    edit: "Edit",
 "presence_label":"My status","presence_online":"Online","presence_away":"Away","presence_dnd":"Do not disturb","presence_offline":"Offline","presence_unknown":"Status unavailable","presence_request":"Requests your presence","presence_accept":"Allow","presence_reject":"Decline","presence_request_action":"Request presence",
 
 "task_owner":"Author","task_assignee":"Assignee","task_unassigned":"Unassigned","task_assignment_pending":"Awaiting acceptance","task_assignment_accepted":"Accepted","task_assignment_declined":"Declined","task_accept":"Accept","task_decline":"Decline","task_assign":"Assign","task_revoke":"Revoke assignment","task_revoke_confirm":"Revoke this assignment? The assignee will lose access to the task.","task_assignment_hint":"Choose a colleague in your organization. They will receive an invitation to accept the task.","task_assignee_search":"Search by name or email","task_assignee_choose":"No new assignment","task_progress_only":"You can update status and progress. The author manages details, dates and assignment.","task_pending_hint":"Accept this task to update its status and progress.","task_notifications":"Task notifications","task_unread":"unread","task_history":"Change history","task_prev":"Previous","task_next":"Next","task_action_create":"Task created","task_action_assign":"Task assigned","task_action_accept":"Assignee accepted the task","task_action_decline":"Assignee declined the task","task_action_revoke":"Assignment revoked","task_action_delete":"Task deleted","task_action_update":"Task updated","task_action_complete":"Task completed","task_action_reopen":"Task reopened","task_history_empty":"No changes yet","task_notifications_empty":"No notifications yet","task_unavailable":"Task deleted or access revoked.","task_change_title":"title","task_change_body":"description","task_change_due":"due date","task_change_progress":"progress","task_change_properties":"sync properties","task_change_assignment":"assignment","task_change_task":"creation",
@@ -526,6 +553,7 @@ contacts_search: "Поиск контактов…",
  mig_skip_tls: "Skip source server certificate verification", mig_skip_tls_hint: "This migration only. Use for a trusted server with a self-signed certificate.",
  nav_antispam: "Antispam",
 "saved":"Saved","ca_self_hint":"Temporary certificate for a test installation. Browsers do not trust it automatically.","ca_pem_hint":"Import a certificate and its matching private key.","ca_acme_hint":"Public DNS must point to this server, with port 80 accessible from outside.","ca_configure":"Open settings →","users_status":"Status","users_active":"Active","users_disabled":"Disabled","users_storage":"Used / quota","users_actions":"Actions","users_quota_action":"Quota","language_topbar_hint":"Choose your language using the globe in the upper right.","profile_admin":"Administrator","profile_user":"User","profile_auth":"Authentication","profile_unlimited":"Unlimited storage","signature_title":"Mail signature","signature_hint":"Saved to your account and available on other devices. Line breaks are preserved.","signature_new":"Add to new messages","signature_reply":"Add to replies","signature_preview":"Preview","signature_empty":"No signature yet","nav_mailsecurity":"Mail protection","security_filters_hint":"Spam and antivirus settings, and quarantined messages.","security_antivirus":"ClamAV antivirus","security_antispam":"Rspamd antispam","monitor_messages":"Message count","monitor_bytes":"Mail storage","monitor_queue":"Outbound queue","monitor_history_hint":"Samples every 5 seconds while this page is open. These are stored message counts, not total inbound traffic.",
+    note_history: "Version history", note_history_empty: "No previous versions yet.", note_restore: "Restore",
     note_copy_local: "Copy my text", note_load_server: "Load server version", note_keep_local: "Save my version", note_reload_confirm: "Replace the editor text with the server version? Local changes will be lost.",
     note_bullets: "Bullet list",
     note_numbers: "Numbered list",
@@ -1548,6 +1576,7 @@ function isAuthPublicPath(path) {
 }
 
 function clearSession() {
+  resetBranding();
   resetTasks();
   resetComposeAttachments();
   disableWebPush().catch(() => {});
@@ -1694,6 +1723,7 @@ async function loadMe() {
   try {
     const me = await api("/api/v1/me");
     state.me = me;
+    refreshBranding();
     refreshMailImagePreferences();
     state.email = me.email || state.email;
     $("acct-email").textContent = me.email;
@@ -2205,10 +2235,15 @@ async function refreshTenantDomains() {
           </label>
           <label class="field-check" title="${escapeHtml(mailImageText('Общий адресный справочник пользователей этого домена','Global address list for users in this domain'))}"><input type="checkbox" data-domain-gal="${escapeHtml(d.id)}" ${d.gal_enabled?'checked':''}> GAL</label>
           <label class="field-check" title="${escapeHtml(mailImageText('Коллеги этого домена в XMPP и веб-чате. В XMPP обновится при переподключении.','Domain colleagues in XMPP and web chat. Reconnect XMPP to refresh.'))}"><input type="checkbox" data-domain-xmpp-gal="${escapeHtml(d.id)}" ${d.xmpp_gal_enabled?'checked':''}> ${escapeHtml(mailImageText('Общий список контактов XMPP','XMPP shared contacts'))}</label>
+          <button type="button" class="btn-secondary" data-domain-branding="${escapeHtml(d.id)}">${escapeHtml(t("branding_title"))}</button>
+          <button type="button" class="btn-secondary" data-domain-aliases="${escapeHtml(d.id)}">${escapeHtml(mailImageText('Алиасы','Aliases'))}</button>
           <button type="button" class="btn-spray" data-open-domain="${escapeHtml(d.id)}" data-name="${escapeHtml(d.name)}">${escapeHtml(t("domains_open"))}</button>
           <button type="button" class="btn-secondary" data-del-domain="${escapeHtml(d.name)}" ${d.user_count > 0 ? "disabled" : ""}>${escapeHtml(t("domains_remove"))}</button>
         </span>
       </li>`).join("") || `<li><span class="meta">${escapeHtml(t("domains_empty"))}</span></li>`;
+    $('tenant-branding-button')?.classList.toggle('hidden', !state.me?.is_global_admin && state.me?.admin_scope !== 'tenant');
+    list.querySelectorAll('[data-domain-branding]').forEach(button=>button.onclick=()=>openAdminBranding('domains',items.find(d=>d.id===button.dataset.domainBranding)));
+    list.querySelectorAll('[data-domain-aliases]').forEach(button=>button.onclick=()=>openAdminAliases('domain',items.find(d=>d.id===button.dataset.domainAliases)));
     list.querySelectorAll("[data-open-domain]").forEach((btn) => {
       btn.addEventListener("click", () => {
         tenantNav.domainID = btn.dataset.openDomain;
@@ -2397,8 +2432,9 @@ async function refreshAdminUsers() {
             </select>
           </label>
 </td><td><div class="user-action-icons">
- ${[['quota','download',t('users_quota_action')],['toggle','disconnect',t(u.enabled?'users_disable':'users_enable')],['pass','key',t('users_reset_pw')],...(state.me?.is_global_admin?[['user-role','shield',mailImageText('Роль и права пользователя','User role and permissions')]]:[]),['mail-access','reply',mailImageText('Доступ к ящику','Mailbox access')],...((u.id!==state.me?.id&&!u.is_global_admin)?[['delete-user','delete',mailImageText('Удалить пользователя','Delete user')]]:[])].map(([action,icon,label])=>`<button type="button" class="btn-secondary user-action-icon" data-${action}="${escapeHtml(u.id)}" data-enabled="${u.enabled?'1':'0'}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${designIcon(icon)}</button>`).join('')}
+ ${[['quota','download',t('users_quota_action')],['toggle','disconnect',t(u.enabled?'users_disable':'users_enable')],['pass','key',t('users_reset_pw')],...(state.me?.is_global_admin?[['user-role','shield',mailImageText('Роль и права пользователя','User role and permissions')]]:[]),['mailbox-aliases','reply',mailImageText('Алиасы ящика','Mailbox aliases')],['mail-access','reply',mailImageText('Доступ к ящику','Mailbox access')],...((u.id!==state.me?.id&&!u.is_global_admin)?[['delete-user','delete',mailImageText('Удалить пользователя','Delete user')]]:[])].map(([action,icon,label])=>`<button type="button" class="btn-secondary user-action-icon" data-${action}="${escapeHtml(u.id)}" data-enabled="${u.enabled?'1':'0'}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${designIcon(icon)}</button>`).join('')}
  </div></td></tr>`).join("") || `<tr><td colspan="7" class="meta">${t("users_empty")}</td></tr>`;
+    list.querySelectorAll('[data-mailbox-aliases]').forEach(button=>button.onclick=()=>openAdminAliases('mailbox',users.find(u=>u.id===button.dataset.mailboxAliases)));
     list.querySelectorAll('[data-delete-user]').forEach(button=>button.onclick=async()=>{const user=users.find(u=>u.id===button.dataset.deleteUser);if(!await askConfirm(mailImageText('Удалить пользователя и его данные: ','Delete user and their data: ')+user.email+'?',{danger:true}))return;button.disabled=true;try{await api('/api/v1/admin/users/'+encodeURIComponent(user.id),{method:'DELETE'});await refreshAdminUsers()}catch(err){setMsg($('admin-msg'),err.message,'err');button.disabled=false}});
     list.querySelectorAll("[data-mail-access]").forEach(button=>button.onclick=()=>openMailboxAccess(button.dataset.mailAccess));list.querySelectorAll("[data-user-role]").forEach(button=>button.onclick=()=>openUserRole(users.find(u=>u.id===button.dataset.userRole)));
     list.querySelectorAll("[data-user-mig]").forEach((sel) => {
@@ -4064,7 +4100,22 @@ function getComposeText() {
   return el.value || "";
 }
 
-function openCompose({ to = "", cc = "", subject = "", body = "", bodyHTML = "" } = {}) {
+let composeSenderEpoch=0;
+async function loadComposeSenders(preferred='') {
+ const select=$('compose-from');if(!select)return;
+ const epoch=++composeSenderEpoch,userID=state.me?.id,primary=state.me?.email||'';
+ const add=address=>{const option=document.createElement('option');option.value=address;option.textContent=address;select.append(option)};
+ select.replaceChildren();if(primary)add(primary);select.disabled=true;renderComposeAttachments();
+ try{
+  const data=await api('/api/v1/mail/senders');
+  if(epoch!==composeSenderEpoch||state.me?.id!==userID)return;
+  select.replaceChildren();for(const address of data.addresses||[])add(address);
+  select.value=(data.addresses||[]).includes(preferred)?preferred:(data.default||primary);
+ }catch(error){if(epoch===composeSenderEpoch&&state.me?.id===userID)setMsg($('compose-msg'),mailImageText('Не удалось загрузить адреса отправителя. Повторно откройте окно письма.','Could not load sender addresses. Reopen the compose window.'),'err');}
+ finally{if(epoch===composeSenderEpoch&&state.me?.id===userID)select.disabled=false;renderComposeAttachments();}
+}
+
+function openCompose({ to = "", cc = "", from = "", subject = "", body = "", bodyHTML = "" } = {}) {
   if (composeAttachments.sending) return;
   resetComposeAttachments();
   $("compose-backdrop")?.classList.remove("hidden");
@@ -4079,6 +4130,7 @@ function openCompose({ to = "", cc = "", subject = "", body = "", bodyHTML = "" 
   const surface = composeBodyEl();
   if (surface?.dataset) surface.dataset.placeholder = t("body");
   setMsg($("compose-msg"), "");
+  loadComposeSenders(from);
   surface?.focus?.();
 }
 
@@ -4109,7 +4161,7 @@ $("compose-backdrop")?.addEventListener("click", (e) => {
   if (e.target === $("compose-backdrop")) $("compose-backdrop").classList.add("hidden");
 });
 $("btn-compose-send")?.addEventListener("click", async () => {
-  if (composeAttachments.sending || composeAttachments.entries.some(item=>item.status!=="ready")) return;
+  if (composeAttachments.sending || $("compose-from")?.disabled || composeAttachments.entries.some(item=>item.status!=="ready")) return;
   composeAttachments.sending = true;
   renderComposeAttachments();
   const to = ($("compose-to").value || "").split(/[,;]/).map((s) => s.trim()).filter(Boolean);
@@ -4119,6 +4171,7 @@ $("btn-compose-send")?.addEventListener("click", async () => {
     const text = getComposeText(), html = getComposeHTML();
     const attachments = composeAttachments.entries.filter(item=>!item.share).map(item=>item.ref);
     const payload = {
+      from: $("compose-from")?.value || state.me?.email || "",
       to,
       cc: ($("compose-cc")?.value || "").split(/[,;]/).map(value=>value.trim()).filter(Boolean),
       subject: $("compose-subject").value,
@@ -4228,11 +4281,15 @@ function calMonthStart(d) {
 }
 
 function showCalCompose(open) {
+ if($('form-cal-event')?.dataset.saving==='true')return;
+ if(open){calState.editingEvent=null;const form=$('form-cal-event');if(form)form.dataset.editorUser=state.me?.id || '';}
  if(open && $("cal-location")){delete $("cal-location").dataset.geo;$("cal-location").dispatchEvent(new Event("input"));}
   const dialog=mountCalendarEditor();
  if(dialog){if(open&&!dialog.open)dialog.showModal();if(!open&&dialog.open)dialog.close()}
  syncEventCalendarChoice();
   if (open) {
+    const title=$('event-editor-title');if(title){title.removeAttribute('data-i18n');title.textContent=t('new_event');}
+    if($('event-calendar-choice'))$('event-calendar-choice').disabled=false;
     setMsg($("cal-msg"), "");
     mountNewEventRecurrence();
     calState.attendees = [];
@@ -4283,7 +4340,7 @@ function renderCalReadAttachments(atts) {
       return `<div class="cal-attach-item">
         <button type="button" class="btn-secondary btn-sm" data-att-dl="${escapeHtml(a.id)}" data-name="${escapeHtml(a.filename || "file")}">${escapeHtml(a.filename || "file")}</button>
         <span class="meta">${escapeHtml(a.content_type || "")}${size}</span>
-        <button type="button" class="btn-secondary btn-sm" data-att-del="${escapeHtml(a.id)}">${escapeHtml(t("cal_attach_delete"))}</button>
+        ${a.read_only ? "" : `<button type="button" class="btn-secondary btn-sm" data-att-del="${escapeHtml(a.id)}">${escapeHtml(t("cal_attach_delete"))}</button>`}
       </div>`;
     }).join("");
     dd.querySelectorAll("[data-att-dl]").forEach((btn) => {
@@ -4705,6 +4762,7 @@ function renderCalDay() {
 }
 
 function startNewCalEvent(day = calState.selectedDay || calDayKey(new Date()), hour = 10) {
+  if($('form-cal-event')?.dataset.saving==='true')return;
   if(calState.defaultCalendarID)calState.calendarID=calState.defaultCalendarID;
   if (calState.calendars.find(c=>c.id===calState.calendarID)?.writable===false) {setMsg($("cal-msg"),t("cal_readonly"),"err");return;}
   clearTimeout(calState.dayClickTimer);
@@ -4712,6 +4770,7 @@ function startNewCalEvent(day = calState.selectedDay || calDayKey(new Date()), h
   $("form-cal-event")?.reset();
   delete $("form-cal-event").dataset.createdEvent;
   calState.uploadedFiles=new Set();
+  $('cal-start').type='datetime-local';$('cal-end').type='datetime-local';
   $("cal-start").value = day + "T" + String(hour).padStart(2,"0") + ":00";
   const end = new Date(day + "T" + String(hour).padStart(2,"0") + ":00");
   end.setHours(end.getHours() + 1);
@@ -4937,6 +4996,7 @@ function showCalReader(ev) {
   renderCalReadAttachments(ev.attachments || []);
   const recurring = !!ev.recurrence_id;
   const canEdit = calendar?.writable !== false && !ev.busy_only && (!recurring || ev.occurrence_organizer);
+  $('btn-cal-edit')?.classList.toggle('hidden',!canEditCalendarEvent(ev));
   $('btn-cal-recurrence')?.classList.toggle('hidden',!canEdit || !ev.recurrence_organizer);
   $('btn-cal-instance-edit')?.classList.toggle('hidden',!recurring || !canEdit);
   $('btn-cal-series-delete')?.classList.toggle('hidden',!recurring || !canEdit);
@@ -5073,6 +5133,7 @@ $("cal-backdrop")?.addEventListener("click", (e) => {
   if (e.target === $("cal-backdrop")) showCalCompose(false);
 });
 $("btn-cal-instance-edit")?.addEventListener("click",()=>openCalOccurrenceEditor());
+$("btn-cal-edit")?.addEventListener("click",()=>editCalendarRecord(calState.currentEvent));
 $("btn-cal-series-delete")?.addEventListener("click",()=>deleteCalEvent(true));
 $("btn-cal-delete")?.addEventListener("click",()=>deleteCalEvent(false));
 $("btn-cal-attendee-add")?.addEventListener("click", () => addCalAttendeesFromInput());
@@ -5120,8 +5181,11 @@ $("cal-read-files")?.addEventListener("change", async () => {
 
 $("form-cal-event")?.addEventListener("submit", async (e) => {
   e.preventDefault();
+  const form=$("form-cal-event"),editing=calState.editingEvent,userID=state.me?.id;
+  if(form.dataset.editorUser && form.dataset.editorUser!==userID)return;
+  if(editing && !canEditCalendarEvent(editing))return;
   addCalAttendeesFromInput();
-  calState.calendarID=$("event-calendar-choice")?.value || calState.calendarID;
+  calState.calendarID=editing?.calendar_id || $("event-calendar-choice")?.value || calState.calendarID;
   if(new Date($("cal-end").value)<=new Date($("cal-start").value)){setMsg($("cal-msg"),mailImageText("Конец должен быть позже начала","End must be after start"),"err");return;}
   if (!calState.calendarID) {
     try {
@@ -5134,20 +5198,21 @@ $("form-cal-event")?.addEventListener("submit", async (e) => {
     return;
   }
   let recurrence;
-  try {recurrence=readRecurrenceFields('cal-new-recurrence');} catch(error) {setMsg($('cal-msg'),error.message,'err');return;}
-  const form=$("form-cal-event");if(form.dataset.saving==="true")return;form.dataset.saving="true";
+  try {if(!editing)recurrence=readRecurrenceFields('cal-new-recurrence');} catch(error) {setMsg($('cal-msg'),error.message,'err');return;}
+  if(form.dataset.saving==="true")return;form.dataset.saving="true";
   const saveButton=form.querySelector('[type="submit"]');if(saveButton)saveButton.disabled=true;
   setMsg($("cal-msg"), "…");
   try {
     const created = form.dataset.createdEvent ? {id:form.dataset.createdEvent} : await api("/api/v1/calendar/calendars/" + encodeURIComponent(calState.calendarID) + "/events", {
-      method: "POST",
+      method: editing ? "PUT" : "POST",
       body: JSON.stringify({
+        id: editing?.id, etag: editing?.etag, all_day: editing?.all_day,
         summary: $("cal-summary").value,
         location: $("cal-location")?.value || "",
  geo: $("cal-location")?.dataset.geo || "",
         description: $("cal-description")?.value || "",
-        start: localInputToISO($("cal-start").value),
-        end: localInputToISO($("cal-end").value),
+        start: editing?.all_day ? $("cal-start").value+'T00:00:00.000Z' : localInputToISO($("cal-start").value),
+        end: editing?.all_day ? $("cal-end").value+'T00:00:00.000Z' : localInputToISO($("cal-end").value),
         recurrence,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
         attendees: calState.attendees.map((a) => ({
@@ -5157,6 +5222,7 @@ $("form-cal-event")?.addEventListener("submit", async (e) => {
         })),
       }),
     });
+    if(state.me?.id!==userID)return;
     if(created?.id)form.dataset.createdEvent=created.id;
     const files = $("cal-files")?.files;
     if (created?.id && files?.length) {
@@ -5164,17 +5230,21 @@ $("form-cal-event")?.addEventListener("submit", async (e) => {
         const key=file.name+":"+file.size+":"+file.lastModified;
         if(calState.uploadedFiles?.has(key))continue;
         await uploadCalAttachment(created.id, file);
+        if(state.me?.id!==userID)return;
         if(!calState.uploadedFiles)calState.uploadedFiles=new Set();calState.uploadedFiles.add(key);
       }
     }
     setMsg($("cal-msg"), "OK", "ok");
     $("form-cal-event").reset();
     calState.attendees = [];
+    calState.editingEvent = null;
     renderCalAttendeeChips();
+    delete form.dataset.saving;
     showCalCompose(false);
     await loadCalEvents();
     if (created?.id) openCalEvent(created.id);
   } catch (err) {
+    if(state.me?.id!==userID)return;
     setMsg($("cal-msg"), form.dataset.createdEvent ? mailImageText("Событие сохранено, но не все вложения загружены. Повторите сохранение, чтобы дозагрузить файлы: ","Event saved, but some attachments failed. Save again to retry uploads: ")+err.message : calendarRecurrenceError(err.message), "err");
   } finally {delete form.dataset.saving;if(saveButton)saveButton.disabled=false;}
 });
@@ -6281,6 +6351,47 @@ $("btn-note-draw-save")?.addEventListener("click", async () => {
   }
 });
 
+$('btn-note-history')?.addEventListener('click', async () => {
+ if (!await flushNoteSave()) return;
+ const id = notesState.noteID;
+ if (!id) return;
+ const dialog = document.createElement('dialog');
+ dialog.className = 'migration-dialog'; dialog.setAttribute('aria-label', t('note_history'));
+ const title = document.createElement('h3'); title.textContent = t('note_history');
+ const close = document.createElement('button'); close.type = 'button'; close.className = 'btn-secondary'; close.textContent = t('close'); close.onclick = () => dialog.close();
+ const list = document.createElement('div');
+ const status = document.createElement('p'); status.className = 'msg'; status.setAttribute('role', 'status');
+ dialog.append(title, list, status, close); document.body.append(dialog);
+ dialog.addEventListener('close', () => dialog.remove(), {once:true}); dialog.showModal();
+ try {
+  const data = await api('/api/v1/notes/' + encodeURIComponent(id) + '/versions');
+  if (!dialog.isConnected) return;
+  if (!data.versions.length) list.textContent = t('note_history_empty');
+  for (const version of data.versions) {
+   const row = document.createElement('details');
+   const summary = document.createElement('summary'); summary.textContent = new Date(version.saved_at).toLocaleString() + ' · ' + (version.title || t('note_new'));
+   const preview = document.createElement('p'); preview.style.whiteSpace = 'pre-wrap'; preview.style.overflowWrap = 'anywhere'; preview.textContent = version.body_text;
+   row.append(summary, preview);
+   if (notesState.rights === 'write') {
+    const restore = document.createElement('button'); restore.type = 'button'; restore.className = 'btn-secondary'; restore.textContent = t('note_restore');
+    restore.onclick = async () => {
+     if (notesState.noteID !== id || !await flushNoteSave()) return;
+     restore.disabled = true;
+     try {
+      const revision = notesState.revision, etag = notesState.etags[id];
+      const note = await api('/api/v1/notes/' + encodeURIComponent(id) + '/versions/' + encodeURIComponent(version.id) + '/restore', {method:'POST', body:JSON.stringify({etag})});
+      if (notesState.noteID === id && notesState.revision === revision && !notesState.dirty) showNoteEditor(note);
+      await refreshNotes(); dialog.close();
+     } catch (err) { setMsg(status, err.message, 'err'); }
+     finally { restore.disabled = false; }
+    };
+    row.append(restore);
+   }
+   list.append(row);
+  }
+ } catch (err) { setMsg(status, err.message, 'err'); }
+});
+
 async function openNoteShare(kind) {
   notesState.shareTarget = kind; // folder | note
   $("note-share-backdrop")?.classList.remove("hidden");
@@ -6797,7 +6908,7 @@ const CONFIG_SECTIONS = {
   seed: ["Первоначальная учётная запись", "Параметры создания первой организации и администратора."],
   storage: ["База данных", "Параметры bootstrap YAML, доступные только для чтения."],
   mailstore: ["Письма и S3", "Каталог maildir и зеркало объектного хранилища."],
-  files: ["Файлы и офис", "Адрес отдельного Collabora Online для совместного редактирования."],
+  files: ["Файлы и офис · ONLYOFFICE / Р7", "Подключение Collabora Online, ONLYOFFICE или Р7 для совместного редактирования."],
   ha: ["Высокая доступность", "Лидер, аренда узла и закрепление писателей за пользователями."],
   http: ["Веб-интерфейс и HTTP", "HTTP/HTTPS, публичный адрес и глобальные администраторы."],
   tls: ["TLS и ACME", "Сертификаты сервисов и автоматическая выдача через ACME."],
@@ -6861,7 +6972,7 @@ function configFieldHTML(field, path, locked = false) {
   else if (field.kind === "strings") input = `<textarea id="${id}" class="field-input" rows="3" ${disabled}>${escapeHtml((value || []).join("\n"))}</textarea>`;
   else if (field.options?.length) {
     const options = [...new Set([...(!field.options.includes(value ?? "") ? [value ?? ""] : []), ...field.options])];
-    input = `<select id="${id}" class="field-input" ${disabled}>${options.map(option => `<option value="${escapeHtml(option)}" ${value === option ? "selected" : ""}>${escapeHtml(option)}</option>`).join("")}</select>`;
+    input = `<select id="${id}" class="field-input" ${disabled}>${options.map(option => `<option value="${escapeHtml(option)}" ${value === option ? "selected" : ""}>${escapeHtml(configEditor.section === "files" && field.key === "office_provider" ? ({"":configText("Collabora Online (по умолчанию)","Collabora Online (default)"),collabora:"Collabora Online",onlyoffice:"ONLYOFFICE Document Server",r7:"Р7 — Сервер документов"}[option] || option) : option)}</option>`).join("")}</select>`;
   } else {
     const type = field.secret ? "password" : ["integer", "number"].includes(field.kind) ? "number" : "text";
     input = `<input id="${id}" class="field-input" type="${type}" value="${escapeHtml(field.secret ? "" : value ?? "")}" ${type === "number" ? `step="${field.kind === "integer" ? "1" : "any"}"` : ""} ${field.kind === "duration" ? 'placeholder="30s, 5m, 24h"' : ""} ${field.secret ? `autocomplete="new-password" placeholder="${escapeHtml(value ? t("config_secret_saved") : t("config_secret_empty"))}"` : ""} ${disabled} />`;
@@ -6930,7 +7041,7 @@ async function openAdminConfig(section) {
   const group = CONFIG_GROUPS.find(group => group.sections.includes(section));
   $("config-category").textContent = group ? configText(...group.title) : "";
   $("config-lede").textContent = configDescription(section);
-  $("config-notice").textContent = t(schema.read_only ? "config_bootstrap_hint" : "config_restart_hint");
+  $("config-notice").textContent = section === "files" ? configText("Изменения применяются сразу. После смены подключения откройте документы заново.", "Changes apply immediately. Reopen documents after changing the connection.") : t(schema.read_only ? "config_bootstrap_hint" : "config_restart_hint");
   $("config-save").classList.toggle("hidden", !!schema.read_only);
   $("config-search").value = "";
   setMsg($("config-msg"), "");
@@ -7168,7 +7279,7 @@ function replyToMessage(message, all=false, dialog=null) {
   let quoted=message.text || '';
   if (!quoted && message.html) {const doc=new DOMParser().parseFromString(message.html,'text/html');doc.querySelectorAll('script,style').forEach(node=>node.remove());quoted=doc.body.textContent || '';}
   ensureComposeCC();
-  openCompose({to,cc:all?(message.reply_all_cc || []).join(', '):'',subject:/^re\s*:/i.test(message.subject || '')?message.subject:'Re: '+(message.subject || ''),body:'\n\n---\n'+quoted.slice(0,10000)});
+  openCompose({to,from:message.reply_from||'',cc:all?(message.reply_all_cc || []).join(', '):'',subject:/^re\s*:/i.test(message.subject || '')?message.subject:'Re: '+(message.subject || ''),body:'\n\n---\n'+quoted.slice(0,10000)});
 }
 function forwardMailMessage(message, dialog=null) {
   if (composeAttachments.sending) return;
@@ -7238,7 +7349,8 @@ function mountEditorDialog(id, className) {
  dialog.querySelectorAll(".compose-panel").forEach(panel=>{panel.removeAttribute("role");panel.removeAttribute("aria-modal")});
   old.replaceWith(dialog);document.body.append(dialog);
   if(id==='contact-backdrop'){const form=$('form-contact');const actions=form?.querySelector('.actions');if(actions){actions.classList.add('event-editor-footer');const save=actions.querySelector('[type=submit]');if(save){save.className='btn-spray';save.textContent=mailImageText('Сохранить контакт','Save contact')}const cancel=$('btn-contact-close');if(cancel){cancel.className='btn-secondary';cancel.textContent=mailImageText('Отмена','Cancel')}}}
-  dialog.addEventListener('click',event=>{if(event.target===dialog){const bounds=dialog.getBoundingClientRect();if(event.clientX<bounds.left||event.clientX>bounds.right||event.clientY<bounds.top||event.clientY>bounds.bottom)dialog.close()}});
+  dialog.addEventListener('cancel',event=>{if(dialog.querySelector('form')?.dataset.saving==='true')event.preventDefault()});
+  dialog.addEventListener('click',event=>{if(event.target===dialog && dialog.querySelector('form')?.dataset.saving!=='true'){const bounds=dialog.getBoundingClientRect();if(event.clientX<bounds.left||event.clientX>bounds.right||event.clientY<bounds.top||event.clientY>bounds.bottom)dialog.close()}});
   return dialog;
 }
 function mountCalendarEditor() {
@@ -7272,13 +7384,50 @@ function syncEventCalendarChoice() {
   select.value=calState.calendarID;
 }
 
+function canEditCalendarEvent(record) {
+  return !!record && !record.busy_only && record.recurrence_organizer !== false &&
+    calState.calendars.some(calendar=>calendar.id===record.calendar_id && calendar.writable!==false && !calendar.external);
+}
+
+async function editCalendarRecord(selected) {
+  if(!canEditCalendarEvent(selected) || $('form-cal-event')?.dataset.saving==='true')return;
+  const userID=state.me?.id;
+  try {
+    const record=await api('/api/v1/calendar/events/'+encodeURIComponent(selected.object_id || selected.id));
+    if(state.me?.id!==userID || !canEditCalendarEvent(record))return;
+    calState.calendarID=record.calendar_id;
+    const form=$('form-cal-event');form.reset();delete form.dataset.createdEvent;
+    calState.uploadedFiles=new Set();
+    showCalCompose(true);
+    calState.editingEvent=record;
+    form.dataset.editorUser=userID;
+    const series=!!record.recurrence?.raw;
+    const title=$('event-editor-title');title.removeAttribute('data-i18n');
+    title.textContent=series?mailImageText('Редактировать всю серию','Edit entire series'):mailImageText('Редактировать событие','Edit event');
+    $('event-calendar-choice').disabled=true;
+    $('cal-new-recurrence')?.remove();
+    for(const key of ['summary','location','description'])$('cal-'+key).value=record[key] || '';
+    $('cal-location').dataset.geo=record.geo || '';
+    for(const key of ['start','end']) {
+      $('cal-'+key).type=record.all_day?'date':'datetime-local';
+      $('cal-'+key).step='1';
+      $('cal-'+key).value=record.all_day?String(record[key]).slice(0,10):calendarLocalInput(record[key])+':'+String(new Date(record[key]).getSeconds()).padStart(2,'0');
+    }
+    calState.attendees=(record.attendees || []).map(a=>({...a,kind:a.kind || 'individual'}));
+    renderCalAttendeeChips();
+    setMsg($('cal-msg'),series?mailImageText('Изменения затронут всю серию. Правило повторения и напоминания сохранятся.','Changes apply to the entire series. The recurrence rule and reminders are preserved.'):record.all_day?mailImageText('Событие на весь день. Дата окончания не включается.','All-day event. The end date is exclusive.'):'');
+  } catch(error) {setMsg($('cal-load-msg'),error.message,'err');}
+}
+
 async function openEntityModal(kind,id) {
   let dialog=$('entity-reader-dialog');if(!dialog){dialog=document.createElement('dialog');dialog.id='entity-reader-dialog';dialog.className='mail-message-dialog';document.body.append(dialog)}
   dialog.dataset.entity=id;dialog.replaceChildren();
   const close=document.createElement('button');close.type='button';close.className='btn-secondary btn-sm';close.textContent=mailImageText('Закрыть','Close');close.addEventListener('click',()=>dialog.close());
   const content=document.createElement('div');content.textContent=mailImageText('Загрузка…','Loading…');dialog.append(close,content);if(!dialog.open)dialog.showModal();
   try{
-    const record=await api((kind==='calendar'?'/api/v1/calendar/events/':'/api/v1/contacts/cards/')+encodeURIComponent(id));
+    const cached=kind==='calendar'?calState.events.find(event=>event.id===id):null;
+    const query=cached?.recurrence_id?'?'+new URLSearchParams({recurrence_id:cached.recurrence_id}):'';
+    const record=await api((kind==='calendar'?'/api/v1/calendar/events/':'/api/v1/contacts/cards/')+encodeURIComponent(cached?.object_id || id)+query);
     if(!dialog.open||dialog.dataset.entity!==id)return;
     if(kind==='calendar'){calState.eventID=id;showCalReader(record)}else{contactState.cardID=id;showContactReader(record)}
     const reader=$(kind==='calendar'?'cal-reader':'contact-reader');
@@ -7288,7 +7437,8 @@ async function openEntityModal(kind,id) {
       addButton(mailImageText('Написать письмо','Write email'),()=>{dialog.close();showApp('mail');openCompose({to:record.email||''})});
       const edit=addButton(mailImageText('Редактировать','Edit'),()=>{dialog.close();editContactRecord(record)});edit.disabled=!!record.readonly;
     }else{
-      addButton(mailImageText('Создать похожее событие','Create similar event'),()=>{dialog.close();startNewCalEvent(calEventDayKey(record));$('cal-summary').value=record.summary||'';$('cal-location').value=record.location||'';$('cal-description').value=record.description||''});
+      const edit=addButton(mailImageText('Редактировать','Edit'),()=>{dialog.close();editCalendarRecord(record)});edit.disabled=!canEditCalendarEvent(record);
+      addButton(mailImageText('Создать похожее событие','Create similar event'),()=>{dialog.close();startNewCalEvent(calEventDayKey(record));$('cal-summary').value=record.summary||'';$('cal-location').value=record.location||'';$('cal-location').dataset.geo=record.geo||'';$('cal-description').value=record.description||''});
     }
     const remove=addButton(mailImageText('Удалить','Delete'),async()=>{
       dialog.close();if(!await askConfirm(t('delete_confirm'),{danger:true})){dialog.showModal();return}
@@ -8185,7 +8335,7 @@ function fileAction(label,run,icon='') {
   if(icon)button.innerHTML=designIcon(icon);else button.textContent=label;button.onclick=run;return button;
 }
 function libraryMessage(error) {
-  return ({507:mailImageText('Квота файлов исчерпана. Очистите корзину или удалите ненужные версии.','File quota exceeded. Empty trash or remove old versions.'),409:mailImageText('Файл изменён или путь уже занят. Обновите список и повторите действие.','File changed or the destination exists. Refresh and retry.'),423:mailImageText('Документ открыт для редактирования. Закройте редактор и повторите действие.','Document is locked for editing. Close the editor and retry.'),503:mailImageText('Офисный редактор ещё не подключён. Администратор может указать адрес Collabora в настройках сервера → Файлы.','Office is not connected yet. Configure Collabora in server settings → Files.')})[error.status]||error.message;
+  return ({507:mailImageText('Квота файлов исчерпана. Очистите корзину или удалите ненужные версии.','File quota exceeded. Empty trash or remove old versions.'),409:mailImageText('Файл изменён или путь уже занят. Обновите список и повторите действие.','File changed or the destination exists. Refresh and retry.'),423:mailImageText('Документ открыт для редактирования. Закройте редактор и повторите действие.','Document is locked for editing. Close the editor and retry.'),503:mailImageText('Офисный редактор ещё не подключён. Администратор может подключить Collabora, ONLYOFFICE или Р7 в настройках сервера → Файлы.','Office is not connected yet. Configure Collabora, ONLYOFFICE or R7 in server settings → Files.')})[error.status]||error.message;
 }
 async function openFileHistory(kind,path='') {
   const view=fileLibraryDialog(kind==='trash'?mailImageText('Корзина','Trash'):mailImageText('Версии файла','File versions')+' · '+path);
@@ -8226,6 +8376,12 @@ async function openOfficeDocument(path,name) {
   const owner=filesState.ownerID,v=fileLibraryDialog(name,true);v.status.textContent=mailImageText('Подключение к редактору…','Connecting to editor…');
   try{
     const session=await api('/api/v1/files/office?lang='+encodeURIComponent(document.documentElement.lang||'ru'),{method:'POST',body:JSON.stringify({path,owner_id:owner})});if(!v.dialog.open)return;
+    if(session.provider==='onlyoffice'||session.provider==='r7'){
+      const endpoint=new URL(session.url);if(endpoint.origin!==location.origin||endpoint.protocol!=='https:')throw new Error('Invalid office origin');
+      const frame=document.createElement('iframe');frame.title=name;frame.allow='clipboard-read; clipboard-write; fullscreen';frame.referrerPolicy='no-referrer';frame.src=endpoint.href;v.body.append(frame);
+      v.status.textContent=session.writable?mailImageText('Сохранение — в меню редактора. После закрытия дождитесь сохранения файла на сервере.','Use Save in the editor. After closing, allow time for the file to be saved on the server.'):mailImageText('Только просмотр','Read only');
+      const close=async()=>{if(session.writable&&!await askConfirm(mailImageText('Закрыть редактор? Изменения сохранятся после завершения сеанса; это может занять несколько секунд.','Close the editor? Changes are saved after the session ends; this may take a few seconds.')))return;v.dialog.close();refreshFiles()};v.close.onclick=close;v.dialog.addEventListener('cancel',event=>{event.preventDefault();close()});return;
+    }
     const endpoint=new URL(session.url);if(endpoint.protocol!=='https:')throw new Error('HTTPS required');
     const frame=document.createElement('iframe');frame.name='tayga-office-'+crypto.randomUUID();frame.title=name;frame.allow='clipboard-read; clipboard-write; fullscreen';frame.referrerPolicy='no-referrer';
     const form=document.createElement('form');form.method='POST';form.action=endpoint.href;form.target=frame.name;form.hidden=true;
@@ -8360,7 +8516,7 @@ function resetComposeAttachments() {
 }
 function renderComposeAttachments() {
   const items=composeAttachments.entries, busy=composeAttachments.sending||!!composeAttachments.preparing;
-  const send=$('btn-compose-send');if(send)send.disabled=busy||items.some(item=>item.status!=='ready');
+  const send=$('btn-compose-send');if(send)send.disabled=busy||!!$('compose-from')?.disabled||items.some(item=>item.status!=='ready');
   if($('compose-attach'))$('compose-attach').disabled=composeAttachments.sending;
   const list=$('compose-uploads');if(!list)return;list.replaceChildren();list.hidden=!items.length;
   for(const item of items){
@@ -9053,3 +9209,201 @@ function showDirectoryPreview(report,applied){
 }
 $('btn-org-structure')?.addEventListener('click',()=>openOrganization());
 $('btn-org-structure-admin')?.addEventListener('click',()=>{if(tenantNav.domainID)openOrganization(tenantNav.domainID);});
+function aliasErrorText(message) {
+  const messages={
+    'address already exists':['Этот адрес уже занят доменом, ящиком, алиасом или группой.','This address is already used by a domain, mailbox, alias or group.'],
+    'invalid alias or target mailbox':['Проверьте адрес алиаса и целевой ящик.','Check the alias address and target mailbox.'],
+    'alias or target not found':['Алиас или ящик уже удалён. Обновите список.','The alias or mailbox was deleted. Reload the list.'],
+    'forbidden':['Недостаточно прав для управления этим адресом.','You do not have permission to manage this address.'],
+    'global admin required':['Алиасами доменов управляет глобальный администратор.','Domain aliases require a global administrator.'],
+    'cannot save alias':['Не удалось сохранить алиас. Повторите попытку.','Could not save the alias. Please try again.']
+  };
+  return messages[message]?directoryLabel(...messages[message]):message;
+}
+async function openAdminAliases(kind, target) {
+  const isDomain=kind==='domain';
+  const title=isDomain?directoryLabel('Алиасы домена','Domain aliases'):directoryLabel('Алиасы ящика','Mailbox aliases');
+  const dialog=directoryDialog(title+' — '+(isDomain?target.name:target.email),'org-editor');
+  dialog.classList.add('alias-dialog');
+  const description=document.createElement('p');description.className='meta';
+  description.textContent=isDomain
+    ?directoryLabel('Адреса с тем же именем получателя доставляются в основной домен. Пользователи могут отправлять с этих адресов. Настройте MX, SPF и DKIM домена-алиаса.','Addresses with the same local part deliver to the primary domain and are available for sending. Configure MX, SPF and DKIM for the alias domain.')
+    :directoryLabel('Дополнительные адреса доступны для получения и отправки почты. Вход выполняется по основному адресу.','Additional addresses are available for receiving and sending mail. Sign in with the primary address.');
+  const status=document.createElement('p');status.className='msg';status.setAttribute('role','status');
+  const list=document.createElement('div');list.className='alias-list';
+  const form=document.createElement('form');form.className='alias-form';
+  const addressLabel=document.createElement('label');addressLabel.className='field';
+  addressLabel.textContent=isDomain?directoryLabel('Домен-алиас','Alias domain'):directoryLabel('Имя до @','Local part before @');
+  const input=document.createElement('input');input.className='field-input';input.required=true;input.maxLength=isDomain?253:64;input.autocomplete='off';input.spellcheck=false;
+  input.placeholder=isDomain?'example.org':'sales';addressLabel.append(input);form.append(addressLabel);
+  const domainLabel=document.createElement('label');domainLabel.className='field';domainLabel.textContent=directoryLabel('Домен адреса','Address domain');
+  const domainSelect=document.createElement('select');domainSelect.className='field-input';domainLabel.append(domainSelect);
+  if(!isDomain)form.append(domainLabel);
+  const actions=document.createElement('div');actions.className='org-toolbar';
+  const save=directoryButton(directoryLabel('Добавить алиас','Add alias'),null,true);save.type='submit';
+  const cancel=directoryButton(t('cancel'),()=>reset());cancel.hidden=true;actions.append(save,cancel);form.append(actions);
+  dialog.append(description,status,list,form);
+  const base='/api/v1/admin/'+(isDomain?'domains/':'users/')+encodeURIComponent(target.id)+'/aliases';
+  let aliases=[],editing=null,busy=false;
+  const writable=!isDomain||!!state.me?.is_global_admin;
+  form.hidden=!writable;
+  function reset(){editing=null;input.value='';domainSelect.disabled=false;save.textContent=directoryLabel('Добавить алиас','Add alias');cancel.hidden=true;}
+  function lock(value){busy=value;dialog.querySelectorAll('button,input,select').forEach(el=>el.disabled=value);if(!value&&editing)domainSelect.disabled=true;}
+  function render(){
+    list.replaceChildren();
+    if(!aliases.length){const empty=document.createElement('p');empty.className='meta';empty.textContent=directoryLabel('Алиасов пока нет.','No aliases yet.');list.append(empty);}
+    for(const alias of aliases){
+      const row=document.createElement('div');row.className='alias-row';
+      const address=document.createElement('span');address.textContent=isDomain?alias.name:alias.email;row.append(address);
+      if(writable){
+        const controls=document.createElement('div');controls.className='org-toolbar';
+        controls.append(directoryButton(directoryLabel('Изменить','Edit'),()=>{
+          editing=alias;input.value=isDomain?alias.name:alias.local_part;
+          domainSelect.value=alias.domain_id;domainSelect.disabled=true;
+          save.textContent=directoryLabel('Сохранить','Save');cancel.hidden=false;input.focus();
+        }),directoryButton(directoryLabel('Удалить','Delete'),async()=>{
+          if(busy||!await askConfirm(directoryLabel('Удалить алиас ','Delete alias ')+(isDomain?alias.name:alias.email)+'?',{danger:true}))return;
+          lock(true);setMsg(status,'','');
+          try{await api(base+'/'+encodeURIComponent(alias.id),{method:'DELETE'});reset();await reload();}
+          catch(error){setMsg(status,aliasErrorText(error.message),'err');}finally{lock(false);}
+        }));row.append(controls);
+      }
+      list.append(row);
+    }
+  }
+  async function reload(){const data=await api(base);if(!dialog.isConnected)return;aliases=data.aliases||[];render();}
+  form.addEventListener('submit',async event=>{
+    event.preventDefault();if(busy)return;lock(true);setMsg(status,'','');
+    const payload=isDomain?{name:input.value.trim()}:{local_part:input.value.trim(),domain_id:editing?editing.domain_id:domainSelect.value};
+    try{await api(base+(editing?'/'+encodeURIComponent(editing.id):''),{method:editing?'PATCH':'POST',body:JSON.stringify(payload)});reset();await reload();setMsg(status,directoryLabel('Алиас сохранён.','Alias saved.'),'ok');}
+    catch(error){setMsg(status,aliasErrorText(error.message),'err');}finally{lock(false);}
+  });
+  lock(true);
+  try{
+    if(!isDomain){
+      const data=await api('/api/v1/admin/domains?tenant_id='+encodeURIComponent(target.tenant_id));
+      for(const domain of data.domains||[]){const option=document.createElement('option');option.value=domain.id;option.textContent='@'+domain.name;domainSelect.append(option);}
+      domainSelect.value=target.domain_id;
+    }
+    await reload();
+  }catch(error){setMsg(status,aliasErrorText(error.message),'err');}finally{lock(false);}
+}
+// Attribution is part of the application, outside all customizable images.
+let brandingRevision = 0;
+function renderHeaderBranding(value) {
+  const image = $('header-branding-image');
+  $('header-branding-name').textContent = value.name || 'Tayga Mail';
+  if (value.image) image.src = value.image;
+  else image.removeAttribute('src');
+  image.classList.toggle('hidden', !value.image);
+}
+function resetBranding() {
+  brandingRevision++;
+  document.querySelector('dialog.branding-dialog')?.close();
+  renderHeaderBranding({});
+}
+async function refreshBranding() {
+  const revision = ++brandingRevision;
+  try {
+    const value = await api('/api/v1/me/branding');
+    if (revision === brandingRevision) renderHeaderBranding(value);
+  } catch {
+    if (revision === brandingRevision) renderHeaderBranding({});
+  }
+}
+
+async function openAdminBranding(kind, target) {
+  document.querySelector('dialog.branding-dialog')?.close();
+  const dialog = directoryDialog(t(kind === 'domains' ? 'branding_domain' : 'branding_tenant') + ' — ' + target.name);
+  dialog.classList.add('branding-dialog');
+  dialog.append($('branding-template').content.cloneNode(true));
+  // Templates are inert until opened; translate the newly inserted elements.
+  dialog.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+  const el = id => dialog.querySelector('#' + id);
+  const form = el('branding-form'), status = el('branding-msg');
+  const base = '/api/v1/admin/branding/' + kind + '/' + encodeURIComponent(target.id);
+  let draft = {enabled:false, name:'', image:''}, busy = false, reading = false, revision = 0;
+  function preview() {
+    el('branding-preview-name').textContent = draft.enabled ? draft.name || 'Tayga Mail' : (kind === 'domains' ? t('mig_inherit') : 'Tayga Mail');
+    const image = el('branding-preview-image');
+    if (draft.enabled && draft.image) image.src = draft.image;
+    else image.removeAttribute('src');
+    image.classList.toggle('hidden', !draft.enabled || !draft.image);
+  }
+  function fill(value) {
+    draft = value;
+    el('branding-name').value = value.name;
+    el('branding-enabled').checked = value.enabled;
+    el('branding-file').value = '';
+    preview();
+  }
+  function lock(value) {
+    busy = value;
+    [...form.elements].forEach(control => { control.disabled = value; });
+  }
+  el('branding-name').oninput = event => { draft.name = event.target.value; preview(); };
+  el('branding-enabled').onchange = event => { draft.enabled = event.target.checked; preview(); };
+  el('branding-file').onchange = async event => {
+    const file = event.target.files[0];
+    if (!file) return;
+    const read = ++revision;
+    reading = true;
+    el('branding-form').querySelector('[type=submit]').disabled = true;
+    try {
+      if (!['image/png', 'image/jpeg'].includes(file.type) || file.size > 1048576) throw Error();
+      const bitmap = await createImageBitmap(file);
+      const valid = bitmap.width <= 4096 && bitmap.height <= 4096;
+      bitmap.close();
+      if (!valid) throw Error();
+      const image = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      if (read !== revision || !dialog.isConnected) return;
+      draft.image = image;
+      draft.enabled = true;
+      el('branding-enabled').checked = true;
+      preview();
+      setMsg(status, '');
+    } catch {
+      if (read === revision && dialog.isConnected) {
+        event.target.value = '';
+        setMsg(status, t('branding_invalid'), 'err');
+      }
+    } finally {
+      if (read === revision) { reading = false; el('branding-form').querySelector('[type=submit]').disabled = busy; }
+    }
+  };
+  el('branding-remove-image').onclick = () => {
+    revision++; reading = false;
+    draft.image = '';
+    el('branding-file').value = '';
+    form.querySelector('[type=submit]').disabled = busy;
+    preview();
+  };
+  async function save(value) {
+    if (busy || reading) return;
+    lock(true); setMsg(status, '');
+    try {
+      const saved = await api(base, {method:'PUT', body:JSON.stringify(value)});
+      if (!dialog.isConnected) return;
+      fill(saved);
+      setMsg(status, t('saved'), 'ok');
+      await refreshBranding();
+    } catch { if (dialog.isConnected) setMsg(status, t('branding_save_error'), 'err'); }
+    finally { lock(false); }
+  }
+  form.onsubmit = event => { event.preventDefault(); save({...draft, name:draft.name.trim()}); };
+  el('branding-reset').onclick = () => {
+    revision++; reading = false;
+    save({enabled:false, name:'', image:''});
+  };
+  lock(true);
+  try {
+    const value = await api(base);
+    if (dialog.isConnected) { fill(value); lock(false); }
+  } catch (err) { if (dialog.isConnected) setMsg(status, err.message, 'err'); }
+}
+$('tenant-branding-button')?.addEventListener('click', () => openAdminBranding('tenants', {id:tenantNav.tenantID, name:tenantNav.tenantName}));

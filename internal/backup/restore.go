@@ -184,6 +184,63 @@ func RestoreTarGz(ctx context.Context, store storage.Driver, r io.Reader, opts R
 		}
 	}
 
+	// Optional metadata keeps archives made before alias support compatible.
+	var domainAliases []*storage.DomainAlias
+	if data, ok := files["meta/domain_aliases.json"]; ok {
+		if err := json.Unmarshal(data, &domainAliases); err != nil {
+			return rep, fmt.Errorf("domain_aliases.json: %w", err)
+		}
+	}
+	for _, a := range domainAliases {
+		if a == nil || domainMap[a.DomainID] == "" {
+			return rep, fmt.Errorf("invalid domain alias target")
+		}
+		domainID := domainMap[a.DomainID]
+		existing, err := store.ListDomainAliases(ctx, domainID)
+		if err != nil {
+			return rep, err
+		}
+		found := false
+		for _, v := range existing {
+			if v.Name == a.Name {
+				found = true
+				break
+			}
+		}
+		if !found {
+			if _, err = store.SaveDomainAlias(ctx, &storage.DomainAlias{DomainID: domainID, Name: a.Name}); err != nil {
+				return rep, fmt.Errorf("domain alias %s: %w", a.Name, err)
+			}
+		}
+	}
+	var aliases []*storage.Alias
+	if data, ok := files["meta/aliases.json"]; ok {
+		if err := json.Unmarshal(data, &aliases); err != nil {
+			return rep, fmt.Errorf("aliases.json: %w", err)
+		}
+	}
+	for _, a := range aliases {
+		if a == nil || domainMap[a.DomainID] == "" || userIDs[a.UserID] == "" {
+			return rep, fmt.Errorf("invalid mailbox alias target")
+		}
+		domainID, userID := domainMap[a.DomainID], userIDs[a.UserID]
+		existing, err := store.ListAliases(ctx, userID)
+		if err != nil {
+			return rep, err
+		}
+		found := false
+		for _, v := range existing {
+			if v.DomainID == domainID && v.LocalPart == a.LocalPart {
+				found = true
+				break
+			}
+		}
+		if !found {
+			if _, err = store.CreateAlias(ctx, domainID, userID, a.LocalPart); err != nil {
+				return rep, fmt.Errorf("mailbox alias %s: %w", a.LocalPart, err)
+			}
+		}
+	}
 	// Sieve scripts: meta/sieve/{userID}/{name}.sieve + .json
 	for name, data := range files {
 		if !strings.HasPrefix(name, "meta/sieve/") || !strings.HasSuffix(name, ".sieve") {

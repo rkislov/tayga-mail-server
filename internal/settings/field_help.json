@@ -3,9 +3,17 @@
     "label": "Файловый сервис",
     "description": "Общее хранилище, WebDAV и подключение отдельного офисного сервиса."
   },
+  "office_provider": {
+    "label": "Офисный редактор",
+    "description": "collabora (по умолчанию) — WOPI; onlyoffice и r7 — Document Server API с обязательным JWT."
+  },
+  "office_jwt_secret": {
+    "label": "JWT-секрет ONLYOFFICE / Р7",
+    "description": "Общий секрет длиной не менее 32 байт для подписи конфигурации и проверки callback. Укажите тот же секрет в browser, inbox и outbox Document Server. Изменение отзывает действующие сеансы."
+  },
   "office_url": {
-    "label": "Адрес Collabora Online",
-    "description": "HTTPS-адрес отдельного Collabora Online, например https://office.example.com. Оставьте пустым для отключения редактора. Изменение действует сразу; открытые редакторы потребуется открыть заново."
+    "label": "Адрес офисного сервера",
+    "description": "HTTPS-адрес отдельного Collabora Online, ONLYOFFICE Document Server или Р7, например https://office.example.com. Оставьте пустым для отключения редактора. Изменение действует сразу; открытые редакторы потребуется открыть заново."
   },
   "hostname": {
     "label": "Имя сервера",

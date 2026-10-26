@@ -53,6 +53,14 @@ func (s *Server) listOutbound(w http.ResponseWriter, r *http.Request) {
 		for _, domain := range list {
 			if s.adminCanManageDomain(r, admin, domain.ID) {
 				domains = append(domains, domain.Name)
+				aliases, e := s.store.ListDomainAliases(r.Context(), domain.ID)
+				if e != nil {
+					writeJSON(w, 500, map[string]string{"error": "domain lookup failed"})
+					return
+				}
+				for _, alias := range aliases {
+					domains = append(domains, alias.Name)
+				}
 			}
 		}
 	}
@@ -141,7 +149,7 @@ func (s *Server) outboundAllowed(w http.ResponseWriter, r *http.Request, it *sto
 	from := strings.TrimSpace(it.EnvelopeFrom)
 	at := strings.LastIndex(from, "@")
 	if at >= 0 {
-		domain, err := s.store.GetDomainByName(r.Context(), strings.ToLower(from[at+1:]))
+		domain, err := s.store.ResolveMailDomain(r.Context(), strings.ToLower(from[at+1:]))
 		if err == nil && s.adminCanManageDomain(r, admin, domain.ID) {
 			return true
 		}

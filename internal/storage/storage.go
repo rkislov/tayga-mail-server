@@ -11,6 +11,7 @@ import (
 )
 
 var (
+	ErrNoteConflict  = errors.New("note revision conflict")
 	ErrNotFound      = errors.New("not found")
 	ErrAlreadyExists = errors.New("already exists")
 	ErrUnauthorized  = errors.New("unauthorized")
@@ -92,6 +93,10 @@ type Driver interface {
 	CreateCalendarAttachment(ctx context.Context, a *CalendarAttachment) (*CalendarAttachment, error)
 	GetCalendarAttachment(ctx context.Context, id string) (*CalendarAttachment, error)
 	ListCalendarAttachments(ctx context.Context, calendarObjectID string) ([]*CalendarAttachment, error)
+	ListCalendarEventAttachments(ctx context.Context, calendarObjectID string) ([]*CalendarAttachment, error)
+	CalendarAttachmentSharedWith(ctx context.Context, attachmentID, userID string) (bool, error)
+	CalendarAttachmentLinks(ctx context.Context, objectID, userID string) ([]CalendarAttachmentLink, error)
+	CalendarDownloadAttachment(ctx context.Context, token string) (*CalendarAttachment, error)
 	DeleteCalendarAttachment(ctx context.Context, id string) error
 	SumMailboxBytes(ctx context.Context, userID string) (int64, error)
 	MessageExistsByMessageID(ctx context.Context, mailboxID, messageID string, size int64) (bool, error)
@@ -138,6 +143,15 @@ type Driver interface {
 	ListServiceClasses(ctx context.Context, tenantID string) ([]*ServiceClass, error)
 
 	CreateAlias(ctx context.Context, domainID, userID, localPart string) (*Alias, error)
+	SaveAlias(ctx context.Context, alias *Alias) (*Alias, error)
+	ListAliases(ctx context.Context, userID string) ([]*Alias, error)
+	DeleteAlias(ctx context.Context, domainID, userID, id string) error
+	ListDomainAliases(ctx context.Context, domainID string) ([]*DomainAlias, error)
+	SaveDomainAlias(ctx context.Context, alias *DomainAlias) (*DomainAlias, error)
+	DeleteDomainAlias(ctx context.Context, domainID, id string) error
+	ResolveMailDomain(ctx context.Context, name string) (*Domain, error)
+	SenderAddresses(ctx context.Context, userID string) ([]string, error)
+	CanSendFrom(ctx context.Context, userID, email string) (bool, error)
 	ResolveRecipient(ctx context.Context, email string) (*User, error)
 	ResolveRecipients(ctx context.Context, email string) ([]*User, error)
 	ListDirectoryGroups(ctx context.Context, domainID string) ([]*DirectoryGroup, error)
@@ -204,6 +218,8 @@ type Driver interface {
 	ListCalendarObjects(ctx context.Context, calendarID string) ([]*CalendarObject, error)
 	GetCalendarObject(ctx context.Context, calendarID, hrefName string) (*CalendarObject, error)
 	GetCalendarObjectByID(ctx context.Context, id string) (*CalendarObject, error)
+	GetCalendarObjectByUID(ctx context.Context, calendarID, uid string) (*CalendarObject, error)
+	MoveCalendarObject(ctx context.Context, userID, id, source, destination string) (*CalendarObject, error)
 	UpsertCalendarObject(ctx context.Context, o *CalendarObject) (*CalendarObject, error)
 	SaveCalendarObjectWithMail(ctx context.Context, o *CalendarObject, mails []CalendarMail) (*CalendarObject, error)
 	SaveCalendarMeeting(ctx context.Context, actorID string, o *CalendarObject) (*CalendarObject, error)
@@ -220,6 +236,7 @@ type Driver interface {
 	ListCalendarInvitesForUser(ctx context.Context, userID string, pendingOnly bool) ([]*CalendarInvite, error)
 	ListCalendarInvitesByEventUID(ctx context.Context, eventUID string) ([]*CalendarInvite, error)
 	UpdateCalendarInvitePartStat(ctx context.Context, id, partstat string, proposedStart, proposedEnd *time.Time) error
+	RespondCalendarInvite(ctx context.Context, userID, inviteID, status, etag string, sendMail bool, comment string) (*CalendarInvite, error)
 	ReplyCalendarInvite(ctx context.Context, userID, inviteID, status string, proposedStart, proposedEnd *time.Time, etag string, comment ...string) (*CalendarInvite, error)
 	ListCalendarProposals(ctx context.Context, userID string) ([]*CalendarProposal, error)
 	FreeBusyForUserExceptMeeting(ctx context.Context, userID string, from, to time.Time, uid, organizerEmail string) ([]BusyInterval, error)
@@ -255,6 +272,8 @@ type Driver interface {
 	DeleteNoteFolder(ctx context.Context, userID, id string) error
 	CreateNoteItem(ctx context.Context, n *NoteItem) (*NoteItem, error)
 	UpdateNoteItem(ctx context.Context, n *NoteItem) error
+	ListNoteVersions(ctx context.Context, noteID string) ([]NoteVersion, error)
+	GetNoteVersion(ctx context.Context, noteID, versionID string) (*NoteVersion, error)
 	GetNoteItem(ctx context.Context, userID, id string) (*NoteItem, error)
 	GetNoteItemByID(ctx context.Context, id string) (*NoteItem, error)
 	ListNoteItems(ctx context.Context, userID, folderID string, includeArchived bool) ([]*NoteItem, error)
@@ -262,6 +281,7 @@ type Driver interface {
 	ListSharedNoteItems(ctx context.Context, userID string) ([]*NoteItem, error)
 	DeleteNoteItem(ctx context.Context, userID, id string) error
 	DeleteNoteItemByID(ctx context.Context, id string) error
+	DeleteNoteItemIfMatch(ctx context.Context, id, etag string) error
 	CreateNoteAttachment(ctx context.Context, a *NoteAttachment) (*NoteAttachment, error)
 	GetNoteAttachment(ctx context.Context, id string) (*NoteAttachment, error)
 	ListNoteAttachments(ctx context.Context, noteID string) ([]*NoteAttachment, error)
@@ -410,11 +430,12 @@ type ServiceClass struct {
 }
 
 type Alias struct {
-	ID        string
-	DomainID  string
-	UserID    string
-	LocalPart string
-	CreatedAt time.Time
+	ID        string    `json:"id"`
+	DomainID  string    `json:"domain_id"`
+	UserID    string    `json:"user_id"`
+	LocalPart string    `json:"local_part"`
+	Email     string    `json:"email"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 type Mailbox struct {

@@ -74,6 +74,9 @@ func (h *ewsHandler) getMailItem(ctx context.Context, u *storage.User, msg *stor
 	return out.String(), nil
 }
 func (h *ewsHandler) attachment(ctx context.Context, u *storage.User, reference string) (messageAttachment, error) {
+	if strings.HasPrefix(reference, "calendar:") {
+		return readCalendarAttachment(ctx, h.store, h.ms, u, reference)
+	}
 	parts := strings.Split(reference, ":")
 	if len(parts) != 2 {
 		return messageAttachment{}, storage.ErrNotFound

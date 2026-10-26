@@ -276,6 +276,13 @@ func (s *Store) ResolveRecipients(ctx context.Context, email string) ([]*User, e
 		return nil, err
 	}
 	email = strings.ToLower(strings.TrimSpace(email))
+	if at := strings.LastIndex(email, "@"); at > 0 {
+		domain, e := s.ResolveMailDomain(ctx, email[at+1:])
+		if e != nil {
+			return nil, e
+		}
+		email = email[:at] + "@" + domain.Name
+	}
 	at := strings.LastIndex(email, "@")
 	if at < 1 {
 		return nil, ErrNotFound

@@ -1,57 +1,158 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <title>Tayga Mail — settings</title>
-  <style>
-    body { font-family: system-ui, sans-serif; max-width: 42rem; margin: 2rem auto; padding: 0 1rem; color: #1a1a1a; }
-    label { display: block; margin-top: 0.75rem; font-weight: 600; font-size: 0.85rem; }
-    input, textarea, select { width: 100%; box-sizing: border-box; padding: 0.45rem; margin-top: 0.25rem; }
-    button { margin-top: 1rem; margin-right: 0.5rem; padding: 0.45rem 0.9rem; cursor: pointer; }
-    .hint { color: #555; font-size: 0.85rem; }
-    code { background: #f0f0f0; padding: 0.1rem 0.3rem; }
-    h2 { margin-top: 2rem; border-top: 1px solid #ddd; padding-top: 1rem; }
-  </style>
-</head>
-<body>
-  <h1>Tayga Mail</h1>
-  <p class="hint">Sign in to your Tayga server. Mail accounts are still created via Mozilla Autoconfig
-    (<code>/.well-known/autoconfig/mail/config-v1.1.xml</code>). CalDAV/CardDAV:
-    <code>{base}/dav/</code></p>
-
-  <label>Server base URL</label>
-  <input id="baseUrl" placeholder="https://mail.example.com" />
-  <label>Email</label>
-  <input id="email" type="email" />
-  <label>Password</label>
-  <input id="password" type="password" />
-  <label>Theme</label>
-  <select id="theme">
-    <option value="tayga">Tayga</option>
-    <option value="cosmos">Cosmos</option>
-  </select>
-  <button id="btn-login" type="button">Sign in &amp; save token</button>
-  <button id="btn-theme" type="button">Apply theme</button>
-  <p id="msg" class="hint"></p>
-
-  <h2>Vacation</h2>
-  <label><input type="checkbox" id="vac-on" /> Enable out-of-office</label>
-  <label>Subject</label>
-  <input id="vac-subj" />
-  <label>Body</label>
-  <textarea id="vac-body" rows="4"></textarea>
-  <button id="btn-vac" type="button">Save vacation</button>
-
-  <h2>Sieve</h2>
-  <label>Script name</label>
-  <input id="sieve-name" value="default" />
-  <label>Script</label>
-  <textarea id="sieve-body" rows="8">require ["fileinto"];
-keep;</textarea>
-  <button id="btn-sieve" type="button">Save &amp; activate</button>
-  <button id="btn-sieve-load" type="button">Reload list</button>
-  <pre id="sieve-list" class="hint"></pre>
-
-  <script src="options.js"></script>
-</body>
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>Tayga Mail — настройки</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <img src="icon.svg" width="48" height="48" alt="" />
+      <div>
+        <h1>Tayga Mail</h1>
+        <p>Почта и сервисы вашей организации в Thunderbird</p>
+      </div>
+    </header>
+    <p id="msg" role="status" aria-live="polite"></p>
+    <section>
+      <h2>Подключение</h2>
+      <p id="session">Проверка сессии…</p>
+      <form id="login-form">
+        <label for="baseUrl">Адрес сервера</label
+        ><input
+          id="baseUrl"
+          type="url"
+          placeholder="https://mail.example.com"
+          required
+        />
+        <label for="email">Электронная почта</label
+        ><input id="email" type="email" autocomplete="username" required />
+        <label for="password">Пароль</label
+        ><input
+          id="password"
+          type="password"
+          autocomplete="current-password"
+          required
+        />
+        <button type="submit">Войти</button
+        ><button id="logout" type="button">Выйти из плагина</button>
+      </form>
+      <form id="mfa-form" hidden>
+        <label for="mfa-code"
+          >Код приложения-аутентификатора или резервный код</label
+        ><input id="mfa-code" autocomplete="one-time-code" required /><button
+          type="submit"
+        >
+          Подтвердить вход
+        </button>
+      </form>
+      <p class="hint">
+        Пароль не сохраняется. Токены сессии хранятся в локальном профиле
+        Thunderbird. Для входа ключом безопасности используйте веб-интерфейс;
+        здесь поддерживаются TOTP и резервные коды.
+      </p>
+    </section>
+    <section>
+      <h2>Двусторонняя синхронизация EWS</h2>
+      <p>
+        После входа плагин создаёт учётную запись EWS, календари и адресные
+        книги Tayga. Изменения синхронизируются автоматически раз в минуту.
+        Повторные входы используют существующие подключения.
+      </p>
+      <p class="hint">
+        Требуется Thunderbird 145+ и сервер Tayga с поддержкой полного обмена
+        EWS. Локальные правки сохраняются в очереди; конфликтующие версии
+        требуют вашего выбора. При отключении синхронизации локальные данные
+        остаются в Thunderbird.
+      </p>
+      <label class="check"
+        ><input id="ews-enabled" type="checkbox" checked /> Автоматически
+        синхронизировать почту, календари и контакты</label
+      ><button id="ews-save" type="button" data-auth>Применить</button
+      ><button id="ews-sync" type="button" data-auth>
+        Синхронизировать сейчас</button
+      ><button id="ews-status-load" type="button">Обновить состояние</button>
+      <p id="ews-status" role="status"></p>
+      <ul id="ews-pending"></ul>
+      <button id="web" type="button">Открыть Tayga в новой вкладке</button>
+      <details>
+        <summary>Альтернативное подключение IMAP/SMTP и DAV</summary>
+        <dl>
+          <dt>Autoconfig</dt>
+          <dd id="autoconfig">—</dd>
+          <dt>CalDAV / CardDAV</dt>
+          <dd id="dav">—</dd>
+        </dl>
+      </details>
+    </section>
+    <section>
+      <h2>Большие вложения · Filelink</h2>
+      <p>
+        В настройках Thunderbird откройте «Составление → Вложения», добавьте
+        сервис <strong>Tayga Mail</strong>. В письме выберите вложение →
+        «Преобразовать в… → Tayga Mail». Thunderbird загрузит файл и вставит
+        ссылку в письмо.
+      </p>
+      <p class="hint">
+        Все подключения Filelink используют текущую сессию плагина. Любой
+        получатель ссылки может скачать файл до её истечения или отзыва. Файл
+        занимает квоту Tayga.
+      </p>
+      <form id="preferences-form">
+        <label for="ttl">Срок новых ссылок (часы, максимум 8760)</label
+        ><input
+          id="ttl"
+          type="number"
+          min="1"
+          max="8760"
+          value="168"
+          required
+        /><label for="theme">Тема Thunderbird</label
+        ><select id="theme">
+          <option value="default">Текущая тема Thunderbird</option>
+          <option value="tayga">Tayga</option>
+          <option value="cosmos">Cosmos</option></select
+        ><button type="submit">Сохранить настройки</button>
+      </form>
+      <button id="shares-load" type="button" data-auth>Обновить ссылки</button>
+      <ul id="shares-list"></ul>
+    </section>
+    <section>
+      <h2>Автоответчик</h2>
+      <p class="hint">
+        На сервере активен один Sieve-скрипт. Включение автоответчика заменяет
+        активный фильтр; после отключения нужный фильтр можно активировать ниже.
+      </p>
+      <form id="vacation-form">
+        <label class="check"
+          ><input type="checkbox" id="vac-on" /> Включить автоответчик</label
+        ><label for="vac-subj">Тема</label><input id="vac-subj" /><label
+          for="vac-body"
+          >Сообщение</label
+        ><textarea id="vac-body" rows="5"></textarea
+        ><button type="submit" data-auth>Сохранить автоответчик</button
+        ><button id="vac-load" type="button" data-auth>Загрузить</button>
+      </form>
+    </section>
+    <section>
+      <h2>Почтовые фильтры Sieve</h2>
+      <button id="sieve-load" type="button" data-auth>Обновить список</button>
+      <ul id="sieve-list"></ul>
+      <form id="sieve-form">
+        <label for="sieve-name">Имя скрипта</label
+        ><input id="sieve-name" value="default" required /><label
+          for="sieve-body"
+          >Скрипт</label
+        ><textarea id="sieve-body" rows="10" spellcheck="false" required>
+require ["fileinto"];
+keep;</textarea
+        ><label class="check"
+          ><input id="sieve-active" type="checkbox" /> Активировать после
+          сохранения (заменит текущий фильтр или автоответчик)</label
+        ><button type="submit" data-auth>Сохранить скрипт</button>
+      </form>
+    </section>
+    <script src="options.js"></script>
+  </body>
 </html>

@@ -90,26 +90,24 @@ func (h *ewsHandler) createMailItem(ctx context.Context, u *storage.User, body s
 	if err != nil {
 		return ewsOperationError("CreateItem", "ErrorInvalidMimeContent", "invalid message"), nil
 	}
-	// Mailbox delegation and arbitrary Sent destinations are not silently ignored.
+	destination := "Drafts"
+	// Validate the actual owned destination, including Thunderbird's explicit Sent copy.
 	if folder := operation.child("SavedItemFolderId"); folder != nil {
 		id, err := h.resolveEWSFolder(ctx, u, folder.render())
 		if err != nil || h.ensureMailboxOwned(ctx, u.ID, id) != nil {
 			return ewsOperationError("CreateItem", "ErrorAccessDenied", "folder unavailable"), nil
 		}
-		expected := "Drafts"
-		if disposition == "SendAndSaveCopy" {
-			expected = "Sent"
-		}
-		mb, e := h.store.GetMailbox(ctx, u.ID, expected)
-		if e != nil || mb.ID != id {
+		mb, e := h.store.GetMailboxByID(ctx, id)
+		if e != nil || (disposition == "SendAndSaveCopy" && mb.Name != "Sent") {
 			return ewsOperationError("CreateItem", "ErrorInvalidFolderId", "unsupported destination"), nil
 		}
+		destination = mb.Name
 	}
 	if disposition != "SaveOnly" {
 		if err = h.sender.send(ctx, u, "", raw, disposition == "SendAndSaveCopy"); err != nil {
 			return ewsOperationError("CreateItem", "ErrorMessageSubmissionBlocked", "message was not accepted"), nil
 		}
-		return ewsSuccess("CreateItem"), nil
+		return ewsNotificationSuccess("CreateItem", "<m:Items/>"), nil
 	}
 	if h.ms == nil {
 		return "", fmt.Errorf("mailstore unavailable")
@@ -117,15 +115,19 @@ func (h *ewsHandler) createMailItem(ctx context.Context, u *storage.User, body s
 	if err = h.ensureStandardMailFolders(ctx, u); err != nil {
 		return "", err
 	}
-	mb, err := h.store.GetMailbox(ctx, u.ID, "Drafts")
+	mb, err := h.store.GetMailbox(ctx, u.ID, destination)
 	if err != nil {
 		return "", err
 	}
-	rel, size, err := h.ms.Deliver(u.Email, "Drafts", raw)
+	rel, size, err := h.ms.Deliver(u.Email, destination, raw)
 	if err != nil {
 		return "", err
 	}
-	record := &storage.Message{MailboxID: mb.ID, FilePath: rel, Size: size, Flags: `\Draft \Seen`, InternalDate: time.Now().UTC()}
+	flags := `\Seen`
+	if destination == "Drafts" || strings.EqualFold(items.Children[0].value("IsDraft"), "true") {
+		flags = `\Draft \Seen`
+	}
+	record := &storage.Message{MailboxID: mb.ID, FilePath: rel, Size: size, Flags: flags, InternalDate: time.Now().UTC()}
 	mailsearch.ApplyHeaders(record, raw)
 	inserted, err := h.store.InsertMessage(ctx, record)
 	if err != nil {

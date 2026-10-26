@@ -12,7 +12,7 @@ function fileAction(label,run,icon='') {
   if(icon)button.innerHTML=designIcon(icon);else button.textContent=label;button.onclick=run;return button;
 }
 function libraryMessage(error) {
-  return ({507:mailImageText('Квота файлов исчерпана. Очистите корзину или удалите ненужные версии.','File quota exceeded. Empty trash or remove old versions.'),409:mailImageText('Файл изменён или путь уже занят. Обновите список и повторите действие.','File changed or the destination exists. Refresh and retry.'),423:mailImageText('Документ открыт для редактирования. Закройте редактор и повторите действие.','Document is locked for editing. Close the editor and retry.'),503:mailImageText('Офисный редактор ещё не подключён. Администратор может указать адрес Collabora в настройках сервера → Файлы.','Office is not connected yet. Configure Collabora in server settings → Files.')})[error.status]||error.message;
+  return ({507:mailImageText('Квота файлов исчерпана. Очистите корзину или удалите ненужные версии.','File quota exceeded. Empty trash or remove old versions.'),409:mailImageText('Файл изменён или путь уже занят. Обновите список и повторите действие.','File changed or the destination exists. Refresh and retry.'),423:mailImageText('Документ открыт для редактирования. Закройте редактор и повторите действие.','Document is locked for editing. Close the editor and retry.'),503:mailImageText('Офисный редактор ещё не подключён. Администратор может подключить Collabora, ONLYOFFICE или Р7 в настройках сервера → Файлы.','Office is not connected yet. Configure Collabora, ONLYOFFICE or R7 in server settings → Files.')})[error.status]||error.message;
 }
 async function openFileHistory(kind,path='') {
   const view=fileLibraryDialog(kind==='trash'?mailImageText('Корзина','Trash'):mailImageText('Версии файла','File versions')+' · '+path);
@@ -53,6 +53,12 @@ async function openOfficeDocument(path,name) {
   const owner=filesState.ownerID,v=fileLibraryDialog(name,true);v.status.textContent=mailImageText('Подключение к редактору…','Connecting to editor…');
   try{
     const session=await api('/api/v1/files/office?lang='+encodeURIComponent(document.documentElement.lang||'ru'),{method:'POST',body:JSON.stringify({path,owner_id:owner})});if(!v.dialog.open)return;
+    if(session.provider==='onlyoffice'||session.provider==='r7'){
+      const endpoint=new URL(session.url);if(endpoint.origin!==location.origin||endpoint.protocol!=='https:')throw new Error('Invalid office origin');
+      const frame=document.createElement('iframe');frame.title=name;frame.allow='clipboard-read; clipboard-write; fullscreen';frame.referrerPolicy='no-referrer';frame.src=endpoint.href;v.body.append(frame);
+      v.status.textContent=session.writable?mailImageText('Сохранение — в меню редактора. После закрытия дождитесь сохранения файла на сервере.','Use Save in the editor. After closing, allow time for the file to be saved on the server.'):mailImageText('Только просмотр','Read only');
+      const close=async()=>{if(session.writable&&!await askConfirm(mailImageText('Закрыть редактор? Изменения сохранятся после завершения сеанса; это может занять несколько секунд.','Close the editor? Changes are saved after the session ends; this may take a few seconds.')))return;v.dialog.close();refreshFiles()};v.close.onclick=close;v.dialog.addEventListener('cancel',event=>{event.preventDefault();close()});return;
+    }
     const endpoint=new URL(session.url);if(endpoint.protocol!=='https:')throw new Error('HTTPS required');
     const frame=document.createElement('iframe');frame.name='tayga-office-'+crypto.randomUUID();frame.title=name;frame.allow='clipboard-read; clipboard-write; fullscreen';frame.referrerPolicy='no-referrer';
     const form=document.createElement('form');form.method='POST';form.action=endpoint.href;form.target=frame.name;form.hidden=true;

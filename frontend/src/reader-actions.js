@@ -5,7 +5,8 @@ function mountEditorDialog(id, className) {
  dialog.querySelectorAll(".compose-panel").forEach(panel=>{panel.removeAttribute("role");panel.removeAttribute("aria-modal")});
   old.replaceWith(dialog);document.body.append(dialog);
   if(id==='contact-backdrop'){const form=$('form-contact');const actions=form?.querySelector('.actions');if(actions){actions.classList.add('event-editor-footer');const save=actions.querySelector('[type=submit]');if(save){save.className='btn-spray';save.textContent=mailImageText('Сохранить контакт','Save contact')}const cancel=$('btn-contact-close');if(cancel){cancel.className='btn-secondary';cancel.textContent=mailImageText('Отмена','Cancel')}}}
-  dialog.addEventListener('click',event=>{if(event.target===dialog){const bounds=dialog.getBoundingClientRect();if(event.clientX<bounds.left||event.clientX>bounds.right||event.clientY<bounds.top||event.clientY>bounds.bottom)dialog.close()}});
+  dialog.addEventListener('cancel',event=>{if(dialog.querySelector('form')?.dataset.saving==='true')event.preventDefault()});
+  dialog.addEventListener('click',event=>{if(event.target===dialog && dialog.querySelector('form')?.dataset.saving!=='true'){const bounds=dialog.getBoundingClientRect();if(event.clientX<bounds.left||event.clientX>bounds.right||event.clientY<bounds.top||event.clientY>bounds.bottom)dialog.close()}});
   return dialog;
 }
 function mountCalendarEditor() {
@@ -39,13 +40,50 @@ function syncEventCalendarChoice() {
   select.value=calState.calendarID;
 }
 
+function canEditCalendarEvent(record) {
+  return !!record && !record.busy_only && record.recurrence_organizer !== false &&
+    calState.calendars.some(calendar=>calendar.id===record.calendar_id && calendar.writable!==false && !calendar.external);
+}
+
+async function editCalendarRecord(selected) {
+  if(!canEditCalendarEvent(selected) || $('form-cal-event')?.dataset.saving==='true')return;
+  const userID=state.me?.id;
+  try {
+    const record=await api('/api/v1/calendar/events/'+encodeURIComponent(selected.object_id || selected.id));
+    if(state.me?.id!==userID || !canEditCalendarEvent(record))return;
+    calState.calendarID=record.calendar_id;
+    const form=$('form-cal-event');form.reset();delete form.dataset.createdEvent;
+    calState.uploadedFiles=new Set();
+    showCalCompose(true);
+    calState.editingEvent=record;
+    form.dataset.editorUser=userID;
+    const series=!!record.recurrence?.raw;
+    const title=$('event-editor-title');title.removeAttribute('data-i18n');
+    title.textContent=series?mailImageText('Редактировать всю серию','Edit entire series'):mailImageText('Редактировать событие','Edit event');
+    $('event-calendar-choice').disabled=true;
+    $('cal-new-recurrence')?.remove();
+    for(const key of ['summary','location','description'])$('cal-'+key).value=record[key] || '';
+    $('cal-location').dataset.geo=record.geo || '';
+    for(const key of ['start','end']) {
+      $('cal-'+key).type=record.all_day?'date':'datetime-local';
+      $('cal-'+key).step='1';
+      $('cal-'+key).value=record.all_day?String(record[key]).slice(0,10):calendarLocalInput(record[key])+':'+String(new Date(record[key]).getSeconds()).padStart(2,'0');
+    }
+    calState.attendees=(record.attendees || []).map(a=>({...a,kind:a.kind || 'individual'}));
+    renderCalAttendeeChips();
+    setMsg($('cal-msg'),series?mailImageText('Изменения затронут всю серию. Правило повторения и напоминания сохранятся.','Changes apply to the entire series. The recurrence rule and reminders are preserved.'):record.all_day?mailImageText('Событие на весь день. Дата окончания не включается.','All-day event. The end date is exclusive.'):'');
+  } catch(error) {setMsg($('cal-load-msg'),error.message,'err');}
+}
+
 async function openEntityModal(kind,id) {
   let dialog=$('entity-reader-dialog');if(!dialog){dialog=document.createElement('dialog');dialog.id='entity-reader-dialog';dialog.className='mail-message-dialog';document.body.append(dialog)}
   dialog.dataset.entity=id;dialog.replaceChildren();
   const close=document.createElement('button');close.type='button';close.className='btn-secondary btn-sm';close.textContent=mailImageText('Закрыть','Close');close.addEventListener('click',()=>dialog.close());
   const content=document.createElement('div');content.textContent=mailImageText('Загрузка…','Loading…');dialog.append(close,content);if(!dialog.open)dialog.showModal();
   try{
-    const record=await api((kind==='calendar'?'/api/v1/calendar/events/':'/api/v1/contacts/cards/')+encodeURIComponent(id));
+    const cached=kind==='calendar'?calState.events.find(event=>event.id===id):null;
+    const query=cached?.recurrence_id?'?'+new URLSearchParams({recurrence_id:cached.recurrence_id}):'';
+    const record=await api((kind==='calendar'?'/api/v1/calendar/events/':'/api/v1/contacts/cards/')+encodeURIComponent(cached?.object_id || id)+query);
     if(!dialog.open||dialog.dataset.entity!==id)return;
     if(kind==='calendar'){calState.eventID=id;showCalReader(record)}else{contactState.cardID=id;showContactReader(record)}
     const reader=$(kind==='calendar'?'cal-reader':'contact-reader');
@@ -55,7 +93,8 @@ async function openEntityModal(kind,id) {
       addButton(mailImageText('Написать письмо','Write email'),()=>{dialog.close();showApp('mail');openCompose({to:record.email||''})});
       const edit=addButton(mailImageText('Редактировать','Edit'),()=>{dialog.close();editContactRecord(record)});edit.disabled=!!record.readonly;
     }else{
-      addButton(mailImageText('Создать похожее событие','Create similar event'),()=>{dialog.close();startNewCalEvent(calEventDayKey(record));$('cal-summary').value=record.summary||'';$('cal-location').value=record.location||'';$('cal-description').value=record.description||''});
+      const edit=addButton(mailImageText('Редактировать','Edit'),()=>{dialog.close();editCalendarRecord(record)});edit.disabled=!canEditCalendarEvent(record);
+      addButton(mailImageText('Создать похожее событие','Create similar event'),()=>{dialog.close();startNewCalEvent(calEventDayKey(record));$('cal-summary').value=record.summary||'';$('cal-location').value=record.location||'';$('cal-location').dataset.geo=record.geo||'';$('cal-description').value=record.description||''});
     }
     const remove=addButton(mailImageText('Удалить','Delete'),async()=>{
       dialog.close();if(!await askConfirm(t('delete_confirm'),{danger:true})){dialog.showModal();return}

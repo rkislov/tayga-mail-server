@@ -13,6 +13,9 @@ import (
 )
 
 func (h *ewsHandler) createItem(ctx context.Context, u *storage.User, body string) (string, error) {
+	if response, handled, err := h.taygaWrite(ctx, u, body, true); handled {
+		return response, err
+	}
 	if strings.HasPrefix(extractAttr(body, "FolderId", "Id"), "ews-gal:") || strings.HasPrefix(extractAttr(body, "ParentFolderId", "Id"), "ews-gal:") {
 		return ewsFault("ErrorAccessDenied", "Directory is read-only"), nil
 	}
@@ -104,15 +107,44 @@ func (h *ewsHandler) createItem(ctx context.Context, u *storage.User, body strin
 		}
 	}
 	if isSticky {
-		subject := extractTag(body, "Subject")
-		bodyHTML := extractTag(body, "Body")
-		return h.createStickyNote(ctx, u, folderID, subject, bodyHTML)
+		message := doc.find("Message")
+		if message == nil {
+			return ewsFault("ErrorInvalidRequest", "missing note message"), nil
+		}
+		content := noteutil.EmptyDoc()
+		if value := message.child("Body"); value != nil {
+			format := ""
+			for _, attr := range value.Attr {
+				if attr.Name.Local == "BodyType" {
+					format = attr.Value
+				}
+			}
+			switch format {
+			case "Text":
+				content = noteutil.DocumentFromText(value.Text)
+			case "HTML":
+				var err error
+				content, err = noteutil.DocumentFromSyncHTML(value.Text)
+				if err != nil {
+					return ewsFault("ErrorInvalidPropertySet", err.Error()), nil
+				}
+			default:
+				return ewsFault("ErrorInvalidPropertySet", "unsupported body type"), nil
+			}
+		}
+		if err := noteutil.ValidateSyncReplacement(noteutil.EmptyDoc(), content); err != nil {
+			return ewsFault("ErrorInvalidPropertySet", err.Error()), nil
+		}
+		return h.createStickyNote(ctx, u, folderID, message.value("Subject"), content)
 	}
 
 	return ewsFault("ErrorInvalidRequest", "FlowSync: CreateItem supports CalendarItem, Contact, StickyNote"), nil
 }
 
 func (h *ewsHandler) updateItem(ctx context.Context, u *storage.User, body string) (string, error) {
+	if response, handled, err := h.taygaWrite(ctx, u, body, false); handled {
+		return response, err
+	}
 	id := extractAttr(body, "ItemId", "Id")
 	if id == "" {
 		return ewsFault("ErrorInvalidId", "missing ItemId"), nil
@@ -184,18 +216,7 @@ func (h *ewsHandler) updateItem(ctx context.Context, u *storage.User, body strin
 		if err != nil || rights != "write" {
 			return ewsFault("ErrorAccessDenied", "forbidden"), nil
 		}
-		if v := extractTag(body, "Subject"); v != "" {
-			n.Title = v
-		}
-		if v := extractTag(body, "Body"); v != "" {
-			doc := noteutil.DocumentFromHTMLOrText(v)
-			n.DocumentJSON = noteutil.MarshalDocumentJSON(doc)
-			n.BodyHTML, n.BodyText = noteutil.DeriveBodies(n.DocumentJSON)
-		}
-		if err := h.store.UpdateNoteItem(ctx, n); err != nil {
-			return "", err
-		}
-		return ewsUpdateResponse("Message", n.ID), nil
+		return h.updateStickyNote(ctx, n, body)
 	}
 
 	return ewsFault("ErrorItemNotFound", "not found"), nil

@@ -29,6 +29,13 @@ func (s *Server) handleMail(w http.ResponseWriter, r *http.Request) {
 	parts := splitPath(path)
 
 	switch {
+	case r.Method == http.MethodGet && path == "senders":
+		addresses, err := s.store.SenderAddresses(r.Context(), au.ID)
+		if err != nil {
+			writeJSON(w, 503, map[string]string{"error": "sender lookup unavailable"})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"addresses": addresses, "default": au.Email})
 	case r.Method == http.MethodGet && path == "limits":
 		s.mailAttachmentLimits(w, r, au)
 	case r.Method == http.MethodPost && path == "attachments":
@@ -308,7 +315,29 @@ func (s *Server) mailGetMessage(w http.ResponseWriter, r *http.Request, au *auth
 	if address, e := mail.ParseAddress(parsed.From); e == nil {
 		senderEmail = strings.ToLower(address.Address)
 	}
-	replyTo, replyCC := replyRecipients(parsed, au.Email)
+	senderAddresses, err := s.store.SenderAddresses(r.Context(), au.ID)
+	if err != nil {
+		writeJSON(w, 503, map[string]string{"error": "sender lookup unavailable"})
+		return
+	}
+	replyTo, replyCC := replyRecipients(parsed, au.Email, senderAddresses...)
+	replyFrom := au.Email
+	own := map[string]bool{}
+	for _, address := range senderAddresses {
+		own[address] = true
+	}
+	for _, header := range []string{parsed.To, parsed.Cc} {
+		addresses, _ := mail.ParseAddressList(header)
+		for _, address := range addresses {
+			if own[strings.ToLower(address.Address)] {
+				replyFrom = strings.ToLower(address.Address)
+				break
+			}
+		}
+		if replyFrom != au.Email {
+			break
+		}
+	}
 	// mark seen
 	if !strings.Contains(strings.ToUpper(msg.Flags), `\SEEN`) {
 		flags := storage.NormalizeFlags(append(storage.ParseFlags(msg.Flags), `\Seen`))
@@ -324,6 +353,7 @@ func (s *Server) mailGetMessage(w http.ResponseWriter, r *http.Request, au *auth
 		"from":          parsed.From,
 		"sender_email":  senderEmail,
 		"reply_to":      parsed.ReplyTo,
+		"reply_from":    replyFrom,
 		"reply_all_to":  replyTo,
 		"reply_all_cc":  replyCC,
 		"to":            parsed.To,
@@ -582,6 +612,7 @@ func (s *Server) mailDeleteMessage(w http.ResponseWriter, r *http.Request, au *a
 
 func (s *Server) mailSend(w http.ResponseWriter, r *http.Request, au *authUser) {
 	var req struct {
+		From        string               `json:"from"`
 		To          []string             `json:"to"`
 		Cc          []string             `json:"cc"`
 		Bcc         []string             `json:"bcc"`
@@ -606,8 +637,26 @@ func (s *Server) mailSend(w http.ResponseWriter, r *http.Request, au *authUser) 
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "user lookup failed"})
 		return
 	}
+	from := strings.ToLower(strings.TrimSpace(req.From))
+	if from == "" {
+		from = user.Email
+	}
+	parsedFrom, parseErr := mail.ParseAddress(from)
+	if parseErr != nil || parsedFrom.Address != from {
+		writeJSON(w, 400, map[string]string{"error": "invalid sender address"})
+		return
+	}
+	allowed, err := s.store.CanSendFrom(r.Context(), user.ID, from)
+	if err != nil {
+		writeJSON(w, 503, map[string]string{"error": "sender lookup unavailable"})
+		return
+	}
+	if !allowed {
+		writeJSON(w, 403, map[string]string{"error": "sender address is not authorized"})
+		return
+	}
 	msgid := fmt.Sprintf("<%d.%s@tayga>", time.Now().UnixNano(), strings.ReplaceAll(au.ID, "-", "")[:8])
-	raw := buildOutgoingMIME(user.Email, user.DisplayName, to, cc, bcc, req.Subject, req.Text, req.HTML, msgid)
+	raw := buildOutgoingMIME(from, user.DisplayName, to, cc, bcc, req.Subject, req.Text, req.HTML, msgid)
 
 	files, err := s.resolveOutgoingFiles(au.ID, req.Attachments)
 	if err == nil {
@@ -646,6 +695,14 @@ func (s *Server) mailSend(w http.ResponseWriter, r *http.Request, au *authUser) 
 				}
 			}
 		} else if errors.Is(err, storage.ErrNotFound) {
+			if _, lookupErr := s.store.ResolveMailDomain(r.Context(), storage.DomainOfEmail(addr)); lookupErr == nil {
+				writeJSON(w, 400, map[string]string{"error": "local recipient not found"})
+				return
+			} else if !errors.Is(lookupErr, storage.ErrNotFound) {
+				writeJSON(w, 503, map[string]string{"error": "recipient lookup unavailable"})
+				return
+			}
+
 			if !seen["remote:"+addr] {
 				remote = append(remote, addr)
 				seen["remote:"+addr] = true
@@ -678,16 +735,18 @@ func (s *Server) mailSend(w http.ResponseWriter, r *http.Request, au *authUser) 
 		}
 	}
 
+	logUser := *user
+	logUser.Email = from
 	for _, rcpt := range local {
 		ru, err := s.store.ResolveRecipient(r.Context(), rcpt)
 		if err != nil {
-			s.writeMailLog(r.Context(), user, "failed", "inbound", rcpt, msgid, int64(len(raw)), err.Error())
+			s.writeMailLog(r.Context(), &logUser, "failed", "inbound", rcpt, msgid, int64(len(raw)), err.Error())
 			continue
 		}
 		root := s.ms.UserRoot(ru.Email)
 		mb, err := s.store.EnsureMailbox(r.Context(), ru.ID, "INBOX", root)
 		if err != nil {
-			s.writeMailLog(r.Context(), user, "failed", "inbound", rcpt, msgid, int64(len(raw)), err.Error())
+			s.writeMailLog(r.Context(), &logUser, "failed", "inbound", rcpt, msgid, int64(len(raw)), err.Error())
 			continue
 		}
 		if rel, size, derr := s.ms.Deliver(ru.Email, "INBOX", raw); derr == nil {
@@ -699,27 +758,27 @@ func (s *Server) mailSend(w http.ResponseWriter, r *http.Request, au *authUser) 
 			if inserted, ierr := s.store.InsertMessage(r.Context(), im); ierr == nil {
 				_ = mailsearch.Index(r.Context(), s.store, inserted.ID, raw)
 				if s.notify != nil {
-					s.notify.PublishMail(ru.ID, "INBOX", req.Subject, user.Email)
+					s.notify.PublishMail(ru.ID, "INBOX", req.Subject, from)
 				}
 			}
-			s.writeMailLog(r.Context(), user, "delivered", "inbound", rcpt, msgid, size, "web")
+			s.writeMailLog(r.Context(), &logUser, "delivered", "inbound", rcpt, msgid, size, "web")
 		} else {
-			s.writeMailLog(r.Context(), user, "failed", "inbound", rcpt, msgid, int64(len(raw)), derr.Error())
+			s.writeMailLog(r.Context(), &logUser, "failed", "inbound", rcpt, msgid, int64(len(raw)), derr.Error())
 		}
 	}
 	for _, rcpt := range remote {
 		_, err := s.store.EnqueueOutbound(r.Context(), &storage.OutboundItem{
-			EnvelopeFrom: user.Email,
+			EnvelopeFrom: from,
 			EnvelopeTo:   rcpt,
 			MessageID:    msgid,
 			Data:         raw,
 			MaxAttempts:  8,
 		})
 		if err != nil {
-			s.writeMailLog(r.Context(), user, "failed", "outbound", rcpt, msgid, int64(len(raw)), err.Error())
+			s.writeMailLog(r.Context(), &logUser, "failed", "outbound", rcpt, msgid, int64(len(raw)), err.Error())
 			continue
 		}
-		s.writeMailLog(r.Context(), user, "queued", "outbound", rcpt, msgid, int64(len(raw)), "web")
+		s.writeMailLog(r.Context(), &logUser, "queued", "outbound", rcpt, msgid, int64(len(raw)), "web")
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status": "accepted", "message_id": msgid,
@@ -743,7 +802,7 @@ func (s *Server) writeMailLog(ctx context.Context, user *storage.User, event, di
 		domain = storage.DomainOfEmail(from)
 	}
 	if tenantID == "" && domain != "" {
-		if d, err := s.store.GetDomainByName(ctx, domain); err == nil && d != nil {
+		if d, err := s.store.ResolveMailDomain(ctx, domain); err == nil && d != nil {
 			tenantID = d.TenantID
 		}
 	}

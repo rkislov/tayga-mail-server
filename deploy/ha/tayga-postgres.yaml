@@ -1,0 +1,28 @@
+# New installation only. This is not a SQLite migration tool.
+server:
+  hostname: mail.example.com
+storage:
+  driver: postgres
+  postgres:
+    # UNIX socket: OS user tayga -> DB role tayga via peer. No network plaintext.
+    dsn: "host=/var/run/postgresql port=5432 dbname=tayga user=tayga sslmode=disable connect_timeout=5"
+mailstore:
+  root: /var/lib/tayga/maildir
+ha:
+  mode: none
+seed:
+  enabled: false
+http:
+  listen: ":80"
+  tls_listen: ":443"
+  public_url: https://mail.example.com
+  admins: [admin@example.com]
+tls:
+  cert_file: /var/lib/tayga/certs/server.crt
+  key_file: /var/lib/tayga/certs/server.key
+  certs_dir: /var/lib/tayga/certs/store
+  auto_generate: false
+log:
+  level: info
+  format: json
+  file: /var/lib/tayga/log/tayga.log

@@ -3,10 +3,14 @@ package flowsync
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"math"
 	"net/mail"
+	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/emersion/go-ical"
 	"github.com/tayga/tms/internal/calutil"
@@ -17,6 +21,13 @@ import (
 // particular an attendee-only edit must not be acknowledged and discarded.
 func (h *easHandler) wbCalendar(ctx context.Context, u *storage.User, calendarID string, op clientOp) (string, error) {
 	var obj *storage.CalendarObject
+	clientUID := op.Fields["ClientUid"]
+	if n := op.ApplicationData.child("ClientUid"); n != nil {
+		clientUID = n.Text
+	}
+	if utf8.RuneCountInString(clientUID) > 300 || strings.ContainsAny(clientUID, "\r\n\x00") {
+		return op.ServerID, fmt.Errorf("invalid calendar client UID")
+	}
 	if op.Kind == "add" {
 		uid := op.Fields["UID"]
 		device, _ := ctx.Value(taskDeviceKey{}).(string)
@@ -31,6 +42,28 @@ func (h *easHandler) wbCalendar(ctx context.Context, u *storage.User, calendarID
 				return old.ID, nil // retry after an accepted Add, including a restart
 			}
 			if err != storage.ErrNotFound {
+				return "", err
+			}
+		}
+		if clientUID != "" {
+			// After MoveItems the same event may be retried as Add. Its href
+			// can predate EAS (web/ticket import), so also match its actual UID
+			// within this collection. Never collapse similar titles or times.
+			if old, err := h.store.GetCalendarObjectByUID(ctx, calendarID, clientUID); err == nil {
+				return old.ID, nil
+			} else if !errors.Is(err, storage.ErrNotFound) {
+				return "", err
+			}
+			// ClientId identifies a request; ClientUid identifies the event
+			// across retries with a new ClientId/device (MS-ASCAL 2.2.2.13).
+			// Scope to the authenticated user and collection. Never compare
+			// titles/times or overwrite a newer edit when replaying an Add.
+			href = "eas-clientuid-" + digest(u.ID+"\x00"+clientUID) + ".ics"
+			old, err := h.store.GetCalendarObject(ctx, calendarID, href)
+			if err == nil {
+				return old.ID, nil
+			}
+			if !errors.Is(err, storage.ErrNotFound) {
 				return "", err
 			}
 		}
@@ -67,6 +100,13 @@ func (h *easHandler) wbCalendar(ctx context.Context, u *storage.User, calendarID
 	obj.Data, obj.DTStart, obj.DTEnd = data, p.Start, p.End
 	saved, err := h.store.SaveCalendarClientObject(ctx, u.ID, obj)
 	if err != nil {
+		// The unique href and CreateOnly constraint arbitrate simultaneous
+		// retries from different devices; return the winner's identity.
+		if op.Kind == "add" && clientUID != "" && errors.Is(err, storage.ErrCalendarConflict) {
+			if old, lookupErr := h.store.GetCalendarObject(ctx, calendarID, obj.HrefName); lookupErr == nil {
+				return old.ID, nil
+			}
+		}
 		return op.ServerID, err
 	}
 	return saved.ID, nil
@@ -112,8 +152,8 @@ func editEASCalendar(data string, u *storage.User, op clientOp) (string, error) 
 			}
 		}
 	}
-	if location := op.ApplicationData.child("Location"); location != nil && location.Name.Space == "AirSyncBase:" {
-		fields["Location"] = location.value("DisplayName")
+	if err := editEASLocation(ev, op.ApplicationData, fields); err != nil {
+		return "", err
 	}
 	storedUID, _ := ev.Props.Text("UID")
 	if uid, ok := fields["UID"]; ok && uid != storedUID {
@@ -264,6 +304,71 @@ func editEASCalendar(data string, u *storage.User, op clientOp) (string, error) 
 	return out.String(), nil
 }
 
+// MS-ASAIRS Location (16.x) is a replacement property. An omitted property
+// preserves the old point; an empty location clears it. Do not confuse nested
+// DisplayName/Latitude fields with properties of the calendar event itself.
+func editEASLocation(ev *ical.Component, app *protocolNode, fields map[string]string) error {
+	location := app.child("Location")
+	if location != nil && location.Name.Space == "AirSyncBase:" {
+		name := location.value("DisplayName")
+		if name == "" {
+			var address []string
+			for _, key := range []string{"Street", "City", "State", "PostalCode", "Country"} {
+				if value := location.value(key); value != "" {
+					address = append(address, value)
+				}
+			}
+			name = strings.Join(address, ", ")
+		}
+		fields["Location"] = name
+		lat, lon := location.child("Latitude"), location.child("Longitude")
+		geo := ""
+		if lat != nil || lon != nil {
+			if lat == nil || lon == nil {
+				return fmt.Errorf("incomplete calendar coordinates")
+			}
+			a, e1 := strconv.ParseFloat(strings.TrimSpace(lat.Text), 64)
+			b, e2 := strconv.ParseFloat(strings.TrimSpace(lon.Text), 64)
+			if e1 != nil || e2 != nil || math.IsNaN(a) || math.IsNaN(b) || math.Abs(a) > 90 || math.Abs(b) > 180 {
+				return fmt.Errorf("invalid calendar coordinates")
+			}
+			geo = strconv.FormatFloat(a, 'f', -1, 64) + ";" + strconv.FormatFloat(b, 'f', -1, 64)
+		}
+		delete(ev.Props, "GEO")
+		delete(ev.Props, "X-APPLE-STRUCTURED-LOCATION")
+		if geo != "" {
+			ev.Props.Set(&ical.Prop{Name: "GEO", Value: geo})
+		}
+	} else if name, changed := fields["Location"]; changed {
+		old, _ := ev.Props.Text("LOCATION")
+		if name != old {
+			delete(ev.Props, "GEO")
+			delete(ev.Props, "X-APPLE-STRUCTURED-LOCATION")
+		}
+	}
+	return nil
+}
+
+func calendarLocationXML(ctx context.Context, data string) string {
+	version, _ := ctx.Value(easVersionKey{}).(string)
+	if version != "16.0" && version != "16.1" {
+		return ""
+	}
+	p, _ := calutil.ParseICS(data)
+	var out strings.Builder
+	out.WriteString(`<Location xmlns="AirSyncBase:"><DisplayName>` + xmlEscape(p.Location) + `</DisplayName>`)
+	parts := strings.Split(p.Geo, ";")
+	if len(parts) == 2 {
+		lat, e1 := strconv.ParseFloat(parts[0], 64)
+		lon, e2 := strconv.ParseFloat(parts[1], 64)
+		if e1 == nil && e2 == nil && !math.IsNaN(lat) && !math.IsNaN(lon) && math.Abs(lat) <= 90 && math.Abs(lon) <= 180 {
+			out.WriteString(`<Latitude>` + strconv.FormatFloat(lat, 'f', -1, 64) + `</Latitude><Longitude>` + strconv.FormatFloat(lon, 'f', -1, 64) + `</Longitude>`)
+		}
+	}
+	out.WriteString(`</Location>`)
+	return out.String()
+}
+
 func calendarMeetingXML(data, viewer string) string {
 	p, err := calutil.ParseICS(data)
 	if err != nil {
@@ -301,6 +406,20 @@ func calendarMeetingXML(data, viewer string) string {
 		status |= 4
 	}
 	field("MeetingStatus", fmt.Sprint(status))
+	response := "0"
+	if len(p.Attendees) > 0 {
+		response = "5"
+		if strings.EqualFold(p.Organizer.Email, viewer) {
+			response = "1"
+		} else {
+			for _, a := range p.Attendees {
+				if strings.EqualFold(a.Email, viewer) {
+					response = fieldOr(map[string]string{"ACCEPTED": "3", "TENTATIVE": "2", "DECLINED": "4"}[strings.ToUpper(a.PartStat)], "5")
+				}
+			}
+		}
+	}
+	field("ResponseType", response)
 	if p.Organizer.Email != "" {
 		field("OrganizerEmail", p.Organizer.Email)
 		field("OrganizerName", fieldOr(p.Organizer.Name, p.Organizer.Email))

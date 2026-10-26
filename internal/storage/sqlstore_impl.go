@@ -18,9 +18,11 @@ const (
 
 // Store implements storage.Driver for SQLite and PostgreSQL.
 type Store struct {
-	db             *sql.DB
-	dialect        Dialect
-	learningPolicy func() (bool, string) // configured once before serving; callback reads live settings
+	db               *sql.DB
+	dialect          Dialect
+	learningPolicy   func() (bool, string) // configured once before serving; callback reads live settings
+	calendarLinkKey  []byte
+	calendarLinkBase string
 }
 
 var _ Driver = (*Store)(nil)
@@ -126,7 +128,10 @@ func (s *Store) CreateDomain(ctx context.Context, tenantID, name string) (*Domai
 
 func (s *Store) InsertDomain(ctx context.Context, d *Domain) (*Domain, error) {
 	now := time.Now().UTC()
-	d.Name = strings.ToLower(d.Name)
+	d.Name = strings.ToLower(strings.TrimSpace(d.Name))
+	if normalized, err := NormalizeAliasDomain(d.Name); err == nil {
+		d.Name = normalized
+	}
 	if d.ID == "" {
 		d.ID = NewID()
 	}
@@ -136,9 +141,31 @@ func (s *Store) InsertDomain(ctx context.Context, d *Domain) (*Domain, error) {
 	if d.MigrationEnabled == "" {
 		d.MigrationEnabled = "inherit"
 	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	if err = s.lockDomainNames(ctx, tx); err != nil {
+		return nil, err
+	}
+	var count int
+	if err = tx.QueryRowContext(ctx, s.rebind(`SELECT COUNT(*) FROM domain_aliases WHERE name=?`), d.Name).Scan(&count); err != nil {
+		return nil, err
+	}
+	if count != 0 {
+		return nil, ErrAlreadyExists
+	}
+	// A newly claimed name must not inherit a previous owner's signing key.
+	if _, err = tx.ExecContext(ctx, s.rebind(`DELETE FROM settings WHERE key=?`), "dkim.domain."+d.Name); err != nil {
+		return nil, err
+	}
 	q := s.rebind(`INSERT INTO domains(id, tenant_id, name, migration_enabled, created_at) VALUES (?, ?, ?, ?, ?)`)
-	if _, err := s.db.ExecContext(ctx, q, d.ID, d.TenantID, d.Name, d.MigrationEnabled, d.CreatedAt); err != nil {
+	if _, err := tx.ExecContext(ctx, q, d.ID, d.TenantID, d.Name, d.MigrationEnabled, d.CreatedAt); err != nil {
 		return nil, mapErr(err)
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
 	}
 	return d, nil
 }
@@ -283,6 +310,14 @@ func (s *Store) CreateUser(ctx context.Context, u *User) (*User, error) {
 	if err = s.checkGroupAddress(ctx, tx, u.DomainID, u.LocalPart); err != nil {
 		return nil, err
 	}
+	var aliasCount int
+	if err = tx.QueryRowContext(ctx, s.rebind(`SELECT COUNT(*) FROM aliases WHERE domain_id=? AND LOWER(local_part)=?`), u.DomainID, strings.ToLower(u.LocalPart)).Scan(&aliasCount); err != nil {
+		return nil, err
+	}
+	if aliasCount != 0 {
+		return nil, ErrAlreadyExists
+	}
+
 	now := time.Now().UTC()
 	u.Email = strings.ToLower(u.Email)
 	u.LocalPart = strings.ToLower(u.LocalPart)
@@ -500,28 +535,7 @@ func (s *Store) SumMailboxBytes(ctx context.Context, userID string) (int64, erro
 }
 
 func (s *Store) CreateAlias(ctx context.Context, domainID, userID, localPart string) (*Alias, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback()
-	if err = s.lockDirectoryDomain(ctx, tx, domainID); err != nil {
-		return nil, err
-	}
-	if err = s.checkGroupAddress(ctx, tx, domainID, localPart); err != nil {
-		return nil, err
-	}
-	now := time.Now().UTC()
-	localPart = strings.ToLower(localPart)
-	a := &Alias{ID: NewID(), DomainID: domainID, UserID: userID, LocalPart: localPart, CreatedAt: now}
-	q := s.rebind(`INSERT INTO aliases(id, domain_id, user_id, local_part, created_at) VALUES (?, ?, ?, ?, ?)`)
-	if _, err := tx.ExecContext(ctx, q, a.ID, domainID, userID, localPart, now); err != nil {
-		return nil, mapErr(err)
-	}
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-	return a, nil
+	return s.SaveAlias(ctx, &Alias{DomainID: domainID, UserID: userID, LocalPart: localPart})
 }
 
 func (s *Store) ResolveRecipient(ctx context.Context, email string) (*User, error) {
@@ -543,7 +557,13 @@ func (s *Store) ResolveRecipient(ctx context.Context, email string) (*User, erro
 	}
 	local, domain := email[:at], email[at+1:]
 
-	d, err := s.GetDomainByName(ctx, domain)
+	d, err := s.ResolveMailDomain(ctx, domain)
+	if err == nil {
+		canonical := local + "@" + d.Name
+		if canonical != email {
+			return s.ResolveRecipient(ctx, canonical)
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
