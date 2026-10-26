@@ -177,6 +177,12 @@ func (s *Server) handleAdminDomains(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/admin/domains")
 	path = strings.Trim(path, "/")
 
+	parts := strings.Split(path, "/")
+	if len(parts) >= 2 && parts[1] == "aliases" {
+		s.handleDomainAliases(w, r, admin, parts)
+		return
+	}
+
 	switch {
 	case r.Method == http.MethodGet && path == "":
 		tenantID := strings.TrimSpace(r.URL.Query().Get("tenant_id"))

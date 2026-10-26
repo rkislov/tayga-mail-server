@@ -12,6 +12,9 @@ func redactConfig(cfg *config.Config) {
 	if cfg == nil {
 		return
 	}
+	if cfg.Files.OfficeJWTSecret != "" {
+		cfg.Files.OfficeJWTSecret = redacted
+	}
 	if cfg.Server.SecretsKey != "" {
 		cfg.Server.SecretsKey = redacted
 	}
@@ -62,6 +65,9 @@ func redactConfig(cfg *config.Config) {
 func preserveSecrets(old, neu *config.Config) {
 	if old == nil || neu == nil {
 		return
+	}
+	if isSecretUnset(neu.Files.OfficeJWTSecret) {
+		neu.Files.OfficeJWTSecret = old.Files.OfficeJWTSecret
 	}
 	if isSecretUnset(neu.Server.SecretsKey) {
 		neu.Server.SecretsKey = old.Server.SecretsKey

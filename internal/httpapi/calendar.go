@@ -370,6 +370,14 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 			}
 			seenAtt[email] = struct{}{}
 			name := strings.TrimSpace(a.Name)
+			role := "REQ-PARTICIPANT"
+			if previous != nil {
+				for _, attendee := range previous.Attendees {
+					if strings.EqualFold(attendee.Email, email) && attendee.Role != "" {
+						role = attendee.Role
+					}
+				}
+			}
 			cutype := "INDIVIDUAL"
 			partstat := "NEEDS-ACTION"
 			rsvp := true
@@ -389,7 +397,7 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 			}
 			ev.Attendees = append(ev.Attendees, calutil.Attendee{
 				Email: email, Name: name,
-				PartStat: partstat, RSVP: rsvp, Role: "REQ-PARTICIPANT", CUType: cutype,
+				PartStat: partstat, RSVP: rsvp, Role: role, CUType: cutype,
 			})
 		}
 		var ics string
@@ -508,6 +516,7 @@ func eventToJSON(o *storage.CalendarObject, ev calutil.ParseResult) map[string]a
 	for _, a := range ev.Attendees {
 		atts = append(atts, map[string]any{
 			"email": a.Email, "name": a.Name, "partstat": a.PartStat, "role": a.Role,
+			"kind": strings.ToLower(a.CUType),
 		})
 	}
 	if len(atts) > 0 {

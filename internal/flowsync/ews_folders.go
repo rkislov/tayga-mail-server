@@ -140,6 +140,9 @@ func (h *ewsHandler) getFolder(ctx context.Context, u *storage.User, body string
 			}
 		}
 		if found {
+			if taygaRequested(body, "TaygaSyncVersion") {
+				f.Inner += taygaProperty("TaygaSyncVersion", "1")
+			}
 			fmt.Fprintf(&out, `<m:GetFolderResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:Folders><t:%s>%s</t:%s></m:Folders></m:GetFolderResponseMessage>`, f.Kind.Local, f.Inner, f.Kind.Local)
 		} else {
 			fmt.Fprintf(&out, `<m:GetFolderResponseMessage ResponseClass="Error"><m:MessageText>Folder unavailable: %s</m:MessageText><m:ResponseCode>ErrorFolderNotFound</m:ResponseCode></m:GetFolderResponseMessage>`, xmlEscape(id))

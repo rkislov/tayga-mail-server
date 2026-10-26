@@ -154,7 +154,10 @@
           <span></span><span></span><span></span>
         </span>
       </button>
-      <p class="brand-sm">Tayga <span>Mail</span></p>
+      <div class="header-branding" id="header-branding">
+        <img id="header-branding-image" class="hidden" alt="" />
+        <div class="header-branding-copy"><strong id="header-branding-name">Tayga Mail</strong><small data-i18n="branding_attribution">Работает на платформе Тайга Майл</small></div>
+      </div>
       <p class="app-topbar-title" id="app-topbar-title" data-i18n="nav_mail">Почта</p>
       <div class="color-mode-switch" role="group" data-i18n-title="color_mode" aria-label="Режим интерфейса"><button type="button" data-color-mode="light" data-i18n-title="color_mode_light" aria-label="Дневной режим">☀</button><button type="button" data-color-mode="auto" data-i18n="color_mode_auto">Авто</button><button type="button" data-color-mode="dark" data-i18n-title="color_mode_dark" aria-label="Ночной режим">☾</button></div>
       <details class="topbar-language" id="topbar-language"><summary data-i18n-title="language_title"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18M5 7h14M5 17h14"/></svg></summary><div class="language-popover"><label class="field-label" for="lang-select" data-i18n="language_title"></label><select class="field-input" id="lang-select">
@@ -254,6 +257,8 @@
       <div id="compose-backdrop" class="compose-backdrop hidden">
         <div id="compose-panel" class="compose-panel" role="dialog" aria-modal="true" aria-labelledby="compose-title">
           <h3 class="heading" id="compose-title" data-i18n="compose">Написать</h3>
+          <label for="compose-from" class="field-label" data-i18n="col_from">От</label>
+          <select class="field-input" id="compose-from"></select>
           <label for="compose-to" class="field-label" data-i18n="to">Кому</label>
           <input class="field-input" id="compose-to" />
           <label for="compose-subject" class="field-label" data-i18n="subject">Тема</label>
@@ -329,6 +334,7 @@
           <div id="cal-empty" class="empty-state" data-i18n="select_event">Выберите событие</div>
           <div id="cal-reader" class="hidden">
             <div class="reader-actions">
+              <button type="button" class="btn-secondary btn-sm hidden" id="btn-cal-edit" data-i18n="edit">Редактировать</button>
               <button type="button" class="btn-secondary btn-sm btn-ico mobile-only" data-pane-back data-i18n-title="back_list" title="К списку" aria-label="К списку"><span class="ico" data-ico="back" aria-hidden="true"></span></button>
               <button type="button" class="btn-secondary btn-sm btn-ico" id="btn-cal-delete" data-i18n-title="delete" title="Удалить" aria-label="Удалить"><span class="ico" data-ico="delete" aria-hidden="true"></span></button>
 			  <button type="button" class="btn-secondary btn-sm hidden" id="btn-cal-instance-edit" data-i18n="cal_instance_edit">Изменить повторение</button>
@@ -524,6 +530,7 @@
               </label>
               <button type="button" class="btn-secondary btn-sm" id="btn-note-draw" data-i18n="note_draw">Рисунок</button>
               <button type="button" class="btn-secondary btn-sm btn-ico" id="btn-note-share" data-i18n-title="note_share" title="Доступ" aria-label="Доступ"><span class="ico" data-ico="contact" aria-hidden="true"></span></button>
+              <button type="button" class="btn-secondary btn-sm" id="btn-note-history" data-i18n="note_history">История версий</button>
               <button type="button" class="btn-spray btn-sm btn-ico" id="btn-note-save" data-i18n-title="save" title="Сохранить" aria-label="Сохранить"><span class="ico" data-ico="save" aria-hidden="true"></span></button>
               <button type="button" class="btn-secondary btn-sm btn-ico" id="btn-note-delete" data-i18n-title="delete" title="Удалить" aria-label="Удалить"><span class="ico" data-ico="delete" aria-hidden="true"></span></button>
             </div>
@@ -735,6 +742,7 @@
           </select>
           <div class="theme-gallery" id="theme-gallery" role="listbox" aria-label="Themes"></div>
           <div class="theme-preview" id="theme-preview" aria-hidden="true"></div>
+
         </div>
       </div>
 
@@ -917,6 +925,7 @@ keep;</textarea>
           </div>
 
           <div id="tenant-level-domains" class="hidden">
+ <button type="button" class="btn-secondary" id="tenant-branding-button" data-i18n="branding_tenant">Брендинг тенанта</button>
             <details class="admin-create"><summary data-i18n="domains_new"></summary><form id="form-create-domain">
               <label class="field-label" for="nd-name" data-i18n="domains_new">Новый домен</label>
               <input class="field-input" id="nd-name" type="text" required placeholder="example.com" />
@@ -1094,6 +1103,26 @@ keep;</textarea>
     </div>
   </section>
 
+<template id="branding-template">          <form id="branding-form" class="branding-form">
+ <label class="field-check"><input type="checkbox" id="branding-enabled" /><span data-i18n="branding_enabled">Свой брендинг</span></label>
+            <h4 class="heading" data-i18n="branding_title">Брендинг шапки</h4>
+            <p class="meta" data-i18n="branding_hint">Брендинг домена заменяет брендинг тенанта. Если свой брендинг выключен, используется оформление тенанта или Тайга Майл. Подпись платформы всегда видна.</p>
+            <label class="field-label" for="branding-name" data-i18n="branding_name">Название</label>
+            <input id="branding-name" class="field-input" type="text" maxlength="60" placeholder="Tayga Mail" />
+            <label class="field-label" for="branding-file" data-i18n="branding_image">Картинка для шапки</label>
+            <input id="branding-file" class="field-input" type="file" accept="image/png,image/jpeg" aria-describedby="branding-file-hint" />
+            <p id="branding-file-hint" class="meta" data-i18n="branding_file_hint">PNG или JPEG до 1 МБ, до 4096 × 4096 пикселей. Картинка вписывается целиком.</p>
+            <div class="header-branding branding-preview" aria-label="Предпросмотр" data-i18n-title="signature_preview">
+              <img id="branding-preview-image" class="hidden" alt="" />
+              <div class="header-branding-copy"><strong id="branding-preview-name">Tayga Mail</strong><small data-i18n="branding_attribution">Работает на платформе Тайга Майл</small></div>
+            </div>
+            <div class="actions">
+              <button class="btn-spray" type="submit" data-i18n="save">Сохранить</button>
+              <button class="btn-secondary" id="branding-remove-image" type="button" data-i18n="branding_remove_image">Убрать картинку</button>
+              <button class="btn-secondary" id="branding-reset" type="button" data-i18n="branding_reset">Сбросить брендинг</button>
+            </div>
+            <p id="branding-msg" class="msg" role="status"></p>
+          </form></template>
   <script src="/assets/app.js"></script>
 </body>
 </html>

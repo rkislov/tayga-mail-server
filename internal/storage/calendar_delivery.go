@@ -75,20 +75,12 @@ func (s *Store) queueCalendarMail(ctx context.Context, tx *sql.Tx, mails []Calen
 		}
 		// Resolve a local identity now: an account deleted before delivery must
 		// never turn a previously local invitation into an external email.
-		var userID string
-		err = tx.QueryRowContext(ctx, s.rebind(`SELECT id FROM users WHERE LOWER(email)=LOWER(?)`), m.To).Scan(&userID)
-		if err != nil && err != sql.ErrNoRows {
+		userID, err := s.calendarRecipientTx(ctx, tx, m.To)
+		if err != nil {
 			return err
 		}
-		if err == sql.ErrNoRows {
-			at := strings.LastIndex(m.To, "@")
-			if at < 1 {
-				return fmt.Errorf("invalid calendar recipient")
-			}
-			err = tx.QueryRowContext(ctx, s.rebind(`SELECT a.user_id FROM aliases a JOIN domains d ON d.id=a.domain_id WHERE LOWER(d.name)=LOWER(?) AND LOWER(a.local_part)=LOWER(?)`), m.To[at+1:], m.To[:at]).Scan(&userID)
-			if err != nil && err != sql.ErrNoRows {
-				return err
-			}
+		if err = s.calendarMailDownloadLinks(ctx, tx, &m); err != nil {
+			return err
 		}
 		id, now := NewID(), time.Now().UTC()
 		raw := calutil.IMIPMessage(m.From, m.FromName, m.To, m.Subject, m.Text, m.ICS, m.Method, id, now)

@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -254,10 +255,66 @@ func (s *Store) CreateNoteItem(ctx context.Context, n *NoteItem) (*NoteItem, err
 	return n, nil
 }
 
+// NoteVersion retains the document before an update. Attachment files remain
+// separate; explicitly deleting an attachment also removes it from old versions.
+type NoteVersion struct {
+	ID      string
+	SavedAt time.Time
+	Note    NoteItem
+}
+
+func (s *Store) GetNoteVersion(ctx context.Context, noteID, versionID string) (*NoteVersion, error) {
+	var v NoteVersion
+	var raw string
+	err := s.db.QueryRowContext(ctx, s.rebind(`SELECT id, snapshot_json, saved_at FROM note_versions WHERE note_id=? AND id=?`), noteID, versionID).Scan(&v.ID, &raw, &v.SavedAt)
+	if err == sql.ErrNoRows {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal([]byte(raw), &v.Note); err != nil {
+		return nil, err
+	}
+	return &v, nil
+}
+
+func (s *Store) ListNoteVersions(ctx context.Context, noteID string) ([]NoteVersion, error) {
+	rows, err := s.db.QueryContext(ctx, s.rebind(`SELECT id, snapshot_json, saved_at FROM note_versions WHERE note_id=? ORDER BY saved_at DESC, id DESC LIMIT 100`), noteID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []NoteVersion{}
+	for rows.Next() {
+		var v NoteVersion
+		var raw string
+		if err := rows.Scan(&v.ID, &raw, &v.SavedAt); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(raw), &v.Note); err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) UpdateNoteItem(ctx context.Context, n *NoteItem) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	old, err := s.scanNoteItem(tx.QueryRowContext(ctx, s.rebind(`SELECT id, folder_id, user_id, title, document_json, body_html, body_text, pinned, archived, color, etag, created_at, updated_at FROM note_items WHERE id=?`), n.ID))
+	if err != nil {
+		return err
+	}
+	if old.ETag != n.ETag {
+		return ErrNoteConflict
+	}
 	now := time.Now().UTC()
-	n.UpdatedAt = now
-	n.ETag = ContentETag(n.DocumentJSON + n.Title + now.String())
+	etag := ContentETag(n.DocumentJSON + n.Title + now.String())
 	pinned, archived := 0, 0
 	if n.Pinned {
 		pinned = 1
@@ -265,21 +322,31 @@ func (s *Store) UpdateNoteItem(ctx context.Context, n *NoteItem) error {
 	if n.Archived {
 		archived = 1
 	}
-	// Update by id only so collaborators (shared ACL) can save the same note.
-	q := s.rebind(`UPDATE note_items SET folder_id=?, title=?, document_json=?, body_html=?, body_text=?,
-		pinned=?, archived=?, color=?, etag=?, updated_at=? WHERE id=?`)
-	res, err := s.db.ExecContext(ctx, q,
-		n.FolderID, n.Title, n.DocumentJSON, n.BodyHTML, n.BodyText,
-		pinned, archived, n.Color, n.ETag, now, n.ID,
-	)
+	res, err := tx.ExecContext(ctx, s.rebind(`UPDATE note_items SET folder_id=?, title=?, document_json=?, body_html=?, body_text=?, pinned=?, archived=?, color=?, etag=?, updated_at=? WHERE id=? AND etag=?`), n.FolderID, n.Title, n.DocumentJSON, n.BodyHTML, n.BodyText, pinned, archived, n.Color, etag, now, n.ID, old.ETag)
 	if err != nil {
 		return err
 	}
-	nn, _ := res.RowsAffected()
-	if nn == 0 {
-		return ErrNotFound
+	count, err := res.RowsAffected()
+	if err != nil {
+		return err
 	}
-	_ = s.bumpNoteFolderCTag(ctx, n.FolderID)
+	if count != 1 {
+		return ErrNoteConflict
+	}
+	raw, err := json.Marshal(old)
+	if err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, s.rebind(`INSERT INTO note_versions(id, note_id, etag, snapshot_json, saved_at) VALUES (?, ?, ?, ?, ?)`), NewID(), n.ID, old.ETag, string(raw), now); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, s.rebind(`UPDATE note_folders SET ctag=? WHERE id=? OR id=?`), newCTag(), old.FolderID, n.FolderID); err != nil {
+		return err
+	}
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+	n.UpdatedAt, n.ETag = now, etag
 	return nil
 }
 
@@ -340,17 +407,26 @@ func (s *Store) DeleteNoteItemByID(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	q := s.rebind(`DELETE FROM note_items WHERE id = ?`)
-	res, err := s.db.ExecContext(ctx, q, id)
+	return s.DeleteNoteItemIfMatch(ctx, n.ID, n.ETag)
+}
+
+func (s *Store) DeleteNoteItemIfMatch(ctx context.Context, id, etag string) error {
+	n, err := s.GetNoteItemByID(ctx, id)
 	if err != nil {
 		return err
 	}
-	nn, _ := res.RowsAffected()
-	if nn == 0 {
-		return ErrNotFound
+	res, err := s.db.ExecContext(ctx, s.rebind(`DELETE FROM note_items WHERE id=? AND etag=?`), id, etag)
+	if err != nil {
+		return err
 	}
-	_ = s.bumpNoteFolderCTag(ctx, n.FolderID)
-	return nil
+	count, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count != 1 {
+		return ErrNoteConflict
+	}
+	return s.bumpNoteFolderCTag(ctx, n.FolderID)
 }
 
 func (s *Store) scanNoteItem(row interface{ Scan(dest ...any) error }) (*NoteItem, error) {

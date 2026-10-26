@@ -1,0 +1,34 @@
+[Unit]
+Description=Tayga Mail (managed exclusively by Pacemaker)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=tayga
+Group=tayga
+WorkingDirectory=/var/lib/tayga
+Environment=TAYGA_PUBLIC_HOST=mail.example.com
+ExecStartPre=/usr/bin/mountpoint -q /var/lib/tayga
+ExecStartPre=/bin/grep -qx tayga-prod-01 /var/lib/tayga/.ha-volume-id
+ExecStart=/opt/tayga/0.9.30/tayga-mail -config /var/lib/tayga/config/tayga.yaml
+ExecStartPost=/usr/local/libexec/tayga-ha-wait-ready
+Restart=no
+TimeoutStartSec=240
+TimeoutStopSec=60
+UMask=0027
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/tayga
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+StandardOutput=journal
+StandardError=journal
+
+# No Install section: start/stop belongs to Pacemaker.

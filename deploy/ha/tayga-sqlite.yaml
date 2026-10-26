@@ -1,0 +1,27 @@
+# New test installation only. Preserve existing settings when migrating.
+server:
+  hostname: mail.example.com
+storage:
+  driver: sqlite
+  sqlite:
+    path: /var/lib/tayga/data/tayga.db
+mailstore:
+  root: /var/lib/tayga/maildir
+ha:
+  mode: none # Single-process ownership and fencing belong to Pacemaker.
+seed:
+  enabled: false
+http:
+  listen: ":80"
+  tls_listen: ":443"
+  public_url: https://mail.example.com
+  admins: [admin@example.com]
+tls:
+  cert_file: /var/lib/tayga/certs/server.crt
+  key_file: /var/lib/tayga/certs/server.key
+  certs_dir: /var/lib/tayga/certs/store
+  auto_generate: false
+log:
+  level: info
+  format: json
+  file: /var/lib/tayga/log/tayga.log

@@ -22,10 +22,13 @@ import (
 // Tokens are document/user-scoped, never login tokens. They expire after 8h
 // and intentionally cease working on restart; no browser credentials reach CODE.
 type officeSession struct {
-	Owner, User, Path, FileID, OfficeURL string
-	Writable                             bool
-	Expires                              time.Time
-	Proof                                officeProofKeys
+	Owner, User, Path, FileID, OfficeURL  string
+	Writable                              bool
+	Expires                               time.Time
+	Proof                                 officeProofKeys
+	Provider, DocumentKey, ETag, Language string
+	SecretHash                            [32]byte
+	Closed                                bool
 }
 
 var officePlaceholder = regexp.MustCompile(`<[^>]*>`)
@@ -52,7 +55,7 @@ func (s *Server) handleOfficeSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if base == "" {
-		writeJSON(w, 503, map[string]string{"error": "Collabora Online is not configured. Set files.office_url in server settings."})
+		writeJSON(w, 503, map[string]string{"error": "Office editor is not configured. Set files.office_url in server settings."})
 		return
 	}
 	public, err := url.Parse(s.publicBase())
@@ -95,6 +98,11 @@ func (s *Server) handleOfficeSession(w http.ResponseWriter, r *http.Request) {
 	info, err := os.Stat(abs)
 	if err != nil || !info.Mode().IsRegular() {
 		writeJSON(w, 404, map[string]string{"error": "file not found"})
+		return
+	}
+	provider := s.cfgLive().Files.OfficeProvider
+	if provider == "onlyoffice" || provider == "r7" {
+		s.createDocumentServerSession(w, r, owner, au.ID, req.Path, base, writable)
 		return
 	}
 	launch, proof, err := officeLaunchURL(r, base, strings.TrimPrefix(strings.ToLower(filepath.Ext(abs)), "."), writable)
@@ -212,7 +220,7 @@ func (s *Server) handleWOPI(w http.ResponseWriter, r *http.Request) {
 	s.fileMu.Lock()
 	session, ok := s.officeSessions[token]
 	s.fileMu.Unlock()
-	if !ok || time.Now().After(session.Expires) || session.OfficeURL != strings.TrimRight(s.cfgLive().Files.OfficeURL, "/") {
+	if !ok || session.Provider != "" || (s.cfgLive().Files.OfficeProvider != "" && s.cfgLive().Files.OfficeProvider != "collabora") || time.Now().After(session.Expires) || session.OfficeURL != strings.TrimRight(s.cfgLive().Files.OfficeURL, "/") {
 		http.Error(w, "unauthorized", 401)
 		return
 	}
