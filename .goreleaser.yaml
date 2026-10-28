@@ -51,6 +51,7 @@ archives:
       - deploy/ha/*
       - docs/setup-filters.md
       - docs/web-omemo.md
+      - docs/xmpp.md
       - docs/xmpp-compatibility-plan.md
       - docs/xmpp-push.md
       - docs/files-and-office.md

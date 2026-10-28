@@ -14,7 +14,7 @@ new_binary="$package_dir/tayga-mail"
 [[ -f "$new_binary" && -f "$package_dir/binary.sha256" ]] || { echo "Запускайте скрипт из распакованного архива рядом с tayga-mail и binary.sha256." >&2; exit 1; }
 (cd "$package_dir" && sha256sum -c binary.sha256)
 new_version="$("$new_binary" version)"
-[[ "$new_version" == 'tayga-mail 0.9.32 '* ]] || { echo "Неожиданная версия нового бинарника: $new_version" >&2; exit 1; }
+[[ "$new_version" == 'tayga-mail 0.9.35 '* ]] || { echo "Неожиданная версия нового бинарника: $new_version" >&2; exit 1; }
 target="${TAYGA_BINARY:-}"
 if [[ -z "$target" ]]; then
   specification="$(systemctl show "$service" --property=ExecStart --value)"
@@ -35,7 +35,7 @@ ready_url="${TAYGA_READY_URL:-https://mail.kislovs.ru/readyz}"
 command -v curl >/dev/null || { echo "Для проверки готовности требуется curl." >&2; exit 1; }
 was_active=false
 if systemctl is-active --quiet "$service"; then was_active=true; fi
-backup="$(mktemp "${target}.before-0.9.32.XXXXXXXX")"
+backup="$(mktemp "${target}.before-0.9.35.XXXXXXXX")"
 cp -p -- "$target" "$backup"
 staged="$(mktemp "${target}.new.XXXXXXXX")"
 trap 'if [[ -n "${staged:-}" && -f "$staged" ]]; then rm -f -- "$staged"; fi' EXIT
