@@ -165,10 +165,12 @@ func (h *ewsHandler) findFolder(ctx context.Context, u *storage.User) (string, e
 	b.WriteString(`<m:ResponseMessages><m:FindFolderResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:RootFolder IncludesLastItemInRange="true"><t:Folders>`)
 	for _, mb := range mbs {
 		parent := "root:" + u.ID
+		displayName := mb.Name
 		if cut := strings.LastIndex(mb.Name, "/"); cut > 0 {
 			for _, candidate := range mbs {
 				if candidate.Name == mb.Name[:cut] {
 					parent = candidate.ID
+					displayName = mb.Name[cut+1:]
 					break
 				}
 			}
@@ -189,7 +191,7 @@ func (h *ewsHandler) findFolder(ctx context.Context, u *storage.User) (string, e
 			}
 		}
 		fmt.Fprintf(&b, `<t:Folder><t:FolderId Id="%s" ChangeKey="0"/><t:ParentFolderId Id="%s"/><t:DisplayName>%s</t:DisplayName><t:FolderClass>IPF.Note</t:FolderClass><t:TotalCount>%d</t:TotalCount><t:ChildFolderCount>%d</t:ChildFolderCount><t:UnreadCount>%d</t:UnreadCount></t:Folder>`,
-			xmlEscape(mb.ID), xmlEscape(parent), xmlEscape(mb.Name), len(messages), children, unread)
+			xmlEscape(mb.ID), xmlEscape(parent), xmlEscape(displayName), len(messages), children, unread)
 	}
 	for _, cal := range cals {
 		name := calendarClientName(ctx, cal)
@@ -278,8 +280,8 @@ func (h *ewsHandler) findMailItems(ctx context.Context, u *storage.User, mailbox
 			return "", err
 		}
 		sensitivity, early, extended, flag := metadataFields(metadata, m.Flags)
-		fmt.Fprintf(&b, `<t:Message><t:ItemId Id="%s" ChangeKey="%s"/><t:Subject>%s</t:Subject>%s<t:DateTimeReceived>%s</t:DateTimeReceived>%s%s%s<t:IsRead>%t</t:IsRead></t:Message>`,
-			xmlEscape(m.ID), digest(m.ID+m.Flags+metadata), xmlEscape(hdr.Subject), sensitivity, m.InternalDate.UTC().Format("2006-01-02T15:04:05Z"), early, extended, flag, storage.HasFlag(m.Flags, `\Seen`))
+		fmt.Fprintf(&b, `<t:Message><t:ItemId Id="%s" ChangeKey="%s"/><t:Subject>%s</t:Subject>%s<t:DateTimeSent>%s</t:DateTimeSent><t:DateTimeReceived>%s</t:DateTimeReceived>%s%s%s<t:IsRead>%t</t:IsRead></t:Message>`,
+			xmlEscape(m.ID), digest(m.ID+m.Flags+metadata), xmlEscape(hdr.Subject), sensitivity, ewsMailSentDate(hdr.SentDate, m.InternalDate), m.InternalDate.UTC().Format("2006-01-02T15:04:05Z"), early, extended, flag, storage.HasFlag(m.Flags, `\Seen`))
 	}
 	b.WriteString(`</t:Items></m:RootFolder></m:FindItemResponseMessage></m:ResponseMessages></m:FindItemResponse>`)
 	return b.String(), nil

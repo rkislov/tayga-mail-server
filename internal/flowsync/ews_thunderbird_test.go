@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -29,6 +30,9 @@ func TestTaygaEWSThunderbirdNative(t *testing.T) {
 	sentCount := 0
 	sentAttachment := false
 	var lostCreate atomic.Bool
+	sentDateElement := regexp.MustCompile(`<(?:[A-Za-z0-9_]+:)?DateTimeSent\b[^>]*>[^<]*</(?:[A-Za-z0-9_]+:)?DateTimeSent>`)
+	var legacySentDate atomic.Bool
+	legacySentDate.Store(true)
 	h.sender = &mailSubmission{store: st, ms: eas.ms, submit: func(_ context.Context, _ *storage.User, _ []string, raw []byte) error {
 		sentMu.Lock()
 		defer sentMu.Unlock()
@@ -56,8 +60,13 @@ func TestTaygaEWSThunderbirdNative(t *testing.T) {
 	if err = h.ensureStandardMailFolders(ctx, u); err != nil {
 		t.Fatal(err)
 	}
+	for _, name := range []string{"Projects", "Projects/2026", "Projects/2026/October"} {
+		if _, err := st.EnsureMailbox(ctx, u.ID, name, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
 	inbox, _ := st.GetMailbox(ctx, u.ID, "INBOX")
-	raw := []byte("From: sender@example.com\r\nTo: alice@example.com\r\nSubject: Tayga EWS native smoke\r\nMessage-ID: <ews-native-test@example.com>\r\nDate: Mon, 26 Oct 2026 09:00:00 +0000\r\n\r\nHello from EWS\r\n")
+	raw := []byte("From: sender@example.com\r\nTo: alice@example.com\r\nSubject: Tayga EWS native smoke\r\nMessage-ID: <ews-native-test@example.com>\r\nDate: Mon, 19 Oct 2026 12:34:56 +0300\r\n\r\nHello from EWS\r\n")
 	path, size, err := eas.ms.Deliver(u.Email, "INBOX", raw)
 	if err != nil {
 		t.Fatal(err)
@@ -100,6 +109,17 @@ func TestTaygaEWSThunderbirdNative(t *testing.T) {
 				"sentAttachment": func() bool { sentMu.Lock(); defer sentMu.Unlock(); return sentAttachment }(),
 				"sentCount":      func() int { sentMu.Lock(); defer sentMu.Unlock(); return sentCount }()})
 			return
+		case "/test/restore-dates":
+			legacySentDate.Store(false)
+			msgs, _ := st.ListMessages(ctx, inbox.ID)
+			if len(msgs) > 0 {
+				if err := st.UpdateMessageFlags(ctx, msgs[0].ID, `\Flagged`); err != nil {
+					http.Error(w, err.Error(), 500)
+					return
+				}
+			}
+			write(map[string]bool{"ok": true})
+			return
 		case "/test/mutate":
 			if r.URL.Query().Get("contact") == "delete" {
 				cards, _ := st.ListAddressObjects(ctx, book)
@@ -136,6 +156,16 @@ func TestTaygaEWSThunderbirdNative(t *testing.T) {
 					return
 				}
 				http.Error(w, "fixture response lost after commit", 503)
+				return
+			}
+			if legacySentDate.Load() {
+				recorded := httptest.NewRecorder()
+				h.ServeHTTP(recorded, r.WithContext(withUser(r.Context(), u)))
+				for key, values := range recorded.Header() {
+					w.Header()[key] = values
+				}
+				w.WriteHeader(recorded.Code)
+				io.WriteString(w, sentDateElement.ReplaceAllString(recorded.Body.String(), ""))
 				return
 			}
 			h.ServeHTTP(w, r.WithContext(withUser(r.Context(), u)))
