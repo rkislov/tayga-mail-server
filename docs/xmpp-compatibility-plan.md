@@ -24,17 +24,36 @@ Updated 2026-10-28. This is an implementation checklist, not a claim of complete
 - [x] Resume an authenticated owner's stream even when the old TCP connection has not detected the disconnect. Validate the token and acknowledgement first, close only that transport, and wait for reader/room cleanup before using its snapshot.
 - [x] Bound the complete replay to a 10-second write deadline; retain pending messages and room state if that replay disconnects again.
 - [x] Loopback TCP tests: SASL, two resources, received/sent Carbons, invalid counters, undetected and repeated disconnects, partial incoming XML, replay without duplicate Carbons, and explicit logout. Additional tests cover the cleanup window, cross-account rejection, replay failure and counter wrap.
-- [ ] Real-client network-switch/background interop verification. Retained streams are in-memory and do not survive a server restart; offline messages remain database-backed.
+- [x] Monal/iPhone on server 0.9.36: operator confirmed background push delivery and reconnection with history intact after Wi-Fi → mobile data → Wi-Fi (2026-10-28; app version not recorded).
+- [ ] Repeat device acceptance for Conversations and ChatSecure, and large-history paging in native clients. Retained streams are in-memory and do not survive a server restart; offline messages remain database-backed.
 - [ ] Existing-identity normalization collision audit before any stored identity migration.
 
-Validation on 2026-10-28: `go test ./...` and `go test -race ./internal/xmpp` passed. Commit `de68881` was installed as `0.9.34+xmpp.2` after a verified SQLite/binary/configuration backup. The service passed `/readyz`; STARTTLS 5222 and direct TLS 5223 both negotiated TLS 1.3 with certificate verification. Three Monal push registrations remained. These server and automated TCP checks do not substitute for the pending native-client background/network-switch check.
+Validation on 2026-10-28: `go test ./...` and `go test -race ./internal/xmpp` passed for stream recovery. Commit `de68881` was installed as `0.9.34+xmpp.2` after a verified SQLite/binary/configuration backup, and is included in release 0.9.36. The service passed `/readyz`; STARTTLS 5222 and direct TLS 5223 both negotiated TLS 1.3 with certificate verification. Three Monal push registrations remained. Subsequent Monal device acceptance is recorded above and in [native push](xmpp-push.md).
+
+Archive acceptance added on 2026-10-28: a loopback TCP scenario loads 257
+messages through two authenticated resources, traverses forward/backward
+pages, commits and delivers a new live message between queries, and resumes
+the phone stream before continuing from its last cursor. It checks result
+correlation, forwarded namespaces, stable IDs, count-only requests, foreign
+cursor rejection and that history is not copied as Carbons to the other
+resource. The server's 100-message page cap is exercised by requesting 500.
+Separate regressions cover cursors outside the new peer/time filters and
+unsupported, duplicate, multivalued or malformed filter input. Unsupported
+filters return an error before any history is streamed.
+
+Validation for the archive changes: `go test ./...`,
+`go test -race ./internal/xmpp` and `go vet ./internal/xmpp` passed. The tests
+use temporary SQLite databases and local TCP sockets; no production message
+contents or push tokens are copied into fixtures.
 
 ## Next batches
 
 - [ ] RFC 6120/6121: complete stream-state/error checks, IQ routing, presence priority/probes and roster transition tests.
 - [ ] RFC 7622 (with RFC 9844): strict JID normalization and validation; audit existing identities for collisions before migration.
 - [x] XEP-0198: acknowledgements and bounded resumable sessions; disconnect, replay, expiry and ownership tests (real-client verification remains above).
-- [ ] XEP-0313/0059: MAM query discovery/preferences and full protocol interoperability, including concurrent archive writes.
+- [x] MAM query-form discovery and owner-scoped persistent archive preferences (XEP-0441).
+- [x] XEP-0313/0059: TCP paging beyond 100 messages on two resources, live archive writes between pages and continuation after SM resume; owner-scoped cursors remain valid when query filters change.
+- [ ] Full MAM interoperability: exact resource-specific JID filtering, insertion ordering for timestamp ties, a consistent snapshot within each page under concurrent writes, and the unadvertised `mam:2#extended` profile. Current bare-JID filtering and timestamp/stanza-ID ordering do not complete these requirements.
 - [x] XEP-0359: account-assigned stable IDs, matching MAM cursors and live/offline/Carbons/web copies across C2S, web, OMEMO, bot and component entry points.
 - [x] XEP-0280: shared sent/received copies for supported direct-message paths; expanded MUC eligibility remains pending.
 - [x] XEP-0352: active/inactive state; suppress only repeated identical availability while inactive. Messages and subscription requests remain immediate.

@@ -328,8 +328,8 @@ func (s *Session) handleMAMIQ(ctx context.Context, id, typ, inner string) error 
 		QueryID string `xml:"queryid,attr"`
 		Form    struct {
 			Fields []struct {
-				Var   string `xml:"var,attr"`
-				Value string `xml:"value"`
+				Var    string   `xml:"var,attr"`
+				Values []string `xml:"jabber:x:data value"`
 			} `xml:"field"`
 		} `xml:"jabber:x:data x"`
 		Set struct {
@@ -355,16 +355,36 @@ func (s *Session) handleMAMIQ(ctx context.Context, id, typ, inner string) error 
 		}
 		f.Limit = n
 	}
+	seen := make(map[string]bool)
 	for _, field := range query.Form.Fields {
+		if seen[field.Var] {
+			return s.writeString(iqBadRequest(id))
+		}
+		seen[field.Var] = true
+		switch field.Var {
+		case "FORM_TYPE", "with", "start", "end":
+			if len(field.Values) != 1 {
+				return s.writeString(iqBadRequest(id))
+			}
+		default:
+			// Never silently widen a query when an extension filter is not
+			// implemented (e.g. ids or a client-specific text search).
+			return s.writeString(fmt.Sprintf(`<iq type='error' id='%s' from='%s' to='%s'><error type='cancel'><feature-not-implemented xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/></error></iq>`, xmlEscape(id), xmlEscape(s.JID.Bare()), xmlEscape(s.JID.Full())))
+		}
+		value := field.Values[0]
 		switch field.Var {
 		case "FORM_TYPE":
-			if field.Value != "urn:xmpp:mam:2" {
+			if value != "urn:xmpp:mam:2" {
 				return s.writeString(iqBadRequest(id))
 			}
 		case "with":
-			f.With = ParseJID(field.Value).Bare()
+			jid, err := NormalizeJID(value)
+			if err != nil {
+				return s.writeString(iqBadRequest(id))
+			}
+			f.With = jid.Bare()
 		case "start", "end":
-			stamp, err := time.Parse(time.RFC3339Nano, field.Value)
+			stamp, err := time.Parse(time.RFC3339Nano, value)
 			if err != nil {
 				return s.writeString(iqBadRequest(id))
 			}
