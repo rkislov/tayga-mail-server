@@ -27,6 +27,8 @@ Updated 2026-10-28. This is an implementation checklist, not a claim of complete
 - [ ] Real-client network-switch/background interop verification. Retained streams are in-memory and do not survive a server restart; offline messages remain database-backed.
 - [ ] Existing-identity normalization collision audit before any stored identity migration.
 
+Validation on 2026-10-28: `go test ./...` and `go test -race ./internal/xmpp` passed. Commit `de68881` was installed as `0.9.34+xmpp.2` after a verified SQLite/binary/configuration backup. The service passed `/readyz`; STARTTLS 5222 and direct TLS 5223 both negotiated TLS 1.3 with certificate verification. Three Monal push registrations remained. These server and automated TCP checks do not substitute for the pending native-client background/network-switch check.
+
 ## Next batches
 
 - [ ] RFC 6120/6121: complete stream-state/error checks, IQ routing, presence priority/probes and roster transition tests.
