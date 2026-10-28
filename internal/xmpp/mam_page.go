@@ -49,7 +49,10 @@ func (s *Server) mamPage(ctx context.Context, owner string, f mamFilter) ([]mamR
 	}
 	if cursor != nil && *cursor != "" {
 		var stamp time.Time
-		if err := s.db.QueryRowContext(ctx, s.rebind("SELECT created_at FROM xmpp_mam WHERE "+where+" AND stanza_id = ?"), append(append([]any{}, args...), *cursor)...).Scan(&stamp); err != nil {
+		// RSM IDs identify entries in the owner's archive, not only entries
+		// matching this query. A client may narrow its filters after saving a
+		// cursor; keep that position while applying the new filters to results.
+		if err := s.db.QueryRowContext(ctx, s.rebind("SELECT created_at FROM xmpp_mam WHERE owner_bare_jid = ? AND stanza_id = ?"), owner, *cursor).Scan(&stamp); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return nil, 0, false, errMAMCursor
 			}

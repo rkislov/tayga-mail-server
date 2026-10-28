@@ -103,3 +103,16 @@ advertised as implemented.
 Automated tests cover registration ownership, malformed forms, replacement, cancellation, restart persistence, queue coalescing, recovery after extended gateway outages, malformed/temporary replies, transient account lookup errors, disabled accounts, counter overflow, privacy and forged acknowledgements. A test gateway completes STARTTLS with mutually verified certificates, bidi, EXTERNAL, stream restart and publication acknowledgement; negative cases reject untrusted certificates, wrong hostnames, missing TLS/bidi, failed authentication and spoofed reply identities.
 
 Real background delivery in ChatSecure remains unverified while its vendor endpoint is unavailable. General S2S federation, dialback, native MUC, arbitrary gateway compatibility and a full XMPP conformance claim are outside this implementation. A browser Web Push notification cannot wake the native ChatSecure application.
+
+### Monal device acceptance, 2026-10-28
+
+On server version `0.9.36 (ef02a7c)`, the operator confirmed that an incoming
+message produced a notification while Monal was in the background on iPhone.
+The server journal recorded two accepted publications to
+`eu.prod.push.monal-im.org` at 14:34 Moscow time. A subsequent read-only check
+found three Monal registrations and no pending push jobs. The operator also
+confirmed reconnection and retained chat history after switching from Wi-Fi
+to mobile data and back. The app version was not recorded for this check.
+This verifies that device scenario; ChatSecure and other gateways still need
+their own acceptance. No additional test message or notification was sent by
+the diagnostic tooling.

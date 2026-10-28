@@ -103,3 +103,62 @@ func TestMAMQueryFormDiscovery(t *testing.T) {
 		}
 	}
 }
+
+func TestMAMCursorOutsideQueryFilters(t *testing.T) {
+	srv, _, u := testServer(t)
+	stamp := time.Now().UTC()
+	for i, peer := range []string{"bob@example.com", "carol@example.com", "bob@example.com"} {
+		id := fmt.Sprintf("m%d", i)
+		if _, err := srv.db.Exec(`INSERT INTO xmpp_mam(id,owner_bare_jid,with_bare_jid,stanza_id,stanza,created_at) VALUES(?,?,?,?,?,?)`, id, u.Email, peer, id, "<message/>", stamp.Add(time.Duration(i)*time.Second)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A client can use a known archive cursor while narrowing the next query
+	// to a conversation or time range that no longer includes that cursor.
+	cursor := "m1"
+	start, end := stamp.Add(2*time.Second), stamp
+	for _, tc := range []struct {
+		name string
+		f    mamFilter
+		want string
+	}{
+		{"peer-after", mamFilter{Limit: 10, With: "bob@example.com", After: &cursor}, "m2"},
+		{"peer-before", mamFilter{Limit: 10, With: "bob@example.com", Before: &cursor}, "m0"},
+		{"start-after", mamFilter{Limit: 10, Start: &start, After: &cursor}, "m2"},
+		{"end-before", mamFilter{Limit: 10, End: &end, Before: &cursor}, "m0"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rows, _, complete, err := srv.mamPage(context.Background(), u.Email, tc.f)
+			if err != nil || !complete || len(rows) != 1 || rows[0].StanzaID != tc.want {
+				t.Fatalf("filtered cursor: rows=%+v complete=%t err=%v", rows, complete, err)
+			}
+		})
+	}
+}
+
+func TestMAMRejectsUnsupportedOrAmbiguousFilters(t *testing.T) {
+	srv, _, u := testServer(t)
+	if err := srv.archiveMAM(context.Background(), u.Email, "bob@example.com", "private", `<message><body>not requested</body></message>`); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct{ name, fields, condition string }{
+		{"unknown", `<field var='{urn:example}text'><value>match nothing</value></field>`, "feature-not-implemented"},
+		{"extension", `<field var='ids'><value>missing</value></field>`, "feature-not-implemented"},
+		{"invalid-jid", `<field var='with'><value>not a jid</value></field>`, "bad-request"},
+		{"empty-jid", `<field var='with'><value/></field>`, "bad-request"},
+		{"duplicate", `<field var='with'><value>bob@example.com</value></field><field var='with'><value>carol@example.com</value></field>`, "bad-request"},
+		{"multiple-values", `<field var='with'><value>bob@example.com</value><value>carol@example.com</value></field>`, "bad-request"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var out bytes.Buffer
+			s := &Session{srv: srv, user: u, JID: ParseJID(u.Email + "/phone"), bw: bufio.NewWriter(&out)}
+			query := `<query xmlns='urn:xmpp:mam:2'><x xmlns='jabber:x:data' type='submit'><field var='FORM_TYPE' type='hidden'><value>urn:xmpp:mam:2</value></field>` + tc.fields + `</x></query>`
+			if err := s.handleMAMIQ(context.Background(), "filter", "set", query); err != nil {
+				t.Fatal(err)
+			}
+			if got := out.String(); !strings.Contains(got, tc.condition) || strings.Contains(got, "<result ") || strings.Contains(got, "<fin ") {
+				t.Fatalf("filter must fail without streaming history: %s", got)
+			}
+		})
+	}
+}
