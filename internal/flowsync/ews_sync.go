@@ -11,8 +11,6 @@ import (
 )
 
 func (h *ewsHandler) syncEWSItems(ctx context.Context, u *storage.User, body string) (string, error) {
-	h.syncMu.Lock()
-	defer h.syncMu.Unlock()
 	folder, err := h.resolveEWSFolder(ctx, u, body)
 	if err != nil {
 		return ewsOperationError("SyncFolderItems", "ErrorFolderNotFound", "folder unavailable"), nil
@@ -30,6 +28,11 @@ func (h *ewsHandler) syncEWSItems(ctx context.Context, u *storage.User, body str
 		}
 		client, key = parts[0], parts[1]
 	}
+	unlock, err := h.lockEWSSync(ctx, ewsSyncLockKey{u.ID, client, folder})
+	if err != nil {
+		return "", err
+	}
+	defer unlock()
 	state, err := loadCollectionState(ctx, h.store, u.ID, client, folder)
 	if err != nil {
 		return "", err
@@ -88,8 +91,6 @@ func (h *ewsHandler) syncEWSItems(ctx context.Context, u *storage.User, body str
 }
 
 func (h *ewsHandler) syncEWSHierarchy(ctx context.Context, u *storage.User, body string) (string, error) {
-	h.syncMu.Lock()
-	defer h.syncMu.Unlock()
 	folder := "hierarchy"
 	token := extractTag(body, "SyncState")
 	client, key := "ews:"+storage.NewID(), ""
@@ -100,6 +101,11 @@ func (h *ewsHandler) syncEWSHierarchy(ctx context.Context, u *storage.User, body
 		}
 		client, key = parts[0], parts[1]
 	}
+	unlock, err := h.lockEWSSync(ctx, ewsSyncLockKey{u.ID, client, folder})
+	if err != nil {
+		return "", err
+	}
+	defer unlock()
 	state, err := loadCollectionState(ctx, h.store, u.ID, client, folder)
 	if err != nil {
 		return "", err

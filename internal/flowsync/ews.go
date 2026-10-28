@@ -20,6 +20,7 @@ import (
 type ewsHandler struct {
 	sender    *mailSubmission
 	syncMu    sync.Mutex
+	syncLocks map[ewsSyncLockKey]*ewsSyncLock
 	subsMu    sync.Mutex
 	subs      map[string]*ewsSubscription
 	store     storage.Driver
@@ -274,7 +275,7 @@ func (h *ewsHandler) findMailItems(ctx context.Context, u *storage.User, mailbox
 	b.WriteString(`<m:ResponseMessages><m:FindItemResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:RootFolder IncludesLastItemInRange="true">`)
 	b.WriteString(`<t:Items>`)
 	for _, m := range msgs {
-		hdr := readMsgHeaders(h.ms, m.FilePath)
+		hdr := indexedMsgHeaders(h.ms, m)
 		metadata, err := h.store.EWSMailMetadata(ctx, m.ID)
 		if err != nil {
 			return "", err

@@ -1,6 +1,7 @@
 package mailstore
 
 import (
+	"bufio"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -188,9 +189,52 @@ func (s *Store) UnarchiveToFolder(email, srcRel, folder string) (newRel string, 
 // Paths ending in .gz or files with gzip magic are transparently inflated.
 // On local miss, tries the object store and repopulates the cache.
 func (s *Store) Read(relPath string) ([]byte, error) {
-	data, err := os.ReadFile(s.Abs(relPath))
+	r, err := s.Open(relPath)
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
+	return io.ReadAll(r)
+}
+
+// Open streams an uncompressed message, so header readers need not load the
+// body or attachments. A cold object-store read still populates the local cache.
+func (s *Store) Open(relPath string) (io.ReadCloser, error) {
+	r, err := s.openStored(relPath)
+	if err != nil {
+		return nil, err
+	}
+	buffered := bufio.NewReader(r)
+	magic, _ := buffered.Peek(2)
+	if !looksGzipped(magic, relPath) {
+		return &messageReader{Reader: buffered, closers: []io.Closer{r}}, nil
+	}
+	zr, err := gzip.NewReader(buffered)
+	if err != nil {
+		r.Close()
+		return nil, err
+	}
+	return &messageReader{Reader: zr, closers: []io.Closer{zr, r}}, nil
+}
+
+type messageReader struct {
+	io.Reader
+	closers []io.Closer
+}
+
+func (r *messageReader) Close() error {
+	var err error
+	for _, closer := range r.closers {
+		err = errors.Join(err, closer.Close())
+	}
+	r.closers = nil
+	return err
+}
+
+func (s *Store) openStored(relPath string) (io.ReadCloser, error) {
+	f, err := os.Open(s.Abs(relPath))
 	if err == nil {
-		return maybeGunzip(data, relPath)
+		return f, nil
 	}
 	if !os.IsNotExist(err) || s.blob == nil {
 		return nil, err
@@ -206,7 +250,7 @@ func (s *Store) Read(relPath string) ([]byte, error) {
 	if mkErr := os.MkdirAll(filepath.Dir(abs), 0o750); mkErr == nil {
 		_ = os.WriteFile(abs, data, 0o640)
 	}
-	return maybeGunzip(data, relPath)
+	return io.NopCloser(bytes.NewReader(data)), nil
 }
 
 func gzipBytes(data []byte) ([]byte, error) {

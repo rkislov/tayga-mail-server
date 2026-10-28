@@ -254,6 +254,21 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     checks.push(
       "native EWS mail account receives messages with Bearer authentication",
     );
+    stage = "download native EWS message";
+    const downloaded = await browser.messages.query({
+      subject: "Tayga EWS native smoke",
+    });
+    assert(downloaded.messages.length === 1, "Native message is not available");
+    const original = await browser.messages.getRaw(downloaded.messages[0].id, {
+      data_format: "File",
+    });
+    const originalText = await original.text();
+    assert(
+      originalText.includes("Hello from EWS") &&
+        originalText.includes("Message-ID: <ews-native-test@example.com>"),
+      "Native EWS message body could not be downloaded",
+    );
+    checks.push("native EWS downloads the original message through GetItem");
     const mailRecord = Object.values((await native("state")).mail)[0];
     const account = await browser.accounts.get(mailRecord.accountId);
     const compose = await browser.compose.beginNew({

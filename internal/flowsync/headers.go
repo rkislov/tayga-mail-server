@@ -5,14 +5,14 @@ package flowsync
 
 import (
 	"bufio"
-	"bytes"
+	"io"
 	"net/mail"
-	"os"
 	"strings"
 	"time"
 
 	"github.com/tayga/tms/internal/mailsearch"
 	"github.com/tayga/tms/internal/mailstore"
+	"github.com/tayga/tms/internal/storage"
 )
 
 type msgHeaders struct {
@@ -26,12 +26,35 @@ func readMsgHeaders(ms *mailstore.Store, filePath string) msgHeaders {
 	if ms == nil || filePath == "" {
 		return h
 	}
-	data, err := os.ReadFile(ms.Abs(filePath))
+	r, err := ms.Open(filePath)
 	if err != nil {
 		return h
 	}
+	defer r.Close()
+	return parseMsgHeaders(r)
+}
+
+// SMTP, IMAP imports and submission already index these immutable MIME headers.
+// Only legacy rows with missing metadata need a bounded file read.
+func indexedMsgHeaders(ms *mailstore.Store, msg *storage.Message) msgHeaders {
+	h := msgHeaders{Subject: msg.Subject, From: msg.FromAddr}
+	h.SentDate, _ = mail.ParseDate(msg.DateHdr)
+	if msg.Subject == "" || msg.DateHdr == "" {
+		fallback := readMsgHeaders(ms, msg.FilePath)
+		if msg.Subject == "" {
+			h.Subject = fallback.Subject
+		}
+		if msg.DateHdr == "" {
+			h.SentDate = fallback.SentDate
+		}
+	}
+	return h
+}
+
+func parseMsgHeaders(r io.Reader) msgHeaders {
+	h := msgHeaders{Subject: "(no subject)"}
 	// headers only — stop at blank line
-	sc := bufio.NewScanner(bytes.NewReader(data))
+	sc := bufio.NewScanner(io.LimitReader(r, 1024*1024))
 	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	var cur string
 	var val strings.Builder
