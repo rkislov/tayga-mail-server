@@ -83,4 +83,36 @@ func TestNoteBodyEditsReplaceDocumentAndPreserveStructure(t *testing.T) {
 		t.Fatal("cannot clear note")
 	}
 	call("stranger", "PATCH", base, `{"body_html":"stolen"}`, 404)
+	call("stranger", "GET", base+"/versions", "", 404)
+	var history struct {
+		Versions []struct {
+			ID    string `json:"id"`
+			Title string `json:"title"`
+		} `json:"versions"`
+	}
+	w = call("owner", "GET", base+"/versions", "", 200)
+	if err := json.Unmarshal(w.Body.Bytes(), &history); err != nil || len(history.Versions) != 3 {
+		t.Fatal(w.Body.String(), err)
+	}
+	versionID := history.Versions[0].ID
+	restorePath := base + "/versions/" + versionID + "/restore"
+	call("owner", "POST", restorePath, `{}`, 400)
+	call("owner", "POST", restorePath, `{"etag":"stale"}`, 409)
+	if err := st.SetNoteACL(ctx, note["id"].(string), users["guest"].ID, "read"); err != nil {
+		t.Fatal(err)
+	}
+	call("guest", "GET", base+"/versions", "", 200)
+	call("guest", "POST", restorePath, `{"etag":"stale"}`, 404)
+	payload, _ = json.Marshal(map[string]string{"etag": note["etag"].(string)})
+	w = call("owner", "POST", restorePath, string(payload), 200)
+	json.Unmarshal(w.Body.Bytes(), &note)
+	if note["body_html"] != html || note["title"] != "Renamed" {
+		t.Fatal("restore lost structure", w.Body.String())
+	}
+	w = call("owner", "GET", base+"/versions", "", 200)
+	json.Unmarshal(w.Body.Bytes(), &history)
+	if len(history.Versions) != 4 {
+		t.Fatal("restore must preserve replaced version", w.Body.String())
+	}
+
 }

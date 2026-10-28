@@ -1,109 +1,239 @@
-/* Tayga Mail Thunderbird companion — large attachments → share links */
+"use strict";
+const client = new Tayga.Client(browser.storage.local);
+const ews = new TaygaEWS.Engine(
+  client,
+  (command, args) => browser.taygaEws.invoke(command, args),
+  browser.storage.local,
+);
+const syncEWS = () =>
+  ews.run().catch((error) => console.error("Tayga EWS:", error.message));
+let pendingMFA = null;
+const uploads = new Map();
 
-const DEFAULTS = {
-  baseUrl: "https://mail.example.com",
-  token: "",
-  largeAttachBytes: 10 * 1024 * 1024,
-  theme: "tayga",
-};
-
-async function settings() {
-  const stored = await browser.storage.local.get(DEFAULTS);
-  return Object.assign({}, DEFAULTS, stored);
+async function configureAccounts() {
+  const cfg = await client.settings();
+  const accounts = await browser.cloudFile.getAllAccounts();
+  await Promise.all(
+    accounts.map((account) =>
+      browser.cloudFile.updateAccount(account.id, {
+        configured: !!cfg.token,
+        spaceRemaining: -1,
+        spaceUsed: -1,
+        uploadSizeLimit: -1,
+      }),
+    ),
+  );
 }
-
-async function api(path, opts = {}) {
-  const cfg = await settings();
-  const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
-  if (cfg.token) headers.Authorization = "Bearer " + cfg.token;
-  const res = await fetch(cfg.baseUrl.replace(/\/$/, "") + path, Object.assign({}, opts, { headers }));
-  const text = await res.text();
-  let data = null;
-  try { data = text ? JSON.parse(text) : null; } catch { data = { error: text }; }
-  if (!res.ok) throw new Error((data && data.error) || res.statusText);
-  return data;
-}
-
 async function applyTheme() {
-  const cfg = await settings();
-  try {
-    await browser.theme.update({
-      colors: {
-        frame: cfg.theme === "cosmos" ? "#0b1020" : "#1a2418",
-        toolbar: cfg.theme === "cosmos" ? "#121a2e" : "#243022",
-        toolbar_text: "#f5f5f0",
-        tab_background_text: "#f5f5f0",
-        tab_line: "#e8b84a",
-        bookmark_text: "#f5f5f0",
-        toolbar_field: "#0f1610",
-        toolbar_field_text: "#f5f5f0",
-      },
-    });
-  } catch (e) {
-    console.warn("Tayga theme:", e);
+  const { theme } = await client.settings();
+  if (theme === "default") return browser.theme.reset();
+  await browser.theme.update({
+    colors: {
+      frame: theme === "cosmos" ? "#0b1020" : "#1a2418",
+      toolbar: theme === "cosmos" ? "#121a2e" : "#243022",
+      toolbar_text: "#f5f5f0",
+      tab_background_text: "#f5f5f0",
+      tab_line: "#e8b84a",
+      toolbar_field: "#0f1610",
+      toolbar_field_text: "#f5f5f0",
+    },
+  });
+}
+function idleSession() {
+  if (uploads.size)
+    throw new Error(
+      "Дождитесь завершения загрузок или отмените их в окне письма.",
+    );
+}
+async function message(msg, sender) {
+  if (sender.id !== browser.runtime.id || !msg?.type?.startsWith("tayga."))
+    return;
+  switch (msg.type) {
+    case "tayga.ews.status":
+      return ews.summary();
+    case "tayga.ews.sync":
+      await ews.run();
+      return ews.summary();
+    case "tayga.ews.resolve":
+      return ews.resolve(msg.commandId, msg.mode);
+    case "tayga.ews.enabled":
+      await browser.storage.local.set({ ewsEnabled: !!msg.enabled });
+      if (msg.enabled) await ews.run();
+      else await ews.stop();
+      return ews.summary();
+    case "tayga.status": {
+      const cfg = await client.settings();
+      return {
+        baseUrl: cfg.baseUrl,
+        email: cfg.email,
+        signedIn: !!cfg.token,
+        theme: cfg.theme,
+        ttlHours: cfg.ttlHours,
+      };
+    }
+    case "tayga.login": {
+      idleSession();
+      await ews.stop();
+      pendingMFA = null;
+      const result = await client.login(
+        msg.baseUrl,
+        msg.email.trim(),
+        msg.password,
+      );
+      if (result.mfa) {
+        pendingMFA = result;
+        return { mfa: true };
+      }
+      await configureAccounts();
+      syncEWS();
+      return { ok: true };
+    }
+    case "tayga.mfa": {
+      idleSession();
+      if (!pendingMFA)
+        throw new Error("Начните вход заново: запрос MFA истёк.");
+      await client.mfa(pendingMFA, msg.code.trim());
+      pendingMFA = null;
+      await configureAccounts();
+      syncEWS();
+      return { ok: true };
+    }
+    case "tayga.logout":
+      idleSession();
+      pendingMFA = null;
+      await ews.stop();
+      await client.logout();
+      await configureAccounts();
+      return { ok: true };
+    case "tayga.preferences": {
+      const ttlHours = Number(msg.ttlHours);
+      if (!Number.isInteger(ttlHours) || ttlHours < 1 || ttlHours > 8760)
+        throw new Error("Срок ссылки: от 1 до 8760 часов.");
+      if (!["default", "tayga", "cosmos"].includes(msg.theme))
+        throw new Error("Неизвестная тема.");
+      await browser.storage.local.set({ theme: msg.theme, ttlHours });
+      await applyTheme();
+      return { ok: true };
+    }
+    case "tayga.vacation.get":
+      return client.api("/mail/vacation");
+    case "tayga.vacation.put":
+      return client.api("/mail/vacation", {
+        ...client.json(msg.body),
+        method: "PUT",
+      });
+    case "tayga.sieve.list":
+      return client.api("/sieve/scripts");
+    case "tayga.sieve.put":
+    case "tayga.sieve.activate":
+    case "tayga.sieve.delete": {
+      if (!msg.name?.trim() || /[/\\]/.test(msg.name))
+        throw new Error("Укажите имя скрипта без слешей.");
+      const path = "/sieve/scripts/" + encodeURIComponent(msg.name);
+      if (msg.type.endsWith(".activate"))
+        return client.api(path + "/activate", { method: "POST" });
+      if (msg.type.endsWith(".delete"))
+        return client.api(path, { method: "DELETE" });
+      return client.api(path, {
+        ...client.json({ script: msg.script, active: !!msg.active }),
+        method: "PUT",
+      });
+    }
+    case "tayga.shares.list":
+      return client.api("/files/shares");
+    case "tayga.shares.delete":
+      return client.api("/files/shares/" + encodeURIComponent(msg.id), {
+        method: "DELETE",
+      });
+    case "tayga.openWeb": {
+      const cfg = await client.settings();
+      await browser.tabs.create({ url: Tayga.baseURL(cfg.baseUrl) });
+      return { ok: true };
+    }
+    default:
+      throw new Error("Неизвестная команда Tayga.");
   }
 }
+browser.runtime.onMessage.addListener((msg, sender) => message(msg, sender));
 
-browser.runtime.onInstalled.addListener(() => { applyTheme(); });
-browser.storage.onChanged.addListener(() => { applyTheme(); });
-
-browser.compose.onBeforeSend.addListener(async (tab, details) => {
-  const cfg = await settings();
-  if (!cfg.token || !cfg.baseUrl) return {};
-  // Attachments API varies by TB version; best-effort body append via compose.update if share created from options.
-  return {};
+// Filelink owns insertion/removal of attachment links and reports upload failures in the composer.
+browser.cloudFile.onFileUpload.addListener(async (account, fileInfo) => {
+  const key = `${account.id}:${fileInfo.id}`;
+  const controller = new AbortController();
+  uploads.set(key, controller);
+  try {
+    const record = await client.upload(
+      fileInfo.data,
+      controller.signal,
+      undefined,
+      fileInfo.name,
+    );
+    await browser.storage.local.set({ [`upload:${key}`]: record });
+    return { url: record.url };
+  } catch (error) {
+    return controller.signal.aborted
+      ? { aborted: true }
+      : { error: error.message };
+  } finally {
+    uploads.delete(key);
+  }
 });
+browser.cloudFile.onFileUploadAbort.addListener((account, fileId) =>
+  uploads.get(`${account.id}:${fileId}`)?.abort(),
+);
+browser.cloudFile.onFileDeleted.addListener(async (account, fileId) => {
+  const key = `upload:${account.id}:${fileId}`;
+  const record = (await browser.storage.local.get(key))[key];
+  if (!record) return;
+  const cfg = await client.settings();
+  if (cfg.baseUrl !== record.baseUrl || cfg.email !== record.email)
+    throw new Error(
+      "Для удаления файла войдите в исходную учётную запись Tayga.",
+    );
+  try {
+    await client.api(
+      "/files/shares/" + encodeURIComponent(record.id),
+      { method: "DELETE" },
+      cfg,
+    );
+  } catch (error) {
+    if (error.status !== 404) throw error;
+  }
+  await client.api(
+    "/files?path=" + encodeURIComponent(record.path),
+    { method: "DELETE" },
+    cfg,
+  );
+  await browser.storage.local.remove(key);
+});
+browser.cloudFile.onAccountAdded.addListener(() => configureAccounts());
+browser.runtime.onInstalled.addListener(() =>
+  browser.runtime.openOptionsPage(),
+);
+browser.runtime.onStartup.addListener(() =>
+  configureAccounts().catch(console.error),
+);
+applyTheme().catch(console.error);
+configureAccounts().catch(console.error);
 
-browser.runtime.onMessage.addListener(async (msg) => {
-  if (msg?.type === "tayga.login") {
-    const res = await fetch(msg.baseUrl.replace(/\/$/, "") + "/api/v1/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: msg.email, password: msg.password }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "login failed");
-    if (data.mfa_required) return { mfa: true, challenge: data.challenge };
-    const tokens = data.tokens || data;
-    await browser.storage.local.set({
-      baseUrl: msg.baseUrl.replace(/\/$/, ""),
-      token: tokens.access_token,
-      email: msg.email,
-    });
-    await applyTheme();
-    return { ok: true, autoconfig: msg.baseUrl.replace(/\/$/, "") + "/.well-known/autoconfig/mail/config-v1.1.xml" };
-  }
-  if (msg?.type === "tayga.shareFile") {
-    const cfg = await settings();
-    const path = "tb-out/" + Date.now() + "-" + (msg.name || "file").replace(/[^\w.\-]+/g, "_");
-    const put = await fetch(cfg.baseUrl.replace(/\/$/, "") + "/api/v1/files/content?path=" + encodeURIComponent(path), {
-      method: "PUT",
-      headers: {
-        Authorization: "Bearer " + cfg.token,
-        "Content-Type": "application/octet-stream",
-      },
-      body: msg.blob,
-    });
-    if (!put.ok) throw new Error(await put.text());
-    const sh = await api("/api/v1/files/shares", {
-      method: "POST",
-      body: JSON.stringify({ path, ttl_hours: 168 }),
-    });
-    return { url: sh.url };
-  }
-  if (msg?.type === "tayga.sieve.list") return api("/api/v1/sieve/scripts");
-  if (msg?.type === "tayga.sieve.put") {
-    return api("/api/v1/sieve/scripts/" + encodeURIComponent(msg.name), {
-      method: "PUT",
-      body: JSON.stringify({ script: msg.script, active: true }),
-    });
-  }
-  if (msg?.type === "tayga.vacation.get") return api("/api/v1/mail/vacation");
-  if (msg?.type === "tayga.vacation.put") {
-    return api("/api/v1/mail/vacation", { method: "PUT", body: JSON.stringify(msg.body) });
-  }
-  if (msg?.type === "tayga.applyTheme") {
-    await applyTheme();
-    return { ok: true };
+browser.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === "tayga-ews-sync") syncEWS();
+});
+browser.alarms.create("tayga-ews-sync", { periodInMinutes: 1 });
+syncEWS();
+
+browser.storage.onChanged.addListener(async (changes, area) => {
+  if (
+    area !== "local" ||
+    !["token", "baseUrl", "email"].some((key) => key in changes)
+  )
+    return;
+  try {
+    const cfg = await client.settings();
+    if (cfg.token && cfg.ewsEnabled !== false)
+      await browser.taygaEws.invoke("configure", cfg);
+    else await browser.taygaEws.invoke("stop", {});
+  } catch (error) {
+    console.error("Tayga EWS session:", error.message);
   }
 });

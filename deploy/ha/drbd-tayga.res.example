@@ -1,0 +1,33 @@
+# TEMPLATE: DRBD 9 on all hosts. Replace empty backing devices and addresses.
+# Never initialize metadata on a device containing existing data.
+resource tayga {
+    protocol C;
+    options {
+        auto-promote no;
+        quorum majority;
+        on-no-quorum suspend-io;
+    }
+    on mail-a {
+        node-id 0;
+        device /dev/drbd0;
+        disk /dev/disk/by-id/REPLACE_EMPTY_DISK_A;
+        meta-disk internal;
+        address 10.40.1.11:7789;
+    }
+    on mail-b {
+        node-id 1;
+        device /dev/drbd0;
+        disk /dev/disk/by-id/REPLACE_EMPTY_DISK_B;
+        meta-disk internal;
+        address 10.40.2.12:7789;
+    }
+    on witness {
+        node-id 2;
+        device /dev/drbd0;
+        disk none;
+        address 10.40.3.10:7789;
+    }
+    connection-mesh {
+        hosts mail-a mail-b witness;
+    }
+}

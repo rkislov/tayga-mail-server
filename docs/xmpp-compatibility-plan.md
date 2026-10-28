@@ -1,6 +1,6 @@
 # XMPP compatibility implementation plan
 
-Updated for 0.9.18, 2026-10-17. This is an implementation checklist, not a claim of complete RFC/XEP conformance.
+Updated 2026-10-28. This is an implementation checklist, not a claim of complete RFC/XEP conformance.
 
 ## Current batch: core connection and archive correctness
 
@@ -20,8 +20,14 @@ Updated for 0.9.18, 2026-10-17. This is an implementation checklist, not a claim
 - [x] Normalize authentication and binding JIDs using PRECIS/IDNA and validate length/characters.
 - [x] XEP-0198 resumption after reauthentication, owner-bound tokens, acknowledged-prefix removal and replay without recounting.
 - [x] Bound replay storage: 120 seconds, 1 MiB per session, 4 retained sessions per user, 256 globally and 16 MiB aggregate.
+- [x] Treat `encoding/xml` unexpected EOF on an open stream as a transport loss; preserve counters for a partially received stanza without acknowledging it. Clean stream closure still invalidates resumption.
+- [x] Resume an authenticated owner's stream even when the old TCP connection has not detected the disconnect. Validate the token and acknowledgement first, close only that transport, and wait for reader/room cleanup before using its snapshot.
+- [x] Bound the complete replay to a 10-second write deadline; retain pending messages and room state if that replay disconnects again.
+- [x] Loopback TCP tests: SASL, two resources, received/sent Carbons, invalid counters, undetected and repeated disconnects, partial incoming XML, replay without duplicate Carbons, and explicit logout. Additional tests cover the cleanup window, cross-account rejection, replay failure and counter wrap.
 - [ ] Real-client network-switch/background interop verification. Retained streams are in-memory and do not survive a server restart; offline messages remain database-backed.
 - [ ] Existing-identity normalization collision audit before any stored identity migration.
+
+Validation on 2026-10-28: `go test ./...` and `go test -race ./internal/xmpp` passed. Commit `de68881` was installed as `0.9.34+xmpp.2` after a verified SQLite/binary/configuration backup. The service passed `/readyz`; STARTTLS 5222 and direct TLS 5223 both negotiated TLS 1.3 with certificate verification. Three Monal push registrations remained. These server and automated TCP checks do not substitute for the pending native-client background/network-switch check.
 
 ## Next batches
 

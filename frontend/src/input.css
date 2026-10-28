@@ -3985,3 +3985,27 @@ dialog.omemo-dialog[open]{display:flex;flex-direction:column}
   .org-toolbar > button, .org-dialog > header button { width: auto; flex: 0 0 auto; }
   .org-source-attributes { grid-template-columns: minmax(0, 1fr); }
 }
+
+.alias-list { margin-block: 16px; }
+.alias-row { display:flex; align-items:center; justify-content:space-between; gap:16px; padding-block:10px; border-bottom:1px solid var(--ui-text-15,#dfe3ee); }
+.alias-row > span { min-width:0; overflow-wrap:anywhere; }
+.alias-row .org-toolbar { flex-shrink:0; margin:0; }
+.alias-form { display:grid; gap:12px; }
+.alias-form .field { display:grid; gap:6px; }
+.alias-form input, .alias-form select { width:100%; min-width:0; }
+@media (max-width:540px) { .alias-row { align-items:start; flex-direction:column; } }
+
+/* Domain and tenant branding: attribution lives outside the uploaded image. */
+.header-branding {display:flex;align-items:center;gap:10px;width:300px;max-width:calc(100vw - 72px);color:var(--ui-text);flex-shrink:0}
+.header-branding img {width:100px;height:38px;object-fit:contain;flex-shrink:0;border-radius:4px}
+.header-branding-copy {display:flex;flex:1;flex-direction:column;min-width:0}
+.header-branding-copy strong {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:15px}
+.header-branding-copy small {font-size:11px;line-height:1.35}
+.branding-form {margin-top:24px;padding-top:20px;border-top:1px solid var(--md-outline-variant)}
+.branding-preview {margin:16px 0;padding:16px;max-width:100%;border:1px solid var(--md-outline-variant);border-radius:12px;background:var(--md-container)}
+@media(max-width:600px) {
+ .app-topbar {flex-wrap:wrap}
+ .app-topbar .header-branding {flex:0 0 calc(100% - 48px);max-width:calc(100% - 48px)}
+ .app-topbar .header-branding img {width:64px;height:32px}
+ .app-topbar-title {flex:1 1 0}
+}

@@ -27,10 +27,12 @@ type easHandler struct {
 	ms     *mailstore.Store
 }
 
+type easVersionKey struct{}
+
 func (h *easHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("MS-Server-ActiveSync", "18.0")
 	w.Header().Set("MS-ASProtocolVersions", "14.0,14.1,16.0,16.1")
-	w.Header().Set("MS-ASProtocolCommands", "FolderSync,FolderCreate,FolderDelete,FolderUpdate,Sync,MoveItems,Ping,Provision,GetItemEstimate,ItemOperations,SendMail,SmartReply,SmartForward,Settings,ResolveRecipients,Search")
+	w.Header().Set("MS-ASProtocolCommands", "FolderSync,FolderCreate,FolderDelete,FolderUpdate,Sync,MoveItems,Ping,Provision,GetItemEstimate,ItemOperations,SendMail,SmartReply,SmartForward,Settings,ResolveRecipients,Search,MeetingResponse")
 	w.Header().Set("X-FlowSync", "Tayga-FlowSync")
 	w.Header().Set("X-FlowSync-Engine", "FlowSync/1.0")
 
@@ -66,6 +68,7 @@ func (h *easHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	version := r.Header.Get("MS-ASProtocolVersion")
+	r = r.WithContext(context.WithValue(r.Context(), easVersionKey{}, version))
 	if err = h.store.TouchFlowSyncDevice(r.Context(), dev.ID, r.RemoteAddr, r.UserAgent(), version, false); err != nil {
 		http.Error(w, "device update failed", 500)
 		return
@@ -120,6 +123,8 @@ func (h *easHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		xmlOut, err = h.searchGAL(r.Context(), u, body)
 	case "resolverecipients":
 		xmlOut, err = h.resolveRecipients(r.Context(), u, body)
+	case "meetingresponse":
+		xmlOut, err = h.meetingResponse(r.Context(), u, body)
 	case "settings":
 		xmlOut, err = settingsResponse(u, body)
 	case "foldersync":

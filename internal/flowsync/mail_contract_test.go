@@ -206,3 +206,42 @@ func TestSyncMailPreferencesWindowAndGetChanges(t *testing.T) {
 		t.Fatal(out)
 	}
 }
+
+func TestSubmissionFromOwnedAliases(t *testing.T) {
+	ctx, st, u, h, _, _ := syncFixture(t)
+	alias, err := st.CreateAlias(ctx, u.DomainID, u.ID, "sales")
+	if err != nil {
+		t.Fatal(err)
+	}
+	da, err := st.SaveDomainAlias(ctx, &storage.DomainAlias{DomainID: u.DomainID, Name: "alias.example"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	calls := 0
+	sender := &mailSubmission{store: st, ms: h.ms, submit: func(_ context.Context, actor *storage.User, recipients []string, raw []byte) error {
+		if actor.ID != u.ID || !bytes.Contains(raw, []byte("From: sales@alias.example")) {
+			t.Fatal("alias sender rewritten", string(raw))
+		}
+		calls++
+		return nil
+	}}
+	raw := []byte("From: sales@alias.example\r\nTo: remote@outside.example\r\nSubject: Alias\r\n\r\nHello")
+	if err = sender.send(ctx, u, "alias", raw, true); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Fatal(calls)
+	}
+	if err = sender.send(ctx, u, "forged", bytes.Replace(raw, []byte("sales@alias.example"), []byte("forged@outside.example"), 1), false); err == nil {
+		t.Fatal("forged sender accepted")
+	}
+	if err = st.DeleteAlias(ctx, alias.DomainID, alias.UserID, alias.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err = sender.send(ctx, u, "revoked", raw, false); err == nil {
+		t.Fatal("revoked sender accepted")
+	}
+	if err = st.DeleteDomainAlias(ctx, da.DomainID, da.ID); err != nil {
+		t.Fatal(err)
+	}
+}

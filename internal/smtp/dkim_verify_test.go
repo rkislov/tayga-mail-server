@@ -200,3 +200,41 @@ func TestManagedDKIMDomainSelection(t *testing.T) {
 		t.Fatal("enabled broken binding must fail closed")
 	}
 }
+
+func TestOutboundQueueSignsAliasDomainFromHeader(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	store, err := storage.Open(ctx, config.StorageConfig{Driver: "sqlite", SQLite: config.SQLiteConfig{Path: filepath.Join(dir, "db")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "alias.pem")
+	if err = os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)}), 0600); err != nil {
+		t.Fatal(err)
+	}
+	binding := storage.DKIMBinding{Domain: "alias.example", Selector: "mail", KeyFile: path, Enabled: true}
+	raw, _ := json.Marshal(binding)
+	if err = store.PutSetting(ctx, "dkim.domain.alias.example", string(raw)); err != nil {
+		t.Fatal(err)
+	}
+	capture := &aliasCaptureSender{}
+	q := newOutboundQueue(store, capture, nil, nil, "mail.example.com", QueueConfig{BatchSize: 1}, nil)
+	data := []byte("From: sales@alias.example\r\nTo: recipient@outside.example\r\nSubject: Alias\r\n\r\nHello\r\n")
+	// SMTP clients may use their primary address for bounces while From is an alias.
+	if err = q.Enqueue(ctx, "owner@example.com", []string{"recipient@outside.example"}, data, "<alias>"); err != nil {
+		t.Fatal(err)
+	}
+	items, err := store.ClaimOutboundDue(ctx, 1)
+	if err != nil || len(items) != 1 {
+		t.Fatal(items, err)
+	}
+	q.process(ctx, items[0])
+	if capture.from != "owner@example.com" || !strings.Contains(string(capture.data), "DKIM-Signature:") || !strings.Contains(string(capture.data), "d=alias.example") {
+		t.Fatal(capture.from, string(capture.data))
+	}
+}

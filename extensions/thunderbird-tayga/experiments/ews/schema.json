@@ -1,0 +1,17 @@
+[
+  {
+    "namespace": "taygaEws",
+    "functions": [
+      {
+        "name": "invoke",
+        "type": "function",
+        "async": true,
+        "parameters": [
+          { "name": "command", "type": "string" },
+          { "name": "args", "type": "object", "additionalProperties": true }
+        ],
+        "returns": { "type": "any" }
+      }
+    ]
+  }
+]

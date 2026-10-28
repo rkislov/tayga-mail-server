@@ -3,6 +3,7 @@ package xmpp
 import (
 	"context"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -11,6 +12,12 @@ import (
 )
 
 const pushNamespace = "urn:xmpp:push:0"
+
+// A gateway outage must not revoke a device's subscription. Bound the retry
+// rate instead, including for counters persisted by an older process.
+func pushRetryDelay(attempts int) time.Duration {
+	return min(30*time.Second<<min(max(attempts, 0), 6), 30*time.Minute)
+}
 
 // A configured authenticated component is an explicit delivery route. No public
 // federation or vendor APNs access is implied by implementing this publisher.
@@ -236,10 +243,8 @@ func (s *Server) deliverPushBatch(ctx context.Context, now time.Time) {
 	s.pushMu.Lock()
 	type job struct {
 		id, owner, service, node, options, user string
-		generation                              int64
-		attempts                                int
 	}
-	rows, err := s.db.QueryContext(ctx, s.rebind(`SELECT r.id,r.owner,r.service,r.node,r.options_xml,r.user_id,j.generation,j.attempts FROM xmpp_push_jobs j JOIN xmpp_push_registrations r ON r.id=j.registration_id WHERE j.next_attempt<=? ORDER BY j.next_attempt LIMIT 100`), now.Unix())
+	rows, err := s.db.QueryContext(ctx, s.rebind(`SELECT r.id,r.owner,r.service,r.node,r.options_xml,r.user_id FROM xmpp_push_jobs j JOIN xmpp_push_registrations r ON r.id=j.registration_id WHERE j.next_attempt<=? ORDER BY j.next_attempt LIMIT 100`), now.Unix())
 	if err != nil {
 		s.pushMu.Unlock()
 		return
@@ -247,7 +252,7 @@ func (s *Server) deliverPushBatch(ctx context.Context, now time.Time) {
 	var jobs []job
 	for rows.Next() {
 		var j job
-		if rows.Scan(&j.id, &j.owner, &j.service, &j.node, &j.options, &j.user, &j.generation, &j.attempts) == nil {
+		if rows.Scan(&j.id, &j.owner, &j.service, &j.node, &j.options, &j.user) == nil {
 			jobs = append(jobs, j)
 		}
 	}
@@ -255,19 +260,31 @@ func (s *Server) deliverPushBatch(ctx context.Context, now time.Time) {
 	s.pushMu.Unlock()
 	s2sCount := 0
 	for _, j := range jobs {
+		if ctx.Err() != nil {
+			return
+		}
 		s.pushMu.Lock()
 		// The registration may have been disabled or replaced since the snapshot.
 		var currentGeneration int64
 		var due int64
-		e := s.db.QueryRowContext(ctx, s.rebind(`SELECT generation,next_attempt FROM xmpp_push_jobs WHERE registration_id=?`), j.id).Scan(&currentGeneration, &due)
+		var attempts int
+		e := s.db.QueryRowContext(ctx, s.rebind(`SELECT generation,next_attempt,attempts FROM xmpp_push_jobs WHERE registration_id=?`), j.id).Scan(&currentGeneration, &due, &attempts)
 		if e != nil || due > now.Unix() {
 			s.pushMu.Unlock()
 			continue
 		}
 		user, e := s.store.GetUserByID(ctx, j.user)
-		if e != nil || !user.Enabled || j.attempts >= 5 {
+		if errors.Is(e, storage.ErrNotFound) || (e == nil && user != nil && !user.Enabled) {
 			_, _ = s.db.ExecContext(ctx, s.rebind(`DELETE FROM xmpp_push_registrations WHERE id=?`), j.id)
 			s.pushMu.Unlock()
+			continue
+		}
+		if e != nil || user == nil {
+			_, _ = s.db.ExecContext(ctx, s.rebind(`UPDATE xmpp_push_jobs SET next_attempt=? WHERE registration_id=?`), now.Add(time.Minute).Unix(), j.id)
+			s.pushMu.Unlock()
+			if s.log != nil {
+				s.log.Warn("xmpp push account lookup deferred", "service", j.service, "error", e)
+			}
 			continue
 		}
 		if !s.pushRoute(j.service, true) {
@@ -281,8 +298,11 @@ func (s *Server) deliverPushBatch(ctx context.Context, now time.Time) {
 			continue
 		}
 		requestID := "push-" + storage.NewID()
-		delay := time.Duration(30*(1<<j.attempts)) * time.Second
-		_, e = s.db.ExecContext(ctx, s.rebind(`UPDATE xmpp_push_jobs SET request_id=?,published_generation=?,attempts=attempts+1,next_attempt=? WHERE registration_id=?`), requestID, currentGeneration, now.Add(delay).Unix(), j.id)
+		nextAttempt := now.Add(pushRetryDelay(attempts))
+		// PostgreSQL stores attempts as INTEGER. Saturate before addition to avoid
+		// an overflow ever turning a long outage into an immediate retry loop.
+		attempt := min(max(attempts, 0), 2147483646) + 1
+		_, e = s.db.ExecContext(ctx, s.rebind(`UPDATE xmpp_push_jobs SET request_id=?,published_generation=?,attempts=?,next_attempt=? WHERE registration_id=?`), requestID, currentGeneration, attempt, nextAttempt.Unix(), j.id)
 		if e != nil {
 			s.pushMu.Unlock()
 			continue
@@ -294,6 +314,9 @@ func (s *Server) deliverPushBatch(ctx context.Context, now time.Time) {
 		raw := []byte(fmt.Sprintf(`<iq from='%s' to='%s' id='%s' type='set'><pubsub xmlns='http://jabber.org/protocol/pubsub'><publish node='%s'><item><notification xmlns='urn:xmpp:push:0'/></item></publish>%s</pubsub></iq>`, xmlEscape(j.owner), xmlEscape(j.service), requestID, xmlEscape(j.node), options))
 		// Serialize disable with publishing. Component writes are bounded by a deadline;
 		// no plaintext, sender, attachment URL or OMEMO key is in the notification.
+		if s.log != nil {
+			s.log.Info("xmpp push attempt", "request_id", requestID, "service", j.service, "attempt", attempt, "retry_at", nextAttempt.UTC())
+		}
 		if component != nil {
 			s.hub.Route(j.service, raw)
 			s.pushMu.Unlock()
@@ -301,11 +324,8 @@ func (s *Server) deliverPushBatch(ctx context.Context, now time.Time) {
 			s.pushMu.Unlock()
 			s2sCount++
 			if err := s.publishPushS2S(ctx, j.owner, j.service, requestID, raw); err != nil && s.log != nil {
-				s.log.Warn("xmpp push delivery failed", "request_id", requestID, "service", j.service, "error", err)
+				s.log.Warn("xmpp push delivery failed", "request_id", requestID, "service", j.service, "error", err, "retry_at", nextAttempt.UTC())
 			}
-		}
-		if s.log != nil {
-			s.log.Info("xmpp push attempt", "request_id", requestID, "service", j.service, "attempt", j.attempts+1)
 		}
 	}
 }
@@ -323,28 +343,36 @@ func (s *Server) acceptPushReply(from, to, id, typ, inner string) bool {
 		return true
 	}
 	if typ == "error" {
-		var fault struct {
-			Type string `xml:"type,attr"`
-		}
 		var wrapper struct {
 			Error struct {
 				Type string `xml:"type,attr"`
 			} `xml:"error"`
 		}
-		_ = xml.Unmarshal([]byte("<root>"+inner+"</root>"), &wrapper)
-		fault.Type = wrapper.Error.Type
-		if fault.Type != "wait" {
-			_, _ = s.db.ExecContext(ctx, s.rebind(`DELETE FROM xmpp_push_registrations WHERE id=?`), registration)
+		parseErr := xml.Unmarshal([]byte("<root>"+inner+"</root>"), &wrapper)
+		// Only a valid, permanent rejection revokes the registration. A malformed
+		// response does not establish that the device's push credentials expired.
+		permanent := parseErr == nil && (wrapper.Error.Type == "cancel" || wrapper.Error.Type == "auth" || wrapper.Error.Type == "modify")
+		if permanent {
+			_, err = s.db.ExecContext(ctx, s.rebind(`DELETE FROM xmpp_push_registrations WHERE id=?`), registration)
 		}
 		if s.log != nil {
-			s.log.Warn("xmpp push rejected", "request_id", id, "service", service, "temporary", fault.Type == "wait")
+			s.log.Warn("xmpp push rejected", "request_id", id, "service", service, "temporary", !permanent)
+			if err != nil {
+				s.log.Warn("xmpp push acknowledgement persistence failed", "request_id", id, "service", service, "error", err)
+			}
 		}
 		return true
 	}
 	if generation == published {
-		_, _ = s.db.ExecContext(ctx, s.rebind(`DELETE FROM xmpp_push_jobs WHERE registration_id=?`), registration)
+		_, err = s.db.ExecContext(ctx, s.rebind(`DELETE FROM xmpp_push_jobs WHERE registration_id=?`), registration)
 	} else {
-		_, _ = s.db.ExecContext(ctx, s.rebind(`UPDATE xmpp_push_jobs SET request_id='',attempts=0,next_attempt=0 WHERE registration_id=?`), registration)
+		_, err = s.db.ExecContext(ctx, s.rebind(`UPDATE xmpp_push_jobs SET request_id='',attempts=0,next_attempt=0 WHERE registration_id=?`), registration)
+	}
+	if s.log != nil {
+		s.log.Info("xmpp push accepted", "request_id", id, "service", service, "pending_more", generation != published)
+		if err != nil {
+			s.log.Warn("xmpp push acknowledgement persistence failed", "request_id", id, "service", service, "error", err)
+		}
 	}
 	return true
 }

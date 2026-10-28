@@ -44,6 +44,7 @@ GitHub Releases: push a `v*` tag; [GoReleaser](https://goreleaser.com) (`.github
 Seed: `admin@example.com` / `changeme`. TLS: `tls.auto_generate` or `scripts/gen-dev-certs.sh`.
 
 - LDAP: hybrid auth; group→admin roles; nested groups; `tayga-mail ldap-sync`
+- Domain and mailbox aliases: admin API and UI, domain-wide address mapping, tenant-scoped mailbox aliases, collision checks and backup/restore — [setup and API](docs/mail-aliases.md).
 - Organization directory: domain department tree backed by nested distribution groups, searchable web UI, deduplicated mail delivery and EWS group lookup/expansion — [setup and scope](docs/organization-directory.md).
 - Quotas: set `users.quota_bytes` (0 = unlimited); SMTP returns `552` when full
 - Auth API: `POST /api/v1/auth/login` → opaque tokens; TOTP MFA; OIDC per-domain
@@ -59,7 +60,7 @@ Seed: `admin@example.com` / `changeme`. TLS: `tls.auto_generate` or `scripts/gen
 - Admin: tenant domains, users, УЦ, **XMPP** (C2S / bots), **Server settings** (DB-backed config), monitoring, backup (`/api/v1/admin/*`)
 - Metrics: `GET /metrics` (Prometheus `tayga_*`)
 - Backup/restore: `./tayga-mail backup|restore -config …` or Admin UI; see [docs/ha.md](docs/ha.md)
-- HA: Postgres + shared maildir; cross-node IMAP IDLE; `ha.mode: active_standby` (`fence: mx|writers`) or `sticky` per-user writers
+- HA deployment: one active Tayga instance with Pacemaker/fencing and a complete shared or replicated state volume; [single-site and two-site guides](docs/ha.md), including MetroLUN and DRBD options.
 - Outbound: `smtp.relay` / `smtp.outbound_direct` + optional `smtp.dkim` for authenticated external recipients
 - MTA-STS / TLS-RPT / DANE: `smtp.mta_sts` (+ `publish`), `smtp.tls_rpt`, `smtp.dane` TLSA on direct MX
 - SMTP rate limits: `smtp.rate_limit.per_ip` / `per_user`

@@ -1,6 +1,7 @@
 package smtp
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
@@ -8,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"net/mail"
 	"strings"
 	"time"
 
@@ -573,6 +575,15 @@ func (s *session) Mail(from string, opts *gosmtp.MailOptions) (result error) {
 			return &gosmtp.SMTPError{Code: 421, EnhancedCode: gosmtp.EnhancedCode{4, 3, 2}, Message: "Not HA leader; try later"}
 		}
 	}
+	if s.user != nil && from != "" {
+		allowed, err := s.backend.store.CanSendFrom(context.Background(), s.user.ID, normalizeAddr(from))
+		if err != nil {
+			return &gosmtp.SMTPError{Code: 451, EnhancedCode: gosmtp.EnhancedCode{4, 3, 0}, Message: "Sender lookup unavailable"}
+		}
+		if !allowed {
+			return &gosmtp.SMTPError{Code: 553, EnhancedCode: gosmtp.EnhancedCode{5, 7, 1}, Message: "Sender address is not authorized"}
+		}
+	}
 	s.from = from
 	s.opts = opts
 	s.toLocal = nil
@@ -619,6 +630,12 @@ func (s *session) Rcpt(to string, _ *gosmtp.RcptOptions) (result error) {
 		s.backend.log.Error("rcpt resolve failed", "to", to, "err", err)
 		return &gosmtp.SMTPError{Code: 451, EnhancedCode: gosmtp.EnhancedCode{4, 3, 0}, Message: "Temporary failure"}
 	}
+	// Unknown recipients in a hosted domain must not loop through external MX.
+	if _, lookupErr := s.backend.store.ResolveMailDomain(context.Background(), storage.DomainOfEmail(to)); lookupErr == nil {
+		return &gosmtp.SMTPError{Code: 550, EnhancedCode: gosmtp.EnhancedCode{5, 1, 1}, Message: "User unknown"}
+	} else if !errors.Is(lookupErr, storage.ErrNotFound) {
+		return &gosmtp.SMTPError{Code: 451, EnhancedCode: gosmtp.EnhancedCode{4, 3, 0}, Message: "Temporary failure"}
+	}
 	// External recipient: authenticated submission + outbound (relay or direct MX).
 	if s.user != nil && s.backend.out != nil {
 		s.toRemote = append(s.toRemote, to)
@@ -647,6 +664,31 @@ func (s *session) Data(r io.Reader) (result error) {
 	}
 
 	ctx := context.Background()
+	signingFrom := normalizeAddr(s.from)
+	if s.user != nil {
+		message, e := mail.ReadMessage(bytes.NewReader(data))
+		if e != nil {
+			return &gosmtp.SMTPError{Code: 554, Message: "Invalid message"}
+		}
+		from, e := message.Header.AddressList("From")
+		if e != nil || len(from) != 1 || len(message.Header["From"]) != 1 {
+			return &gosmtp.SMTPError{Code: 554, Message: "Exactly one From address required"}
+		}
+		// Recheck both addresses after DATA, including revocation since MAIL FROM.
+		for _, address := range []string{s.from, from[0].Address} {
+			if address == "" {
+				continue
+			}
+			allowed, e := s.backend.store.CanSendFrom(ctx, s.user.ID, normalizeAddr(address))
+			if e != nil {
+				return &gosmtp.SMTPError{Code: 451, EnhancedCode: gosmtp.EnhancedCode{4, 3, 0}, Message: "Sender lookup unavailable"}
+			}
+			if !allowed {
+				return &gosmtp.SMTPError{Code: 553, EnhancedCode: gosmtp.EnhancedCode{5, 7, 1}, Message: "Sender address is not authorized"}
+			}
+		}
+		signingFrom = from[0].Address
+	}
 	msgid := extractMessageID(data)
 	for _, rcpt := range s.toLocal {
 		if err := s.deliver(ctx, rcpt, data, msgid); err != nil {
@@ -663,19 +705,22 @@ func (s *session) Data(r io.Reader) (result error) {
 	}
 	if len(s.toRemote) > 0 {
 		outData := data
-		signer, err := domainDKIMSigner(ctx, s.backend.store, s.backend.dkim, normalizeAddr(s.from))
-		if err != nil {
-			return &gosmtp.SMTPError{Code: 451, Message: "DKIM configuration unavailable"}
+		if s.backend.queue == nil {
+			signer, err := domainDKIMSigner(ctx, s.backend.store, s.backend.dkim, signingFrom)
+			if err != nil {
+				return &gosmtp.SMTPError{Code: 451, Message: "DKIM configuration unavailable"}
+			}
+
+			if signer != nil {
+				signed, err := signer.Sign(outData)
+				if err != nil {
+					s.backend.log.Error("dkim sign failed", "err", err)
+					return &gosmtp.SMTPError{Code: 451, EnhancedCode: gosmtp.EnhancedCode{4, 3, 0}, Message: "DKIM signing failed"}
+				}
+				outData = signed
+			}
 		}
 
-		if signer != nil {
-			signed, err := signer.Sign(outData)
-			if err != nil {
-				s.backend.log.Error("dkim sign failed", "err", err)
-				return &gosmtp.SMTPError{Code: 451, EnhancedCode: gosmtp.EnhancedCode{4, 3, 0}, Message: "DKIM signing failed"}
-			}
-			outData = signed
-		}
 		from := normalizeAddr(s.from)
 		if s.backend.queue != nil {
 			if err := s.backend.queue.Enqueue(ctx, from, s.toRemote, outData, msgid); err != nil {
@@ -728,7 +773,7 @@ func (s *session) logMailEvent(event, direction, rcpt, msgid string, size int64,
 		}
 	}
 	if tenantID == "" && domain != "" {
-		if d, err := s.backend.store.GetDomainByName(context.Background(), domain); err == nil && d != nil {
+		if d, err := s.backend.store.ResolveMailDomain(context.Background(), domain); err == nil && d != nil {
 			tenantID = d.TenantID
 		}
 	}

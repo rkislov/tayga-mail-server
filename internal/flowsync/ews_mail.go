@@ -10,6 +10,7 @@ import (
 	"net/mail"
 	"strconv"
 	"strings"
+	"time"
 )
 
 func ewsAddress(field, value string) string {
@@ -25,6 +26,16 @@ func ewsAddress(field, value string) string {
 	fmt.Fprintf(&out, "</t:%s>", field)
 	return out.String()
 }
+
+// DateTimeSent is the message's RFC 5322 Date, not its import/receipt time.
+// Native EWS clients use this property to populate the message-list Date column.
+func ewsMailSentDate(sent, received time.Time) string {
+	if sent.IsZero() {
+		sent = received
+	}
+	return sent.UTC().Format("2006-01-02T15:04:05Z")
+}
+
 func (h *ewsHandler) getMailItem(ctx context.Context, u *storage.User, msg *storage.Message, request string) (string, error) {
 	if err := h.ensureMailboxOwned(ctx, u.ID, msg.MailboxID); err != nil {
 		return ewsFault("ErrorAccessDenied", "forbidden"), nil
@@ -65,7 +76,7 @@ func (h *ewsHandler) getMailItem(ctx context.Context, u *storage.User, msg *stor
 		}
 		out.WriteString(`</t:Attachments>`)
 	}
-	fmt.Fprintf(&out, `<t:DateTimeReceived>%s</t:DateTimeReceived><t:Size>%d</t:Size>%s<t:HasAttachments>%t</t:HasAttachments>%s%s`, msg.InternalDate.UTC().Format("2006-01-02T15:04:05Z"), msg.Size, early, len(content.Attachments) > 0, extended, flag)
+	fmt.Fprintf(&out, `<t:DateTimeSent>%s</t:DateTimeSent><t:DateTimeReceived>%s</t:DateTimeReceived><t:Size>%d</t:Size>%s<t:HasAttachments>%t</t:HasAttachments>%s%s`, ewsMailSentDate(content.SentDate, msg.InternalDate), msg.InternalDate.UTC().Format("2006-01-02T15:04:05Z"), msg.Size, early, len(content.Attachments) > 0, extended, flag)
 	out.WriteString(ewsAddress("ToRecipients", content.To))
 	out.WriteString(ewsAddress("CcRecipients", content.Cc))
 	out.WriteString(ewsAddress("From", content.From))
@@ -74,6 +85,9 @@ func (h *ewsHandler) getMailItem(ctx context.Context, u *storage.User, msg *stor
 	return out.String(), nil
 }
 func (h *ewsHandler) attachment(ctx context.Context, u *storage.User, reference string) (messageAttachment, error) {
+	if strings.HasPrefix(reference, "calendar:") {
+		return readCalendarAttachment(ctx, h.store, h.ms, u, reference)
+	}
 	parts := strings.Split(reference, ":")
 	if len(parts) != 2 {
 		return messageAttachment{}, storage.ErrNotFound

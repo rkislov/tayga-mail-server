@@ -5,8 +5,11 @@ import (
 	"strings"
 )
 
-func replyRecipients(message parsedMsg, self string) (to, cc []string) {
+func replyRecipients(message parsedMsg, self string, aliases ...string) (to, cc []string) {
 	seen := map[string]bool{strings.ToLower(self): true}
+	for _, address := range aliases {
+		seen[strings.ToLower(address)] = true
+	}
 	collect := func(value string, dst *[]string) {
 		addresses, err := mail.ParseAddressList(value)
 		if err != nil {

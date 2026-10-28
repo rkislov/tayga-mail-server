@@ -104,7 +104,7 @@ func schemaField(key, path string, value reflect.Value, locked bool) FieldSchema
 		f.Kind = "string"
 		f.Default = value.String()
 	}
-	f.Secret = key == "password" || key == "secret" || key == "secret_key" || key == "access_key" || key == "client_secret" || key == "bind_password" || key == "secrets_key" || key == "dsn"
+	f.Secret = key == "office_jwt_secret" || key == "password" || key == "secret" || key == "secret_key" || key == "access_key" || key == "client_secret" || key == "bind_password" || key == "secrets_key" || key == "dsn"
 	if f.Secret {
 		f.Default = ""
 	}
@@ -114,6 +114,8 @@ func schemaField(key, path string, value reflect.Value, locked bool) FieldSchema
 
 func schemaOptions(path string) []string {
 	switch path {
+	case "files.office_provider":
+		return []string{"collabora", "onlyoffice", "r7"}
 	case "spam.backend":
 		return []string{"none", "rspamd"}
 	case "scan.backend":

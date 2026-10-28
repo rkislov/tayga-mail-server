@@ -110,12 +110,8 @@ func (h *ewsHandler) getFolder(ctx context.Context, u *storage.User, body string
 				f.Inner = fmt.Sprintf(`<t:FolderId Id="%s" ChangeKey="0"/><t:DisplayName>Mailbox</t:DisplayName><t:TotalCount>0</t:TotalCount><t:ChildFolderCount>%d</t:ChildFolderCount>`, xmlEscape("root:"+u.ID), len(folders))
 				found = true
 			} else if name, ok := aliases[id]; ok {
-				for _, candidate := range folders {
-					if strings.EqualFold(candidate.Name, name) {
-						f = candidate
-						found = true
-						break
-					}
+				if mailbox, err := h.store.GetMailbox(ctx, u.ID, name); err == nil {
+					f, found = folders[mailbox.ID]
 				}
 			} else {
 				defaultID := ""
@@ -140,6 +136,9 @@ func (h *ewsHandler) getFolder(ctx context.Context, u *storage.User, body string
 			}
 		}
 		if found {
+			if taygaRequested(body, "TaygaSyncVersion") {
+				f.Inner += taygaProperty("TaygaSyncVersion", "1")
+			}
 			fmt.Fprintf(&out, `<m:GetFolderResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:Folders><t:%s>%s</t:%s></m:Folders></m:GetFolderResponseMessage>`, f.Kind.Local, f.Inner, f.Kind.Local)
 		} else {
 			fmt.Fprintf(&out, `<m:GetFolderResponseMessage ResponseClass="Error"><m:MessageText>Folder unavailable: %s</m:MessageText><m:ResponseCode>ErrorFolderNotFound</m:ResponseCode></m:GetFolderResponseMessage>`, xmlEscape(id))

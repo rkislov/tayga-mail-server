@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"github.com/tayga/tms/internal/storage"
+	"strconv"
 	"strings"
 )
 
@@ -32,12 +33,23 @@ func (h *easHandler) itemOperations(ctx context.Context, u *storage.User, body [
 			}
 			ref := fetch.value("FileReference")
 			if ref != "" {
-				a, err := helper.attachment(ctx, u, ref)
+				var a messageAttachment
+				var err error
+				if strings.HasPrefix(ref, "calendar:") || calendarDownloadToken(ref) != "" {
+					a, err = h.calendarAttachment(ctx, u, ref)
+				} else {
+					a, err = helper.attachment(ctx, u, ref)
+				}
 				if err != nil {
 					out.WriteString(`<Fetch><Status>6</Status></Fetch>`)
 					continue
 				}
-				fmt.Fprintf(&out, `<Fetch><Status>1</Status><FileReference xmlns="AirSyncBase:">%s</FileReference><Properties><ContentType xmlns="AirSyncBase:">%s</ContentType><Data>%s</Data></Properties></Fetch>`, xmlEscape(ref), xmlEscape(a.ContentType), base64.StdEncoding.EncodeToString(a.Data))
+				data, rangeXML, status := attachmentByteRange(a.Data, fetch.child("Options"))
+				if status != 1 {
+					fmt.Fprintf(&out, `<Fetch><Status>%d</Status></Fetch>`, status)
+					continue
+				}
+				fmt.Fprintf(&out, `<Fetch><Status>1</Status><FileReference xmlns="AirSyncBase:">%s</FileReference><Properties><ContentType xmlns="AirSyncBase:">%s</ContentType>%s<Data>%s</Data></Properties></Fetch>`, xmlEscape(ref), xmlEscape(a.ContentType), rangeXML, base64.StdEncoding.EncodeToString(data))
 				continue
 			}
 			id := fetch.value("ServerId")
@@ -94,4 +106,29 @@ func (h *easHandler) itemOperations(ctx context.Context, u *storage.User, body [
 	}
 	out.WriteString(`</Response></ItemOperations>`)
 	return out.String(), nil
+}
+
+// ItemOperations ranges are inclusive byte offsets, before base64 encoding.
+// A client may resume a file download; returning the entire file for a Range
+// request would corrupt the chunks it assembles.
+func attachmentByteRange(data []byte, options *protocolNode) ([]byte, string, int) {
+	if options == nil || len(options.Children) == 0 {
+		return data, "", 1
+	}
+	if len(options.Children) != 1 || options.Children[0].Name.Local != "Range" {
+		return nil, "", 2
+	}
+	parts := strings.Split(options.Children[0].Text, "-")
+	if len(parts) != 2 {
+		return nil, "", 8
+	}
+	start, e1 := strconv.ParseUint(parts[0], 10, 32)
+	end, e2 := strconv.ParseUint(parts[1], 10, 32)
+	if e1 != nil || e2 != nil || start > end || start >= uint64(len(data)) {
+		return nil, "", 8
+	}
+	if end >= uint64(len(data)) {
+		end = uint64(len(data)) - 1
+	}
+	return data[start : end+1], fmt.Sprintf(`<Range>%d-%d</Range><Total>%d</Total>`, start, end, len(data)), 1
 }
