@@ -10,10 +10,12 @@ import (
 	"github.com/tayga/tms/internal/mailsearch"
 	"io"
 	"strings"
+	"time"
 )
 
 type messageContent struct {
 	Subject, From, To, Cc, ReplyTo, Text, HTML string
+	SentDate                                   time.Time
 	Attachments                                []messageAttachment
 	MIME                                       []byte
 	SMIME                                      bool
@@ -42,6 +44,7 @@ func parseMessageContent(raw []byte) (messageContent, error) {
 	}
 	defer r.Close()
 	out.MIME = raw
+	out.SentDate, _ = r.Header.Date()
 	media, params, _ := r.Header.ContentType()
 	out.SMIME = media == "application/pkcs7-mime" || media == "application/x-pkcs7-mime" || (media == "multipart/signed" && strings.Contains(params["protocol"], "pkcs7-signature"))
 	out.Subject = mailsearch.DecodeHeader(r.Header.Get("Subject"))
