@@ -49,6 +49,8 @@ On 2026-10-17, DNS lookups performed on `mail.kislovs.ru` resolved `chatsecure.o
 
 On 2026-10-27, an address lookup from the mail server again failed for `push.chatsecure.org`; `eu.prod.push.monal-im.org` resolved to public IPv4 and IPv6 addresses. Three Monal registrations were present and the pending queue was empty. This read-only check did not send test notifications or verify their display on a phone.
 
+On 2026-10-28, recovery commit `105a830` was installed on `mail.kislovs.ru` as `0.9.34+xmpp.1`, preserving the deployed Thunderbird fixes from 0.9.33/0.9.34. The full Go suite and `go test -race ./internal/xmpp` passed. After installation, `/readyz` returned `ready`, STARTTLS on 5222 and direct TLS on 5223 both negotiated TLS 1.3 with a verified certificate, all three Monal registrations remained, and the queue was empty. A binary/configuration/verified SQLite backup was retained before replacement. Phone-side background delivery still requires a real incoming message and is tracked separately from these server checks.
+
 ## Validation and remaining interoperability
 
 ### Monal (2026-10-18)
