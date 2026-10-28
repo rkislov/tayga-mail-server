@@ -85,7 +85,7 @@ try {
   );
   manifest.background.scripts.push("smoke-background.js");
   if (process.env.TAYGA_EWS_FIXTURE)
-    manifest.permissions.push("compose", "compose.send", "accountsRead");
+    manifest.permissions.push("compose", "compose.send", "accountsRead", "messagesRead");
   await writeFile(join(extension, "manifest.json"), JSON.stringify(manifest));
   await writeFile(
     join(extension, "smoke-background.js"),
