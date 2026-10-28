@@ -46,6 +46,22 @@ Validation for the archive changes: `go test ./...`,
 use temporary SQLite databases and local TCP sockets; no production message
 contents or push tokens are copied into fixtures.
 
+Deployment on 2026-10-28: archive commit `bc37051` installed as
+`0.9.36+xmpp.1`; binary SHA-256
+`1ae9f8c347e9cd057494649ab227d3bd651dc4dfac860f715b58eee89b0a0fcf`.
+The previous binary, configuration and a verified SQLite backup are in
+`/var/backups/tayga/pre-0.9.36-xmpp.1-vUWjj9d1`. Readiness passed, and external
+STARTTLS 5222/direct TLS 5223 probes negotiated TLS 1.3 with verified
+certificates. Three Monal registrations remained and the push queue was
+empty; no ERROR-level entries were found in the post-restart journal check.
+
+Probe limitation: two external attempts with `to` preceding the namespace
+attributes in the initial XML stream header timed out before STARTTLS.
+The same header worked over server loopback, while external probes with
+namespace attributes first completed on both ports. The cause has not been
+established; this is a separate network-path diagnostic item, not evidence
+that the server parser rejects that valid XML attribute order.
+
 ## Next batches
 
 - [ ] RFC 6120/6121: complete stream-state/error checks, IQ routing, presence priority/probes and roster transition tests.
