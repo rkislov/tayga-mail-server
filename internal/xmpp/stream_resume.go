@@ -26,6 +26,25 @@ type resumableStream struct {
 	expires      time.Time
 }
 
+func (s *Session) retainDisconnectedStream() {
+	// Keep the reader discoverable after Close unregisters its resource and
+	// while presence/MUC cleanup is still running. A reconnect in that window
+	// must wait for the snapshot instead of getting a spurious item-not-found.
+	s.srv.resumeMu.Lock()
+	if s.srv.closingStreams == nil {
+		s.srv.closingStreams = make(map[*Session]struct{})
+	}
+	s.srv.closingStreams[s] = struct{}{}
+	s.srv.resumeMu.Unlock()
+	defer func() {
+		s.srv.resumeMu.Lock()
+		delete(s.srv.closingStreams, s)
+		s.srv.resumeMu.Unlock()
+	}()
+	s.Close()
+	s.retainStream()
+}
+
 // retainStream is called after the reader and socket have stopped.
 // Offline delivery remains in the database while the resource is disconnected.
 func (s *Session) retainStream() {
@@ -88,6 +107,17 @@ func (s *Session) resumeStream(start xml.StartElement) error {
 	token := attr(start, "previd")
 	s.srv.resumeMu.Lock()
 	old, ok := s.srv.resumable[token]
+	if !ok {
+		s.srv.resumeMu.Unlock()
+		// On a network switch the new connection can arrive before TCP detects
+		// the old one is gone. Finish that reader before taking its SM snapshot;
+		// copying live counters would race with an in-flight stanza handler.
+		if condition := s.finishPreviousStream(token, uint32(n)); condition != "" {
+			return fail(condition)
+		}
+		s.srv.resumeMu.Lock()
+		old, ok = s.srv.resumable[token]
+	}
 	if !ok || old.userID != s.user.ID || time.Now().After(old.expires) {
 		s.srv.resumeMu.Unlock()
 		return fail("item-not-found")
@@ -113,19 +143,12 @@ func (s *Session) resumeStream(start xml.StartElement) error {
 	s.pepCaps, s.pepDiscoID, s.pepDiscoNode, s.pepDiscoAt = old.pepCaps, old.pepDiscoID, old.pepDiscoNode, old.pepDiscoAt
 	s.bound = true
 	s.sm.ack(uint32(n))
-	_, err = s.bw.WriteString(fmt.Sprintf(`<resumed xmlns='urn:xmpp:sm:3' previd='%s' h='%d'/>`, xmlEscape(token), s.sm.received))
-	if err == nil {
-		for _, raw := range s.sm.pending {
-			if _, err = s.bw.WriteString(raw); err != nil {
-				break
-			}
-		}
-	}
-	if err == nil {
-		_, err = s.bw.WriteString(`<r xmlns='urn:xmpp:sm:3'/>`)
-	}
-	if err == nil {
-		err = s.bw.Flush()
+	replayed := len(s.sm.pending)
+	err = s.replayStreamLocked(token)
+	if err != nil {
+		// A second disconnect during replay must not discard room memberships
+		// that have not yet been re-established on this connection.
+		s.mucResume = append([]mucResumeState(nil), old.rooms...)
 	}
 	s.mu.Unlock()
 	if err != nil {
@@ -141,8 +164,73 @@ func (s *Session) resumeStream(start xml.StartElement) error {
 			return err
 		}
 	}
+	if s.srv.log != nil {
+		s.srv.log.Info("xmpp stream resumed", "user_id", s.user.ID, "resource", s.JID.Resource, "replayed_stanzas", replayed)
+	}
 	// These are new deliveries, so they receive fresh outgoing sequence numbers.
 	return s.srv.flushOffline(context.Background(), s.user.ID, s.SendRaw)
+}
+
+// finishPreviousStream only considers a token belonging to this authenticated
+// account. It closes the obsolete transport without waiting for a write to a
+// possibly blackholed socket. The reader owns final counters and room cleanup.
+func (s *Session) finishPreviousStream(token string, h uint32) string {
+	candidates := s.srv.hub.Sessions(s.user.Email)
+	s.srv.resumeMu.Lock()
+	for previous := range s.srv.closingStreams {
+		candidates = append(candidates, previous)
+	}
+	s.srv.resumeMu.Unlock()
+	for _, previous := range candidates {
+		if previous == s {
+			continue
+		}
+		previous.mu.Lock()
+		matches := previous.user != nil && previous.user.ID == s.user.ID && previous.sm.resumable && previous.sm.token == token && previous.done != nil
+		invalid := h-previous.sm.acknowledged > previous.sm.sent-previous.sm.acknowledged
+		conn, done := previous.conn, previous.done
+		previous.mu.Unlock()
+		if !matches {
+			continue
+		}
+		if invalid {
+			return "bad-request"
+		}
+		if conn == nil {
+			return "item-not-found"
+		}
+		_ = conn.Close()
+		timer := time.NewTimer(stanzaWriteTimeout)
+		defer timer.Stop()
+		select {
+		case <-done:
+			return ""
+		case <-timer.C:
+			return "resource-constraint"
+		}
+	}
+	return ""
+}
+
+// Replay uses one deadline for the complete batch. It bypasses writeLocked so
+// retransmission neither advances counters nor inserts duplicate queue entries.
+func (s *Session) replayStreamLocked(token string) error {
+	if s.conn != nil {
+		_ = s.conn.SetWriteDeadline(time.Now().Add(stanzaWriteTimeout))
+		defer s.conn.SetWriteDeadline(time.Time{})
+	}
+	if _, err := s.bw.WriteString(fmt.Sprintf(`<resumed xmlns='urn:xmpp:sm:3' previd='%s' h='%d'/>`, xmlEscape(token), s.sm.received)); err != nil {
+		return err
+	}
+	for _, raw := range s.sm.pending {
+		if _, err := s.bw.WriteString(raw); err != nil {
+			return err
+		}
+	}
+	if _, err := s.bw.WriteString(`<r xmlns='urn:xmpp:sm:3'/>`); err != nil {
+		return err
+	}
+	return s.bw.Flush()
 }
 
 func (sm *streamManagement) ack(h uint32) {
