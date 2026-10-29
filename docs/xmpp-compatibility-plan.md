@@ -1,6 +1,6 @@
 # XMPP compatibility implementation plan
 
-Updated 2026-10-28. This is an implementation checklist, not a claim of complete RFC/XEP conformance.
+Updated 2026-10-29. This is an implementation checklist, not a claim of complete RFC/XEP conformance.
 
 ## Current batch: core connection and archive correctness
 
@@ -61,6 +61,24 @@ The same header worked over server loopback, while external probes with
 namespace attributes first completed on both ports. The cause has not been
 established; this is a separate network-path diagnostic item, not evidence
 that the server parser rejects that valid XML attribute order.
+
+## Web OMEMO session isolation (2026-10-29)
+
+Pending browser operations now retain their originating login, including time
+spent waiting for a Web Lock, PEP requests, token refresh/retry, cached plaintext
+and encrypted-file previews. Logout and relogin invalidate that context without
+deleting local keys. Late refresh replies cannot replace a newer login's tokens
+or share its pending refresh promise. Already dispatched requests may finish for
+the original account; subsequent work is rejected after a login change.
+
+Validation: the session-isolation, device-settings and independent browser-device
+scripts passed, as did `go test ./...`. An isolated Go server with the built web
+assets passed the actual HTTP API scenario: two browser devices, encrypted
+delivery, deduplication, settings, logout/relogin, retained device ID and cached
+plaintext. Independent Node.js AES-GCM encryption/decryption verifies the file
+wire format in both directions. Native Monal/Conversations encrypted-file and
+history acceptance remains pending; this batch does not claim that interop.
+See [web OMEMO](web-omemo.md) for commands and storage boundaries.
 
 ## Next batches
 

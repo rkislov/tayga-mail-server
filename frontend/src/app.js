@@ -479,6 +479,7 @@ function isAuthPublicPath(path) {
 }
 
 function clearSession() {
+  if (typeof omemoCancelOperations === 'function') omemoCancelOperations();
   resetBranding();
   resetTasks();
   resetComposeAttachments();
@@ -505,12 +506,15 @@ function forceLogin(msg) {
 }
 
 let tokenRefreshPromise = null;
+let tokenRefreshSession = null;
 
 async function refreshAccessToken() {
-  const refresh = state.tokens?.refresh_token;
+  const sessionTokens = state.tokens;
+  const refresh = sessionTokens?.refresh_token;
   if (!refresh) return false;
-  if (!tokenRefreshPromise) {
-    tokenRefreshPromise = (async () => {
+  if (!tokenRefreshPromise || tokenRefreshSession !== sessionTokens) {
+    tokenRefreshSession = sessionTokens;
+    const pending = (async () => {
       const res = await fetch("/api/v1/auth/token", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -519,28 +523,40 @@ async function refreshAccessToken() {
       const text = await res.text();
       let data = null;
       try { data = text ? JSON.parse(text) : null; } catch { data = null; }
-      if (!res.ok || !data?.access_token) return false;
+      if (!res.ok || !data?.access_token || state.tokens !== sessionTokens) return false;
       state.tokens = data;
       localStorage.setItem("tayga.tokens", JSON.stringify(data));
       return true;
-    })().finally(() => { tokenRefreshPromise = null; });
+    })().finally(() => {
+      if (tokenRefreshPromise === pending) {
+        tokenRefreshPromise = null;
+        tokenRefreshSession = null;
+      }
+    });
+    tokenRefreshPromise = pending;
   }
   return tokenRefreshPromise;
 }
 
 async function api(path, opts = {}) {
+  // Sensitive callers bind requests (including 401 retries) to their login.
+  const {_guard, ...requestOpts} = opts;
+  _guard?.();
   if(filesState.ownerID&&/^\/api\/v1\/files(?:[/?]|$)/.test(path)&&!/^\/api\/v1\/files\/(?:access|shares|library|office)/.test(path))path+=(path.includes('?')?'&':'?')+'owner_id='+encodeURIComponent(filesState.ownerID);
   const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
   if (state.tokens?.access_token) {
     headers.Authorization = "Bearer " + state.tokens.access_token;
   }
-  const res = await fetch(path, Object.assign({}, opts, { headers }));
+  const res = await fetch(path, Object.assign({}, requestOpts, { headers }));
   const text = await res.text();
+  _guard?.();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = { error: text }; }
   if (!res.ok) {
     if (res.status === 401 && !opts._authRetry && !isAuthPublicPath(path)) {
-      if (state.tokens?.refresh_token && await refreshAccessToken()) {
+      const refreshed = state.tokens?.refresh_token && await refreshAccessToken();
+      _guard?.();
+      if (refreshed) {
         return api(path, Object.assign({}, opts, { _authRetry: true }));
       }
       forceLogin(t("session_expired"));
@@ -2299,6 +2315,7 @@ $("btn-sieve-save").addEventListener("click", async () => {
 });
 
 function enterAccount(tokens, email) {
+  if (typeof omemoCancelOperations === 'function') omemoCancelOperations();
   state.tokens = tokens;
   state.email = email || state.email;
   localStorage.setItem("tayga.tokens", JSON.stringify(tokens));
@@ -4601,10 +4618,13 @@ $("form-chat-send")?.addEventListener("submit", async (e) => {
   e.preventDefault();
   const input=$("chat-body"),draft=input?.value||'',body=draft.trim(),peer=chatState.peer;
   if (!body || !peer || chatState.sending) return;
+  const guard=omemoGuard();
   chatState.sending=true;
   const button=e.currentTarget.querySelector('[type=submit]');if(button)button.disabled=true;
   try {
-    const ev=await omemoEnabled(peer)?await omemoSend(peer,body):await api('/api/v1/chat/send',{method:'POST',body:JSON.stringify({to:peer,body})});
+    const encryptedMode=await omemoEnabled(peer);guard();
+    const ev=encryptedMode?await omemoSend(peer,body):await api('/api/v1/chat/send',{method:'POST',body:JSON.stringify({to:peer,body}),_guard:guard});
+    guard();
     if(chatBare(chatState.peer)===chatBare(peer)){
       if(input && input.value===draft)input.value='';
       appendChatBubble(ev);scrollChatBottom();
@@ -5744,17 +5764,23 @@ $('chat-attach')?.addEventListener('click',()=>{
 $('chat-file')?.addEventListener('change',async e=>{
  const file=e.target.files?.[0],peer=chatState.peer;e.target.value='';if(!file||!peer||chatState.sending)return;
  if(file.size>WEB_UPLOAD_BYTES){setMsg($('chat-msg'),mailImageText('Максимум 10 ГиБ','Maximum 10 GiB'),'err');return}
- const encryptedMode=await omemoEnabled(peer);
+ const guard=omemoGuard();
  chatState.sending=true;$('chat-attach').disabled=true;
  const name=file.name.replace(/[\/\\\r\n]/g,'_'),path='chat/'+crypto.randomUUID()+'/'+name;let share;
  try {
+  const encryptedMode=await omemoEnabled(peer);guard();
   const encryptedFile=encryptedMode?await omemoEncryptFile(file):null;
+  guard();
   const upload=encryptedFile?.blob||file;
   const linkMode=!encryptedMode&&$('chat-file-mode')?.value==='link';
-  const slot=linkMode?null:await api('/api/v1/chat/upload',{method:'POST',body:JSON.stringify({name,size:upload.size,type:encryptedMode?"application/octet-stream":file.type})});
+  const slot=linkMode?null:await api('/api/v1/chat/upload',{method:'POST',body:JSON.stringify({name,size:upload.size,type:encryptedMode?"application/octet-stream":file.type}),_guard:guard});
+  guard();
   await new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest();xhr.open('PUT',slot?slot.put:'/api/v1/files/content?path='+encodeURIComponent(path));if(!slot)xhr.setRequestHeader('Authorization','Bearer '+state.tokens.access_token);xhr.timeout=0;xhr.upload.onprogress=ev=>{if(ev.lengthComputable)setMsg($('chat-msg'),Math.round(ev.loaded/ev.total*100)+'%')};xhr.onerror=xhr.ontimeout=()=>reject(new Error(mailImageText('Ошибка загрузки','Upload failed')));xhr.onload=()=>xhr.status>=200&&xhr.status<300?resolve():reject(new Error(mailImageText('Не удалось загрузить файл','Unable to upload file')));xhr.send(upload)});
-  share=slot?{url:slot.get}:await api('/api/v1/files/shares',{method:'POST',body:JSON.stringify({path,rights:'read',ttl_hours:168})});
-  const ev=encryptedMode?await omemoSend(peer,omemoFileURI(share.url,encryptedFile)):await api('/api/v1/chat/send',{method:'POST',body:JSON.stringify({to:peer,body:linkMode?name+'\n'+share.url:share.url})});
+  guard();
+  share=slot?{url:slot.get}:await api('/api/v1/files/shares',{method:'POST',body:JSON.stringify({path,rights:'read',ttl_hours:168}),_guard:guard});
+  guard();
+  const ev=encryptedMode?await omemoSend(peer,omemoFileURI(share.url,encryptedFile)):await api('/api/v1/chat/send',{method:'POST',body:JSON.stringify({to:peer,body:linkMode?name+'\n'+share.url:share.url}),_guard:guard});
+  guard();
   if(chatBare(chatState.peer)===chatBare(peer)){appendChatBubble(ev);scrollChatBottom()}
   setMsg($('chat-msg'),mailImageText('Файл отправлен. Ссылка действует 7 дней.','File sent. Link valid for 7 days.'),'ok');
  }catch(err){setMsg($('chat-msg'),err.message,'err')}

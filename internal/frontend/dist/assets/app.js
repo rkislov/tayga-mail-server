@@ -1576,6 +1576,7 @@ function isAuthPublicPath(path) {
 }
 
 function clearSession() {
+  if (typeof omemoCancelOperations === 'function') omemoCancelOperations();
   resetBranding();
   resetTasks();
   resetComposeAttachments();
@@ -1602,12 +1603,15 @@ function forceLogin(msg) {
 }
 
 let tokenRefreshPromise = null;
+let tokenRefreshSession = null;
 
 async function refreshAccessToken() {
-  const refresh = state.tokens?.refresh_token;
+  const sessionTokens = state.tokens;
+  const refresh = sessionTokens?.refresh_token;
   if (!refresh) return false;
-  if (!tokenRefreshPromise) {
-    tokenRefreshPromise = (async () => {
+  if (!tokenRefreshPromise || tokenRefreshSession !== sessionTokens) {
+    tokenRefreshSession = sessionTokens;
+    const pending = (async () => {
       const res = await fetch("/api/v1/auth/token", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1616,28 +1620,40 @@ async function refreshAccessToken() {
       const text = await res.text();
       let data = null;
       try { data = text ? JSON.parse(text) : null; } catch { data = null; }
-      if (!res.ok || !data?.access_token) return false;
+      if (!res.ok || !data?.access_token || state.tokens !== sessionTokens) return false;
       state.tokens = data;
       localStorage.setItem("tayga.tokens", JSON.stringify(data));
       return true;
-    })().finally(() => { tokenRefreshPromise = null; });
+    })().finally(() => {
+      if (tokenRefreshPromise === pending) {
+        tokenRefreshPromise = null;
+        tokenRefreshSession = null;
+      }
+    });
+    tokenRefreshPromise = pending;
   }
   return tokenRefreshPromise;
 }
 
 async function api(path, opts = {}) {
+  // Sensitive callers bind requests (including 401 retries) to their login.
+  const {_guard, ...requestOpts} = opts;
+  _guard?.();
   if(filesState.ownerID&&/^\/api\/v1\/files(?:[/?]|$)/.test(path)&&!/^\/api\/v1\/files\/(?:access|shares|library|office)/.test(path))path+=(path.includes('?')?'&':'?')+'owner_id='+encodeURIComponent(filesState.ownerID);
   const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
   if (state.tokens?.access_token) {
     headers.Authorization = "Bearer " + state.tokens.access_token;
   }
-  const res = await fetch(path, Object.assign({}, opts, { headers }));
+  const res = await fetch(path, Object.assign({}, requestOpts, { headers }));
   const text = await res.text();
+  _guard?.();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = { error: text }; }
   if (!res.ok) {
     if (res.status === 401 && !opts._authRetry && !isAuthPublicPath(path)) {
-      if (state.tokens?.refresh_token && await refreshAccessToken()) {
+      const refreshed = state.tokens?.refresh_token && await refreshAccessToken();
+      _guard?.();
+      if (refreshed) {
         return api(path, Object.assign({}, opts, { _authRetry: true }));
       }
       forceLogin(t("session_expired"));
@@ -3396,6 +3412,7 @@ $("btn-sieve-save").addEventListener("click", async () => {
 });
 
 function enterAccount(tokens, email) {
+  if (typeof omemoCancelOperations === 'function') omemoCancelOperations();
   state.tokens = tokens;
   state.email = email || state.email;
   localStorage.setItem("tayga.tokens", JSON.stringify(tokens));
@@ -5698,10 +5715,13 @@ $("form-chat-send")?.addEventListener("submit", async (e) => {
   e.preventDefault();
   const input=$("chat-body"),draft=input?.value||'',body=draft.trim(),peer=chatState.peer;
   if (!body || !peer || chatState.sending) return;
+  const guard=omemoGuard();
   chatState.sending=true;
   const button=e.currentTarget.querySelector('[type=submit]');if(button)button.disabled=true;
   try {
-    const ev=await omemoEnabled(peer)?await omemoSend(peer,body):await api('/api/v1/chat/send',{method:'POST',body:JSON.stringify({to:peer,body})});
+    const encryptedMode=await omemoEnabled(peer);guard();
+    const ev=encryptedMode?await omemoSend(peer,body):await api('/api/v1/chat/send',{method:'POST',body:JSON.stringify({to:peer,body}),_guard:guard});
+    guard();
     if(chatBare(chatState.peer)===chatBare(peer)){
       if(input && input.value===draft)input.value='';
       appendChatBubble(ev);scrollChatBottom();
@@ -6841,17 +6861,23 @@ $('chat-attach')?.addEventListener('click',()=>{
 $('chat-file')?.addEventListener('change',async e=>{
  const file=e.target.files?.[0],peer=chatState.peer;e.target.value='';if(!file||!peer||chatState.sending)return;
  if(file.size>WEB_UPLOAD_BYTES){setMsg($('chat-msg'),mailImageText('Максимум 10 ГиБ','Maximum 10 GiB'),'err');return}
- const encryptedMode=await omemoEnabled(peer);
+ const guard=omemoGuard();
  chatState.sending=true;$('chat-attach').disabled=true;
  const name=file.name.replace(/[\/\\\r\n]/g,'_'),path='chat/'+crypto.randomUUID()+'/'+name;let share;
  try {
+  const encryptedMode=await omemoEnabled(peer);guard();
   const encryptedFile=encryptedMode?await omemoEncryptFile(file):null;
+  guard();
   const upload=encryptedFile?.blob||file;
   const linkMode=!encryptedMode&&$('chat-file-mode')?.value==='link';
-  const slot=linkMode?null:await api('/api/v1/chat/upload',{method:'POST',body:JSON.stringify({name,size:upload.size,type:encryptedMode?"application/octet-stream":file.type})});
+  const slot=linkMode?null:await api('/api/v1/chat/upload',{method:'POST',body:JSON.stringify({name,size:upload.size,type:encryptedMode?"application/octet-stream":file.type}),_guard:guard});
+  guard();
   await new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest();xhr.open('PUT',slot?slot.put:'/api/v1/files/content?path='+encodeURIComponent(path));if(!slot)xhr.setRequestHeader('Authorization','Bearer '+state.tokens.access_token);xhr.timeout=0;xhr.upload.onprogress=ev=>{if(ev.lengthComputable)setMsg($('chat-msg'),Math.round(ev.loaded/ev.total*100)+'%')};xhr.onerror=xhr.ontimeout=()=>reject(new Error(mailImageText('Ошибка загрузки','Upload failed')));xhr.onload=()=>xhr.status>=200&&xhr.status<300?resolve():reject(new Error(mailImageText('Не удалось загрузить файл','Unable to upload file')));xhr.send(upload)});
-  share=slot?{url:slot.get}:await api('/api/v1/files/shares',{method:'POST',body:JSON.stringify({path,rights:'read',ttl_hours:168})});
-  const ev=encryptedMode?await omemoSend(peer,omemoFileURI(share.url,encryptedFile)):await api('/api/v1/chat/send',{method:'POST',body:JSON.stringify({to:peer,body:linkMode?name+'\n'+share.url:share.url})});
+  guard();
+  share=slot?{url:slot.get}:await api('/api/v1/files/shares',{method:'POST',body:JSON.stringify({path,rights:'read',ttl_hours:168}),_guard:guard});
+  guard();
+  const ev=encryptedMode?await omemoSend(peer,omemoFileURI(share.url,encryptedFile)):await api('/api/v1/chat/send',{method:'POST',body:JSON.stringify({to:peer,body:linkMode?name+'\n'+share.url:share.url}),_guard:guard});
+  guard();
   if(chatBare(chatState.peer)===chatBare(peer)){appendChatBubble(ev);scrollChatBottom()}
   setMsg($('chat-msg'),mailImageText('Файл отправлен. Ссылка действует 7 дней.','File sent. Link valid for 7 days.'),'ok');
  }catch(err){setMsg($('chat-msg'),err.message,'err')}
@@ -8667,6 +8693,11 @@ async function editMailSource(source={}) {
 // OMEMO legacy (XEP-0384 0.3): ratchet operations are supplied by libomemo.js.
 const omemoNS='eu.siacs.conversations.axolotl';
 let omemoLibrary,omemoDB;
+function omemoCancelOperations(){state.omemoSessionGeneration=(state.omemoSessionGeneration||0)+1;for(const dialog of document.querySelectorAll('.omemo-dialog'))dialog.close()}
+function omemoGuard(){
+ const account=omemoAccount(),generation=state.omemoSessionGeneration||0;
+ return ()=>{if(!account||account!==omemoAccount()||generation!==(state.omemoSessionGeneration||0))throw Error('Учётная запись изменилась. Повторите действие. / Account changed. Try again.')};
+}
 const omemoB64=b=>{let s='';for(const v of new Uint8Array(b))s+=String.fromCharCode(v);return btoa(s)};
 const omemoBytes=s=>Uint8Array.from(atob(s.trim()),c=>c.charCodeAt(0)).buffer;
 const omemoHex=b=>Array.from(new Uint8Array(b),v=>v.toString(16).padStart(2,'0')).join('');
@@ -8682,15 +8713,15 @@ async function omemoRead(store,key){const db=await omemoDatabase();return new Pr
 async function omemoWrite(account,data,message){const db=await omemoDatabase();return new Promise((resolve,reject)=>{const tx=db.transaction(['accounts','messages'],'readwrite');tx.objectStore('accounts').put(data,account);if(message)tx.objectStore('messages').put(message.body,[account,message.key]);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||Error('OMEMO storage failed'))})}
 async function omemoLocked(fn){
  if(!isSecureContext||!navigator.locks)throw Error('OMEMO требует HTTPS и поддержку Web Locks / OMEMO requires HTTPS and Web Locks');
- const account=omemoAccount();if(!account)throw Error('Sign in first');
- return navigator.locks.request('tayga-omemo:'+account,async()=>{const lib=await (omemoLibrary||=import('/assets/libomemo.js'));const data=await omemoRead('accounts',account)||{store:{},enabled:{},trust:{}};const store=new lib.InMemoryStore();store.store=data.store;
+ const account=omemoAccount(),guard=omemoGuard();guard();
+ return navigator.locks.request('tayga-omemo:'+account,async()=>{guard();const lib=await (omemoLibrary||=import('/assets/libomemo.js'));guard();const data=await omemoRead('accounts',account)||{store:{},enabled:{},trust:{}};guard();const store=new lib.InMemoryStore();store.store=data.store;
  store.isTrustedIdentity=(address,key)=>data.trust[address]===omemoB64(key);
- const result=await fn({account,lib,data,store,save:m=>omemoWrite(account,data,m)});return result});
+ const result=await fn({account,lib,data,store,guard,save:async m=>{guard();await omemoWrite(account,data,m);guard()},request:async(path,opts)=>{guard();const result=await api(path,{...opts,_guard:guard});guard();return result}});guard();return result});
 }
-async function omemoPEP(owner,node){const r=await api('/api/v1/chat/omemo?owner='+encodeURIComponent(owner)+'&node='+encodeURIComponent(node));return r.items?.find(i=>i.id==='current')?.xml||r.items?.[0]?.xml||''}
-async function omemoPublish(node,xml){await api('/api/v1/chat/omemo',{method:'PUT',body:JSON.stringify({node,xml})})}
-async function omemoDevices(jid){const raw=await omemoPEP(jid,omemoNS+'.devicelist');if(!raw)return [];const ids=omemoElements(omemoXML(raw),'device').map(e=>Number(e.getAttribute('id')));if(ids.length>100||ids.some(i=>!Number.isInteger(i)||i<1||i>2147483647))throw Error('Invalid device list');return [...new Set(ids)]}
-async function omemoBundle(jid,id){const raw=await omemoPEP(jid,omemoNS+'.bundles:'+id);if(!raw)throw Error('Нет ключей устройства / Missing device bundle: '+id);const doc=omemoXML(raw);const key=omemoElement(doc,'identityKey'),signed=omemoElement(doc,'signedPreKeyPublic'),sig=omemoElement(doc,'signedPreKeySignature'),prekeys=omemoElements(doc,'preKeyPublic');if(!key||!signed||!sig||!prekeys.length)throw Error('Incomplete OMEMO bundle');const pre=prekeys[crypto.getRandomValues(new Uint32Array(1))[0]%prekeys.length];return {registrationId:id,identityKey:omemoBytes(key.textContent),signedPreKey:{keyId:Number(signed.getAttribute('signedPreKeyId')),publicKey:omemoBytes(signed.textContent),signature:omemoBytes(sig.textContent)},preKey:{keyId:Number(pre.getAttribute('preKeyId')),publicKey:omemoBytes(pre.textContent)}}}
+async function omemoPEP(owner,node,guard=omemoGuard()){guard();const r=await api('/api/v1/chat/omemo?owner='+encodeURIComponent(owner)+'&node='+encodeURIComponent(node),{_guard:guard});guard();return r.items?.find(i=>i.id==='current')?.xml||r.items?.[0]?.xml||''}
+async function omemoPublish(ctx,node,xml){await ctx.request('/api/v1/chat/omemo',{method:'PUT',body:JSON.stringify({node,xml})})}
+async function omemoDevices(jid,guard=omemoGuard()){const raw=await omemoPEP(jid,omemoNS+'.devicelist',guard);if(!raw)return [];const ids=omemoElements(omemoXML(raw),'device').map(e=>Number(e.getAttribute('id')));if(ids.length>100||ids.some(i=>!Number.isInteger(i)||i<1||i>2147483647))throw Error('Invalid device list');return [...new Set(ids)]}
+async function omemoBundle(jid,id,guard=omemoGuard()){const raw=await omemoPEP(jid,omemoNS+'.bundles:'+id,guard);if(!raw)throw Error('Нет ключей устройства / Missing device bundle: '+id);const doc=omemoXML(raw);const key=omemoElement(doc,'identityKey'),signed=omemoElement(doc,'signedPreKeyPublic'),sig=omemoElement(doc,'signedPreKeySignature'),prekeys=omemoElements(doc,'preKeyPublic');if(!key||!signed||!sig||!prekeys.length)throw Error('Incomplete OMEMO bundle');const pre=prekeys[crypto.getRandomValues(new Uint32Array(1))[0]%prekeys.length];return {registrationId:id,identityKey:omemoBytes(key.textContent),signedPreKey:{keyId:Number(signed.getAttribute('signedPreKeyId')),publicKey:omemoBytes(signed.textContent),signature:omemoBytes(sig.textContent)},preKey:{keyId:Number(pre.getAttribute('preKeyId')),publicKey:omemoBytes(pre.textContent)}}}
 async function omemoInitialize(ctx){
  const {lib,data,store,save}=ctx;
  if(!data.id){data.id=crypto.getRandomValues(new Uint32Array(1))[0]%2147483646+1;store.put('identityKey',await lib.KeyHelper.generateIdentityKeyPair());store.put('registrationId',data.id);data.prekeys=[];data.nextPrekey=1;const signed=await lib.KeyHelper.generateSignedPreKey(store.getIdentityKeyPair(),1,omemoNS);store.storeSignedPreKey(1,signed.keyPair);data.signature=signed.signature;await save()}
@@ -8698,19 +8729,19 @@ async function omemoInitialize(ctx){
  while(data.prekeys.length<100){const pre=await lib.KeyHelper.generatePreKey(data.nextPrekey++);store.storePreKey(pre.keyId,pre.keyPair);data.prekeys.push(pre.keyId)}
  await save(); // Persist private keys before advertising public material.
  const signed=store.loadSignedPreKey(1).keyPair;
- await omemoPublish(omemoNS+'.bundles:'+data.id,`<bundle xmlns="${omemoNS}"><signedPreKeyPublic signedPreKeyId="1">${omemoB64(signed.pubKey)}</signedPreKeyPublic><signedPreKeySignature>${omemoB64(data.signature)}</signedPreKeySignature><identityKey>${omemoB64(store.getIdentityKeyPair().pubKey)}</identityKey><prekeys>${data.prekeys.map(id=>`<preKeyPublic preKeyId="${id}">${omemoB64(store.get('25519KeypreKey'+id).pubKey)}</preKeyPublic>`).join('')}</prekeys></bundle>`);
- const devices=await omemoDevices(ctx.account);if(!devices.includes(data.id)){if(devices.length>=100)throw Error('Too many own devices');devices.push(data.id);await omemoPublish(omemoNS+'.devicelist',`<list xmlns="${omemoNS}">${devices.map(id=>`<device id="${id}"/>`).join('')}</list>`)}
+ await omemoPublish(ctx,omemoNS+'.bundles:'+data.id,`<bundle xmlns="${omemoNS}"><signedPreKeyPublic signedPreKeyId="1">${omemoB64(signed.pubKey)}</signedPreKeyPublic><signedPreKeySignature>${omemoB64(data.signature)}</signedPreKeySignature><identityKey>${omemoB64(store.getIdentityKeyPair().pubKey)}</identityKey><prekeys>${data.prekeys.map(id=>`<preKeyPublic preKeyId="${id}">${omemoB64(store.get('25519KeypreKey'+id).pubKey)}</preKeyPublic>`).join('')}</prekeys></bundle>`);
+ const devices=await omemoDevices(ctx.account,ctx.guard);ctx.guard();if(!devices.includes(data.id)){if(devices.length>=100)throw Error('Too many own devices');devices.push(data.id);await omemoPublish(ctx,omemoNS+'.devicelist',`<list xmlns="${omemoNS}">${devices.map(id=>`<device id="${id}"/>`).join('')}</list>`)}
 }
-async function omemoEnabled(peer){const data=await omemoRead('accounts',omemoAccount());return !!data?.enabled?.[peer]}
+async function omemoEnabled(peer){const guard=omemoGuard(),data=await omemoRead('accounts',omemoAccount());guard();return !!data?.enabled?.[peer]}
 async function omemoSend(peer,body){
  return omemoLocked(async ctx=>{
  const {lib,store,data,save,account}=ctx;if(new TextEncoder().encode(body).length>120000)throw Error('OMEMO: сообщение слишком большое');if(!data.enabled[peer])throw Error('OMEMO is not enabled');await omemoInitialize(ctx);
- const recipients=await omemoDevices(peer);if(!recipients.length)throw Error('У собеседника нет OMEMO-устройств / No recipient devices');const own=await omemoDevices(account);const targets=[...recipients.filter(id=>peer!==account||id!==data.id).map(id=>[peer,id]),...own.filter(id=>id!==data.id&&peer!==account).map(id=>[account,id])];
- const prepared=[];for(const [jid,id] of targets){const bundle=await omemoBundle(jid,id),address=new lib.OMEMOAddress(jid,id);if(!await store.isTrustedIdentity(address.toString(),bundle.identityKey))throw Error('Подтвердите ключ устройства в OMEMO / Verify device key: '+jid+' #'+id);prepared.push({bundle,address})}
+ const recipients=await omemoDevices(peer,ctx.guard);if(!recipients.length)throw Error('У собеседника нет OMEMO-устройств / No recipient devices');const own=await omemoDevices(account,ctx.guard);const targets=[...recipients.filter(id=>peer!==account||id!==data.id).map(id=>[peer,id]),...own.filter(id=>id!==data.id&&peer!==account).map(id=>[account,id])];
+ const prepared=[];for(const [jid,id] of targets){const bundle=await omemoBundle(jid,id,ctx.guard),address=new lib.OMEMOAddress(jid,id);if(!await store.isTrustedIdentity(address.toString(),bundle.identityKey))throw Error('Подтвердите ключ устройства в OMEMO / Verify device key: '+jid+' #'+id);prepared.push({bundle,address})}
  const key=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12));const aes=await crypto.subtle.importKey('raw',key,'AES-GCM',false,['encrypt']);const encrypted=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv},aes,new TextEncoder().encode(body)));const material=new Uint8Array(32);material.set(key);material.set(encrypted.slice(-16),16);
  let keys='';for(const {bundle,address} of prepared){const cipher=new lib.SessionCipher(store,address,omemoNS);if(!await cipher.hasOpenSession())await new lib.SessionBuilder(store,address,omemoNS).processPreKey(bundle);const wrapped=await cipher.encrypt(material.buffer);const bytes=typeof wrapped.body==='string'?Uint8Array.from(wrapped.body,c=>c.charCodeAt(0)):wrapped.body;keys+=`<key rid="${address.getDeviceId()}"${wrapped.type===3?' prekey="true"':''}>${omemoB64(bytes)}</key>`}
  const xml=`<encrypted xmlns="${omemoNS}"><header sid="${data.id}">${keys}<iv>${omemoB64(iv)}</iv></header><payload>${omemoB64(encrypted.slice(0,-16))}</payload></encrypted>`;
- await save();if(omemoAccount()!==account)throw Error('Account changed');const ev=await api('/api/v1/chat/omemo',{method:'POST',body:JSON.stringify({to:peer,xml})});await save({key:chatBare(ev.from)+'|'+ev.id,body});return {...ev,body,encrypted:false,decrypted:true};
+ await save();const ev=await ctx.request('/api/v1/chat/omemo',{method:'POST',body:JSON.stringify({to:peer,xml})});await save({key:chatBare(ev.from)+'|'+ev.id,body});return {...ev,body,encrypted:false,decrypted:true};
  });
 }
 async function omemoDecrypt(message){
@@ -8719,7 +8750,7 @@ async function omemoDecrypt(message){
  const cached=await omemoRead('messages',[account,cacheKey]);if(cached!==undefined)return cached;
  const doc=omemoXML(message.omemo||'');if(doc.documentElement.namespaceURI!==omemoNS)throw Error('This OMEMO version is not supported');
  const header=omemoElement(doc,'header'),sid=Number(header?.getAttribute('sid'));if(!Number.isInteger(sid)||sid<1)throw Error('Invalid sender device');const keys=omemoElements(doc,'key').filter(k=>Number(k.getAttribute('rid'))===data.id);if(!keys.length)throw Error('Сообщение не адресовано этому устройству / Not encrypted for this device');
- const address=new lib.OMEMOAddress(from,sid),bundle=await omemoBundle(from,sid);if(!await store.isTrustedIdentity(address.toString(),bundle.identityKey))throw Error('Подтвердите ключ отправителя в OMEMO / Verify sender key: #'+sid);
+ const address=new lib.OMEMOAddress(from,sid),bundle=await omemoBundle(from,sid,ctx.guard);if(!await store.isTrustedIdentity(address.toString(),bundle.identityKey))throw Error('Подтвердите ключ отправителя в OMEMO / Verify sender key: #'+sid);
  const key=keys[0],cipher=new lib.SessionCipher(store,address,omemoNS),raw=omemoBytes(key.textContent);const result=await (['true','1'].includes(key.getAttribute('prekey'))?cipher.decryptPreKeyWhisperMessage(raw):cipher.decryptWhisperMessage(raw));
  const material=new Uint8Array(result.plaintext),payload=omemoElement(doc,'payload');if(!payload){await save();await omemoInitialize(ctx);return ''}
  if(material.length!==32&&material.length!==16)throw Error('Invalid payload key');const encrypted=new Uint8Array(omemoBytes(payload.textContent)),combined=new Uint8Array(encrypted.length+(material.length===32?16:0));combined.set(encrypted);if(material.length===32)combined.set(material.slice(16),encrypted.length);
@@ -8728,7 +8759,8 @@ async function omemoDecrypt(message){
  });
 }
 async function omemoRender(message,element){
- try{const body=await omemoDecrypt(message);if(!element.isConnected||element.dataset.encryption==='omemo')return;const currentPeer=chatState.peer;const actualPeer=chatBare(message.from)===omemoAccount()?chatBare(message.to):chatBare(message.from);if(currentPeer!==actualPeer)return;const anchor=document.createComment('omemo');element.replaceWith(anchor);const bubble=appendChatBubble({...message,body,encrypted:false,decrypted:true});if(bubble)anchor.replaceWith(bubble);else anchor.remove();scrollChatBottom()}
+ const guard=omemoGuard();
+ try{const body=await omemoDecrypt(message);guard();if(!element.isConnected||element.dataset.encryption==='omemo')return;const currentPeer=chatState.peer;const actualPeer=chatBare(message.from)===omemoAccount()?chatBare(message.to):chatBare(message.from);if(currentPeer!==actualPeer)return;const anchor=document.createComment('omemo');element.replaceWith(anchor);const bubble=appendChatBubble({...message,body,encrypted:false,decrypted:true});if(bubble)anchor.replaceWith(bubble);else anchor.remove();scrollChatBottom()}
  catch(error){if(element.isConnected&&element.dataset.encryption!=='omemo')element.querySelector('p').textContent='🔒 '+error.message}
 }
 const omemoText=(ru,en)=>typeof lang!=='undefined'&&lang==='en'?en:ru;
@@ -8740,7 +8772,7 @@ function omemoDeviceStatus(device,snapshot){
  return trusted===device.fingerprint?'trusted':trusted?'changed':'unverified';
 }
 async function omemoSettings(){
- const peer=chatState.peer,account=omemoAccount();
+ const peer=chatState.peer,account=omemoAccount(),sessionGuard=omemoGuard();
  if(!peer||chatState.roster.find(r=>r.jid===peer)?.group||document.querySelector('.omemo-dialog'))return;
  const dialog=omemoNode('dialog','document-preview omemo-dialog');
  dialog.setAttribute('aria-labelledby','omemo-dialog-title');
@@ -8755,9 +8787,9 @@ async function omemoSettings(){
  const hint=omemoNode('p','meta',omemoText('Ключи и названия устройств хранятся в этом браузере. Очистка его данных удалит ключи и доступ к старым сообщениям.','Keys and device names are stored in this browser. Clearing its data removes keys and access to old messages.'));
  footer.append(refresh,hint);body.append(notice,content);dialog.append(header,body,footer);document.body.append(dialog);
  let snapshot,devices=[],loading=false,busy=false,revision=0,changed=false;
- const active=()=>dialog.isConnected&&omemoAccount()===account;
+ const active=()=>{try{sessionGuard();return dialog.isConnected}catch{return false}};
  const guard=c=>{if(c.account!==account||!active())throw Error(omemoText('Учётная запись изменилась. Откройте настройки заново.','Account changed. Reopen these settings.'))};
- dialog.onclose=()=>{revision++;dialog.remove();if(omemoAccount()===account&&chatState.peer===peer){$('chat-omemo')?.focus();if(changed&&typeof openChatPeer==='function')void openChatPeer(peer,true)}};
+ dialog.onclose=()=>{revision++;const sameSession=active();dialog.remove();if(sameSession&&chatState.peer===peer){$('chat-omemo')?.focus();if(changed&&typeof openChatPeer==='function')void openChatPeer(peer,true)}};
  dialog.showModal();
  function disableActions(value){for(const b of dialog.querySelectorAll('button'))if(b!==close)b.disabled=value}
  async function change(action){
@@ -8787,7 +8819,7 @@ async function omemoSettings(){
     verify.type='button';verify.dataset.omemoAction=status==='trusted'?'revoke':'verify';
     verify.onclick=()=>change(async c=>{
      if(status==='trusted'){if(c.data.trust[device.address]===device.fingerprint)delete c.data.trust[device.address];return}
-     const latest=await omemoBundle(device.jid,device.id);guard(c);
+     const latest=await omemoBundle(device.jid,device.id,c.guard);guard(c);
      if(omemoB64(latest.identityKey)!==device.fingerprint)throw Error(omemoText('Ключ изменился во время проверки. Обновите устройства и сравните новый отпечаток.','The key changed during verification. Refresh devices and compare the new fingerprint.'));
      c.data.trust[device.address]=device.fingerprint;c.store.removeSession(device.address);c.store.saveIdentity(device.address,latest.identityKey);
     });
@@ -8835,11 +8867,11 @@ async function omemoSettings(){
    snapshot=await omemoLocked(async c=>{guard(c);await omemoInitialize(c);guard(c);return {id:c.data.id,enabled:!!c.data.enabled[peer],trust:{...c.data.trust},names:{...c.data.deviceNames},lib:c.lib,identityKey:c.store.getIdentityKeyPair().pubKey}});
    const next=[];
    for(const jid of [...new Set([peer,account])]){
-    const ids=await omemoDevices(jid);if(jid===account&&!ids.includes(snapshot.id))ids.unshift(snapshot.id);
+    const ids=await omemoDevices(jid,sessionGuard);if(jid===account&&!ids.includes(snapshot.id))ids.unshift(snapshot.id);
     for(let i=0;i<ids.length;i+=4){
      next.push(...await Promise.all(ids.slice(i,i+4).map(async id=>{
       const device={jid,id,address:new snapshot.lib.OMEMOAddress(jid,id).toString(),current:jid===account&&id===snapshot.id};
-      try{const key=device.current?snapshot.identityKey:(await omemoBundle(jid,id)).identityKey;device.fingerprint=omemoB64(key);device.displayFingerprint=omemoFingerprint(key)}catch(error){device.error=error.message}
+      try{const key=device.current?snapshot.identityKey:(await omemoBundle(jid,id,sessionGuard)).identityKey;device.fingerprint=omemoB64(key);device.displayFingerprint=omemoFingerprint(key)}catch(error){device.error=error.message}
       return device;
      })));
     }
@@ -8881,10 +8913,10 @@ async function omemoDecryptFile(descriptor,blob){
 }
 function omemoAttachmentBubble(message,element){
  if(!String(message.body||'').startsWith('aesgcm://'))return;
- const text=element.querySelector('p');text.textContent='🔒 Зашифрованный файл';
+ const guard=omemoGuard(),text=element.querySelector('p');text.textContent='🔒 Зашифрованный файл';
  let file;try{file=omemoFileDescriptor(message.body)}catch(e){text.textContent=e.message;return}
  text.textContent='🔒 '+file.name;const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.textContent='Открыть зашифрованный файл';element.append(button);
- button.onclick=async()=>{button.disabled=true;try{const response=await fetch(file.url,{credentials:'omit',referrerPolicy:'no-referrer'});if(!response.ok)throw Error('Файл недоступен');const encrypted=await boundedPreviewBlob(response,omemoFileLimit+16),blob=await omemoDecryptFile(file,encrypted);await openDocumentPreview({name:file.name,blob,size:blob.size})}catch(e){text.textContent='Не удалось расшифровать файл: '+e.message}finally{button.disabled=false}};
+ button.onclick=async()=>{button.disabled=true;try{guard();const response=await fetch(file.url,{credentials:'omit',referrerPolicy:'no-referrer'});guard();if(!response.ok)throw Error('Файл недоступен');const encrypted=await boundedPreviewBlob(response,omemoFileLimit+16),blob=await omemoDecryptFile(file,encrypted);guard();await openDocumentPreview({name:file.name,blob,size:blob.size})}catch(e){text.textContent='Не удалось расшифровать файл: '+e.message}finally{button.disabled=false}};
 }
 // Domain organization chart backed by distribution groups.
 function directoryLabel(ru, en) { return mailImageText(ru, en); }
