@@ -80,6 +80,17 @@ wire format in both directions. Native Monal/Conversations encrypted-file and
 history acceptance remains pending; this batch does not claim that interop.
 See [web OMEMO](web-omemo.md) for commands and storage boundaries.
 
+Deployment on 2026-10-29: commit `4ed691e` installed as `0.9.36+xmpp.2`
+(built `2026-10-29T11:20:40Z`), binary SHA-256
+`2741108375c3288949da0530af54385db2f504b1b6edb7a0a62f8f0faa16b5da`.
+The binary/configuration/verified SQLite backup is
+`/var/backups/tayga/pre-0.9.36-xmpp.2-oXTiYHnp`.
+Public readiness and the served JavaScript hash matched the build; canonical
+external STARTTLS 5222 and direct TLS 5223 probes negotiated TLS 1.3 with
+certificate verification. All three push registrations remained, the queue was
+empty, and the recent journal contained no ERROR-level application entries.
+These probes did not send user messages or trigger native push acceptance.
+
 ## Next batches
 
 - [ ] RFC 6120/6121: complete stream-state/error checks, IQ routing, presence priority/probes and roster transition tests.
