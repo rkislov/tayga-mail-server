@@ -481,6 +481,9 @@ func (s *Session) handleMessage(se xml.StartElement) error {
 	if to == "" {
 		return nil
 	}
+	if err := s.srv.checkOMEMOSender(context.Background(), s.JID.Bare(), encryptedElement("<message>"+inner+"</message>")); err != nil {
+		return s.writeString(fmt.Sprintf(`<message from='%s' to='%s'%s type='error'><error type='cancel'><not-allowed xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/><text xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'>OMEMO key unavailable</text></error></message>`, xmlEscape(to), xmlEscape(s.JID.Full()), attrIf("id", id)))
+	}
 	if s.srv.isWebRoom(to) {
 		return s.handleMUCMessage(to, typ, id, inner)
 	}

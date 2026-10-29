@@ -23,7 +23,11 @@ func TestOMEMOLegacyAndModernPublishRetrieve(t *testing.T) {
 		return out.String()
 	}
 	for _, node := range []string{"eu.siacs.conversations.axolotl.devicelist", "eu.siacs.conversations.axolotl.bundles:42", "urn:xmpp:omemo:2:bundles"} {
-		pub := `<pubsub xmlns='http://jabber.org/protocol/pubsub'><publish node='` + node + `'><item id='42'><bundle xmlns='urn:test:bundle'><key>abc</key></bundle></item></publish><publish-options><x xmlns='jabber:x:data' type='submit'><field var='FORM_TYPE'><value>http://jabber.org/protocol/pubsub#publish-options</value></field><field var='pubsub#access_model'><value>open</value></field><field var='pubsub#persist_items'><value>true</value></field></x></publish-options></pubsub>`
+		payload := `<bundle xmlns='urn:test:bundle'><key>abc</key></bundle>`
+		if node == legacyOMEMO+".devicelist" {
+			payload = `<list xmlns='eu.siacs.conversations.axolotl'><device id='42' label='abc'/></list>`
+		}
+		pub := `<pubsub xmlns='http://jabber.org/protocol/pubsub'><publish node='` + node + `'><item id='42'>` + payload + `</item></publish><publish-options><x xmlns='jabber:x:data' type='submit'><field var='FORM_TYPE'><value>http://jabber.org/protocol/pubsub#publish-options</value></field><field var='pubsub#access_model'><value>open</value></field><field var='pubsub#persist_items'><value>true</value></field></x></publish-options></pubsub>`
 		if got := call("set", "", pub); !strings.Contains(got, "type='result'") {
 			t.Fatal(got)
 		}

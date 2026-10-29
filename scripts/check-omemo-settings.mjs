@@ -29,7 +29,7 @@ try{
  await assert.rejects(()=>page.evaluate(()=>omemoSend('bob@example.com','must stay encrypted')));assert.equal(sent.length,0);
  const row=id=>page.locator(`.omemo-device[data-device-id="${id}"]`);
  async function refresh(){await page.getByRole('button',{name:'Обновить устройства'}).click();await page.waitForFunction(()=>!document.querySelector('.omemo-footer button').disabled)}
- await row(b.id).locator('summary').click();
+ await row(b.id).locator(':scope > .omemo-device-details > summary').click();
  pep.set(bundleKey,pep.get(b2.email+'|eu.siacs.conversations.axolotl.bundles:'+b2.id));
  await row(b.id).getByRole('button',{name:'Отпечатки совпадают — доверять'}).click();
  await page.getByRole('status').filter({hasText:'Ключ изменился во время проверки'}).waitFor();
@@ -37,11 +37,11 @@ try{
  pep.set(bundleKey,originalBundle);
  await row(b.id).getByRole('button',{name:'Отпечатки совпадают — доверять'}).click();
  await row(b.id).locator('[data-status=trusted]').waitFor();
- await row(b.id).locator('summary').click();
+ await row(b.id).locator(':scope > .omemo-device-details > summary').click();
  await row(b.id).getByLabel('Название для вас').fill('Телефон собеседника');
  await row(b.id).getByRole('button',{name:'Сохранить название'}).click();
  await row(b.id).getByText('Телефон собеседника',{exact:true}).waitFor();
- for(const id of [a2.id,b2.id]){await row(id).locator('summary').click();await row(id).getByRole('button',{name:'Отпечатки совпадают — доверять'}).click();await row(id).locator('[data-status=trusted]').waitFor()}
+ for(const id of [a2.id,b2.id]){await row(id).locator(':scope > .omemo-device-details > summary').click();await row(id).getByRole('button',{name:'Отпечатки совпадают — доверять'}).click();await row(id).locator('[data-status=trusted]').waitFor()}
  await page.getByText('Все устройства проверены. Можно отправлять зашифрованные сообщения.').waitFor();
  await refresh();await row(b.id).getByText('Телефон собеседника',{exact:true}).waitFor();
  await page.locator('.omemo-body').evaluate(e=>e.scrollTop=0);
@@ -50,7 +50,7 @@ try{
  await refresh();await row(b.id).locator('[data-status=changed]').waitFor();
  await assert.rejects(()=>page.evaluate(()=>omemoSend('bob@example.com','changed key')));
  pep.set(bundleKey,originalBundle);await refresh();await row(b.id).locator('[data-status=trusted]').waitFor();
- await row(b.id).locator('summary').click();await row(b.id).getByRole('button',{name:'Отозвать доверие'}).click();await row(b.id).locator('[data-status=unverified]').waitFor();
+ await row(b.id).locator(':scope > .omemo-device-details > summary').click();await row(b.id).getByRole('button',{name:'Отозвать доверие'}).click();await row(b.id).locator('[data-status=unverified]').waitFor();
  await assert.rejects(()=>page.evaluate(()=>omemoSend('bob@example.com','blocked again')));assert.equal(sent.length,0);
  // A missing bundle must leave other devices and the encryption switch usable.
  const missingKey=b2.email+'|eu.siacs.conversations.axolotl.bundles:'+b2.id;pep.delete(missingKey);
@@ -61,7 +61,7 @@ try{
  assert.equal(await page.evaluate(()=>chatRefreshes),1);
  await page.getByRole('button',{name:'Шифрование: вкл.'}).click();await row(b2.id).locator('[data-status=unavailable]').waitFor();
  await page.setViewportSize({width:390,height:844});await page.evaluate(()=>document.documentElement.dataset.colorMode='dark');
- await row(b.id).locator('summary').click();
+ await row(b.id).locator(':scope > .omemo-device-details > summary').click();
  const box=await page.locator('.omemo-dialog').boundingBox();assert(box.x>=0&&box.y>=0&&box.x+box.width<=390&&box.y+box.height<=844);
  assert(await page.locator('.omemo-body').evaluate(e=>e.scrollWidth<=e.clientWidth+1));
  await page.screenshot({path:'/private/tmp/tayga-omemo-settings-mobile.png'});

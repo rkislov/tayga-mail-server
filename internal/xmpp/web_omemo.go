@@ -60,12 +60,8 @@ func (s *Server) PublishWebOMEMO(ctx context.Context, owner, node, payload strin
 	if err != nil || !user.Enabled {
 		return fmt.Errorf("owner unavailable")
 	}
-	if err := s.publishPEP(ctx, owner, node, "current", payload); err != nil {
-		return err
-	}
 	session := &Session{srv: s, user: user, JID: ParseJID(owner + "/web")}
-	session.notifyPEP(ctx, owner, node, `<item id="current">`+payload+`</item>`)
-	return nil
+	return session.publishAndNotifyPEP(ctx, owner, node, "current", payload)
 }
 
 // Extract only the encrypted element, never arbitrary client-controlled stanza routing.
@@ -146,6 +142,9 @@ func (s *Server) SendWebOMEMO(ctx context.Context, from, to, raw string) (ChatEv
 	}
 	cipher, err := validateWebCiphertext(raw)
 	if err != nil {
+		return ChatEvent{}, err
+	}
+	if err = s.checkOMEMOSender(ctx, from, cipher); err != nil {
 		return ChatEvent{}, err
 	}
 	id := randomID()

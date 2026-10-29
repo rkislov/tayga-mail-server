@@ -15,10 +15,10 @@ try {
  await pages[0].evaluate(()=>omemoSettings());await pages[0].getByRole('button',{name:'Выключить шифрование чата'}).waitFor();await pages[0].screenshot({path:process.env.OMEMO_SCREENSHOT||'docs/screenshots/ui-web-omemo.png'});
  const otherID=await pages[1].evaluate(()=>omemoLocked(c=>c.data.id));
  const other=pages[0].locator(`.omemo-device[data-device-id="${otherID}"]`);
- await other.locator('summary').click();await other.getByRole('button',{name:'Не отправлять на устройство',exact:true}).click();await other.locator('[data-status=excluded]').waitFor();
+ await other.locator(':scope > .omemo-device-details > summary').click();await other.getByRole('button',{name:'Не отправлять на устройство',exact:true}).click();await other.locator('[data-status=excluded]').waitFor();
  let posts=0;const countPosts=r=>{if(r.method()==='POST'&&new URL(r.url()).pathname==='/api/v1/chat/omemo')posts++};pages[0].on('request',countPosts);
  await assert.rejects(()=>pages[0].evaluate(()=>omemoSend(state.email,'excluded recipient must not receive')),/Нет доступных устройств/);assert.equal(posts,0);
- await other.locator('summary').click();await other.getByRole('button',{name:'Отпечатки совпадают — включить',exact:true}).click();await other.locator('[data-status=trusted]').waitFor();
+ await other.locator(':scope > .omemo-device-details > summary').click();await other.getByRole('button',{name:'Отпечатки совпадают — включить',exact:true}).click();await other.locator('[data-status=trusted]').waitFor();
  const restored=await pages[0].evaluate(()=>omemoSend(state.email,'Restored device API test'));assert.equal(await pages[1].evaluate(m=>omemoDecrypt(m),restored),'Restored device API test');assert.equal(posts,1);pages[0].off('request',countPosts);
  const deviceID=await pages[0].evaluate(()=>omemoLocked(c=>c.data.id));
  await pages[0].evaluate(()=>forceLogin());

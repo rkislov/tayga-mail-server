@@ -2,7 +2,9 @@ package httpapi
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -98,6 +100,48 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch {
+	case path == "omemo/devices":
+		bridge, ok := s.xmpp.(interface {
+			RetiredWebOMEMO(context.Context, string) ([]xmpp.RetiredOMEMODevice, error)
+			RetireWebOMEMO(context.Context, string, uint32, string) error
+		})
+		if !ok {
+			writeJSON(w, 503, map[string]string{"error": "OMEMO retirement unavailable"})
+			return
+		}
+		if r.Method == http.MethodGet {
+			devices, err := bridge.RetiredWebOMEMO(r.Context(), au.Email)
+			if err != nil {
+				writeJSON(w, 500, map[string]string{"error": "cannot read retired keys"})
+				return
+			}
+			writeJSON(w, 200, map[string]any{"retired": devices})
+			return
+		}
+		if r.Method != http.MethodPost {
+			writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+			return
+		}
+		var req struct {
+			ID          uint32 `json:"id"`
+			IdentityKey string `json:"identity_key"`
+		}
+		if json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&req) != nil {
+			writeJSON(w, 400, map[string]string{"error": "invalid device"})
+			return
+		}
+		if err := bridge.RetireWebOMEMO(r.Context(), au.Email, req.ID, req.IdentityKey); err != nil {
+			status := http.StatusBadRequest
+			if errors.Is(err, xmpp.ErrOMEMOKeyChanged) {
+				status = http.StatusConflict
+			}
+			if errors.Is(err, sql.ErrNoRows) {
+				status = http.StatusNotFound
+			}
+			writeJSON(w, status, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, 200, map[string]bool{"ok": true})
 	case path == "omemo":
 		bridge, ok := s.xmpp.(interface {
 			ReadWebOMEMO(context.Context, string, string) ([]xmpp.OMEMOItem, error)

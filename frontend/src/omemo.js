@@ -85,6 +85,7 @@ async function omemoRender(message,element){
 const omemoText=(ru,en)=>typeof lang!=='undefined'&&lang==='en'?en:ru;
 function omemoNode(tag,className,text){const node=document.createElement(tag);if(className)node.className=className;if(text!==undefined)node.textContent=text;return node}
 function omemoDeviceStatus(device,snapshot){
+ if(snapshot.retired?.has(device.id)&&device.jid===omemoAccount())return 'retired';
  if(device.current)return 'current';
  if(snapshot.excluded?.[device.address])return 'excluded';
  if(device.error)return 'unavailable';
@@ -104,7 +105,7 @@ async function omemoSettings(){
  const content=omemoNode('div','omemo-content');
  const footer=omemoNode('footer','omemo-footer'),refresh=omemoNode('button','btn-secondary',omemoText('Обновить устройства','Refresh devices'));
  refresh.type='button';
- const hint=omemoNode('p','meta',omemoText('Доверие, исключения и названия устройств действуют только в этом браузере для текущей учётной записи. Очистка его данных удалит ключи и доступ к старым сообщениям.','Trust, exclusions and device labels apply only in this browser for this account. Clearing its data removes keys and access to old messages.'));
+ const hint=omemoNode('p','meta',omemoText('Доверие, исключения и названия действуют в этом браузере. Отзыв собственного ключа на сервере действует для всей учётной записи. Очистка его данных удалит ключи и доступ к старым сообщениям.','Trust, exclusions and labels apply in this browser. Retiring your own key on the server applies to the whole account. Clearing its data removes keys and access to old messages.'));
  footer.append(refresh,hint);body.append(notice,content);dialog.append(header,body,footer);document.body.append(dialog);
  let snapshot,devices=[],loading=false,busy=false,revision=0,changed=false;
  const active=()=>{try{sessionGuard();return dialog.isConnected}catch{return false}};
@@ -128,7 +129,7 @@ async function omemoSettings(){
   details.append(summary);
   const panel=omemoNode('div','omemo-key-details');
   panel.append(omemoNode('p','meta',device.jid+' · ID '+device.id));
-  if(!device.error){
+  if(!device.error&&status!=='retired'){
    panel.append(omemoNode('p','',device.current?omemoText('Это отпечаток данного браузера. Сравните его с ключом веб-устройства в Monal или Conversations.','This is this browser’s fingerprint. Compare it with the web device key in Monal or Conversations.'):omemoText('Сверьте этот отпечаток с отпечатком на самом устройстве или по другому доверенному каналу.','Compare this fingerprint with the one on the device, or through another trusted channel.')));
    const code=omemoNode('code','omemo-fingerprint',device.displayFingerprint);code.tabIndex=0;
    const copy=omemoNode('button','btn-secondary btn-sm',omemoText('Скопировать отпечаток','Copy fingerprint'));copy.type='button';
@@ -148,9 +149,21 @@ async function omemoSettings(){
     panel.append(verify);
    }
   }
-  if(!device.current&&status!=='excluded'){
+  if(!device.current&&!['excluded','retired'].includes(status)){
    panel.append(omemoNode('p','meta',omemoText('Старое устройство можно исключить: новые сообщения из этого браузера будут доступны только оставшимся проверенным устройствам. Новые сообщения от исключённого устройства также потребуют повторной проверки. Вход в аккаунт на нём сохранится.','You can exclude an old device: new messages from this browser will be available only to the remaining verified devices. New messages from the excluded device will also require verification again. It can still sign in.')));
    const exclude=omemoNode('button','btn-secondary',omemoText('Не отправлять на устройство','Do not send to this device'));exclude.type='button';exclude.dataset.omemoAction='exclude';exclude.onclick=()=>change(c=>omemoExcludeDevice(c,device.jid,device.id));panel.append(exclude);
+  }
+  if(device.jid===account&&!device.current&&status!=='retired'){
+   const retirement=omemoNode('details','omemo-device-retirement');
+   retirement.append(omemoNode('summary','',omemoText('Потерянное устройство: отозвать ключ','Lost device: retire key')));
+   retirement.append(omemoNode('p','meta',omemoText('Сервер удалит этот ключ из списка и запретит его повторную публикацию. Отменить отзыв нельзя. Другим клиентам нужно обновить список устройств. Пароль входа и уже полученные сообщения останутся на устройстве; с действующим паролем оно сможет создать новый ключ. При потере устройства также смените пароль аккаунта и попросите администратора завершить его действующие сеансы.','The server will remove this key and reject its republication. Retirement cannot be undone. Other clients need to refresh their device lists. The device keeps its sign-in password and received messages; a valid password lets it create a new key. If it is lost, also change your account password and ask your administrator to end its active sessions.')));
+   const retire=omemoNode('button','btn-secondary',omemoText('Отозвать этот ключ на сервере','Retire this key on the server'));retire.type='button';retire.dataset.omemoAction='retire';
+   retire.onclick=()=>change(async c=>{
+    if(device.id===c.data.id)throw Error(omemoText('Нельзя отозвать ключ текущего браузера здесь.','You cannot retire this browser’s key here.'));
+    await c.request('/api/v1/chat/omemo/devices',{method:'POST',body:JSON.stringify({id:device.id,identity_key:device.fingerprint||''})});guard(c);
+    omemoExcludeDevice(c,account,device.id);snapshot.retired.add(device.id);
+   });
+   retirement.append(retire);panel.append(retirement);
   }
   const label=omemoNode('label','omemo-device-label',omemoText('Название для вас','Your device label'));
   const input=omemoNode('input','field-input');input.type='text';input.maxLength=60;input.value=snapshot.names[device.address]||'';input.placeholder=device.current?omemoText('Этот браузер','This browser'):omemoText('Например, iPhone или рабочий ноутбук','For example, iPhone or work laptop');
@@ -162,12 +175,13 @@ async function omemoSettings(){
   content.replaceChildren();
   const overview=omemoNode('section','omemo-overview'),top=omemoNode('div','omemo-overview-heading');
   top.append(omemoNode('strong','',snapshot.enabled?omemoText('Шифрование включено','Encryption is on'):omemoText('Шифрование выключено','Encryption is off')));
-  const toggle=omemoNode('button','btn-secondary',snapshot.enabled?omemoText('Выключить','Turn off'):omemoText('Включить','Turn on'));toggle.type='button';toggle.dataset.omemoAction='toggle';toggle.setAttribute('aria-label',snapshot.enabled?omemoText('Выключить шифрование чата','Turn off chat encryption'):omemoText('Включить шифрование чата','Turn on chat encryption'));toggle.onclick=()=>change(c=>{c.data.enabled[peer]=!snapshot.enabled});top.append(toggle);overview.append(top);
+  const toggle=omemoNode('button','btn-secondary',snapshot.enabled?omemoText('Выключить','Turn off'):omemoText('Включить','Turn on'));toggle.type='button';toggle.dataset.omemoAction='toggle';toggle.setAttribute('aria-label',snapshot.enabled?omemoText('Выключить шифрование чата','Turn off chat encryption'):omemoText('Включить шифрование чата','Turn on chat encryption'));toggle.onclick=()=>change(c=>{if(snapshot.retired.has(c.data.id))throw Error(omemoText('Ключ этого браузера отозван.','This browser’s key is retired.'));c.data.enabled[peer]=!snapshot.enabled});top.append(toggle);overview.append(top);
   overview.append(omemoNode('p','meta',chatState.roster.find(r=>r.jid===peer)?.name||peer));
-  const excluded=devices.filter(d=>omemoDeviceStatus(d,snapshot)==='excluded'),others=devices.filter(d=>!d.current&&omemoDeviceStatus(d,snapshot)!=='excluded'),pending=others.filter(d=>omemoDeviceStatus(d,snapshot)!=='trusted'),missing=others.some(d=>d.error),hasPeer=others.some(d=>d.jid===peer);
+  const excluded=devices.filter(d=>omemoDeviceStatus(d,snapshot)==='excluded'),others=devices.filter(d=>!d.current&&!['excluded','retired'].includes(omemoDeviceStatus(d,snapshot))),pending=others.filter(d=>omemoDeviceStatus(d,snapshot)!=='trusted'),missing=others.some(d=>d.error),hasPeer=others.some(d=>d.jid===peer);
   let text=!hasPeer?omemoText('Нет доступных устройств получателя. Включите и проверьте хотя бы одно устройство.','No recipient devices available. Enable and verify at least one device.'):missing?omemoText('Некоторые ключи недоступны. Переподключите соответствующее устройство и обновите список.','Some keys are unavailable. Reconnect that device and refresh the list.'):pending.length?omemoText('Нужно проверить устройств: ','Devices to verify: ')+pending.length:excluded.length?omemoText('Оставшиеся устройства проверены.','The remaining devices are verified.'):snapshot.enabled?omemoText('Все устройства проверены. Можно отправлять зашифрованные сообщения.','All devices are verified. You can send encrypted messages.'):omemoText('Все устройства проверены. Включите шифрование для этого чата.','All devices are verified. Turn on encryption for this chat.');
   if(excluded.length)text+=' '+omemoText('Исключено в этом браузере: ','Excluded in this browser: ')+excluded.length+'.';
   if(snapshot.enabled&&pending.length)text+=' '+omemoText('До проверки отправка будет приостановлена.','Sending is paused until verification.');
+  if(snapshot.retired.has(snapshot.id))text=omemoText('Ключ этого браузера отозван на сервере. Отправка с ним недоступна. Для нового ключа используйте другой профиль браузера и заново проверьте отпечатки. Сохранённая здесь история остаётся доступна.','This browser’s key has been retired on the server. Sending with it is disabled. Use a different browser profile for a new key and verify fingerprints again. History already saved here remains available.');
   overview.append(omemoNode('p','',text));content.append(overview);
   for(const jid of [...new Set([peer,account])]){
    const group=omemoNode('section','omemo-device-group');group.append(omemoNode('h3','',jid===account?omemoText('Мои устройства','My devices'):omemoText('Устройства собеседника','Contact’s devices')));
@@ -176,11 +190,12 @@ async function omemoSettings(){
     const status=omemoDeviceStatus(device,snapshot),row=omemoNode('li','omemo-device');row.dataset.deviceId=String(device.id);row.dataset.deviceOwner=jid;row.dataset.keyStatus=status;
     const heading=omemoNode('div','omemo-device-heading'),info=omemoNode('div');
     info.append(omemoNode('strong','',snapshot.names[device.address]||(device.current?omemoText('Этот браузер','This browser'):omemoText('Устройство ','Device ')+device.id)));
-    const labels={current:omemoText('Ваш ключ','Your key'),trusted:omemoText('Проверено','Verified'),excluded:omemoText('Исключено здесь','Excluded here'),unverified:omemoText('Нужно проверить','Needs verification'),changed:omemoText('Ключ изменился','Key changed'),unavailable:omemoText('Ключ недоступен','Key unavailable')};
+    const labels={retired:omemoText('Отозван на сервере','Retired on server'),current:omemoText('Ваш ключ','Your key'),trusted:omemoText('Проверено','Verified'),excluded:omemoText('Исключено здесь','Excluded here'),unverified:omemoText('Нужно проверить','Needs verification'),changed:omemoText('Ключ изменился','Key changed'),unavailable:omemoText('Ключ недоступен','Key unavailable')};
     const badge=omemoNode('span','omemo-device-status',labels[status]);badge.dataset.status=status;heading.append(info,badge);row.append(heading);
     if(status==='changed')row.append(omemoNode('p','omemo-device-warning',omemoText('Прежнее подтверждение больше не действует. Сверьте новый отпечаток.','The previous verification no longer applies. Compare the new fingerprint.')));
     if(status==='excluded')row.append(omemoNode('p','meta',omemoText('Новые сообщения из этого браузера не отправляются на это устройство. Для возврата сравните его текущий отпечаток.','New messages from this browser are not sent to this device. To enable it again, compare its current fingerprint.')));
-    if(device.error)row.append(omemoNode('p','meta',device.advertised?omemoText('Устройство не опубликовало доступный набор ключей.','This device has no accessible key bundle.'):omemoText('Устройство больше не объявлено. Для возврата переподключите его и обновите список.','The device is no longer advertised. To enable it again, reconnect it and refresh the list.')));
+    if(status==='retired')row.append(omemoNode('p','meta',omemoText('Повторная публикация этого ID запрещена. Отзыв ключа не завершает вход в аккаунт.','Republication of this ID is blocked. Retiring a key does not sign the device out.')));
+    if(device.error&&status!=='retired')row.append(omemoNode('p','meta',device.advertised?omemoText('Устройство не опубликовало доступный набор ключей.','This device has no accessible key bundle.'):omemoText('Устройство больше не объявлено. Для возврата переподключите его и обновите список.','The device is no longer advertised. To enable it again, reconnect it and refresh the list.')));
     keyDetails(device,row);list.append(row);
    }
    if(!list.childElementCount)group.append(omemoNode('p','meta',omemoText('Устройства пока не найдены.','No devices found yet.')));
@@ -192,17 +207,34 @@ async function omemoSettings(){
   if(loading||busy||!active())return;
   loading=true;disableActions(true);const current=++revision;notice.textContent=omemoText('Получаем список устройств…','Loading devices…');
   try{
-   snapshot=await omemoLocked(async c=>{guard(c);await omemoInitialize(c);guard(c);return {id:c.data.id,enabled:!!c.data.enabled[peer],trust:{...c.data.trust},excluded:{...c.data.excludedDevices},names:{...c.data.deviceNames},lib:c.lib,identityKey:c.store.getIdentityKeyPair().pubKey}});
+   const retirement=await api('/api/v1/chat/omemo/devices',{_guard:sessionGuard});sessionGuard();
+   const retired=new Set((retirement.retired||[]).map(d=>d.id));
+   snapshot=await omemoLocked(async c=>{guard(c);if(c.data.id&&!retired.has(c.data.id))await omemoInitialize(c);guard(c);return {id:c.data.id,retired,enabled:!!c.data.enabled[peer],trust:{...c.data.trust},excluded:{...c.data.excludedDevices},names:{...c.data.deviceNames},lib:c.lib,identityKey:c.data.id?c.store.getIdentityKeyPair().pubKey:null}});
+   if(!snapshot.id){
+    content.replaceChildren();notice.textContent='';
+    const intro=omemoNode('section','omemo-overview');intro.append(omemoNode('h3','',omemoText('Подключить этот браузер','Connect this browser')));
+    intro.append(omemoNode('p','',omemoText('Здесь пока нет ключа OMEMO. Создайте новый ключ, затем сравните его отпечаток на своих устройствах и проверьте ключи собеседника. Доверие не переносится автоматически.','This browser has no OMEMO key yet. Create a key, compare its fingerprint on your other devices, and verify your contact’s keys. Trust is not transferred automatically.')));
+    intro.append(omemoNode('p','meta',omemoText('Если данные прежнего браузера потеряны, новый ключ не откроет старые зашифрованные сообщения. Их можно читать на устройствах, где сохранились ключи и история. После подключения отзовите ключ потерянного устройства в разделе «Мои устройства».','If the previous browser’s data was lost, the new key cannot open old encrypted messages. Read them on devices that retain their keys and history. After connecting, retire the lost device’s key under My devices.')));
+    const connect=omemoNode('button','btn-spray',omemoText('Создать ключ для этого браузера','Create a key for this browser'));connect.type='button';connect.dataset.omemoAction='connect';
+    connect.onclick=async()=>{
+     if(loading||busy||!active())return;busy=true;disableActions(true);let success=false;
+     try{await omemoLocked(async c=>{guard(c);await omemoInitialize(c)});success=true;changed=true}catch(error){if(active())notice.textContent=error.message}
+     finally{busy=false;if(active())disableActions(false)}
+     if(success)await load();
+    };
+    intro.append(connect);content.append(intro);return;
+   }
    const next=[];
    for(const jid of [...new Set([peer,account])]){
     const ids=await omemoDevices(jid,sessionGuard);if(jid===account&&!ids.includes(snapshot.id))ids.unshift(snapshot.id);
     const advertised=new Set(ids);
+    if(jid===account)for(const id of snapshot.retired)if(!ids.includes(id))ids.push(id);
     // Keep exclusions visible even while a device is absent from its PEP list.
     for(const device of Object.values(snapshot.excluded))if(device.jid===jid&&!ids.includes(device.id))ids.push(device.id);
     for(let i=0;i<ids.length;i+=4){
      next.push(...await Promise.all(ids.slice(i,i+4).map(async id=>{
       const device={jid,id,address:new snapshot.lib.OMEMOAddress(jid,id).toString(),current:jid===account&&id===snapshot.id,advertised:advertised.has(id)};
-      try{if(!device.advertised)throw Error('Device not advertised');const key=device.current?snapshot.identityKey:(await omemoBundle(jid,id,sessionGuard)).identityKey;device.fingerprint=omemoB64(key);device.displayFingerprint=omemoFingerprint(key)}catch(error){device.error=error.message}
+      try{if(jid===account&&snapshot.retired.has(id))throw Error('Retired');if(!device.advertised)throw Error('Device not advertised');const key=device.current?snapshot.identityKey:(await omemoBundle(jid,id,sessionGuard)).identityKey;device.fingerprint=omemoB64(key);device.displayFingerprint=omemoFingerprint(key)}catch(error){device.error=error.message}
       return device;
      })));
     }

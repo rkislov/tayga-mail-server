@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -205,10 +206,12 @@ func (s *Session) handlePubSubIQ(ctx context.Context, id, typ, to, inner string)
 		if item.ID == "" {
 			item.ID = "current"
 		}
-		if err = s.srv.publishPEP(ctx, owner, node, item.ID, item.Payload); err != nil {
+		if err = s.publishAndNotifyPEP(ctx, owner, node, item.ID, item.Payload); err != nil {
+			if errors.Is(err, ErrOMEMORetired) {
+				return fail("forbidden")
+			}
 			return fail("internal-server-error")
 		}
-		s.notifyPEP(ctx, owner, node, `<item id='`+xmlEscape(item.ID)+`'>`+item.Payload+`</item>`)
 		return reply(`<pubsub xmlns='` + pepNS + `'><publish node='` + xmlEscape(node) + `'><item id='` + xmlEscape(item.ID) + `'/></publish></pubsub>`)
 	case "items":
 		if typ != "get" {
