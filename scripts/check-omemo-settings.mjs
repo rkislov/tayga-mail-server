@@ -12,7 +12,7 @@ try{
  async function device(email){
   const context=await browser.newContext({viewport:{width:1000,height:900}}),page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
   await page.exposeFunction('transport',async(path,options)=>{const u=new URL(path,base);if(!options){const xml=pep.get(u.searchParams.get('owner')+'|'+u.searchParams.get('node'));return{items:xml?[{id:'current',xml}]:[]}}const req=JSON.parse(options.body);if(options.method==='PUT'){pep.set(email+'|'+req.node,req.xml);return{ok:true}}sent.push(req);return{id:String(sent.length),from:email,to:req.to,omemo:req.xml}});
-  await page.goto(base);await page.addScriptTag({content:`const state={email:${JSON.stringify(email)}};let lang='ru';const chatBare=s=>String(s||'').split('/')[0].toLowerCase();const api=(p,o)=>window.transport(p,o);const $=id=>document.getElementById(id);let chatRefreshes=0;const openChatPeer=async()=>{chatRefreshes++};const chatState={peer:'bob@example.com',roster:[{jid:'bob@example.com',name:'Bob'}]};`});await page.addScriptTag({url:base+'/omemo.js'});
+  await page.goto(base);await page.addScriptTag({content:`const state={email:${JSON.stringify(email)}};let lang='ru';const chatBare=s=>String(s||'').split('/')[0].toLowerCase();const api=async(p,o)=>{const {_guard,...opts}=o||{};_guard?.();const result=await window.transport(p,Object.keys(opts).length?opts:undefined);_guard?.();return result};const $=id=>document.getElementById(id);let chatRefreshes=0;const openChatPeer=async()=>{chatRefreshes++};const chatState={peer:'bob@example.com',roster:[{jid:'bob@example.com',name:'Bob'}]};`});await page.addScriptTag({url:base+'/omemo.js'});
   const id=await page.evaluate(()=>omemoLocked(async c=>{await omemoInitialize(c);return c.data.id}));return{page,context,email,id};
  }
  const a=await device('alice@example.com'),a2=await device('alice@example.com'),b=await device('bob@example.com'),b2=await device('bob@example.com'),page=a.page;
@@ -70,6 +70,14 @@ try{
  await row(b.id).getByRole('button',{name:'Отпечатки совпадают — доверять'}).click();
  assert.equal(await page.evaluate(()=>omemoRead('accounts','different@example.com')),undefined);
  await page.getByRole('button',{name:'Закрыть',exact:true}).click();
+ await page.locator('.omemo-dialog').waitFor({state:'detached'});
+ assert.equal(await page.evaluate(()=>chatRefreshes),1);
+ // Logout closes key management and must not reload the previous chat from
+ // the close handler, even when the dialog had saved changes.
+ await page.evaluate(async()=>{state.email='alice@example.com';await omemoSettings()});
+ await page.getByRole('button',{name:'Выключить шифрование чата',exact:true}).click();
+ await page.getByRole('button',{name:'Включить шифрование чата',exact:true}).waitFor();
+ await page.evaluate(()=>omemoCancelOperations());
  await page.locator('.omemo-dialog').waitFor({state:'detached'});
  assert.equal(await page.evaluate(()=>chatRefreshes),1);
  assert.deepEqual(errors,[]);
