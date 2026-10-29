@@ -144,6 +144,20 @@ mobile layout. The actual HTTP API scenario also checks exclusion/restoration wi
 the embedded web build. Global device withdrawal and key-loss recovery remain
 separate work; see [web OMEMO](web-omemo.md).
 
+Deployment on 2026-10-29: commit `d322d4b` installed as `0.9.36+xmpp.4`
+(built `2026-10-29T16:24:19Z`), binary SHA-256
+`c686dff049f4cfa17b5456e2e945848ccd17d3f664f23ed441acf28a7bc69127`.
+Previous binary/configuration and verified SQLite backup:
+`/var/backups/tayga/pre-0.9.36-xmpp.4-pTZ0ZgfA`.
+Public readiness and the served JavaScript SHA-256 matched the build
+(`9831625cad5bb135cfef6683ecd1b96be22a2c2607db13c0a98976c4a0aa1002`).
+External canonical STARTTLS 5222 and direct TLS 5223 probes negotiated TLS 1.3
+with certificate verification. The four-device, settings, session, HTTP API and
+HTTPS file scenarios passed, as did `go test ./...`.
+The temporary upload hit `/tmp`'s per-user quota before installation; the partial
+upload was removed and the verified package installed from `/var/tmp`. The working
+binary was not changed until the complete package and backup had been verified.
+
 ## Next batches
 
 - [ ] RFC 6120/6121: complete stream-state/error checks, IQ routing, presence priority/probes and roster transition tests.
