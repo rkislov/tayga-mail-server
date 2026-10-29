@@ -117,8 +117,32 @@ Previous binary/configuration and verified SQLite backup:
 External readiness, served JavaScript hash and PUT/GET CORS preflights passed.
 Canonical STARTTLS 5222/direct TLS 5223 probes both negotiated verified TLS 1.3;
 three push registrations remained, the queue was empty, and the recent journal
-check found no ERROR-level application entries. Native file acceptance was
-requested from the operator and remains pending.
+check found no ERROR-level application entries. On 2026-10-29 the operator
+confirmed encrypted files open in both directions, web ↔ Monal, on this build.
+The app version was not recorded; Conversations acceptance and native bytewise
+comparison remain unverified.
+
+## Local OMEMO device exclusion (2026-10-29)
+
+An explicit setting excludes an old device from new encrypted sends while keeping
+delivery to remaining verified devices. It applies to this browser/account only,
+including other own devices; it neither changes the public PEP list nor revokes
+account access. Missing or rotated excluded bundles do not block other recipients,
+but unknown active devices still do. Sending with no recipient device fails even
+if own-device copies are available. Cached history remains readable; uncached
+incoming messages from an excluded sender are rejected until explicit verification.
+
+Exclusions survive reload, PEP removal and reappearance. Restoring a device requires
+fresh publication and a fingerprint comparison; a stale verification dialog cannot
+undo an exclusion saved in another tab. Trust revocation remains distinct and
+continues to block sends pending verification or explicit exclusion.
+
+The four-browser scenario in `scripts/check-omemo-devices.mjs` verifies real ratchet
+delivery/decryption, missing and changed keys, own/recipient exclusion, empty
+recipient rejection, cached history, independent browser trust, restoration and
+mobile layout. The actual HTTP API scenario also checks exclusion/restoration with
+the embedded web build. Global device withdrawal and key-loss recovery remain
+separate work; see [web OMEMO](web-omemo.md).
 
 ## Next batches
 
