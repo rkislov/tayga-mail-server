@@ -91,6 +91,24 @@ certificate verification. All three push registrations remained, the queue was
 empty, and the recent journal contained no ERROR-level application entries.
 These probes did not send user messages or trigger native push acceptance.
 
+## Encrypted attachment transport (2026-10-29)
+
+The web receiver accepts the historical Conversations 16-byte IV alongside the
+XEP-0454 12-byte IV; new uploads still emit only the 12-byte form. Malformed URLs
+are rejected before download. Chat upload/download capability URLs now support
+credential-free CORS and preflight requests. HEAD retains its method when
+delegating to the public share handler, returns no body and does not consume a
+download count; ordinary public file/folder shares also accept metadata-only HEAD.
+
+The HTTP regression reproduced the previous 405 preflight responses and HEAD
+body/download-count changes before the fix. `go test ./...`, the OMEMO device,
+settings and session scripts, independent Apple CryptoKit and Node.js wire-format
+checks all passed. A disposable HTTPS instance with two browser origins passed
+the UI upload → encrypted message → PNG/PDF preview/download cycle, including
+legacy-IV receipt and no key fragments, credentials or referrers in file GETs.
+These are transport/format tests, not native-app acceptance. Sources, commands
+and remaining device checks are recorded in [web OMEMO](web-omemo.md).
+
 ## Next batches
 
 - [ ] RFC 6120/6121: complete stream-state/error checks, IQ routing, presence priority/probes and roster transition tests.

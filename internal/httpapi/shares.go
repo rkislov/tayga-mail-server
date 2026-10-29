@@ -133,7 +133,7 @@ func (s *Server) publicBase() string {
 }
 
 func (s *Server) handlePublicShare(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet && r.Method != http.MethodPut {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodPut {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
@@ -216,6 +216,11 @@ func (s *Server) handlePublicShare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err == nil && info.IsDir() {
+		if r.Method == http.MethodHead {
+			w.Header().Set("Content-Type", "application/zip")
+			w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": info.Name() + ".zip"}))
+			return
+		}
 		r.URL.Query()
 		query := r.URL.Query()
 		query.Set("path", cleanRel(filepath.Join(sh.Path, child)))
@@ -235,7 +240,9 @@ func (s *Server) handlePublicShare(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
 	}
-	_ = s.store.IncrementFileShareDownload(r.Context(), sh.ID)
+	if r.Method != http.MethodHead {
+		_ = s.store.IncrementFileShareDownload(r.Context(), sh.ID)
+	}
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": filepath.Base(abs)}))
 	http.ServeContent(w, r, filepath.Base(abs), st.ModTime(), f)

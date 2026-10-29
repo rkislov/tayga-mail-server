@@ -123,6 +123,9 @@ func (s *Server) handleChatUploadSlot(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 201, slot)
 }
 func (s *Server) handleChatUploadPut(w http.ResponseWriter, r *http.Request) {
+	if chatFileCORS(w, r, "PUT, OPTIONS") {
+		return
+	}
 	if r.Method != "PUT" {
 		w.WriteHeader(405)
 		return
@@ -190,6 +193,9 @@ func (s *Server) handleChatUploadPut(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(201)
 }
 func (s *Server) handleChatDownload(w http.ResponseWriter, r *http.Request) {
+	if chatFileCORS(w, r, "GET, HEAD, OPTIONS") {
+		return
+	}
 	if r.Method != "GET" && r.Method != "HEAD" {
 		w.WriteHeader(405)
 		return
@@ -203,7 +209,21 @@ func (s *Server) handleChatDownload(w http.ResponseWriter, r *http.Request) {
 	copyURL := *r.URL
 	clone.URL = &copyURL
 	clone.URL.Path = "/s/" + parts[0]
-	clone.Method = "GET"
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	s.handlePublicShare(w, clone)
+}
+
+// These URLs carry their own unguessable capability; browser cookies and
+// account credentials are neither needed nor allowed by this CORS policy.
+// Web clients can be hosted on a different origin from the upload service.
+func chatFileCORS(w http.ResponseWriter, r *http.Request, methods string) bool {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", methods)
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Range")
+	w.Header().Set("Access-Control-Expose-Headers", "Content-Length, Content-Disposition, Content-Range")
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return true
+	}
+	return false
 }
