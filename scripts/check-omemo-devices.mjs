@@ -27,7 +27,7 @@ try{
  const row=id=>page.locator(`.omemo-device[data-device-id="${id}"]`);
  async function open(){await page.evaluate(()=>omemoSettings());await row(a.id).locator('[data-status=current]').waitFor()}
  async function refresh(){await page.getByRole('button',{name:'Обновить устройства'}).click();await page.waitForFunction(()=>!document.querySelector('.omemo-footer button').disabled)}
- async function action(id,name){if(!await row(id).locator('details').evaluate(e=>e.open))await row(id).locator('summary').click();await row(id).getByRole('button',{name,exact:true}).click()}
+ async function action(id,name){if(!await row(id).locator(':scope > .omemo-device-details').evaluate(e=>e.open))await row(id).locator(':scope > .omemo-device-details > summary').click();await row(id).getByRole('button',{name,exact:true}).click()}
  async function exclude(id){await action(id,'Не отправлять на устройство');await row(id).locator('[data-status=excluded]').waitFor()}
  async function restore(id){await action(id,'Отпечатки совпадают — включить');await row(id).locator('[data-status=trusted]').waitFor()}
  async function send(d,peer,body){await d.page.evaluate(({peer,body})=>omemoSend(peer,body),{peer,body});return sent.at(-1)}
@@ -71,7 +71,7 @@ try{
  await assert.rejects(()=>send(a,b.email,'must not send'),/Нет доступных устройств/);assert.equal(sent.length,count);
  await page.getByText('Нет доступных устройств получателя.',{exact:false}).first().waitFor();
  await page.setViewportSize({width:390,height:844});await page.evaluate(()=>document.documentElement.dataset.colorMode='dark');
- if(!await row(b2.id).locator('details').evaluate(e=>e.open))await row(b2.id).locator('summary').click();
+ if(!await row(b2.id).locator(':scope > .omemo-device-details').evaluate(e=>e.open))await row(b2.id).locator(':scope > .omemo-device-details > summary').click();
  await row(b2.id).scrollIntoViewIfNeeded();
  const box=await page.locator('.omemo-dialog').boundingBox();assert(box.x>=0&&box.y>=0&&box.x+box.width<=390&&box.y+box.height<=844);
  assert(await page.locator('.omemo-body').evaluate(e=>e.scrollWidth<=e.clientWidth+1));

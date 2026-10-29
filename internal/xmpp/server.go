@@ -23,7 +23,9 @@ type Server struct {
 	muc        map[string]map[*Session]mucOccupant
 	mucPending map[string]*Session
 
-	pushMu sync.Mutex
+	pushMu       sync.Mutex
+	pepPublishMu sync.Mutex
+	pepOwners    map[string]*pepOwnerLock // Per-owner commit/notification order.
 
 	resumeMu       sync.Mutex
 	resumable      map[string]resumableStream
