@@ -109,6 +109,17 @@ legacy-IV receipt and no key fragments, credentials or referrers in file GETs.
 These are transport/format tests, not native-app acceptance. Sources, commands
 and remaining device checks are recorded in [web OMEMO](web-omemo.md).
 
+Deployment on 2026-10-29: commit `ffe9e53` installed as `0.9.36+xmpp.3`
+(built `2026-10-29T13:54:25Z`), binary SHA-256
+`6999ccc9373cef0aa4d95cd9e8f02ef31bfd15ae57f0a2f27192499b395f0e0c`.
+Previous binary/configuration and verified SQLite backup:
+`/var/backups/tayga/pre-0.9.36-xmpp.3-5JZLrieS`.
+External readiness, served JavaScript hash and PUT/GET CORS preflights passed.
+Canonical STARTTLS 5222/direct TLS 5223 probes both negotiated verified TLS 1.3;
+three push registrations remained, the queue was empty, and the recent journal
+check found no ERROR-level application entries. Native file acceptance was
+requested from the operator and remains pending.
+
 ## Next batches
 
 - [ ] RFC 6120/6121: complete stream-state/error checks, IQ routing, presence priority/probes and roster transition tests.
