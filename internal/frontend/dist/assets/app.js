@@ -8902,8 +8902,11 @@ async function omemoEncryptFile(file){
 function omemoFileURI(url,file){const u=new URL(url);if(u.protocol!=='https:'||u.username||u.password)throw Error('OMEMO file requires HTTPS');return 'aesgcm:'+u.href.slice(6).split('#')[0]+'#'+omemoHex(file.iv)+omemoHex(file.key)}
 function omemoFileDescriptor(body){
  const lines=String(body||'').split('\n');if(lines.length>2||(lines.length===2&&!/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(lines[1])))throw Error('Invalid encrypted attachment');const line=lines[0];if(!line.startsWith('aesgcm://'))return null;
- const u=new URL('https:'+line.slice(7));if(u.username||u.password||!/^#[a-f0-9]{88}$/i.test(u.hash))throw Error('Invalid encrypted file URL');
- const bytes=Uint8Array.from(u.hash.slice(1).match(/../g),x=>parseInt(x,16)),iv=bytes.slice(0,12),key=bytes.slice(12);u.hash='';
+ if(/[\s\\\x00-\x1f\x7f]/.test(line))throw Error('Invalid encrypted file URL');
+ const u=new URL('https:'+line.slice(7));if(u.username||u.password||!/^#(?:[a-f0-9]{88}|[a-f0-9]{96})$/i.test(u.hash))throw Error('Invalid encrypted file URL');
+ // Emit only the XEP-0454 12-byte IV; also read the historical 16-byte
+ // Conversations format. The final 32 bytes always contain the AES key.
+ const bytes=Uint8Array.from(u.hash.slice(1).match(/../g),x=>parseInt(x,16)),iv=bytes.slice(0,-32),key=bytes.slice(-32);u.hash='';
  return {url:u.href,iv,key,name:decodeURIComponent(u.pathname.split('/').pop())||'file'};
 }
 async function omemoDecryptFile(descriptor,blob){

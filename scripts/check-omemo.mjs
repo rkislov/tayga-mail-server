@@ -3,6 +3,7 @@ import {createServer} from 'node:http';
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import {createCipheriv,createDecipheriv,randomBytes} from 'node:crypto';
+import {execFileSync} from 'node:child_process';
 const pep=new Map(),sent=[];
 const server=createServer((req,res)=>{if(req.url==='/assets/libomemo.js'){res.setHeader('Content-Type','text/javascript');res.end(fs.readFileSync('internal/frontend/dist/assets/libomemo.js'))}else if(req.url==='/omemo.js'){res.setHeader('Content-Type','text/javascript');res.end(fs.readFileSync('frontend/src/omemo.js'))}else{res.setHeader('Content-Type','text/html');res.end('<!doctype html><title>OMEMO test</title>')}});
 await new Promise(r=>server.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+server.address().port;
@@ -32,5 +33,21 @@ try{
  const browserFile=await a.page.evaluate(async()=>{const f=await omemoEncryptFile(new File(['browser attachment fixture'],'ticket.pdf'));return {key:[...f.key],iv:[...f.iv],bytes:[...new Uint8Array(await f.blob.arrayBuffer())]}});
  const wire=Buffer.from(browserFile.bytes),decipher=createDecipheriv('aes-256-gcm',Buffer.from(browserFile.key),Buffer.from(browserFile.iv));
  decipher.setAuthTag(wire.subarray(-16));assert.equal(Buffer.concat([decipher.update(wire.subarray(0,-16)),decipher.final()]).toString(),'browser attachment fixture');
+ // Conversations also accepts the historical 16-byte IV / 32-byte key form.
+ const legacyIV=randomBytes(16),legacyCipher=createCipheriv('aes-256-gcm',nativeKey,legacyIV);
+ const legacyBytes=Buffer.concat([legacyCipher.update('legacy attachment fixture'),legacyCipher.final(),legacyCipher.getAuthTag()]);
+ const legacyURI='aesgcm://files.example.com/legacy.pdf#'+legacyIV.toString('hex')+nativeKey.toString('hex');
+ assert.equal(await a.page.evaluate(async({uri,bytes})=>await (await omemoDecryptFile(omemoFileDescriptor(uri),new Blob([Uint8Array.from(bytes)]))).text(),{uri:legacyURI,bytes:[...legacyBytes]}),'legacy attachment fixture');
+ for(const uri of [nativeURI+' ',nativeURI.replace('files.example.com','user:pass@files.example.com'),nativeURI.replace('/ticket.pdf','/ticket.pdf\\extra'),nativeURI.slice(0,-2),nativeURI+'\nnot a thumbnail']){
+  await assert.rejects(()=>a.page.evaluate(uri=>omemoFileDescriptor(uri),uri));
+ }
+ if(process.env.OMEMO_CRYPTOKIT==='1'){
+  const input={key:Buffer.from(browserFile.key).toString('base64'),iv:Buffer.from(browserFile.iv).toString('base64'),wire:wire.toString('base64')};
+  const native=JSON.parse(execFileSync('swift',['scripts/omemo-file-cryptokit.swift'],{input:JSON.stringify(input),encoding:'utf8',timeout:120000}));
+  assert.equal(Buffer.from(native.plain,'base64').toString(),'browser attachment fixture');
+  const uri='aesgcm://files.example.com/cryptokit.pdf#'+Buffer.from(native.iv,'base64').toString('hex')+Buffer.from(native.key,'base64').toString('hex');
+  assert.equal(await a.page.evaluate(async({uri,bytes})=>await (await omemoDecryptFile(omemoFileDescriptor(uri),new Blob([Uint8Array.from(bytes)]))).text(),{uri,bytes:[...Buffer.from(native.wire,'base64')]}),'browser attachment fixture');
+  console.log('Apple CryptoKit / Web Crypto attachment wire format in both directions — OK');
+ }
  console.log('OMEMO: independent devices, multi-device delivery, bidirectional ratchet, out-of-order delivery, persistent history, tamper rejection and trust blocking — OK');
 }finally{await browser.close();await new Promise(r=>server.close(r))}
