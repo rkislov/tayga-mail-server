@@ -158,7 +158,13 @@ func (s *Server) roomArchivePage(ctx context.Context, email, room string, f mamF
 		args = append(args, seq)
 	}
 	args = append(args, f.Limit+1)
-	rows, err := s.db.QueryContext(ctx, s.rebind(`SELECT id,sender,body,created_at,nick,origin_id,sender_jid FROM web_chat_messages WHERE `+where+` ORDER BY archive_seq `+order+` LIMIT ?`), args...)
+	// Resolve current profile names even for authors absent from the reader's roster.
+	// Restrict the lookup to the reader's tenant, including historical senders.
+	args = append([]any{email}, args...)
+	rows, err := s.db.QueryContext(ctx, s.rebind(`SELECT id,sender,body,created_at,nick,origin_id,sender_jid,
+ COALESCE((SELECT u.display_name FROM users u JOIN users viewer ON viewer.email=?
+ WHERE u.email=web_chat_messages.sender AND u.tenant_id=viewer.tenant_id),'')
+ FROM web_chat_messages WHERE `+where+` ORDER BY archive_seq `+order+` LIMIT ?`), args...)
 	if err != nil {
 		return p, err
 	}
@@ -166,7 +172,7 @@ func (s *Server) roomArchivePage(ctx context.Context, email, room string, f mamF
 	for rows.Next() {
 		var m HistoryMsg
 		var at string
-		if err = rows.Scan(&m.ID, &m.From, &m.Body, &at, &m.Nick, &m.OriginID, &m.SenderJID); err != nil {
+		if err = rows.Scan(&m.ID, &m.From, &m.Body, &at, &m.Nick, &m.OriginID, &m.SenderJID, &m.SenderName); err != nil {
 			return p, err
 		}
 		m.To = room

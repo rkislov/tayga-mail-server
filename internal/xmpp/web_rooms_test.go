@@ -79,3 +79,61 @@ func TestWebGroupsMembershipHistoryAndDelivery(t *testing.T) {
 		t.Fatal("cross tenant member accepted")
 	}
 }
+
+func TestRoomProfileNamesAndSelfRoster(t *testing.T) {
+	srv, st, alice := testServer(t)
+	ctx := context.Background()
+	if _, err := srv.db.ExecContext(ctx, `UPDATE users SET display_name=? WHERE id=?`, "Алиса Иванова", alice.ID); err != nil {
+		t.Fatal(err)
+	}
+	bob, err := st.CreateUser(ctx, &storage.User{Email: "bob@example.com", LocalPart: "bob", DomainID: alice.DomainID, TenantID: alice.TenantID, Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = srv.UpsertChatRoster(ctx, alice.ID, alice.Email, alice.Email); err != nil {
+		t.Fatal(err)
+	}
+	room, err := srv.CreateChatRoom(ctx, alice.Email, "Names", []string{bob.Email})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ev, err := srv.SendChatMessage(ctx, alice.Email, room.JID, "hello")
+	if err != nil || ev.SenderName != "Алиса Иванова" {
+		t.Fatal(ev, err)
+	}
+	ev, err = srv.SendChatMessage(ctx, bob.Email, room.JID, "reply")
+	if err != nil || ev.SenderName != "" {
+		t.Fatal(ev, err)
+	}
+	// Profile changes apply to previously archived messages too; no roster entry is needed.
+	if _, err = srv.db.ExecContext(ctx, `UPDATE users SET display_name=? WHERE id=?`, "Алиса Петрова", alice.ID); err != nil {
+		t.Fatal(err)
+	}
+	page, err := srv.RoomHistoryPage(ctx, bob.Email, room.JID, "", 80)
+	if err != nil || len(page.Messages) != 2 || page.Messages[0].SenderName != "Алиса Петрова" || page.Messages[1].SenderName != "" {
+		t.Fatal(page, err)
+	}
+	roster, err := srv.ListChatRoster(ctx, alice.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range roster {
+		if ParseJID(item.JID).Bare() == alice.Email {
+			t.Fatal("self contact remains", item)
+		}
+	}
+	// Hiding the self contact must not delete user data.
+	items, err := srv.effectiveRoster(ctx, alice.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, item := range items {
+		if item.JID == alice.Email {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("self roster data deleted")
+	}
+}
