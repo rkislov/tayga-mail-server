@@ -52,8 +52,7 @@ archives:
       - docs/setup-filters.md
       - docs/web-omemo.md
       - docs/xmpp.md
-      - docs/xmpp-compatibility-plan.md
-      - docs/xmpp-push.md
+      - docs/xmpp-*.md
       - docs/files-and-office.md
       - docs/external-mail.md
       - docs/mail-delivery-logs.md

@@ -15,6 +15,14 @@ const omemoXML=s=>{const d=new DOMParser().parseFromString(s,'application/xml');
 const omemoElement=(d,n)=>d.getElementsByTagNameNS(omemoNS,n)[0];
 const omemoElements=(d,n)=>Array.from(d.getElementsByTagNameNS(omemoNS,n));
 function omemoAccount(){return chatBare(state.email);}
+function omemoIsRoom(peer){return /^[^@]+@web-groups\./.test(chatBare(peer))||typeof chatState!=='undefined'&&!!chatState.roster.find(r=>r.jid===peer)?.group}
+function omemoMessageRoom(message){return message.room||(omemoIsRoom(message.to)?chatBare(message.to):'')}
+function omemoCacheKey(message){const room=omemoMessageRoom(message);return room?JSON.stringify([room,chatBare(message.from),String(message.id)]):chatBare(message.from)+'|'+message.id}
+async function omemoAudience(peer,guard=omemoGuard()){
+ if(omemoIsRoom(peer)){const audience=await api('/api/v1/chat/rooms/omemo?room='+encodeURIComponent(peer),{_guard:guard});guard();return audience}
+ return {members:[...new Set([peer,omemoAccount()])].map(jid=>({jid,name:''}))};
+}
+
 async function omemoDatabase(){
  if(!omemoDB)omemoDB=new Promise((resolve,reject)=>{const r=indexedDB.open('tayga-omemo-v1',1);r.onupgradeneeded=()=>{r.result.createObjectStore('accounts');r.result.createObjectStore('messages')};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});return omemoDB;
 }
@@ -51,35 +59,62 @@ function omemoExcludeDevice(ctx,jid,id){
 async function omemoSend(peer,body){
  return omemoLocked(async ctx=>{
  const {lib,store,data,save,account}=ctx;if(new TextEncoder().encode(body).length>120000)throw Error('OMEMO: сообщение слишком большое');if(!data.enabled[peer])throw Error('OMEMO is not enabled');await omemoInitialize(ctx);
- const recipients=await omemoDevices(peer,ctx.guard);if(!recipients.length)throw Error('У собеседника нет OMEMO-устройств / No recipient devices');const own=await omemoDevices(account,ctx.guard);const targets=[...recipients.filter(id=>peer!==account||id!==data.id).map(id=>[peer,id]),...own.filter(id=>id!==data.id&&peer!==account).map(id=>[account,id])];
- const activeTargets=targets.filter(([jid,id])=>!data.excludedDevices?.[new lib.OMEMOAddress(jid,id).toString()]);
- if(!activeTargets.some(([jid])=>jid===peer))throw Error(omemoText('Нет доступных устройств получателя. В настройках OMEMO включите и проверьте хотя бы одно устройство.','No recipient devices available. Enable and verify at least one device in OMEMO settings.'));
+ const audience=await omemoAudience(peer,ctx.guard),targets=[];
+ for(const {jid} of audience.members){
+  const ids=await omemoDevices(jid,ctx.guard);
+  const available=ids.filter(id=>!(jid===account&&id===data.id)&&!data.excludedDevices?.[new lib.OMEMOAddress(jid,id).toString()]);
+  if((jid!==account||!audience.room&&peer===account)&&!available.length)throw Error(omemoText('Нет доступных устройств OMEMO у участника: ','No available OMEMO devices for: ')+jid);
+  targets.push(...available.map(id=>[jid,id]));
+ }
+ const activeTargets=targets;
+ if(!activeTargets.length)throw Error(omemoText('Нет устройств для получения сообщения.','No recipient devices available.'));
+ if(activeTargets.length>200)throw Error(omemoText('Максимум 200 устройств на сообщение. Исключите неиспользуемые устройства в настройках.','Maximum 200 devices per message. Exclude unused devices in settings.'));
+ // Legacy OMEMO routes wrapped keys by a numeric RID. Monal selects the first
+ // matching key; don't send a message that would silently exclude a collision.
+ const rids=new Set();for(const [,id] of activeTargets){if(rids.has(id))throw Error(omemoText('Совпадают ID устройств участников: ','Participants have conflicting device IDs: ')+id);rids.add(id)}
  const prepared=[];for(const [jid,id] of activeTargets){const bundle=await omemoBundle(jid,id,ctx.guard),address=new lib.OMEMOAddress(jid,id);if(!await store.isTrustedIdentity(address.toString(),bundle.identityKey))throw Error('Подтвердите ключ устройства в OMEMO / Verify device key: '+jid+' #'+id);prepared.push({bundle,address})}
  const key=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12));const aes=await crypto.subtle.importKey('raw',key,'AES-GCM',false,['encrypt']);const encrypted=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv},aes,new TextEncoder().encode(body)));const material=new Uint8Array(32);material.set(key);material.set(encrypted.slice(-16),16);
  let keys='';for(const {bundle,address} of prepared){const cipher=new lib.SessionCipher(store,address,omemoNS);if(!await cipher.hasOpenSession())await new lib.SessionBuilder(store,address,omemoNS).processPreKey(bundle);const wrapped=await cipher.encrypt(material.buffer);const bytes=typeof wrapped.body==='string'?Uint8Array.from(wrapped.body,c=>c.charCodeAt(0)):wrapped.body;keys+=`<key rid="${address.getDeviceId()}"${wrapped.type===3?' prekey="true"':''}>${omemoB64(bytes)}</key>`}
  const xml=`<encrypted xmlns="${omemoNS}"><header sid="${data.id}">${keys}<iv>${omemoB64(iv)}</iv></header><payload>${omemoB64(encrypted.slice(0,-16))}</payload></encrypted>`;
- await save();const ev=await ctx.request('/api/v1/chat/omemo',{method:'POST',body:JSON.stringify({to:peer,xml})});await save({key:chatBare(ev.from)+'|'+ev.id,body});return {...ev,body,encrypted:false,decrypted:true};
+ await save();const ev=await ctx.request(audience.room?'/api/v1/chat/rooms/omemo':'/api/v1/chat/omemo',{method:'POST',body:JSON.stringify(audience.room?{room:peer,revision:audience.revision,xml}:{to:peer,xml})});await save({key:omemoCacheKey(ev),body});return {...ev,body,encrypted:false,decrypted:true};
  });
 }
 async function omemoDecrypt(message){
  return omemoLocked(async ctx=>{
- const {lib,store,data,account,save}=ctx;if(!data.id)throw Error('Включите OMEMO на этом устройстве / Enable OMEMO on this device');const from=chatBare(message.from),cacheKey=from+'|'+message.id;
+ const {lib,store,data,account,save}=ctx;if(!data.id)throw Error('Включите OMEMO на этом устройстве / Enable OMEMO on this device');const from=chatBare(message.from),cacheKey=omemoCacheKey(message);
  const cached=await omemoRead('messages',[account,cacheKey]);if(cached!==undefined)return cached;
  const doc=omemoXML(message.omemo||'');if(doc.documentElement.namespaceURI!==omemoNS)throw Error('This OMEMO version is not supported');
  const header=omemoElement(doc,'header'),sid=Number(header?.getAttribute('sid'));if(!Number.isInteger(sid)||sid<1)throw Error('Invalid sender device');const keys=omemoElements(doc,'key').filter(k=>Number(k.getAttribute('rid'))===data.id);if(!keys.length)throw Error('Сообщение не адресовано этому устройству / Not encrypted for this device');
  const address=new lib.OMEMOAddress(from,sid);
  if(data.excludedDevices?.[address.toString()])throw Error(omemoText('Устройство отправителя исключено в этом браузере.','The sender device is excluded in this browser.'));
  const bundle=await omemoBundle(from,sid,ctx.guard);if(!await store.isTrustedIdentity(address.toString(),bundle.identityKey))throw Error('Подтвердите ключ отправителя в OMEMO / Verify sender key: #'+sid);
- const key=keys[0],cipher=new lib.SessionCipher(store,address,omemoNS),raw=omemoBytes(key.textContent);const result=await (['true','1'].includes(key.getAttribute('prekey'))?cipher.decryptPreKeyWhisperMessage(raw):cipher.decryptWhisperMessage(raw));
- const material=new Uint8Array(result.plaintext),payload=omemoElement(doc,'payload');if(!payload){await save();await omemoInitialize(ctx);return ''}
- if(material.length!==32&&material.length!==16)throw Error('Invalid payload key');const encrypted=new Uint8Array(omemoBytes(payload.textContent)),combined=new Uint8Array(encrypted.length+(material.length===32?16:0));combined.set(encrypted);if(material.length===32)combined.set(material.slice(16),encrypted.length);
- const aes=await crypto.subtle.importKey('raw',material.slice(0,16),'AES-GCM',false,['decrypt']);const plaintext=await crypto.subtle.decrypt({name:'AES-GCM',iv:omemoBytes(omemoElement(doc,'iv').textContent)},aes,combined);const body=new TextDecoder('utf-8',{fatal:true}).decode(plaintext);
+ // RID collisions in received legacy traffic: each trial has its own store.
+ // Failed authentication must not consume a prekey or advance the saved ratchet.
+ let lastError,successful,body='';
+ for(const key of keys){
+  try{
+   const trial=new lib.InMemoryStore();trial.store=structuredClone(store.store);trial.isTrustedIdentity=store.isTrustedIdentity;
+   const cipher=new lib.SessionCipher(trial,address,omemoNS),raw=omemoBytes(key.textContent);
+   const result=await (['true','1'].includes(key.getAttribute('prekey'))?cipher.decryptPreKeyWhisperMessage(raw):cipher.decryptWhisperMessage(raw));
+   const material=new Uint8Array(result.plaintext),payload=omemoElement(doc,'payload');body='';
+   if(payload){
+    if(material.length!==32&&material.length!==16)throw Error('Invalid payload key');
+    const encrypted=new Uint8Array(omemoBytes(payload.textContent)),combined=new Uint8Array(encrypted.length+(material.length===32?16:0));combined.set(encrypted);if(material.length===32)combined.set(material.slice(16),encrypted.length);
+    const aes=await crypto.subtle.importKey('raw',material.slice(0,16),'AES-GCM',false,['decrypt']);
+    const plaintext=await crypto.subtle.decrypt({name:'AES-GCM',iv:omemoBytes(omemoElement(doc,'iv').textContent)},aes,combined);
+    body=new TextDecoder('utf-8',{fatal:true}).decode(plaintext);
+   }
+   successful=trial;break;
+  }catch(error){lastError=error}
+ }
+ if(!successful)throw lastError||Error('Cannot decrypt OMEMO key');
+ store.store=successful.store;data.store=successful.store;
  await save({key:cacheKey,body});await omemoInitialize(ctx);return body;
  });
 }
 async function omemoRender(message,element){
  const guard=omemoGuard();
- try{const body=await omemoDecrypt(message);guard();if(!element.isConnected||element.dataset.encryption==='omemo')return;const currentPeer=chatState.peer;const actualPeer=chatBare(message.from)===omemoAccount()?chatBare(message.to):chatBare(message.from);if(currentPeer!==actualPeer)return;const anchor=document.createComment('omemo');element.replaceWith(anchor);const bubble=appendChatBubble({...message,body,encrypted:false,decrypted:true});if(bubble)anchor.replaceWith(bubble);else anchor.remove();scrollChatBottom()}
+ try{const body=await omemoDecrypt(message);guard();if(!element.isConnected||element.dataset.encryption==='omemo')return;const currentPeer=chatState.peer;const actualPeer=omemoMessageRoom(message)||(chatBare(message.from)===omemoAccount()?chatBare(message.to):chatBare(message.from));if(currentPeer!==actualPeer)return;const box=element.parentElement,atBottom=box.scrollHeight-box.scrollTop-box.clientHeight<80;const anchor=document.createComment('omemo');element.replaceWith(anchor);const bubble=appendChatBubble({...message,body,encrypted:false,decrypted:true});if(bubble)anchor.replaceWith(bubble);else anchor.remove();if(atBottom)scrollChatBottom()}
  catch(error){if(element.isConnected&&element.dataset.encryption!=='omemo')element.querySelector('p').textContent='🔒 '+error.message}
 }
 const omemoText=(ru,en)=>typeof lang!=='undefined'&&lang==='en'?en:ru;
@@ -94,7 +129,7 @@ function omemoDeviceStatus(device,snapshot){
 }
 async function omemoSettings(){
  const peer=chatState.peer,account=omemoAccount(),sessionGuard=omemoGuard();
- if(!peer||chatState.roster.find(r=>r.jid===peer)?.group||document.querySelector('.omemo-dialog'))return;
+ if(!peer||document.querySelector('.omemo-dialog'))return;
  const dialog=omemoNode('dialog','document-preview omemo-dialog');
  dialog.setAttribute('aria-labelledby','omemo-dialog-title');
  const header=omemoNode('header'),title=omemoNode('strong','',omemoText('Шифрование чата','Chat encryption'));
@@ -108,7 +143,7 @@ async function omemoSettings(){
  const hint=omemoNode('p','meta',omemoText('Доверие, исключения и названия действуют в этом браузере. Отзыв собственного ключа на сервере действует для всей учётной записи. Очистка его данных удалит ключи и доступ к старым сообщениям.','Trust, exclusions and labels apply in this browser. Retiring your own key on the server applies to the whole account. Clearing its data removes keys and access to old messages.'));
  const access=omemoNode('button','btn-secondary',omemoText('Пароли и доступ устройств','Device passwords and access'));access.type='button';access.onclick=()=>{dialog.close();showApp('profile');$('xmpp-devices-card')?.scrollIntoView({block:'start',behavior:'smooth'})};
  footer.append(refresh,access,hint);body.append(notice,content);dialog.append(header,body,footer);document.body.append(dialog);
- let snapshot,devices=[],loading=false,busy=false,revision=0,changed=false;
+ let snapshot,audience={members:[]},devices=[],loading=false,busy=false,revision=0,changed=false;
  const active=()=>{try{sessionGuard();return dialog.isConnected}catch{return false}};
  const guard=c=>{if(c.account!==account||!active())throw Error(omemoText('Учётная запись изменилась. Откройте настройки заново.','Account changed. Reopen these settings.'))};
  dialog.onclose=()=>{revision++;const sameSession=active();dialog.remove();if(sameSession&&chatState.peer===peer){$('chat-omemo')?.focus();if(changed&&typeof openChatPeer==='function')void openChatPeer(peer,true)}};
@@ -178,14 +213,17 @@ async function omemoSettings(){
   top.append(omemoNode('strong','',snapshot.enabled?omemoText('Шифрование включено','Encryption is on'):omemoText('Шифрование выключено','Encryption is off')));
   const toggle=omemoNode('button','btn-secondary',snapshot.enabled?omemoText('Выключить','Turn off'):omemoText('Включить','Turn on'));toggle.type='button';toggle.dataset.omemoAction='toggle';toggle.setAttribute('aria-label',snapshot.enabled?omemoText('Выключить шифрование чата','Turn off chat encryption'):omemoText('Включить шифрование чата','Turn on chat encryption'));toggle.onclick=()=>change(c=>{if(snapshot.retired.has(c.data.id))throw Error(omemoText('Ключ этого браузера отозван.','This browser’s key is retired.'));c.data.enabled[peer]=!snapshot.enabled});top.append(toggle);overview.append(top);
   overview.append(omemoNode('p','meta',chatState.roster.find(r=>r.jid===peer)?.name||peer));
-  const excluded=devices.filter(d=>omemoDeviceStatus(d,snapshot)==='excluded'),others=devices.filter(d=>!d.current&&!['excluded','retired'].includes(omemoDeviceStatus(d,snapshot))),pending=others.filter(d=>omemoDeviceStatus(d,snapshot)!=='trusted'),missing=others.some(d=>d.error),hasPeer=others.some(d=>d.jid===peer);
-  let text=!hasPeer?omemoText('Нет доступных устройств получателя. Включите и проверьте хотя бы одно устройство.','No recipient devices available. Enable and verify at least one device.'):missing?omemoText('Некоторые ключи недоступны. Переподключите соответствующее устройство и обновите список.','Some keys are unavailable. Reconnect that device and refresh the list.'):pending.length?omemoText('Нужно проверить устройств: ','Devices to verify: ')+pending.length:excluded.length?omemoText('Оставшиеся устройства проверены.','The remaining devices are verified.'):snapshot.enabled?omemoText('Все устройства проверены. Можно отправлять зашифрованные сообщения.','All devices are verified. You can send encrypted messages.'):omemoText('Все устройства проверены. Включите шифрование для этого чата.','All devices are verified. Turn on encryption for this chat.');
+  const excluded=devices.filter(d=>omemoDeviceStatus(d,snapshot)==='excluded'),others=devices.filter(d=>!d.current&&!['excluded','retired'].includes(omemoDeviceStatus(d,snapshot))),pending=others.filter(d=>omemoDeviceStatus(d,snapshot)!=='trusted'),missing=others.some(d=>d.error),hasPeer=audience.room?audience.members.every(m=>m.jid===account||others.some(d=>d.jid===m.jid))&&others.length>0:others.some(d=>d.jid===peer);
+  let text=!hasPeer?(audience.room?omemoText('У каждого участника должно быть хотя бы одно доступное проверенное устройство.','Each participant needs at least one available verified device.'):omemoText('Нет доступных устройств получателя. Включите и проверьте хотя бы одно устройство.','No recipient devices available. Enable and verify at least one device.')):missing?omemoText('Некоторые ключи недоступны. Переподключите соответствующее устройство и обновите список.','Some keys are unavailable. Reconnect that device and refresh the list.'):pending.length?omemoText('Нужно проверить устройств: ','Devices to verify: ')+pending.length:excluded.length?omemoText('Оставшиеся устройства проверены.','The remaining devices are verified.'):snapshot.enabled?omemoText('Все устройства проверены. Можно отправлять зашифрованные сообщения.','All devices are verified. You can send encrypted messages.'):omemoText('Все устройства проверены. Включите шифрование для этого чата.','All devices are verified. Turn on encryption for this chat.');
   if(excluded.length)text+=' '+omemoText('Исключено в этом браузере: ','Excluded in this browser: ')+excluded.length+'.';
   if(snapshot.enabled&&pending.length)text+=' '+omemoText('До проверки отправка будет приостановлена.','Sending is paused until verification.');
   if(snapshot.retired.has(snapshot.id))text=omemoText('Ключ этого браузера отозван на сервере. Отправка с ним недоступна. Для нового ключа используйте другой профиль браузера и заново проверьте отпечатки. Сохранённая здесь история остаётся доступна.','This browser’s key has been retired on the server. Sending with it is disabled. Use a different browser profile for a new key and verify fingerprints again. History already saved here remains available.');
-  overview.append(omemoNode('p','',text));content.append(overview);
-  for(const jid of [...new Set([peer,account])]){
-   const group=omemoNode('section','omemo-device-group');group.append(omemoNode('h3','',jid===account?omemoText('Мои устройства','My devices'):omemoText('Устройства собеседника','Contact’s devices')));
+  overview.append(omemoNode('p','',text));
+  if(audience.room)overview.append(omemoNode('p','meta',omemoText('Настройка шифрует ваши сообщения из этого браузера. Остальные участники включают шифрование на своих устройствах.','This setting encrypts your messages from this browser. Other participants enable encryption on their own devices.')));
+  content.append(overview);
+  for(const {jid,name} of audience.members){
+   const group=omemoNode('section','omemo-device-group');group.append(omemoNode('h3','',jid===account?omemoText('Мои устройства','My devices'):audience.room?(name||jid):omemoText('Устройства собеседника','Contact’s devices')));
+   if(audience.room&&jid!==account&&name)group.append(omemoNode('p','meta',jid));
    const list=omemoNode('ul','omemo-device-list');
    for(const device of devices.filter(d=>d.jid===jid)){
     const status=omemoDeviceStatus(device,snapshot),row=omemoNode('li','omemo-device');row.dataset.deviceId=String(device.id);row.dataset.deviceOwner=jid;row.dataset.keyStatus=status;
@@ -225,8 +263,9 @@ async function omemoSettings(){
     };
     intro.append(connect);content.append(intro);return;
    }
+   audience=await omemoAudience(peer,sessionGuard);
    const next=[];
-   for(const jid of [...new Set([peer,account])]){
+   for(const {jid} of audience.members){
     const ids=await omemoDevices(jid,sessionGuard);if(jid===account&&!ids.includes(snapshot.id))ids.unshift(snapshot.id);
     const advertised=new Set(ids);
     if(jid===account)for(const id of snapshot.retired)if(!ids.includes(id))ids.push(id);
@@ -250,7 +289,7 @@ async function omemoSettings(){
 }
 async function renderOMEMOButton(){
  let b=$('chat-omemo');if(!b){b=omemoNode('button','btn-secondary btn-sm');b.id='chat-omemo';b.type='button';b.onclick=omemoSettings;$('chat-peer')?.after(b)}
- const peer=chatState.peer,account=omemoAccount();b.hidden=!peer||!!chatState.roster.find(r=>r.jid===peer)?.group;
+ const peer=chatState.peer,account=omemoAccount();b.hidden=!peer;
  b.setAttribute('aria-haspopup','dialog');
  try{const enabled=await omemoEnabled(peer);if(peer===chatState.peer&&account===omemoAccount()){b.textContent=enabled?omemoText('Шифрование: вкл.','Encryption: on'):omemoText('Шифрование: выкл.','Encryption: off');b.title=omemoText('Устройства и ключи OMEMO','OMEMO devices and keys');b.removeAttribute('aria-pressed')}}catch{b.textContent=omemoText('Шифрование','Encryption')}
 }

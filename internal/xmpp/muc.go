@@ -16,8 +16,9 @@ const discoItems = "http://jabber.org/protocol/disco#items"
 
 type mucOccupant struct{ Nick, Affiliation, Show, Status string }
 type mucResumeState struct {
-	JID, Nick string
-	Since     time.Time
+	JID, Nick  string
+	Since      time.Time
+	ArchiveSeq int64
 }
 type mucRoom struct{ JID, Name, Owner, Subject string }
 
@@ -96,6 +97,7 @@ func mucDeparture(room string, session *Session, occupant mucOccupant, occupants
 	}
 }
 func (s *Server) evictRoomMember(room, email, code string) {
+	s.removeWebRoomPresence(room, email, true)
 	for session, occupant := range s.muc[room] {
 		if session.JID.Bare() != email {
 			continue
@@ -116,7 +118,11 @@ func (s *Session) leaveMUC() {
 		if occupant, ok := occupants[s]; ok {
 			s.mu.Lock()
 			if s.sm.resumable && srv.mucPending[room] != s {
-				s.mucResume = append(s.mucResume, mucResumeState{room, occupant.Nick, time.Now().UTC()})
+				var seq int64
+				if err := srv.db.QueryRowContext(context.Background(), srv.rebind(`SELECT next_archive_seq FROM web_chat_rooms WHERE jid=?`), room).Scan(&seq); err != nil {
+					seq = -1
+				}
+				s.mucResume = append(s.mucResume, mucResumeState{JID: room, Nick: occupant.Nick, Since: time.Now().UTC(), ArchiveSeq: seq})
 			}
 			s.mu.Unlock()
 			delete(occupants, s)
@@ -135,10 +141,15 @@ func (s *Session) handleMUCPresence(to, typ, inner string) error {
 	srv := s.srv
 	srv.mucMu.Lock()
 	defer srv.mucMu.Unlock()
+	return s.handleMUCPresenceLocked(to, typ, inner)
+}
+
+func (s *Session) handleMUCPresenceLocked(to, typ, inner string) error {
+	srv := s.srv
 	ctx := context.Background()
 	jid := ParseJID(to)
 	fail := func(condition string) error { return s.mucError("presence", "", to, condition) }
-	if jid.Local == "" || jid.Resource == "" || len(jid.Resource) > 256 {
+	if jid.Local == "" || jid.Resource == "" || len(jid.Resource) > 256 || strings.HasPrefix(jid.Resource, webRoomNickPrefix) {
 		return fail("jid-malformed")
 	}
 	if typ == "error" {
@@ -265,6 +276,11 @@ func (s *Session) handleMUCPresence(to, typ, inner string) error {
 	_, already := occupants[s]
 	occupant := mucOccupant{Nick: jid.Resource, Affiliation: affiliation, Show: req.Show, Status: req.Status}
 	if !already {
+		for email, entry := range srv.mucWeb[room.JID] {
+			if srv.requireRoomMember(ctx, email, room.JID) == nil {
+				s.SendRaw([]byte(mucPresence(room.JID, entry.session, entry.presence, s.JID.Full(), false, "")))
+			}
+		}
 		seen := map[string]bool{}
 		for other, o := range occupants {
 			if seen[o.Nick] {
@@ -292,7 +308,9 @@ func (s *Session) handleMUCPresence(to, typ, inner string) error {
 		}
 		chars := 0
 		for _, message := range history {
-			if message.At.Before(since) {
+			// Encrypted archive uses MAM's authoritative real sender JID. Legacy
+			// join history can map a reused nick to a different Signal identity.
+			if message.Encrypted || message.At.Before(since) {
 				continue
 			}
 			nick := message.Nick
@@ -320,14 +338,27 @@ func roomMessageXML(room, nick, to, id, body, origin, extra string) string {
 	if to != "" {
 		address = " to='" + xmlEscape(to) + "'"
 	}
-	return fmt.Sprintf(`<message xmlns='jabber:client' from='%s/%s'%s type='groupchat' id='%s'><body>%s</body><stanza-id xmlns='urn:xmpp:sid:0' by='%s' id='%s'/>%s</message>`, xmlEscape(room), xmlEscape(nick), address, xmlEscape(id), xmlEscape(body), xmlEscape(room), xmlEscape(id), extra)
+	payload := ""
+	if body != "" {
+		payload = "<body>" + xmlEscape(body) + "</body>"
+	}
+	return fmt.Sprintf(`<message xmlns='jabber:client' from='%s/%s'%s type='groupchat' id='%s'>%s<stanza-id xmlns='urn:xmpp:sid:0' by='%s' id='%s'/>%s</message>`, xmlEscape(room), xmlEscape(nick), address, xmlEscape(id), payload, xmlEscape(room), xmlEscape(id), extra)
 }
 func (s *Server) broadcastRoomMessage(ev ChatEvent, nick, origin string) {
+	if nick == webRoomNick(ev.From) {
+		ephemeral, err := s.ensureWebRoomPresence(context.Background(), ev.Room, ev.From)
+		if err != nil {
+			return
+		}
+		if ephemeral {
+			defer s.removeWebRoomPresence(ev.Room, ev.From, false)
+		}
+	}
 	for session := range s.muc[ev.Room] {
 		if s.requireRoomMember(context.Background(), session.JID.Bare(), ev.Room) != nil {
 			continue
 		}
-		session.SendRaw([]byte(roomMessageXML(ev.Room, nick, session.JID.Full(), ev.ID, ev.Body, origin, "")))
+		session.SendRaw([]byte(roomMessageXML(ev.Room, nick, session.JID.Full(), ev.ID, ev.Body, origin, roomCipherExtras(ev.OMEMO))))
 	}
 }
 func (s *Session) handleMUCMessage(to, typ, id, inner string) error {
@@ -367,6 +398,26 @@ func (s *Session) handleMUCMessage(to, typ, id, inner string) error {
 	if xml.Unmarshal([]byte("<message>"+inner+"</message>"), &payload) != nil {
 		return fail("bad-request")
 	}
+	cipher := ""
+	for _, child := range payload.Children {
+		if child.XMLName.Local != "encrypted" {
+			continue
+		}
+		if child.XMLName.Space != legacyOMEMO {
+			return fail("feature-not-implemented")
+		}
+		if cipher != "" || payload.Subject != nil || payload.X.Invite != nil {
+			return fail("bad-request")
+		}
+		cipher, err = validateWebCiphertext(encryptedElement("<message>" + inner + "</message>"))
+		if err != nil {
+			return fail("bad-request")
+		}
+		if err = srv.checkOMEMOSender(ctx, s.JID.Bare(), cipher); err != nil {
+			return fail("not-allowed")
+		}
+		payload.Body = "" // Never store a plaintext fallback alongside encrypted content.
+	}
 	if payload.X.Invite != nil {
 		if aff != "owner" && aff != "admin" {
 			return fail("forbidden")
@@ -385,11 +436,6 @@ func (s *Session) handleMUCMessage(to, typ, id, inner string) error {
 	if !ok {
 		return fail("not-acceptable")
 	}
-	for _, child := range payload.Children {
-		if child.XMLName.Local == "encrypted" {
-			return fail("feature-not-implemented")
-		}
-	}
 	if payload.Subject != nil {
 		if aff != "owner" && aff != "admin" {
 			return fail("forbidden")
@@ -406,7 +452,7 @@ func (s *Session) handleMUCMessage(to, typ, id, inner string) error {
 		}
 		return nil
 	}
-	if payload.Body == "" {
+	if payload.Body == "" && cipher == "" {
 		return nil
 	}
 	origin := payload.Origin.ID
@@ -417,16 +463,16 @@ func (s *Session) handleMUCMessage(to, typ, id, inner string) error {
 		return fail("bad-request")
 	}
 	if origin != "" {
-		var oldID, body, nick string
-		err = srv.db.QueryRowContext(ctx, srv.rebind(`SELECT id,body,nick FROM web_chat_messages WHERE room_jid=? AND sender=? AND origin_id=?`), room.JID, s.JID.Bare(), origin).Scan(&oldID, &body, &nick)
+		var oldID, body, nick, oldCipher string
+		err = srv.db.QueryRowContext(ctx, srv.rebind(`SELECT id,body,nick,omemo FROM web_chat_messages WHERE room_jid=? AND sender=? AND origin_id=?`), room.JID, s.JID.Bare(), origin).Scan(&oldID, &body, &nick, &oldCipher)
 		if err == nil {
-			return s.writeString(roomMessageXML(room.JID, nick, s.JID.Full(), oldID, body, origin, ""))
+			return s.writeString(roomMessageXML(room.JID, nick, s.JID.Full(), oldID, body, origin, roomCipherExtras(oldCipher)))
 		}
 		if err != sql.ErrNoRows {
 			return fail("internal-server-error")
 		}
 	}
-	if _, err = srv.sendRoomMessageAs(ctx, s.JID.Bare(), room.JID, payload.Body, occupant.Nick, origin, s.JID.Full()); err != nil {
+	if _, err = srv.storeRoomMessage(ctx, s.JID.Bare(), room.JID, payload.Body, occupant.Nick, origin, s.JID.Full(), cipher); err != nil {
 		return fail("internal-server-error")
 	}
 	return nil
@@ -481,6 +527,9 @@ func (s *Server) setRoomAffiliation(ctx context.Context, actor string, room mucR
 	if err != nil {
 		return err
 	}
+	if _, err = tx.ExecContext(ctx, s.rebind(`UPDATE web_chat_rooms SET membership_token=? WHERE jid=?`), randomID(), room.JID); err != nil {
+		return err
+	}
 	if err = tx.Commit(); err != nil {
 		return err
 	}
@@ -506,8 +555,26 @@ func (s *Server) setRoomAffiliation(ctx context.Context, actor string, room mucR
 			}
 		}
 	}
-	s.hub.pushWeb(target, ChatEvent{Type: "roster"})
-	s.hub.pushWeb(actor, ChatEvent{Type: "roster"})
+	if entry, ok := s.mucWeb[room.JID][target]; ok {
+		entry.presence.Affiliation = aff
+		s.mucWeb[room.JID][target] = entry
+		for other := range s.muc[room.JID] {
+			other.SendRaw([]byte(mucPresence(room.JID, entry.session, entry.presence, other.JID.Full(), false, "")))
+		}
+	}
+	if aff == "owner" {
+		if entry, ok := s.mucWeb[room.JID][room.Owner]; ok {
+			entry.presence.Affiliation = "member"
+			s.mucWeb[room.JID][room.Owner] = entry
+			for other := range s.muc[room.JID] {
+				if s.requireRoomMember(ctx, other.JID.Bare(), room.JID) == nil {
+					other.SendRaw([]byte(mucPresence(room.JID, entry.session, entry.presence, other.JID.Full(), false, "")))
+				}
+			}
+		}
+		s.notifyRoomAffiliation(ctx, room.JID, room.Owner, "member")
+	}
+	s.notifyRoomAffiliation(ctx, room.JID, target, aff)
 	return nil
 }
 func (s *Server) destroyRoom(ctx context.Context, actor, jid string) error {
@@ -530,6 +597,7 @@ func (s *Server) destroyRoom(ctx context.Context, actor, jid string) error {
 		session.SendRaw([]byte(mucPresence(jid, session, occupant, session.JID.Full(), true, `<destroy/><status code='110'/>`)))
 	}
 	delete(s.muc, jid)
+	delete(s.mucWeb, jid)
 	delete(s.mucPending, jid)
 	for _, member := range members {
 		s.hub.pushWeb(member, ChatEvent{Type: "roster"})

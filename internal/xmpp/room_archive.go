@@ -161,7 +161,7 @@ func (s *Server) roomArchivePage(ctx context.Context, email, room string, f mamF
 	// Resolve current profile names even for authors absent from the reader's roster.
 	// Restrict the lookup to the reader's tenant, including historical senders.
 	args = append([]any{email}, args...)
-	rows, err := s.db.QueryContext(ctx, s.rebind(`SELECT id,sender,body,created_at,nick,origin_id,sender_jid,
+	rows, err := s.db.QueryContext(ctx, s.rebind(`SELECT id,sender,body,created_at,nick,origin_id,sender_jid,omemo,
  COALESCE((SELECT u.display_name FROM users u JOIN users viewer ON viewer.email=?
  WHERE u.email=web_chat_messages.sender AND u.tenant_id=viewer.tenant_id),'')
  FROM web_chat_messages WHERE `+where+` ORDER BY archive_seq `+order+` LIMIT ?`), args...)
@@ -172,10 +172,11 @@ func (s *Server) roomArchivePage(ctx context.Context, email, room string, f mamF
 	for rows.Next() {
 		var m HistoryMsg
 		var at string
-		if err = rows.Scan(&m.ID, &m.From, &m.Body, &at, &m.Nick, &m.OriginID, &m.SenderJID, &m.SenderName); err != nil {
+		if err = rows.Scan(&m.ID, &m.From, &m.Body, &at, &m.Nick, &m.OriginID, &m.SenderJID, &m.OMEMO, &m.SenderName); err != nil {
 			return p, err
 		}
 		m.To = room
+		m.Encrypted = m.OMEMO != ""
 		m.At, err = time.Parse(time.RFC3339Nano, at)
 		if err != nil {
 			return p, fmt.Errorf("invalid room timestamp: %w", err)

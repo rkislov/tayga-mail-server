@@ -39,6 +39,50 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/v1/chat"), "/")
+	if path == "rooms/omemo" {
+		bridge, ok := s.xmpp.(interface {
+			RoomOMEMOContext(context.Context, string, string) (xmpp.RoomOMEMOContext, error)
+			SendRoomOMEMO(context.Context, string, string, string, string) (xmpp.ChatEvent, error)
+		})
+		if !ok {
+			writeJSON(w, 503, map[string]string{"error": "group OMEMO unavailable"})
+			return
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		var result any
+		var err error
+		switch r.Method {
+		case http.MethodGet:
+			result, err = bridge.RoomOMEMOContext(r.Context(), au.Email, r.URL.Query().Get("room"))
+		case http.MethodPost:
+			var req struct {
+				Room     string `json:"room"`
+				Revision string `json:"revision"`
+				XML      string `json:"xml"`
+			}
+			if json.NewDecoder(http.MaxBytesReader(w, r.Body, 512*1024)).Decode(&req) != nil {
+				writeJSON(w, 400, map[string]string{"error": "invalid group OMEMO request"})
+				return
+			}
+			result, err = bridge.SendRoomOMEMO(r.Context(), au.Email, req.Room, req.Revision, req.XML)
+		default:
+			writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+			return
+		}
+		if err != nil {
+			status := 400
+			if errors.Is(err, xmpp.ErrRoomAccess) {
+				status = 403
+			}
+			if errors.Is(err, xmpp.ErrRoomChanged) {
+				status = 409
+			}
+			writeJSON(w, status, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, 200, result)
+		return
+	}
 	if path == "rooms/history" {
 		if r.Method != http.MethodGet {
 			writeJSON(w, 405, map[string]string{"error": "method not allowed"})

@@ -15,11 +15,12 @@ import (
 )
 
 type mamWirePage struct {
-	IDs      []string
-	First    string
-	Last     string
-	Count    int
-	Complete bool
+	IDs       []string
+	Encrypted []string
+	First     string
+	Last      string
+	Count     int
+	Complete  bool
 }
 
 func readMAMWirePage(t *testing.T, c *resumeWireClient, id, resource string) mamWirePage {
@@ -41,6 +42,15 @@ func readArchiveWirePage(t *testing.T, c *resumeWireClient, id, resource, archiv
 					QueryID string `xml:"queryid,attr"`
 					Forward struct {
 						Message struct {
+							Body      string `xml:"body"`
+							Encrypted *struct {
+								Header string `xml:",innerxml"`
+							} `xml:"eu.siacs.conversations.axolotl encrypted"`
+							Identity struct {
+								Item struct {
+									JID string `xml:"jid,attr"`
+								} `xml:"item"`
+							} `xml:"http://jabber.org/protocol/muc#user x"`
 							IDs []struct {
 								By string `xml:"by,attr"`
 								ID string `xml:"id,attr"`
@@ -57,6 +67,12 @@ func readArchiveWirePage(t *testing.T, c *resumeWireClient, id, resource, archiv
 				t.Fatalf("invalid MAM result/forwarded namespace/stable ID: %+v", r)
 			}
 			page.IDs = append(page.IDs, r.ID)
+			if m := r.Forward.Message; m.Encrypted != nil {
+				if m.Body != "" || m.Encrypted.Header == "" || strings.Contains(archive, "@web-groups.") && m.Identity.Item.JID == "" {
+					t.Fatalf("invalid encrypted archive envelope: %+v", m)
+				}
+				page.Encrypted = append(page.Encrypted, r.ID)
+			}
 		case "iq":
 			if e.ID != id {
 				t.Fatalf("unexpected IQ: %+v", e)

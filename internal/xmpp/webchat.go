@@ -304,6 +304,7 @@ func (s *Server) SubscribeChat(bare string) (<-chan ChatEvent, func()) {
 		s.hub.mu.RUnlock()
 		if n == 0 {
 			s.recordPresence(context.Background(), bare+"/web", "offline", "")
+			s.leaveWebRooms(ParseJID(bare).Bare())
 		}
 	}
 }

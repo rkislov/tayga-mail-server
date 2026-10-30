@@ -22,6 +22,7 @@ type Server struct {
 	mucMu      sync.Mutex
 	muc        map[string]map[*Session]mucOccupant
 	mucPending map[string]*Session
+	mucWeb     map[string]map[string]webRoomOccupant // protected by mucMu
 
 	pushMu       sync.Mutex
 	pepPublishMu sync.Mutex

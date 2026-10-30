@@ -144,7 +144,7 @@ func (s *Session) handleRoomMAM(ctx context.Context, id, typ, room, inner string
 		// MAM room messages omit 'to' and identify the actual publisher in this
 		// non-anonymous room. Never copy client-supplied identity metadata.
 		extra := `<x xmlns='` + mucNS + `#user'><item jid='` + xmlEscape(m.SenderJID) + `'/></x>`
-		stanza := roomMessageXML(room, m.Nick, "", m.ID, m.Body, m.OriginID, extra)
+		stanza := roomMessageXML(room, m.Nick, "", m.ID, m.Body, m.OriginID, roomCipherExtras(m.OMEMO)+extra)
 		s.SendRaw([]byte(fmt.Sprintf(`<message from='%s' to='%s'><result xmlns='urn:xmpp:mam:2' queryid='%s' id='%s'><forwarded xmlns='urn:xmpp:forward:0'><delay xmlns='urn:xmpp:delay' stamp='%s'/>%s</forwarded></result></message>`, xmlEscape(room), xmlEscape(s.JID.Full()), xmlEscape(queryID), xmlEscape(m.ID), m.At.UTC().Format(time.RFC3339Nano), stanza)))
 	}
 	bounds := ""

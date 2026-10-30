@@ -43,8 +43,20 @@ func TestRoomMAMTCPReconnectAndRemovedMember(t *testing.T) {
 	phone.want("message", "")
 	desktop.want("message", "") // invitations, not user messages
 	var ids []string
+	encrypted := map[string]bool{}
+	audience, err := srv.RoomOMEMOContext(ctx, bob.Email, room.JID)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for i := 0; i < 257; i++ {
-		ev, e := srv.SendChatMessage(ctx, bob.Email, room.JID, fmt.Sprint(i))
+		var ev ChatEvent
+		var e error
+		if i%2 == 0 {
+			ev, e = srv.SendRoomOMEMO(ctx, bob.Email, room.JID, audience.Revision, groupCipherFixture)
+			encrypted[ev.ID] = true
+		} else {
+			ev, e = srv.SendChatMessage(ctx, bob.Email, room.JID, fmt.Sprint(i))
+		}
 		if e != nil {
 			t.Fatal(e)
 		}
@@ -57,7 +69,17 @@ func TestRoomMAMTCPReconnectAndRemovedMember(t *testing.T) {
 	token := phone.want("enabled", "").ID
 	query := func(c *resumeWireClient, id, rsm string) mamWirePage {
 		c.send(`<iq to='` + room.JID + `' type='set' id='` + id + `'><query xmlns='urn:xmpp:mam:2' queryid='` + id + `'><set xmlns='http://jabber.org/protocol/rsm'>` + rsm + `</set></query></iq>`)
-		return readArchiveWirePage(t, c, id, "", room.JID)
+		page := readArchiveWirePage(t, c, id, "", room.JID)
+		var want []string
+		for _, id := range page.IDs {
+			if encrypted[id] {
+				want = append(want, id)
+			}
+		}
+		if !reflect.DeepEqual(page.Encrypted, want) {
+			t.Fatalf("ciphertexts lost across TCP/MAM: %+v", page)
+		}
+		return page
 	}
 	first := query(phone, "first", `<max>100</max>`)
 	if !reflect.DeepEqual(first.IDs, ids[:100]) || first.Complete {
@@ -117,5 +139,70 @@ func TestRoomMAMTCPReconnectAndRemovedMember(t *testing.T) {
 	removed.send(`<iq to='` + room.JID + `' type='set' id='denied'><query xmlns='urn:xmpp:mam:2'/></iq>`)
 	if e = removed.want("iq", "denied"); !strings.Contains(e.Inner, "forbidden") {
 		t.Fatal(e)
+	}
+}
+
+// A room sender can leave/reuse a nickname while the receiver is disconnected.
+// Require a fresh MAM catchup instead of a successful SM resume that drops a
+// ciphertext or feeds it to a Signal session belonging to the current nick.
+func TestGroupOMEMOReconnectFallsBackToMAM(t *testing.T) {
+	srv, st, u := testServer(t)
+	ctx := context.Background()
+	srv.authn = auth.NewLayer(st, config.LDAPConfig{}, config.MFAConfig{}, config.OIDCConfig{})
+	hash, err := srv.authn.Hasher.Hash("fixture-password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = st.UpdateUserPassword(ctx, u.ID, hash); err != nil {
+		t.Fatal(err)
+	}
+	bob, err := st.CreateUser(ctx, &storage.User{TenantID: u.TenantID, DomainID: u.DomainID, LocalPart: "bob", Email: "bob@example.com", Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	room, err := srv.CreateChatRoom(ctx, u.Email, "Encrypted reconnect", []string{bob.Email})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	phone := newResumeWireClient(t, srv, ln, "phone")
+	join := func(c *resumeWireClient) {
+		c.send(`<presence to='` + room.JID + `/Alice'><x xmlns='` + mucNS + `'><history maxstanzas='0'/></x></presence>`)
+		c.want("presence", "")
+		c.want("message", "")
+	}
+	join(phone)
+	phone.send(`<enable xmlns='urn:xmpp:sm:3' resume='true'/>`)
+	token := phone.want("enabled", "").ID
+	phone.conn.Close()
+	select {
+	case <-phone.done:
+	case <-time.After(4 * time.Second):
+		t.Fatal("disconnect timeout")
+	}
+	audience, err := srv.RoomOMEMOContext(ctx, bob.Email, room.JID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ev, err := srv.SendRoomOMEMO(ctx, bob.Email, room.JID, audience.Revision, groupCipherFixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	restored := newResumeWireClient(t, srv, ln, "")
+	restored.send(`<resume xmlns='urn:xmpp:sm:3' previd='` + token + `' h='0'/>`)
+	if failure := restored.want("failed", ""); !strings.Contains(failure.Inner, "item-not-found") {
+		t.Fatal(failure)
+	}
+	restored.send(`<iq type='set' id='bind'><bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'><resource>phone</resource></bind></iq>`)
+	restored.want("iq", "bind")
+	join(restored)
+	restored.send(`<iq to='` + room.JID + `' type='set' id='catchup'><query xmlns='urn:xmpp:mam:2' queryid='catchup'/></iq>`)
+	page := readArchiveWirePage(t, restored, "catchup", "", room.JID)
+	if !reflect.DeepEqual(page.Encrypted, []string{ev.ID}) || !page.Complete {
+		t.Fatal(page)
 	}
 }
