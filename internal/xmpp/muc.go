@@ -316,10 +316,17 @@ func roomMessageXML(room, nick, to, id, body, origin, extra string) string {
 	if origin != "" {
 		extra += `<origin-id xmlns='urn:xmpp:sid:0' id='` + xmlEscape(origin) + `'/>`
 	}
-	return fmt.Sprintf(`<message from='%s/%s' to='%s' type='groupchat' id='%s'><body>%s</body><stanza-id xmlns='urn:xmpp:sid:0' by='%s' id='%s'/>%s</message>`, xmlEscape(room), xmlEscape(nick), xmlEscape(to), xmlEscape(id), xmlEscape(body), xmlEscape(room), xmlEscape(id), extra)
+	address := ""
+	if to != "" {
+		address = " to='" + xmlEscape(to) + "'"
+	}
+	return fmt.Sprintf(`<message xmlns='jabber:client' from='%s/%s'%s type='groupchat' id='%s'><body>%s</body><stanza-id xmlns='urn:xmpp:sid:0' by='%s' id='%s'/>%s</message>`, xmlEscape(room), xmlEscape(nick), address, xmlEscape(id), xmlEscape(body), xmlEscape(room), xmlEscape(id), extra)
 }
 func (s *Server) broadcastRoomMessage(ev ChatEvent, nick, origin string) {
 	for session := range s.muc[ev.Room] {
+		if s.requireRoomMember(context.Background(), session.JID.Bare(), ev.Room) != nil {
+			continue
+		}
 		session.SendRaw([]byte(roomMessageXML(ev.Room, nick, session.JID.Full(), ev.ID, ev.Body, origin, "")))
 	}
 }
@@ -419,7 +426,7 @@ func (s *Session) handleMUCMessage(to, typ, id, inner string) error {
 			return fail("internal-server-error")
 		}
 	}
-	if _, err = srv.sendRoomMessageAs(ctx, s.JID.Bare(), room.JID, payload.Body, occupant.Nick, origin); err != nil {
+	if _, err = srv.sendRoomMessageAs(ctx, s.JID.Bare(), room.JID, payload.Body, occupant.Nick, origin, s.JID.Full()); err != nil {
 		return fail("internal-server-error")
 	}
 	return nil
@@ -597,11 +604,13 @@ func (s *Session) handleMUCIQ(id, typ, to, inner string) (bool, error) {
 		return fail("forbidden")
 	}
 	switch q.XMLName.Space {
+	case "urn:xmpp:mam:2":
+		return true, s.handleRoomMAM(ctx, id, typ, room.JID, inner)
 	case discoInfo:
 		if typ != "get" {
 			return fail("bad-request")
 		}
-		return true, s.mucResult(id, to, `<query xmlns='`+discoInfo+`'><identity category='conference' type='text' name='`+xmlEscape(room.Name)+`'/><feature var='`+mucNS+`'/><feature var='muc_persistent'/><feature var='muc_membersonly'/><feature var='muc_nonanonymous'/><feature var='muc_unmoderated'/><feature var='muc_hidden'/><feature var='urn:xmpp:sid:0'/></query>`)
+		return true, s.mucResult(id, to, `<query xmlns='`+discoInfo+`'><identity category='conference' type='text' name='`+xmlEscape(room.Name)+`'/><feature var='`+mucNS+`'/><feature var='muc_persistent'/><feature var='muc_membersonly'/><feature var='muc_nonanonymous'/><feature var='muc_unmoderated'/><feature var='muc_hidden'/><feature var='urn:xmpp:sid:0'/><feature var='urn:xmpp:mam:2'/></query>`)
 	case discoItems:
 		if typ != "get" {
 			return fail("bad-request")

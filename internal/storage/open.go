@@ -126,6 +126,7 @@ func migrate(ctx context.Context, db *sql.DB, dialect Dialect) error {
 			"055_note_versions.sqlite.sql",
 			"056_omemo_retirement.sqlite.sql",
 			"057_xmpp_device_passwords.sqlite.sql",
+			"058_room_archive.sqlite.sql",
 		}
 	case DialectPostgres:
 		files = []string{
@@ -186,6 +187,7 @@ func migrate(ctx context.Context, db *sql.DB, dialect Dialect) error {
 			"055_note_versions.postgres.sql",
 			"056_omemo_retirement.postgres.sql",
 			"057_xmpp_device_passwords.postgres.sql",
+			"058_room_archive.postgres.sql",
 		}
 	default:
 		return fmt.Errorf("unsupported dialect")

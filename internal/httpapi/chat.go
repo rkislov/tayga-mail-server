@@ -39,6 +39,43 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/v1/chat"), "/")
+	if path == "rooms/history" {
+		if r.Method != http.MethodGet {
+			writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+			return
+		}
+		archive, ok := s.xmpp.(interface {
+			RoomHistoryPage(context.Context, string, string, string, int) (xmpp.RoomArchivePage, error)
+		})
+		if !ok {
+			writeJSON(w, 503, map[string]string{"error": "room archive unavailable"})
+			return
+		}
+		q := r.URL.Query()
+		limit := 80
+		if q.Get("limit") != "" {
+			n, e := strconv.Atoi(q.Get("limit"))
+			if e != nil || n < 1 || n > 100 {
+				writeJSON(w, 400, map[string]string{"error": "limit must be 1–100"})
+				return
+			}
+			limit = n
+		}
+		page, e := archive.RoomHistoryPage(r.Context(), au.Email, q.Get("room"), q.Get("before"), limit)
+		if e != nil {
+			status := 500
+			if errors.Is(e, xmpp.ErrRoomAccess) {
+				status = 403
+			} else if errors.Is(e, xmpp.ErrRoomCursor) {
+				status = 404
+			}
+			writeJSON(w, status, map[string]string{"error": e.Error()})
+			return
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		writeJSON(w, 200, page)
+		return
+	}
 	if path == "rooms" || strings.HasPrefix(path, "rooms/") {
 		groups, ok := s.xmpp.(interface {
 			CreateChatRoom(context.Context, string, string, []string) (xmpp.ChatRoom, error)
