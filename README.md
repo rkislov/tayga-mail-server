@@ -1,5 +1,11 @@
 # Tayga Mail Server (TMS)
 
+<!-- owner-maintenance:start -->
+**Автор проекта, изменений и публикаций — Кислов Роман Сергеевич ([@rkislov](https://github.com/rkislov)).**
+
+Ошибки и предложения принимаются через **Issues**, изменения — через **Pull Requests** из форков. Прямую запись в основной репозиторий и публикацию версий выполняет только владелец `rkislov`.
+<!-- owner-maintenance:end -->
+
 Corporate-class multi-domain / multi-tenant mail server in Go.
 
 **Author:** Кислов Роман Сергеевич (Roman Sergeyevich Kislov)  
