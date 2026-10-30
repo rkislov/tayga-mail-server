@@ -11,6 +11,7 @@ import (
 
 // ChatEvent is pushed to web clients over SSE.
 type ChatEvent struct {
+	SenderName string          `json:"sender_name,omitempty"`
 	OMEMO      string          `json:"omemo,omitempty"`
 	Room       string          `json:"room,omitempty"`
 	Attachment *ChatAttachment `json:"attachment,omitempty"`
@@ -35,6 +36,7 @@ type RosterEntry struct {
 
 // HistoryMsg is a decoded MAM / chat history item.
 type HistoryMsg struct {
+	SenderName string          `json:"sender_name,omitempty"`
 	SenderJID  string          `json:"-"`
 	Nick       string          `json:"-"`
 	OriginID   string          `json:"-"`
@@ -173,6 +175,11 @@ func (s *Server) ListChatRoster(ctx context.Context, userID string) ([]RosterEnt
 	}
 	out := make([]RosterEntry, 0, len(items))
 	for _, it := range items {
+		// Own devices can create a self-roster entry. The account already has a
+		// dedicated presence row; keep its history/roster data, but not a duplicate contact.
+		if ParseJID(it.JID).Bare() == ParseJID(user.Email).Bare() {
+			continue
+		}
 		name := s.rosterDisplayName(ctx, userID, it.JID, it.Name)
 		presence := "unknown"
 		if it.Subscription == "to" || it.Subscription == "both" {

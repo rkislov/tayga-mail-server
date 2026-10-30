@@ -4455,7 +4455,7 @@ function startChatLive() {
     const me = chatBare(chatState.me || state.email);
     const peer = data.room || (from === me ? to : from);
     if (!peer) return;
-    if (!chatState.roster.some((r) => chatBare(r.jid) === peer)) {
+    if (peer !== me && !chatState.roster.some((r) => chatBare(r.jid) === peer)) {
       chatState.roster.unshift({ jid: peer, name: "", subscription: "none", group: !!data.room });
       if(data.room) refreshChat();
       renderChatRoster();
@@ -4482,7 +4482,7 @@ function appendChatBubble(m) {
   if(messageKey)div.dataset.messageKey=messageKey;
   div.className = "chat-bubble" + (mine ? " is-mine" : "");
   div.innerHTML = `<p>${escapeHtml(m.body || "")}</p><time>${escapeHtml(m.at ? new Date(m.at).toLocaleString() : "")}</time>`;
-  if(chatState.roster.find(r=>r.jid===chatState.peer)?.group){const author=document.createElement("strong");author.textContent=chatState.roster.find(r=>r.jid===chatBare(m.from))?.name||chatBare(m.from);div.prepend(author)}
+  if(chatState.roster.find(r=>r.jid===chatState.peer)?.group){const author=document.createElement("strong");author.textContent=String(m.sender_name||'').trim()||(mine?String(state.me?.display_name||'').trim():'')||String(chatState.roster.find(r=>chatBare(r.jid)===chatBare(m.from))?.name||'').trim()||chatBare(m.from);author.title=chatBare(m.from);div.prepend(author)}
   const attachment=m.attachment||chatAttachment(m.body);
   if(m.encrypted){div.querySelector('p').textContent='🔒 OMEMO…';omemoRender(m,div)}
   if(attachment){if(m.body===attachment.url)div.querySelector("p").textContent=attachment.name;const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.textContent=mailImageText('Открыть файл: ','Open file: ')+attachment.name;button.onclick=()=>{try{const u=new URL(attachment.url,location.href);if(u.protocol!=='https:'||u.username||u.password)return;if(u.origin===location.origin)openDocumentPreview(attachment);else window.open(u.href,'_blank','noopener,noreferrer')}catch{}};div.append(button);addChatInlinePreview(div,attachment,button)}
@@ -4551,7 +4551,7 @@ function renderChatRoster() {
   const list = $("chat-roster");
   if (!list) return;
   const peer = chatBare(chatState.peer);
-  list.innerHTML = chatState.roster.map((r) => {
+  list.innerHTML = chatState.roster.filter(r=>r.group||chatBare(r.jid)!==chatBare(chatState.me||state.email)).map((r) => {
     const jid = chatBare(r.jid);
     const label = r.name || jid;
  const presence=r.group?mailImageText("Группа","Group"):t("presence_"+(r.presence||"unknown"));

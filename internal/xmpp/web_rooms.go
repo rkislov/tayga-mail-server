@@ -186,6 +186,9 @@ func (s *Server) sendRoomMessageAs(ctx context.Context, email, jid, body, nick, 
 		return ChatEvent{}, fmt.Errorf("message must contain 1–65536 bytes")
 	}
 	ev := ChatEvent{Type: "message", Room: jid, ID: randomID(), From: email, To: jid, Body: body, At: time.Now().UTC()}
+	if sender, e := s.store.GetUserByEmail(ctx, email); e == nil {
+		ev.SenderName = strings.TrimSpace(sender.DisplayName)
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return ChatEvent{}, err
