@@ -34,7 +34,7 @@ func taskXML(t storage.Task, user string) string {
 	_ = json.Unmarshal([]byte(t.EWSProperties), &props)
 	keys := []string{}
 	for k := range props {
-		if strings.HasPrefix(k, "_eas:") {
+		if strings.HasPrefix(k, "_eas:") || strings.HasPrefix(k, "_tayga:") {
 			continue
 		}
 		if k == "task:CompleteDate" && !t.Completed {

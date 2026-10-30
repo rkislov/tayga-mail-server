@@ -72,6 +72,9 @@ func taygaRawItem(item, body, kind, data string) string {
 	return strings.Replace(item, anchor, taygaProperty(kind, data)+anchor, 1)
 }
 func (h *ewsHandler) taygaWrite(ctx context.Context, u *storage.User, body string, create bool) (string, bool, error) {
+	if response, handled, err := h.taygaTaskWrite(ctx, u, body, create); handled {
+		return response, true, err
+	}
 	props := taygaProperties(body)
 	raw, calendar := props["TaygaICalendar"]
 	if !calendar {

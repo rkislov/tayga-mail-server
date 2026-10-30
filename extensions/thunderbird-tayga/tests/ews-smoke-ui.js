@@ -25,6 +25,10 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
         "Pending edit did not survive restart",
       );
       assert(
+        persisted.tasks.some((t) => t.title === "Задача после перезапуска"),
+        "Task queue did not survive restart",
+      );
+      assert(
         Object.keys((await native("state")).pending).length === 0,
         "Restart queue was not drained: " +
           JSON.stringify((await native("state")).pending),
@@ -187,6 +191,157 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     checks.push(
       "server to native calendar/contact sync preserves recurrence and vCard fields",
     );
+    stage = "tasks";
+    const tasks = Object.values(state.collections).find(
+      (c) => c.kind === "tasks",
+    );
+    assert(tasks, "Tasks mirror not created");
+    item = await inspect({
+      key: tasks.key,
+      op: "get",
+      localId: server.serverTaskId,
+    });
+    assert(
+      item.data.includes("Задача с сервера") &&
+        item.data.includes("PERCENT-COMPLETE:25"),
+      "Server task not downloaded",
+    );
+    const taskData =
+      "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Tayga//Test//EN\r\nBEGIN:VTODO\r\nUID:native-task\r\nSUMMARY:Задача Thunderbird\r\nDESCRIPTION:Проверка синхронизации\r\nDUE;VALUE=DATE:20261105\r\nSTATUS:NEEDS-ACTION\r\nPERCENT-COMPLETE:0\r\nBEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER:-PT15M\r\nDESCRIPTION:Напоминание\r\nEND:VALARM\r\nEND:VTODO\r\nEND:VCALENDAR\r\n";
+    await inspect({ key: tasks.key, op: "create", data: taskData });
+    let lost = false;
+    try {
+      await background.ews.run();
+    } catch (e) {
+      if (!e.message.includes("503")) throw e;
+      lost = true;
+    }
+    assert(lost, "Task lost-response fixture not exercised");
+    await inspect({
+      key: tasks.key,
+      op: "modify",
+      localId: "native-task",
+      title: "Задача Thunderbird после повтора",
+    });
+    await background.ews.run();
+    assert(
+      Object.values((await native("state")).pending).some(
+        (p) => p.localId === "native-task",
+      ),
+      "New edit was lost after create retry",
+    );
+    await background.ews.run();
+    server = await serverState();
+    assert(
+      server.tasks.filter((t) => t.title === "Задача Thunderbird после повтора")
+        .length === 1,
+      "Task create duplicated or failed",
+    );
+    assert(
+      Object.keys((await native("state")).pending).length === 0,
+      "Task echo or pending create remains",
+    );
+    await inspect({
+      key: tasks.key,
+      op: "modify",
+      localId: "native-task",
+      status: "IN-PROCESS",
+      percent: 60,
+    });
+    await background.ews.run();
+    server = await serverState();
+    assert(
+      server.tasks.some(
+        (t) =>
+          t.title === "Задача Thunderbird после повтора" &&
+          t.percent_complete === 60,
+      ),
+      "Task progress not uploaded",
+    );
+    await fetch(fixture + "/test/tasks", { method: "POST" });
+    await background.ews.run();
+    item = await inspect({
+      key: tasks.key,
+      op: "get",
+      localId: server.serverTaskId,
+    });
+    assert(
+      item.data.includes("Задача изменена в вебе") &&
+        item.data.includes("STATUS:COMPLETED"),
+      "Web task edit/completion not downloaded",
+    );
+    await inspect({
+      key: tasks.key,
+      op: "modify",
+      localId: server.serverTaskId,
+      status: "IN-PROCESS",
+      percent: 20,
+    });
+    await background.ews.run();
+    assert(
+      (await serverState()).tasks.some(
+        (t) =>
+          t.id === server.serverTaskId &&
+          !t.completed &&
+          t.percent_complete === 20,
+      ),
+      "Completed task could not be reopened",
+    );
+    // Reproduce a 2.1 task incorrectly queued in an event calendar, then upgrade.
+    await inspect({
+      key: calendar.key,
+      op: "legacyTask",
+      data: taskData
+        .replaceAll("native-task", "legacy-task")
+        .replace("Задача Thunderbird", "Восстановленная задача"),
+    });
+    await background.ews.run();
+    server = await serverState();
+    assert(
+      server.tasks.filter((t) => t.title === "Восстановленная задача")
+        .length === 1,
+      "Legacy task not recovered exactly once",
+    );
+    assert(
+      !(await inspect({ key: calendar.key, op: "get", localId: "legacy-task" }))
+        .data,
+      "Misplaced local task not moved",
+    );
+    assert(
+      (
+        await inspect({ key: tasks.key, op: "get", localId: "legacy-task" })
+      ).data.includes("BEGIN:VALARM"),
+      "Recovery lost the task alarm",
+    );
+    await background.ews.run();
+    assert(
+      Object.keys((await native("state")).pending).length === 0,
+      "Recovery generated a sync echo",
+    );
+    await inspect({ key: tasks.key, op: "delete", localId: "native-task" });
+    await background.ews.run();
+    assert(
+      !(await serverState()).tasks.some(
+        (t) => t.title === "Задача Thunderbird после повтора",
+      ),
+      "Native task deletion not uploaded",
+    );
+    await fetch(fixture + "/test/tasks?delete=1", { method: "POST" });
+    await background.ews.run();
+    assert(
+      !(
+        await inspect({
+          key: tasks.key,
+          op: "get",
+          localId: server.serverTaskId,
+        })
+      ).data,
+      "Server task deletion not applied",
+    );
+    checks.push(
+      "tasks: both directions, progress, completion/reopen, both deletions, lost-response replay, 2.1 queue recovery and alarms",
+    );
+    stage = "calendar/contact regression";
     const largeCard =
       "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:large-person\r\nFN:Large queue test\r\nNOTE:" +
       "x".repeat(1100000) +
@@ -468,6 +623,12 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       op: "modify",
       localId: "server-event",
       title: "Queued across restart",
+    });
+    await inspect({
+      key: tasks.key,
+      op: "modify",
+      localId: "legacy-task",
+      title: "Задача после перезапуска",
     });
     await browser.storage.local.set({ ewsSmokeRestart: { checks } });
     await fetch(resultURL, {

@@ -50,6 +50,8 @@ type Driver interface {
 	SaveTask(context.Context, string, *Task) error
 	CreateFlowSyncTask(context.Context, string, string, string, *Task) (string, error)
 	DeleteTask(context.Context, string, string) error
+	DeleteTaskVersion(context.Context, string, string, int64) error
+	CreateEWSTask(context.Context, string, string, *Task) (string, error)
 
 	EWSMailMetadata(context.Context, string) (string, error)
 	UpdateEWSMailMetadata(context.Context, string, string, string) error

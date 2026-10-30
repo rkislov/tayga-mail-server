@@ -18,6 +18,9 @@ var { MailServices } = ChromeUtils.importESModule(
 var { cal } = ChromeUtils.importESModule(
   "resource:///modules/calendar/calUtils.sys.mjs",
 );
+var { default: ICAL } = ChromeUtils.importESModule(
+  "resource:///modules/calendar/Ical.sys.mjs",
+);
 var { VCardUtils } = ChromeUtils.importESModule(
   "resource:///modules/VCardUtils.sys.mjs",
 );
@@ -148,17 +151,29 @@ var taygaEws = class extends ExtensionCommon.ExtensionAPI {
     return Services.uuid.generateUUID().toString().slice(1, -1);
   }
   native(collection) {
-    return collection.kind === "calendar"
+    return collection.kind !== "contacts"
       ? cal.manager.getCalendarById(collection.nativeId)
       : MailServices.ab.getDirectory(collection.nativeId).wrappedJSObject;
   }
   attach(collection) {
-    if (collection.kind !== "calendar" || this.calObservers.has(collection.key))
+    if (collection.kind === "contacts" || this.calObservers.has(collection.key))
       return;
     const calendar = this.native(collection);
     if (!calendar) return;
+    calendar.setProperty(
+      "capabilities.tasks.supported",
+      collection.kind === "tasks",
+    );
+    calendar.setProperty(
+      "capabilities.events.supported",
+      collection.kind === "calendar",
+    );
     const changed = (item, op) => {
       const parent = item.parentItem || item;
+      // Old versions allowed tasks inside an event calendar. They are recovered
+      // by migrateTasks, never sent through the CalendarItem path again.
+      if (collection.kind === "calendar" && parent.isTodo()) return;
+      if (collection.kind === "tasks" && !parent.isTodo()) return;
       let data = "";
       if (op !== "delete") {
         const serializer = Cc[
@@ -188,6 +203,39 @@ var taygaEws = class extends ExtensionCommon.ExtensionAPI {
     const hash = Cc["@mozilla.org/security/hash;1"].createInstance(
       Ci.nsICryptoHash,
     );
+    if (data.includes("BEGIN:VTODO")) {
+      const canonical = (component) => {
+        const props = component[1]
+          .filter(
+            (p) =>
+              ![
+                "prodid",
+                "created",
+                "last-modified",
+                "dtstamp",
+                "x-moz-generation",
+              ].includes(p[0]) &&
+              !(
+                ["priority", "percent-complete", "sequence"].includes(p[0]) &&
+                Number(p[3]) === 0
+              ),
+          )
+          .map((p) => [
+            p[0],
+            Object.fromEntries(Object.entries(p[1]).sort()),
+            ...p.slice(2),
+          ]);
+        props.sort((a, b) =>
+          JSON.stringify(a).localeCompare(JSON.stringify(b)),
+        );
+        const children = component[2].map(canonical);
+        children.sort((a, b) =>
+          JSON.stringify(a).localeCompare(JSON.stringify(b)),
+        );
+        return [component[0], props, children];
+      };
+      data = JSON.stringify(canonical(ICAL.parse(data)));
+    }
     const bytes = new TextEncoder().encode(
       data.replace(
         /^(?:X-MOZ-GENERATION|LAST-MODIFIED|DTSTAMP|CREATED):[^\r\n]*\r?\n/gm,
@@ -199,7 +247,7 @@ var taygaEws = class extends ExtensionCommon.ExtensionAPI {
     return hash.finish(true);
   }
   serialize(collection, item) {
-    if (collection.kind !== "calendar")
+    if (collection.kind === "contacts")
       return VCardUtils.abCardToVCard(item, "4.0");
     const serializer = Cc[
       "@mozilla.org/calendar/ics-serializer;1"
@@ -218,7 +266,7 @@ var taygaEws = class extends ExtensionCommon.ExtensionAPI {
       if (!target) continue;
       const seen = new Set();
       const inspect = (item) => {
-        const id = collection.kind === "calendar" ? item.id : item.UID;
+        const id = collection.kind !== "contacts" ? item.id : item.UID;
         seen.add(id);
         if (
           this.state.pending[collection.key + ":" + id] ||
@@ -240,9 +288,17 @@ var taygaEws = class extends ExtensionCommon.ExtensionAPI {
             item.title || item.displayName,
           );
       };
-      if (collection.kind === "calendar") {
+      if (collection.kind !== "contacts") {
         const reader = target
-          .getItems(Ci.calICalendar.ITEM_FILTER_TYPE_EVENT, 0, null, null)
+          .getItems(
+            collection.kind === "tasks"
+              ? Ci.calICalendar.ITEM_FILTER_TYPE_TODO |
+                  Ci.calICalendar.ITEM_FILTER_COMPLETED_ALL
+              : Ci.calICalendar.ITEM_FILTER_TYPE_EVENT,
+            0,
+            null,
+            null,
+          )
           .getReader();
         try {
           while (true) {
@@ -437,7 +493,7 @@ var taygaEws = class extends ExtensionCommon.ExtensionAPI {
         kind: args.kind,
         items: {},
       };
-      if (args.kind === "calendar") {
+      if (args.kind !== "contacts") {
         const calendar = cal.manager.createCalendar(
           "storage",
           Services.io.newURI("moz-storage-calendar://"),
@@ -466,12 +522,111 @@ var taygaEws = class extends ExtensionCommon.ExtensionAPI {
     }
     if (collection.name !== args.name) {
       const target = this.native(collection);
-      if (collection.kind === "calendar") target.name = "Tayga · " + args.name;
+      if (collection.kind !== "contacts") target.name = "Tayga · " + args.name;
       else target.dirName = "Tayga · " + args.name;
       collection.name = args.name;
       this.save();
     }
+    if (collection.kind !== "contacts") {
+      const target = this.native(collection);
+      target.setProperty(
+        "capabilities.tasks.supported",
+        collection.kind === "tasks",
+      );
+      target.setProperty(
+        "capabilities.events.supported",
+        collection.kind === "calendar",
+      );
+    }
     return collection;
+  }
+  async migrateTasks(args) {
+    const tasks = this.state.collections[args.key];
+    if (tasks?.kind !== "tasks")
+      throw new Error("Task collection unavailable.");
+    const target = this.native(tasks);
+    this.state.taskRecovery ||= {};
+    for (const source of Object.values(this.state.collections)) {
+      if (source.scope !== tasks.scope || source.kind !== "calendar") continue;
+      const calendar = this.native(source);
+      if (!calendar) continue;
+      const reader = calendar
+        .getItems(
+          Ci.calICalendar.ITEM_FILTER_TYPE_TODO |
+            Ci.calICalendar.ITEM_FILTER_COMPLETED_ALL,
+          0,
+          null,
+          null,
+        )
+        .getReader();
+      const items = [];
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          items.push(...(Array.isArray(value) ? value : [value]));
+        }
+      } finally {
+        reader.releaseLock();
+      }
+      for (const item of items) {
+        const oldKey = source.key + ":" + item.id;
+        const newKey = tasks.key + ":" + item.id;
+        const old = this.state.pending[oldKey];
+        if (source.items[item.id]?.id || old?.remoteId) continue;
+        const data = this.serialize(tasks, item);
+        const recovery = (this.state.taskRecovery[oldKey] ||= {
+          data,
+          createId: old?.createId || this.uuid(),
+          destination: tasks.key,
+        });
+        recovery.data = data;
+        await this.save();
+        const existing = await target.getItem(item.id);
+        if (
+          existing &&
+          this.fingerprint(this.serialize(tasks, existing)) !==
+            this.fingerprint(data)
+        )
+          throw new Error(
+            "Восстановление задачи остановлено: в списке задач есть другая версия. Обе записи сохранены.",
+          );
+        if (!existing) {
+          const copy = item.clone();
+          copy.calendar = target;
+          await target.addItem(copy);
+        }
+        if (!tasks.items[item.id]?.id) {
+          this.queue(tasks, item.id, "put", data, item.title);
+          this.state.pending[newKey].createId = recovery.createId;
+          this.state.pending[newKey].conflict = false;
+          this.state.pending[newKey].error = "";
+        }
+        await this.save();
+        // Only remove the local misplaced copy after the new mirror and its
+        // upload queue are durable. The original ICS stays in taskRecovery.
+        const current = await calendar.getItem(item.id);
+        if (
+          current &&
+          this.fingerprint(this.serialize(source, current)) !==
+            this.fingerprint(data)
+        )
+          throw new Error(
+            "Задача изменена во время восстановления; повторите синхронизацию.",
+          );
+        this.suppressed.set(oldKey, { op: "delete" });
+        try {
+          if (current) await calendar.deleteItem(current);
+          delete this.state.pending[oldKey];
+          delete source.items[item.id];
+          recovery.completed = true;
+          await this.save();
+        } finally {
+          this.suppressed.delete(oldKey);
+        }
+      }
+    }
+    return { ok: true };
   }
   async apply(args) {
     const collection = this.state.collections[args.key];
@@ -489,7 +644,7 @@ var taygaEws = class extends ExtensionCommon.ExtensionAPI {
         if (!localId) continue;
         this.suppressed.set(collection.key + ":" + localId, { op: "delete" });
         try {
-          if (collection.kind === "calendar") {
+          if (collection.kind !== "contacts") {
             const old = await target.getItem(localId);
             if (old) await target.deleteItem(old);
           } else {
@@ -504,7 +659,7 @@ var taygaEws = class extends ExtensionCommon.ExtensionAPI {
         continue;
       }
       let item, id;
-      if (collection.kind === "calendar") {
+      if (collection.kind !== "contacts") {
         const parser = Cc["@mozilla.org/calendar/ics-parser;1"].createInstance(
           Ci.calIIcsParser,
         );
@@ -513,6 +668,8 @@ var taygaEws = class extends ExtensionCommon.ExtensionAPI {
         if (items.length !== 1 || parser.getParentlessItems().length)
           throw new Error("Invalid EWS calendar resource.");
         item = items[0];
+        if ((collection.kind === "tasks") !== item.isTodo())
+          throw new Error("Неверный тип объекта EWS.");
         id = item.id;
         item.calendar = target;
       } else {
@@ -527,7 +684,7 @@ var taygaEws = class extends ExtensionCommon.ExtensionAPI {
         fingerprint: this.fingerprint(this.serialize(collection, item)),
       });
       try {
-        if (collection.kind === "calendar") {
+        if (collection.kind !== "contacts") {
           const old = await target.getItem(id);
           if (old) await target.modifyItem(item, old);
           else await target.addItem(item);
@@ -536,7 +693,7 @@ var taygaEws = class extends ExtensionCommon.ExtensionAPI {
           else target.addCard(item);
         }
         const stored =
-          collection.kind === "calendar"
+          collection.kind !== "contacts"
             ? await target.getItem(id)
             : target.getCard(id);
         collection.items[id] = {
@@ -557,6 +714,8 @@ var taygaEws = class extends ExtensionCommon.ExtensionAPI {
         return this.configure(args);
       case "ensure":
         return this.ensure(args);
+      case "migrateTasks":
+        return this.migrateTasks(args);
       case "state":
         await this.reconcile();
         return JSON.parse(JSON.stringify(this.state));
@@ -567,10 +726,22 @@ var taygaEws = class extends ExtensionCommon.ExtensionAPI {
           (p) => p.commandId === args.commandId,
         );
         if (pending) {
+          if (
+            this.state.collections[pending.key]?.kind === "tasks" &&
+            !pending.remoteId &&
+            pending.op === "put"
+          ) {
+            pending.createData ??= pending.data;
+            pending.createCommandId ??= pending.commandId;
+          }
           pending.attempted = true;
           this.save();
         }
-        return { ok: true };
+        return {
+          ok: true,
+          createData: pending?.createData,
+          createCommandId: pending?.createCommandId,
+        };
       }
       case "ack": {
         const itemKey = args.key + ":" + args.localId;
@@ -592,6 +763,15 @@ var taygaEws = class extends ExtensionCommon.ExtensionAPI {
         } else if (current) {
           current.remoteId = args.id;
           current.changeKey = args.changeKey;
+          if (
+            collection.kind === "tasks" &&
+            args.created &&
+            args.changeKey !== "1"
+          ) {
+            current.conflict = true;
+            current.error =
+              "Задача изменена на сервере после создания. Локальная правка сохранена; выберите нужную версию.";
+          }
         }
         this.save();
         return { ok: true };
@@ -623,6 +803,15 @@ var taygaEws = class extends ExtensionCommon.ExtensionAPI {
         } else {
           pending.changeKey = args.changeKey || "";
           pending.remoteId = args.id || "";
+          if (
+            !pending.remoteId &&
+            this.state.collections[pending.key]?.kind === "tasks"
+          ) {
+            pending.createId = this.uuid();
+            pending.attempted = false;
+            delete pending.createData;
+            delete pending.createCommandId;
+          }
           pending.conflict = false;
           pending.error = "";
         }
