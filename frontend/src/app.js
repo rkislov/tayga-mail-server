@@ -4539,8 +4539,8 @@ function renderChatPeerPresence() {
  let label=$('chat-peer-presence');if(!label){label=document.createElement('span');label.id='chat-peer-presence';label.className='meta';label.setAttribute('role','status');button.after(label)}
  const peer=chatState.roster.find(r=>chatBare(r.jid)===chatBare(chatState.peer));
  const allowed=peer&&(peer.subscription==='to'||peer.subscription==='both'||(peer.presence&&peer.presence!=='unknown'));
- button.hidden=!!allowed||!chatState.peer||!!peer?.group;
- label.hidden=!allowed&&!peer?.group;label.textContent=peer?.group?mailImageText('Групповой чат','Group chat'):(allowed?t('presence_'+(peer.presence||'offline')):'');
+ button.hidden=!!allowed||!chatState.peer||!!peer?.group||!!peer?.self;
+ label.hidden=!!peer?.self||(!allowed&&!peer?.group);label.textContent=peer?.group?mailImageText('Групповой чат','Group chat'):(allowed?t('presence_'+(peer.presence||'offline')):'');
 }
 
 function renderChatRoster() {
@@ -4551,13 +4551,13 @@ function renderChatRoster() {
   const list = $("chat-roster");
   if (!list) return;
   const peer = chatBare(chatState.peer);
-  list.innerHTML = chatState.roster.filter(r=>r.group||chatBare(r.jid)!==chatBare(chatState.me||state.email)).map((r) => {
+  list.innerHTML = chatState.roster.filter(r=>r.self||r.group||chatBare(r.jid)!==chatBare(chatState.me||state.email)).map((r) => {
     const jid = chatBare(r.jid);
-    const label = r.name || jid;
+    const label = r.self ? t("chat_self_notes") : r.name || jid;
  const presence=r.group?mailImageText("Группа","Group"):t("presence_"+(r.presence||"unknown"));
     return `<li>
       <button type="button" class="msg-item${jid === peer ? " is-active" : ""}" data-jid="${escapeHtml(jid)}">
-        <span class="chat-roster-name"><span class="msg-subject">${escapeHtml(label)}</span>${r.group?'':chatPresenceDot(r.presence)}</span>
+        <span class="chat-roster-name"><span class="msg-subject">${escapeHtml(label)}</span>${r.group||r.self?'':chatPresenceDot(r.presence)}</span>
         <span class="msg-date">${escapeHtml(r.group?presence:jid)}</span>
       </button>${r.subscription_request?`<section class="chat-presence-request" aria-label="${escapeHtml(t('presence_request'))}"><strong>${escapeHtml(label)}</strong><span class="meta">${escapeHtml(jid)}</span><p>${escapeHtml(t('presence_request'))}</p><div class="chat-presence-request-actions"><button type="button" class="btn-secondary btn-sm" data-sub-action="accept" data-peer="${escapeHtml(jid)}">${escapeHtml(t('presence_accept'))}</button><button type="button" class="btn-secondary btn-sm" data-sub-action="reject" data-peer="${escapeHtml(jid)}">${escapeHtml(t('presence_reject'))}</button></div></section>`:''}
     </li>`;
@@ -4631,7 +4631,7 @@ async function openChatPeer(jid, keepPane) {
   renderChatRoster();
   $('chat-empty')?.classList.add('hidden');$('chat-thread')?.classList.remove('hidden');
   const contact=chatState.roster.find(r=>chatBare(r.jid)===peer);
-  if($('chat-peer'))$('chat-peer').textContent=contact?.name||peer;
+  if($('chat-peer'))$('chat-peer').textContent=contact?.self?t('chat_self_notes'):contact?.name||peer;
   const box=$('chat-messages');if(!box)return;box.replaceChildren();
   const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm chat-history-older';
   const history={peer,revision,guard:omemoGuard(),group:!!contact?.group,before:'',complete:false,loaded:false,loading:false,button};
@@ -5568,10 +5568,10 @@ async function refreshTasks() {
     const showDone = $('tasks-completed').checked;
     $('tasks-list').innerHTML = taskRows.filter(x => showDone || !x.completed).map(x => `
       <li class="list-row task-row ${x.completed ? 'task-row-completed' : ''}">
-        <input type="checkbox" data-task-toggle="${escapeHtml(x.id)}" ${x.completed ? 'checked' : ''} ${x.can_update === false ? 'disabled' : ''} aria-label="${escapeHtml(t('task_complete') + ': ' + x.title)}">
+        <input type="checkbox" data-task-toggle="${escapeHtml(x.id)}" ${x.completed ? 'checked' : ''} ${x.can_update === false || x.recurring ? 'disabled' : ''} aria-label="${escapeHtml(t('task_complete') + ': ' + x.title)}">
         <button class="btn-secondary task-row-edit" data-task-edit="${escapeHtml(x.id)}">
           <span class="task-row-title">${escapeHtml(x.title)}${x.source_message_id ? ' <span aria-label="Mail">✉</span>' : ''}</span>
-          <span class="meta task-row-detail">${escapeHtml(t('task_status_' + taskStatus(x)))} · ${Number(x.percent_complete ?? (x.completed ? 100 : 0))}%${x.due ? ' · ' + escapeHtml(new Date(x.due).toLocaleDateString()) : ''}</span><span class="meta task-row-detail">${escapeHtml(taskPeople(x))}</span>
+          <span class="meta task-row-detail">${escapeHtml(t('task_status_' + taskStatus(x)))} · ${Number(x.percent_complete ?? (x.completed ? 100 : 0))}%${x.due ? ' · ' + escapeHtml(new Date(x.due).toLocaleDateString()) : ''}</span><span class="meta task-row-detail">${escapeHtml(x.recurring ? t('task_recurring_hint') : taskPeople(x))}</span>
         </button>
         ${x.can_manage === false ? '' : `<button class="btn-secondary btn-ico task-row-delete" data-task-delete="${escapeHtml(x.id)}" title="${escapeHtml(t('delete'))}" aria-label="${escapeHtml(t('delete') + ': ' + x.title)}">×</button>`}
       </li>`).join('') || `<li class="meta" style="padding:16px">${escapeHtml(t('tasks_empty'))}</li>`;
@@ -5588,7 +5588,7 @@ async function refreshTasks() {
     });
     $('tasks-list').querySelectorAll('[data-task-edit]').forEach(el => el.onclick = () => editTask(taskRows.find(x => x.id === el.dataset.taskEdit)));
     $('tasks-list').querySelectorAll('[data-task-delete]').forEach(el => el.onclick = async () => {
-      if (!confirm(t('task_delete_confirm'))) return;
+      if (!confirm(t(taskRows.find(x => x.id === el.dataset.taskDelete)?.recurring ? 'task_series_delete_confirm' : 'task_delete_confirm'))) return;
       try {
         await api('/api/v1/tasks/' + encodeURIComponent(el.dataset.taskDelete), {method: 'DELETE'});
         await refreshTasks();
@@ -5613,9 +5613,9 @@ function editTask(task = null) {
   $('task-assignee').innerHTML=`<option value="">${escapeHtml(t('task_assignee_choose'))}</option>`;
   $('task-history-section').open=false;
   renderTaskPermissions();
-  if(task?.can_manage !== false) loadTaskAssignees();
+  if(!task?.recurring && task?.can_manage !== false) loadTaskAssignees();
   loadTaskHistory();
-  (task?.can_manage === false ? $('task-status') : $('task-title')).focus();
+  (task?.recurring ? $('task-cancel') : task?.can_manage === false ? $('task-status') : $('task-title')).focus();
 }
 $('task-status')?.addEventListener('change', () => {
   const status = $('task-status').value;
@@ -5675,13 +5675,13 @@ function taskPager(prefix, offset, total, size = 10) {
   $(prefix + '-count').textContent = total ? `${Math.min(offset + 1, total)}–${Math.min(offset + size, total)} / ${total}` : '0';
 }
 function renderTaskPermissions() {
-  const task = editingTask, manage = task?.can_manage !== false, update = task?.can_update !== false;
+  const task = editingTask, manage = task?.can_manage !== false && !task?.recurring, update = task?.can_update !== false && !task?.recurring;
   $('task-people').textContent = taskPeople(task);
-  $('task-permissions').textContent = manage ? '' : t(update ? 'task_progress_only' : 'task_pending_hint');
+  $('task-permissions').textContent = task?.recurring ? t('task_recurring_hint') : manage ? '' : t(update ? 'task_progress_only' : 'task_pending_hint');
   for (const field of ['task-title','task-body','task-due']) $(field).disabled = !manage;
   for (const field of ['task-status','task-percent','task-save']) $(field).disabled = !update || taskAssignmentBusy;
   $('task-assignment-controls').hidden = !manage;
-  $('task-response').hidden = manage || task?.assignment_state !== 'pending' || task.completed;
+  $('task-response').hidden = !!task?.recurring || manage || task?.assignment_state !== 'pending' || task.completed;
   for (const field of ['task-accept','task-decline','task-assign','task-revoke']) $(field).disabled = taskAssignmentBusy;
   $('task-cancel').disabled = taskAssignmentBusy;
   $('task-assign').hidden = !task;

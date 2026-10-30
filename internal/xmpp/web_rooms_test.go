@@ -117,10 +117,17 @@ func TestRoomProfileNamesAndSelfRoster(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	self := 0
 	for _, item := range roster {
 		if ParseJID(item.JID).Bare() == alice.Email {
-			t.Fatal("self contact remains", item)
+			self++
+			if !item.Self || item.Group || item.SubscriptionRequest {
+				t.Fatal("invalid self notes", item)
+			}
 		}
+	}
+	if self != 1 {
+		t.Fatal("expected one self notes row", roster)
 	}
 	// Hiding the self contact must not delete user data.
 	items, err := srv.effectiveRoster(ctx, alice.ID)

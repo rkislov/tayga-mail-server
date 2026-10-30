@@ -66,7 +66,9 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err := s.store.SaveTask(r.Context(), au.ID, &task); err != nil {
-			if err == storage.ErrInvalidTaskProgress || err == storage.ErrTaskAssignment {
+			if err == storage.ErrTaskSeries {
+				writeJSON(w, 409, map[string]string{"error": err.Error()})
+			} else if err == storage.ErrInvalidTaskProgress || err == storage.ErrTaskAssignment {
 				writeJSON(w, 400, map[string]string{"error": "invalid task status or percentage"})
 			} else if err == storage.ErrUnauthorized {
 				writeJSON(w, 403, map[string]string{"error": "Only the author can change task details; accept the assignment to update progress"})
@@ -167,6 +169,9 @@ func (s *Server) handleTaskActions(w http.ResponseWriter, r *http.Request, user 
 			case storage.ErrUnauthorized:
 				code = 403
 				message = "Action not allowed for this task"
+			case storage.ErrTaskSeries:
+				code = 409
+				message = err.Error()
 			case storage.ErrTaskAssignment:
 				code = 400
 				message = "Invalid assignment transition"

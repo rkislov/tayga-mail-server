@@ -137,6 +137,9 @@ func (s *Server) createChatRoom(ctx context.Context, email, name string, members
 		return ChatRoom{}, err
 	}
 	for _, member := range all {
+		if requested == "" {
+			s.logBookmarkError(s.syncRoomBookmarksLocked(ctx, member))
+		}
 		s.hub.pushWeb(member, ChatEvent{Type: "roster"})
 		if member != email {
 			s.inviteRoomMember(email, member, room.JID)

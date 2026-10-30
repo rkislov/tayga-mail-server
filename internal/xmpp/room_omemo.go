@@ -95,6 +95,11 @@ func roomCipherExtras(cipher string) string {
 // Also notify about offline members. Native clients use these updates to refresh
 // the OMEMO recipient set; web senders additionally validate the snapshot above.
 func (s *Server) notifyRoomAffiliation(ctx context.Context, room, email, affiliation string) {
+	if affiliation == "none" {
+		s.logBookmarkError(s.removeRoomBookmark(ctx, email, room))
+	} else {
+		s.logBookmarkError(s.syncRoomBookmarksLocked(ctx, email))
+	}
 	for session := range s.muc[room] {
 		if s.requireRoomMember(ctx, session.JID.Bare(), room) != nil {
 			continue

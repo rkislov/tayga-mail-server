@@ -13,38 +13,165 @@ import (
 	"github.com/emersion/go-ical"
 	"github.com/google/uuid"
 	"github.com/tayga/tms/internal/storage"
+	"github.com/teambition/rrule-go"
 )
 
 const taskTodoProperty = "_tayga:VTodo"
 
+// decodeTaskTodo validates a complete series without expanding an unbounded rule.
+// Detached instances belong to the same UID and keep their original recurrence ID.
 func decodeTaskTodo(raw string) (*ical.Calendar, *ical.Component, error) {
 	c, err := ical.NewDecoder(strings.NewReader(raw)).Decode()
 	if err != nil {
 		return nil, nil, err
 	}
-	var todo *ical.Component
+	var master *ical.Component
+	var todos []*ical.Component
 	for _, child := range c.Children {
 		if child.Name == "VTIMEZONE" {
 			continue
 		}
-		if child.Name != "VTODO" || todo != nil {
-			return nil, nil, errors.New("expected one VTODO")
+		if child.Name != "VTODO" || len(todos) >= 1001 {
+			return nil, nil, errors.New("expected one task series, at most 1000 exceptions")
 		}
-		todo = child
+		todos = append(todos, child)
+		if child.Props.Get("RECURRENCE-ID") == nil {
+			if master != nil {
+				return nil, nil, errors.New("multiple task masters")
+			}
+			master = child
+		}
 	}
-	if todo == nil {
-		return nil, nil, errors.New("missing VTODO")
+	if master == nil {
+		return nil, nil, errors.New("missing task master")
 	}
-	uid, _ := todo.Props.Text("UID")
+	uid, _ := master.Props.Text("UID")
 	if uid == "" {
 		return nil, nil, errors.New("missing task UID")
 	}
-	for _, name := range []string{"RRULE", "RDATE", "EXDATE", "RECURRENCE-ID", "ATTENDEE", "ORGANIZER"} {
-		if todo.Props.Get(name) != nil {
-			return nil, nil, fmt.Errorf("task property %s is not supported; local task retained", name)
+	recurring := taskTodoRecurring(c)
+	start := master.Props.Get("DTSTART")
+	if recurring && start == nil {
+		return nil, nil, errors.New("recurring task requires DTSTART")
+	}
+	seen := map[string]bool{}
+	for _, todo := range todos {
+		id, _ := todo.Props.Text("UID")
+		if id != uid {
+			return nil, nil, errors.New("mixed task UIDs")
+		}
+		for _, name := range []string{"ATTENDEE", "ORGANIZER"} {
+			if todo.Props.Get(name) != nil {
+				return nil, nil, fmt.Errorf("task property %s is not supported; local task retained", name)
+			}
+		}
+		for _, name := range []string{"DTSTART", "DUE", "COMPLETED", "RECURRENCE-ID"} {
+			if _, err := todoTime(todo, name); err != nil {
+				return nil, nil, err
+			}
+		}
+		if p := todo.Props.Get("DURATION"); p != nil {
+			if todo.Props.Get("DUE") != nil || todo.Props.Get("DTSTART") == nil {
+				return nil, nil, errors.New("task DURATION requires DTSTART and excludes DUE")
+			}
+			d, err := p.Duration()
+			if err != nil || d <= 0 {
+				return nil, nil, errors.New("invalid task duration")
+			}
+		}
+		if rid := todo.Props.Get("RECURRENCE-ID"); rid != nil {
+			if rid.Params.Get("RANGE") != "" {
+				return nil, nil, errors.New("task RANGE exceptions are not supported")
+			}
+			key, err := taskDateKey(*rid, start)
+			if err != nil {
+				return nil, nil, err
+			}
+			if seen[key] {
+				return nil, nil, errors.New("duplicate task recurrence ID")
+			}
+			seen[key] = true
+			for _, name := range []string{"RRULE", "RDATE", "EXDATE"} {
+				if todo.Props.Get(name) != nil {
+					return nil, nil, errors.New("exception cannot define a recurrence rule")
+				}
+			}
+		}
+		if p := todo.Props.Get("RRULE"); p != nil {
+			if len(todo.Props.Values("RRULE")) != 1 {
+				return nil, nil, errors.New("multiple task recurrence rules")
+			}
+			opt, err := todo.Props.RecurrenceRule()
+			if err != nil {
+				return nil, nil, err
+			}
+			if opt.Freq < rrule.YEARLY || opt.Freq > rrule.DAILY || opt.Interval < 0 || opt.Count < 0 || opt.Count > 10000 || len(opt.Byhour)+len(opt.Byminute)+len(opt.Bysecond) > 0 {
+				return nil, nil, errors.New("unsupported dense task recurrence")
+			}
+			if opt.Count > 0 && !opt.Until.IsZero() {
+				return nil, nil, errors.New("task recurrence cannot combine COUNT and UNTIL")
+			}
+			opt.Dtstart, err = start.DateTime(time.UTC)
+			if err != nil {
+				return nil, nil, err
+			}
+			if _, err = rrule.NewRRule(*opt); err != nil {
+				return nil, nil, err
+			}
+		}
+		for _, name := range []string{"RDATE", "EXDATE"} {
+			for _, p := range todo.Props.Values(name) {
+				for _, value := range strings.Split(p.Value, ",") {
+					copy := p
+					copy.Value = value
+					if _, err := taskDateKey(copy, start); err != nil {
+						return nil, nil, err
+					}
+				}
+			}
+		}
+		status, _ := todo.Props.Text("STATUS")
+		if status != "" && status != "NEEDS-ACTION" && status != "IN-PROCESS" && status != "COMPLETED" && !(todo != master && status == "CANCELLED") {
+			return nil, nil, errors.New("invalid task status")
+		}
+		if p := todo.Props.Get("PERCENT-COMPLETE"); p != nil {
+			n, err := p.Int()
+			if err != nil || n < 0 || n > 100 {
+				return nil, nil, errors.New("invalid task percentage")
+			}
 		}
 	}
-	return c, todo, nil
+	return c, master, nil
+}
+func taskDateKey(p ical.Prop, start *ical.Prop) (string, error) {
+	if start == nil {
+		return "", errors.New("task recurrence requires DTSTART")
+	}
+	date := p.Params.Get("VALUE") == "DATE" || len(p.Value) == 8
+	startDate := start.Params.Get("VALUE") == "DATE" || len(start.Value) == 8
+	if date != startDate {
+		return "", errors.New("task recurrence value type mismatch")
+	}
+	t, err := p.DateTime(time.UTC)
+	if err != nil {
+		return "", err
+	}
+	if date {
+		return t.Format("2006-01-02"), nil
+	}
+	return t.UTC().Format(time.RFC3339), nil
+}
+func taskTodoRecurring(c *ical.Calendar) bool {
+	for _, todo := range c.Children {
+		if todo.Name == "VTODO" {
+			for _, name := range []string{"RRULE", "RDATE", "EXDATE", "RECURRENCE-ID"} {
+				if todo.Props.Get(name) != nil {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 func encodeTaskTodo(c *ical.Calendar) (string, error) {
 	if c.Props.Get("PRODID") == nil {
@@ -129,6 +256,10 @@ func taskTodo(t *storage.Task) (string, error) {
 		todo = ical.NewComponent("VTODO")
 		todo.Props.SetText("UID", t.ID)
 		c.Children = append(c.Children, todo)
+	}
+	// Series are edited as complete resources. Other write paths are guarded in storage.
+	if taskTodoRecurring(c) {
+		return encodeTaskTodo(c)
 	}
 	todo.Props.SetText("SUMMARY", t.Title)
 	todo.Props.SetText("DESCRIPTION", t.Body)
@@ -221,6 +352,17 @@ func applyTodoTask(t *storage.Task, raw string) error {
 	due, err := todoTime(todo, "DUE")
 	if err != nil {
 		return err
+	}
+	if due == "" && todo.Props.Get("DURATION") != nil {
+		start, e := todo.Props.Get("DTSTART").DateTime(time.UTC)
+		if e != nil {
+			return e
+		}
+		d, e := todo.Props.Get("DURATION").Duration()
+		if e != nil {
+			return e
+		}
+		due = start.Add(d).UTC().Format(time.RFC3339)
 	}
 	status, _ := todo.Props.Text("STATUS")
 	state := storage.TaskNotStarted
@@ -316,6 +458,12 @@ func applyTodoTask(t *storage.Task, raw string) error {
 	for _, k := range []string{"X-TAYGA-TASK-STATUS", "X-TAYGA-TASK-PERCENT"} {
 		delete(todo.Props, k)
 	}
+	delete(props, "_tayga:Recurring")
+	if taskTodoRecurring(c) {
+		props["_tayga:Recurring"] = "1"
+	}
+	t.Recurring = taskTodoRecurring(c)
+	t.FullTaskResource = true
 	normalized, err := encodeTaskTodo(c)
 	if err != nil {
 		return err
@@ -418,6 +566,9 @@ func (h *ewsHandler) taygaTaskWrite(ctx context.Context, u *storage.User, body s
 		}
 	} else {
 		err = h.store.SaveTask(ctx, u.ID, t)
+	}
+	if err == storage.ErrTaskSeries {
+		return fail("ErrorInvalidPropertySet", err.Error())
 	}
 	if err == storage.ErrUnauthorized {
 		return fail("ErrorAccessDenied", "Task modification is not allowed")

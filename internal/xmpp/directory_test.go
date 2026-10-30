@@ -26,6 +26,9 @@ func TestDomainDirectoryIsOptInScopedAndPreservesPersonalRoster(t *testing.T) {
 	check := func(want int) []RosterEntry {
 		t.Helper()
 		rows, err := srv.ListChatRoster(ctx, owner.ID)
+		if len(rows) > 0 && rows[0].Self {
+			rows = rows[1:]
+		}
 		if err != nil || len(rows) != want {
 			t.Fatalf("roster=%+v err=%v want=%d", rows, err, want)
 		}

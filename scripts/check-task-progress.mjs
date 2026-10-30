@@ -142,6 +142,14 @@ try {
     assert.equal(await page.locator('#task-dialog').evaluate(el=>el.scrollWidth>el.clientWidth+1),false);
     await page.screenshot({path:join(output,`assignment-${width}.png`)});
   }
+  await page.click('#task-cancel');
+  activeUser='author'; rows[0].recurring=true;
+  await page.evaluate(() => refreshTasks());
+  assert.equal(await page.isDisabled('[data-task-toggle]'),true);
+  await page.click('[data-task-edit]');
+  for(const id of ['task-title','task-body','task-status','task-percent','task-save']) assert.equal(await page.isDisabled('#'+id),true);
+  assert.equal(await page.isVisible('#task-assignment-controls'),false);
+  assert.match(await page.textContent('#task-permissions'),/Thunderbird/);
   assert.deepEqual(errors, []);
   await page.evaluate(() => resetTasks());
   assert.equal(await page.locator('[data-task-edit]').count(),0);

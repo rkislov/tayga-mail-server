@@ -30,6 +30,9 @@ func taskXML(t storage.Task, user string) string {
 		due = "<t:DueDate>" + xmlEscape(t.Due) + "</t:DueDate>"
 	}
 	raw := fmt.Sprintf(`<t:Task><t:ItemId Id="%s" ChangeKey="%d"/><t:ParentFolderId Id="%s"/><t:ItemClass>IPM.Task</t:ItemClass><t:Subject>%s</t:Subject><t:Body BodyType="Text">%s</t:Body><t:Status>%s</t:Status><t:PercentComplete>%s</t:PercentComplete><t:IsComplete>%t</t:IsComplete>%s</t:Task>`, xmlEscape(t.ID), t.Revision, xmlEscape(systemFolderID(user, "tasks")), xmlEscape(t.Title), xmlEscape(t.Body), t.Status, percent, t.Completed, due)
+	if t.Recurring {
+		raw = strings.Replace(raw, "</t:Task>", "<t:IsRecurring>true</t:IsRecurring></t:Task>", 1)
+	}
 	props := map[string]string{}
 	_ = json.Unmarshal([]byte(t.EWSProperties), &props)
 	keys := []string{}
@@ -244,6 +247,9 @@ func (h *ewsHandler) writeTask(ctx context.Context, u *storage.User, body string
 		t.Title = "Task"
 	}
 	if err = h.store.SaveTask(ctx, u.ID, t); err != nil {
+		if err == storage.ErrTaskSeries {
+			return ewsFault("ErrorInvalidPropertySet", err.Error()), nil
+		}
 		if err == storage.ErrUnauthorized {
 			return ewsFault("ErrorAccessDenied", "Only accepted assignees may update progress; task details belong to the author"), nil
 		}

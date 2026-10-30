@@ -2,7 +2,7 @@
   "manifest_version": 2,
   "name": "Tayga Mail",
   "description": "Tayga EWS: автоматическая двусторонняя синхронизация почты, календарей, задач и контактов.",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "browser_specific_settings": {
     "gecko": {
       "id": "tayga@mail.local",

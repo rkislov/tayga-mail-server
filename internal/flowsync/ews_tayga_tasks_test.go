@@ -64,7 +64,7 @@ func TestTaygaEWSTasksRoundTripAndReplay(t *testing.T) {
 	call(update("1", taygaProperty("TaygaVTodo", raw)), "ErrorIrresolvableConflict")
 	key := strconv.FormatInt(original.Revision, 10)
 	call(update(key, taygaProperty("TaygaVTodo", strings.Replace(raw, "UID:tb-task", "UID:different", 1))), "ErrorInvalidPropertySet")
-	call(update(key, taygaProperty("TaygaVTodo", strings.Replace(raw, "END:VTODO", "RRULE:FREQ=DAILY\r\nEND:VTODO", 1))), "ErrorInvalidPropertySet")
+	call(update(key, taygaProperty("TaygaVTodo", strings.Replace(raw, "END:VTODO", "RRULE:FREQ=SECONDLY\r\nEND:VTODO", 1))), "ErrorInvalidPropertySet")
 	r = call(update(key, taygaProperty("TaygaVTodo", raw)), "NoError")
 	key = extractAttr(r.render(), "ItemId", "ChangeKey")
 	other := *u
@@ -150,5 +150,75 @@ func TestTaygaTaskAssigneePermissions(t *testing.T) {
 	}
 	if err = st.DeleteTaskVersion(ctx, member.ID, task.ID, current.Revision); err != storage.ErrUnauthorized {
 		t.Fatal(err)
+	}
+}
+
+func TestTaygaTaskSeriesPreservedAndGenericEditsRejected(t *testing.T) {
+	ctx, st, u, eas, _, _ := syncFixture(t)
+	raw := "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTODO\r\nUID:series\r\nSUMMARY:Weekly\r\nDTSTART;TZID=Europe/Berlin:20261024T090000\r\nDURATION:PT1H\r\nRRULE:FREQ=DAILY;COUNT=4\r\nEXDATE;TZID=Europe/Berlin:20261027T090000\r\nEND:VTODO\r\nBEGIN:VTODO\r\nUID:series\r\nRECURRENCE-ID;TZID=Europe/Berlin:20261025T090000\r\nDTSTART;TZID=Europe/Berlin:20261025T090000\r\nSTATUS:COMPLETED\r\nPERCENT-COMPLETE:100\r\nEND:VTODO\r\nEND:VCALENDAR\r\n"
+	task := &storage.Task{}
+	if e := applyTodoTask(task, raw); e != nil {
+		t.Fatal(e)
+	}
+	if !task.Recurring || task.Due != "2026-10-24T08:00:00Z" {
+		t.Fatal(task)
+	}
+	if e := st.SaveTask(ctx, u.ID, task); e != nil {
+		t.Fatal(e)
+	}
+	saved, e := st.GetTask(ctx, u.ID, task.ID)
+	if e != nil {
+		t.Fatal(e)
+	}
+	read, e := taskTodo(saved)
+	if e != nil || !strings.Contains(read, "EXDATE") || !strings.Contains(read, "RECURRENCE-ID") || !strings.Contains(read, "STATUS:COMPLETED") {
+		t.Fatal(read, e)
+	}
+	saved.Title = "lossy edit"
+	if e = st.SaveTask(ctx, u.ID, saved); e != storage.ErrTaskSeries {
+		t.Fatal("generic edit allowed", e)
+	}
+	data, _ := parseProtocolXML([]byte(`<ApplicationData><Subject xmlns="Tasks:">lossy</Subject></ApplicationData>`))
+	if _, e = eas.wbTask(ctx, u, systemFolderID(u.ID, "tasks"), clientOp{Kind: "change", ServerID: task.ID, ApplicationData: data.find("ApplicationData")}); e != storage.ErrTaskSeries {
+		t.Fatal("EAS edit allowed", e)
+	}
+	h := &ewsHandler{store: st, ms: eas.ms}
+	body := `<m:UpdateItem><m:ItemChanges><t:ItemChange><t:ItemId Id="` + task.ID + `"/><t:Updates><t:SetItemField><t:FieldURI FieldURI="item:Subject"/><t:Task><t:Subject>lossy</t:Subject></t:Task></t:SetItemField></t:Updates></t:ItemChange></m:ItemChanges></m:UpdateItem>`
+	if got := calendarSOAP(t, h, ctx, u, body); got.find("ResponseCode").Text != "ErrorInvalidPropertySet" {
+		t.Fatal(got.render())
+	}
+	saved, e = st.GetTask(ctx, u.ID, task.ID)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if saved.Title != "Weekly" {
+		t.Fatal("rejected edits changed series")
+	}
+	if e = applyTodoTask(saved, strings.Replace(raw, "SUMMARY:Weekly", "SUMMARY:Updated", 1)); e != nil {
+		t.Fatal(e)
+	}
+	if e = st.SaveTask(ctx, u.ID, saved); e != nil {
+		t.Fatal(e)
+	}
+	if e = st.DeleteTask(ctx, u.ID, saved.ID); e != nil {
+		t.Fatal(e)
+	}
+}
+
+func TestTaygaTaskInvalidSeries(t *testing.T) {
+	master := "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTODO\r\nUID:series\r\nSUMMARY:Task\r\nDTSTART:20261101T090000Z\r\nRRULE:FREQ=DAILY;COUNT=3\r\nEND:VTODO\r\nEND:VCALENDAR\r\n"
+	exception := "BEGIN:VTODO\r\nUID:series\r\nRECURRENCE-ID:20261102T090000Z\r\nEND:VTODO\r\n"
+	cases := []string{
+		strings.Replace(master, "FREQ=DAILY;COUNT=3", "FREQ=SECONDLY;COUNT=3", 1),
+		strings.Replace(master, "DTSTART:20261101T090000Z\r\n", "", 1),
+		strings.Replace(master, "COUNT=3", "COUNT=3;UNTIL=20261108T090000Z", 1),
+		strings.Replace(master, "END:VCALENDAR", exception+exception+"END:VCALENDAR", 1),
+		strings.Replace(master, "END:VCALENDAR", strings.Replace(exception, "UID:series", "UID:other", 1)+"END:VCALENDAR", 1),
+		strings.Replace(master, "END:VCALENDAR", strings.Replace(exception, "RECURRENCE-ID:20261102T090000Z", "RECURRENCE-ID;VALUE=DATE:20261102", 1)+"END:VCALENDAR", 1),
+	}
+	for i, raw := range cases {
+		if _, _, e := decodeTaskTodo(raw); e == nil {
+			t.Fatalf("invalid series accepted: %d", i)
+		}
 	}
 }

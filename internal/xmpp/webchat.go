@@ -26,6 +26,7 @@ type ChatEvent struct {
 
 // RosterEntry is a roster row for the web messenger.
 type RosterEntry struct {
+	Self                bool   `json:"self,omitempty"`
 	Group               bool   `json:"group,omitempty"`
 	JID                 string `json:"jid"`
 	Name                string `json:"name"`
@@ -173,7 +174,8 @@ func (s *Server) ListChatRoster(ctx context.Context, userID string) ([]RosterEnt
 			return nil, err
 		}
 	}
-	out := make([]RosterEntry, 0, len(items))
+	out := make([]RosterEntry, 0, len(items)+1)
+	out = append(out, RosterEntry{JID: ParseJID(user.Email).Bare(), Self: true})
 	for _, it := range items {
 		// Own devices can create a self-roster entry. The account already has a
 		// dedicated presence row; keep its history/roster data, but not a duplicate contact.

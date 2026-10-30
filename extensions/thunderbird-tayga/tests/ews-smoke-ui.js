@@ -28,6 +28,24 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
         persisted.tasks.some((t) => t.title === "Задача после перезапуска"),
         "Task queue did not survive restart",
       );
+      const taskCollection = Object.values(
+        (await native("state")).collections,
+      ).find((c) => c.kind === "tasks");
+      const series = (
+        await inspect({
+          key: taskCollection.key,
+          op: "get",
+          localId: "native-series",
+        })
+      ).data;
+      for (const want of [
+        "RRULE:",
+        "RECURRENCE-ID",
+        "STATUS:COMPLETED",
+        "EXDATE",
+        "Перенесено",
+      ])
+        assert(series.includes(want), "Series lost after restart: " + want);
       assert(
         Object.keys((await native("state")).pending).length === 0,
         "Restart queue was not drained: " +
@@ -341,6 +359,59 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     checks.push(
       "tasks: both directions, progress, completion/reopen, both deletions, lost-response replay, 2.1 queue recovery and alarms",
     );
+    stage = "recurring tasks";
+    const seriesData =
+      "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Tayga//Test//EN\r\nBEGIN:VTODO\r\nUID:native-series\r\nSUMMARY:Повторяющаяся задача\r\nDTSTART;TZID=Europe/Berlin:20261024T090000\r\nDUE;TZID=Europe/Berlin:20261024T100000\r\nRRULE:FREQ=DAILY;COUNT=4\r\nSTATUS:NEEDS-ACTION\r\nEND:VTODO\r\nEND:VCALENDAR\r\n";
+    await inspect({ key: tasks.key, op: "create", data: seriesData });
+    await background.ews.run();
+    await inspect({
+      key: tasks.key,
+      op: "occurrence",
+      localId: "native-series",
+      rid: "20261025T090000",
+      timezone: "Europe/Berlin",
+      completed: true,
+    });
+    await background.ews.run();
+    await inspect({
+      key: tasks.key,
+      op: "occurrence",
+      localId: "native-series",
+      rid: "20261026T090000",
+      timezone: "Europe/Berlin",
+      title: "Перенесено",
+      start: "20261026T140000Z",
+      due: "20261026T150000Z",
+    });
+    await background.ews.run();
+    await inspect({
+      key: tasks.key,
+      op: "occurrence",
+      localId: "native-series",
+      rid: "20261027T090000",
+      timezone: "Europe/Berlin",
+      remove: true,
+    });
+    await background.ews.run();
+    const recurringRaw = (await serverState()).taskResources[
+      "Повторяющаяся задача"
+    ];
+    for (const want of [
+      "RRULE:FREQ=DAILY;COUNT=4",
+      "STATUS:COMPLETED",
+      "SUMMARY:Перенесено",
+      "EXDATE",
+      "RECURRENCE-ID",
+    ])
+      assert(recurringRaw.includes(want), "Missing task series data: " + want);
+    assert(
+      Object.keys((await native("state")).pending).length === 0,
+      "Task series creates sync echo",
+    );
+    checks.push(
+      "recurring tasks: daily series across DST, completion, moved and deleted occurrences; durable full VTODO",
+    );
+
     stage = "calendar/contact regression";
     const largeCard =
       "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:large-person\r\nFN:Large queue test\r\nNOTE:" +

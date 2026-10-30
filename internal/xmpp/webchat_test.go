@@ -32,7 +32,7 @@ func TestWebChatSendHistorySubscribe(t *testing.T) {
 
 	_ = srv.UpsertChatRoster(ctx, u.ID, "bob@example.com", "Bob")
 	roster, err := srv.ListChatRoster(ctx, u.ID)
-	if err != nil || len(roster) != 1 {
+	if err != nil || len(roster) != 2 {
 		t.Fatalf("roster=%+v err=%v", roster, err)
 	}
 
@@ -53,7 +53,7 @@ func TestIncomingConversationVisibleWithoutSavedContact(t *testing.T) {
 	}
 	for i := 0; i < 2; i++ {
 		roster, err := srv.ListChatRoster(ctx, user.ID)
-		if err != nil || len(roster) != 1 || roster[0].JID != "bob@example.com" {
+		if err != nil || len(roster) != 2 || roster[1].JID != "bob@example.com" {
 			t.Fatalf("roster=%+v err=%v", roster, err)
 		}
 	}

@@ -23,25 +23,25 @@ func TestWebPresenceConsentNamesAndReconnect(t *testing.T) {
 		t.Fatal(err)
 	}
 	rows, err := srv.ListChatRoster(ctx, alice.ID)
-	if err != nil || len(rows) != 1 || rows[0].Name != "Борис Иванов" || rows[0].Presence != "unknown" {
+	if err != nil || len(rows) != 2 || rows[1].Name != "Борис Иванов" || rows[1].Presence != "unknown" {
 		t.Fatalf("unapproved roster: %+v %v", rows, err)
 	}
 	if err := srv.ChatSubscription(ctx, alice.ID, bob.Email, "request"); err != nil {
 		t.Fatal(err)
 	}
 	requests, err := srv.ListChatRoster(ctx, bob.ID)
-	if err != nil || len(requests) != 1 || !requests[0].SubscriptionRequest {
+	if err != nil || len(requests) != 2 || !requests[1].SubscriptionRequest {
 		t.Fatalf("request: %+v %v", requests, err)
 	}
 	if err := srv.ChatSubscription(ctx, bob.ID, alice.Email, "accept"); err != nil {
 		t.Fatal(err)
 	}
 	rows, _ = srv.ListChatRoster(ctx, alice.ID)
-	if rows[0].Presence != "dnd" || rows[0].Subscription != "to" {
+	if rows[1].Presence != "dnd" || rows[1].Subscription != "to" {
 		t.Fatalf("approved: %+v", rows)
 	}
 	requests, _ = srv.ListChatRoster(ctx, bob.ID)
-	if requests[0].SubscriptionRequest {
+	if requests[1].SubscriptionRequest {
 		t.Fatal("accepted request remains")
 	}
 	if err := srv.ChatSubscription(ctx, bob.ID, alice.Email, "accept"); err == nil {

@@ -234,6 +234,13 @@ async function ewsStatus() {
   if (data.enabled && data.tasksSupported === false)
     el("ews-status").textContent +=
       " Для синхронизации задач требуется обновление сервера Tayga; локальные задачи сохранены.";
+  if (
+    data.enabled &&
+    data.tasksSupported &&
+    data.taskRecurrenceSupported === false
+  )
+    el("ews-status").textContent +=
+      " Для повторяющихся задач обновите сервер Tayga.";
   el("ews-pending").replaceChildren();
   for (const pending of data.pending) {
     const item = document.createElement("li");
