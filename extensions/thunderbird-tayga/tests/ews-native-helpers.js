@@ -38,7 +38,7 @@ async function taygaNativeTest(api, args) {
   }
   const collection = api.state.collections[args.key];
   const target = api.native(collection);
-  if (collection.kind === "calendar") {
+  if (collection.kind !== "contacts") {
     let item;
     if (args.data) {
       const parser = Cc["@mozilla.org/calendar/ics-parser;1"].createInstance(
@@ -55,13 +55,25 @@ async function taygaNativeTest(api, args) {
       if (item) serializer.addItems([item]);
       return { data: item ? serializer.serializeToString() : "" };
     }
-    if (args.op === "create") await target.addItem(item);
+    if (args.op === "create" || args.op === "legacyTask")
+      await target.addItem(item);
+    if (args.op === "legacyTask") {
+      api.queue(collection, item.id, "put", args.data, item.title);
+      const p = api.state.pending[collection.key + ":" + item.id];
+      p.error =
+        "EWS CreateItem: ErrorInvalidPropertySet Tayga sync write rejected";
+      p.conflict = true;
+      p.attempted = true;
+      await api.save();
+    }
     if (args.op === "unobservedModify") {
       const { observer } = api.calObservers.get(collection.key);
       target.removeObserver(observer);
       try {
         const changed = item.clone();
-        changed.title = args.title;
+        if (args.title !== undefined) changed.title = args.title;
+        if (args.status !== undefined) changed.status = args.status;
+        if (args.percent !== undefined) changed.percentComplete = args.percent;
         await target.modifyItem(changed, item);
       } finally {
         target.addObserver(observer);
@@ -69,7 +81,9 @@ async function taygaNativeTest(api, args) {
     }
     if (args.op === "modify") {
       const changed = item.clone();
-      changed.title = args.title;
+      if (args.title !== undefined) changed.title = args.title;
+      if (args.status !== undefined) changed.status = args.status;
+      if (args.percent !== undefined) changed.percentComplete = args.percent;
       await target.modifyItem(changed, item);
     }
     if (args.op === "delete") await target.deleteItem(item);

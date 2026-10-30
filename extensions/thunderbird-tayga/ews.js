@@ -23,6 +23,12 @@ const TaygaEWS = (() => {
     `<t:ExtendedProperty><t:ExtendedFieldURI PropertySetId="${P}" PropertyName="${name}" PropertyType="String"/><t:Value>${escape(value)}</t:Value></t:ExtendedProperty>`;
   const propertyRequest = (name) =>
     `<t:ExtendedFieldURI PropertySetId="${P}" PropertyName="${name}" PropertyType="String"/>`;
+  const rawProperty = (kind) =>
+    ({
+      calendar: "TaygaICalendar",
+      contacts: "TaygaVCard",
+      tasks: "TaygaVTodo",
+    })[kind];
   class Engine {
     constructor(client, native, storage) {
       this.client = client;
@@ -49,12 +55,13 @@ const TaygaEWS = (() => {
           credentials: "omit",
           redirect: "error",
           cache: "no-store",
-          signal: this.controller && !independent
-            ? AbortSignal.any([
-                this.controller.signal,
-                AbortSignal.timeout(120000),
-              ])
-            : AbortSignal.timeout(120000),
+          signal:
+            this.controller && !independent
+              ? AbortSignal.any([
+                  this.controller.signal,
+                  AbortSignal.timeout(120000),
+                ])
+              : AbortSignal.timeout(120000),
         });
       let response = await send(cfg);
       if (response.status === 401) {
@@ -73,7 +80,10 @@ const TaygaEWS = (() => {
       );
       if (first(doc, "parsererror")) throw new Error("EWS: некорректный XML.");
       const direct = ["GetInboxRules", "UpdateInboxRules"].includes(op);
-      const messages = doc.getElementsByTagNameNS(M, op + (direct ? "Response" : "ResponseMessage"));
+      const messages = doc.getElementsByTagNameNS(
+        M,
+        op + (direct ? "Response" : "ResponseMessage"),
+      );
       if (messages.length !== 1)
         throw new Error(`EWS ${op}: некорректный ответ сервера.`);
       const message = messages[0],
@@ -89,7 +99,7 @@ const TaygaEWS = (() => {
     }
     rawItem(node, kind) {
       const id = first(node, "ItemId");
-      const name = kind === "calendar" ? "TaygaICalendar" : "TaygaVCard";
+      const name = rawProperty(kind);
       let data = "";
       for (const prop of node.getElementsByTagNameNS(T, "ExtendedProperty")) {
         const field = first(prop, "ExtendedFieldURI");
@@ -110,8 +120,7 @@ const TaygaEWS = (() => {
       };
     }
     async get(id, collection, cfg) {
-      const name =
-        collection.kind === "calendar" ? "TaygaICalendar" : "TaygaVCard";
+      const name = rawProperty(collection.kind);
       const result = await this.soap(
         "GetItem",
         `<m:ItemShape><t:BaseShape>AllProperties</t:BaseShape><t:AdditionalProperties>${propertyRequest(name)}</t:AdditionalProperties></m:ItemShape><m:ItemIds><t:ItemId Id="${escape(id)}"/></m:ItemIds>`,
@@ -123,15 +132,26 @@ const TaygaEWS = (() => {
       return this.rawItem(items.children[0], collection.kind);
     }
     async push(pending, collection, cfg) {
-      await this.native("attempt", { commandId: pending.commandId });
-      const name =
-        collection.kind === "calendar" ? "TaygaICalendar" : "TaygaVCard";
-      const type = collection.kind === "calendar" ? "CalendarItem" : "Contact";
+      const attempt = await this.native("attempt", {
+        commandId: pending.commandId,
+      });
+      const created = !pending.remoteId && pending.op !== "delete";
+      const name = rawProperty(collection.kind);
+      const type = {
+        calendar: "CalendarItem",
+        contacts: "Contact",
+        tasks: "Task",
+      }[collection.kind];
       let item;
       try {
         if (!pending.remoteId && pending.op === "delete") {
           try {
-            const existing = await this.get(pending.createId, collection, cfg);
+            const existing = await this.get(
+              (collection.kind === "tasks" ? "task-create:" : "") +
+                pending.createId,
+              collection,
+              cfg,
+            );
             pending.remoteId = existing.id;
             pending.changeKey = existing.changeKey;
           } catch (error) {
@@ -145,7 +165,7 @@ const TaygaEWS = (() => {
         if (!pending.remoteId) {
           const result = await this.soap(
             "CreateItem",
-            `<m:SavedItemFolderId><t:FolderId Id="${escape(collection.id)}"/></m:SavedItemFolderId><m:Items><t:${type}>${property(name, pending.data)}${property("TaygaCreateId", pending.createId)}</t:${type}></m:Items>`,
+            `<m:SavedItemFolderId><t:FolderId Id="${escape(collection.id)}"/></m:SavedItemFolderId><m:Items><t:${type}>${property(name, collection.kind === "tasks" ? (attempt.createData ?? pending.data) : pending.data)}${property("TaygaCreateId", pending.createId)}</t:${type}></m:Items>`,
             cfg,
           );
           item = this.rawItem(
@@ -175,6 +195,11 @@ const TaygaEWS = (() => {
       const deleted = pending.op === "delete";
       await this.native("ack", {
         ...pending,
+        commandId:
+          created && collection.kind === "tasks"
+            ? attempt.createCommandId || pending.commandId
+            : pending.commandId,
+        created,
         id: item?.id || pending.remoteId,
         changeKey: item?.changeKey || "",
         deleted,
@@ -221,7 +246,7 @@ const TaygaEWS = (() => {
         await this.native("configure", cfg);
         const capabilities = await this.soap(
           "GetFolder",
-          `<m:FolderShape><t:BaseShape>IdOnly</t:BaseShape><t:AdditionalProperties>${propertyRequest("TaygaSyncVersion")}</t:AdditionalProperties></m:FolderShape><m:FolderIds><t:DistinguishedFolderId Id="msgfolderroot"/></m:FolderIds>`,
+          `<m:FolderShape><t:BaseShape>IdOnly</t:BaseShape><t:AdditionalProperties>${propertyRequest("TaygaSyncVersion")}${propertyRequest("TaygaTasksVersion")}</t:AdditionalProperties></m:FolderShape><m:FolderIds><t:DistinguishedFolderId Id="msgfolderroot"/></m:FolderIds>`,
           cfg,
         );
         const supported = Array.from(
@@ -239,6 +264,36 @@ const TaygaEWS = (() => {
             "Обновите сервер Tayga: двусторонний обмен EWS не поддерживается. Локальные правки сохранены.",
           );
         const { key, value: state } = await this.loadState(cfg);
+        const tasksSupported = Array.from(
+          capabilities.getElementsByTagNameNS(T, "ExtendedProperty"),
+        ).some((p) => {
+          const f = first(p, "ExtendedFieldURI");
+          return (
+            (f?.getAttribute("PropertySetId") || "").toLowerCase() === P &&
+            f.getAttribute("PropertyName") === "TaygaTasksVersion" &&
+            text(p, "Value") === "1"
+          );
+        });
+        this.status.tasksSupported = tasksSupported;
+        // Explicit discovery also handles an upgrade with an unchanged hierarchy cursor.
+        let taskCollection;
+        if (tasksSupported) {
+          const result = await this.soap(
+            "GetFolder",
+            '<m:FolderShape><t:BaseShape>AllProperties</t:BaseShape></m:FolderShape><m:FolderIds><t:DistinguishedFolderId Id="tasks"/></m:FolderIds>',
+            cfg,
+          );
+          const folder = first(result, "TasksFolder");
+          const id = first(folder, "FolderId")?.getAttribute("Id");
+          if (!id) throw new Error("EWS: отсутствует папка задач.");
+          taskCollection = await this.native("ensure", {
+            ...cfg,
+            id,
+            kind: "tasks",
+            name: "Задачи",
+          });
+          state.folders[id] = { ...taskCollection, items: undefined };
+        }
         state.scans ||= {};
         const save = () => this.storage.set({ [key]: state });
         let more = true,
@@ -307,7 +362,10 @@ const TaygaEWS = (() => {
           more = last === "false";
           if (!more && state.hierarchyScan) {
             for (const id of Object.keys(state.folders))
-              if (!state.hierarchyScan.includes(id)) {
+              if (
+                !state.hierarchyScan.includes(id) &&
+                id !== taskCollection?.id
+              ) {
                 delete state.folders[id];
                 delete state.cursors[id];
               }
@@ -315,11 +373,17 @@ const TaygaEWS = (() => {
           }
           await save();
         }
+        if (taskCollection)
+          await this.native("migrateTasks", { key: taskCollection.key });
         const native = await this.native("state", {});
         for (const pending of Object.values(native.pending)) {
           if (epoch !== this.epoch) return;
           const collection = native.collections[pending.key];
-          if (collection?.scope !== this.scope(cfg) || pending.conflict)
+          if (
+            collection?.scope !== this.scope(cfg) ||
+            pending.conflict ||
+            (collection.kind === "tasks" && !tasksSupported)
+          )
             continue;
           if (!state.folders[collection.id]) {
             await this.native("fail", {
@@ -335,6 +399,7 @@ const TaygaEWS = (() => {
             const conflict = [
               "ErrorIrresolvableConflict",
               "ErrorChangeKeyRequired",
+              "ErrorChangeKeyRequiredForWriteOperations",
               "ErrorItemNotFound",
               "ErrorInvalidPropertySet",
               "ErrorAccessDenied",
@@ -348,6 +413,7 @@ const TaygaEWS = (() => {
           }
         }
         for (const collection of Object.values(state.folders)) {
+          if (collection.kind === "tasks" && !tasksSupported) continue;
           more = true;
           reset = false;
           while (more) {
@@ -469,9 +535,16 @@ const TaygaEWS = (() => {
         throw new Error("Правка не найдена.");
       const collection = native.collections[pending.key];
       let item;
-      if (pending.remoteId) {
+      if (
+        pending.remoteId ||
+        (collection.kind === "tasks" && pending.attempted)
+      ) {
         try {
-          item = await this.get(pending.remoteId, collection, cfg);
+          item = await this.get(
+            pending.remoteId || "task-create:" + pending.createId,
+            collection,
+            cfg,
+          );
         } catch (error) {
           if (error.code !== "ErrorItemNotFound") throw error;
         }

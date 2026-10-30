@@ -46,6 +46,35 @@ const (
 )
 
 var ErrInvalidTaskProgress = errors.New("invalid task status or percentage")
+var ErrTaskConflict = errors.New("task revision changed")
+
+// CreateEWSTask records the create receipt atomically. A lost response can be
+// retried without duplicating, overwriting, or resurrecting a task.
+func (s *Store) CreateEWSTask(ctx context.Context, user, createID string, t *Task) (string, error) {
+	if createID == "" || len(createID) > 256 || t.ID != "" {
+		return "", ErrUnauthorized
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback()
+	id := "task:" + NewID()
+	_, err = tx.ExecContext(ctx, s.rebind(`INSERT INTO flowsync_states(user_id,client_id,collection_id,state) VALUES(?,'ews-tasks',?,?) ON CONFLICT(user_id,client_id,collection_id) DO NOTHING`), user, createID, id)
+	if err != nil {
+		return "", err
+	}
+	var saved string
+	if err = tx.QueryRowContext(ctx, s.rebind(`SELECT state FROM flowsync_states WHERE user_id=? AND client_id='ews-tasks' AND collection_id=?`), user, createID).Scan(&saved); err != nil {
+		return "", err
+	}
+	if saved == id {
+		if err = s.insertTask(ctx, tx, user, id, t); err != nil {
+			return "", err
+		}
+	}
+	return saved, tx.Commit()
+}
 
 // SetStatus and SetPercentComplete apply ordered EWS property updates. In
 // particular, a later status can reopen a task completed by an earlier field.
@@ -389,6 +418,11 @@ func (s *Store) setTaskMailFlag(ctx context.Context, tx *sql.Tx, id string, flag
 	return err
 }
 func (s *Store) DeleteTask(ctx context.Context, user, id string) error {
+	return s.DeleteTaskVersion(ctx, user, id, 0)
+}
+
+// DeleteTaskVersion checks the version under the same lock as the deletion.
+func (s *Store) DeleteTaskVersion(ctx context.Context, user, id string, revision int64) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -397,6 +431,9 @@ func (s *Store) DeleteTask(ctx context.Context, user, id string) error {
 	task, e := s.taskInTx(ctx, tx, user, id)
 	if e != nil {
 		return e
+	}
+	if revision != 0 && task.Revision != revision {
+		return ErrTaskConflict
 	}
 	if !task.CanManage {
 		return ErrUnauthorized

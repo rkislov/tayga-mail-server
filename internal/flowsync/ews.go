@@ -330,12 +330,23 @@ func (h *ewsHandler) getItem(ctx context.Context, u *storage.User, body string) 
 	if strings.HasPrefix(id, "ews-gal-item:") {
 		return h.getGALItem(ctx, u, id)
 	}
+	if strings.HasPrefix(id, "task-create:") {
+		var err error
+		id, err = h.store.GetFlowSyncState(ctx, u.ID, "ews-tasks", strings.TrimPrefix(id, "task-create:"))
+		if err != nil {
+			return "", err
+		}
+		if id == "" {
+			return ewsOperationError("GetItem", "ErrorItemNotFound", "Task unavailable"), nil
+		}
+	}
 	if taskID(id) {
 		t, err := h.getTask(ctx, u, id)
 		if err != nil {
-			return ewsFault("ErrorItemNotFound", "task unavailable"), nil
+			return ewsOperationError("GetItem", "ErrorItemNotFound", "task unavailable"), nil
 		}
-		return ewsNotificationSuccess("GetItem", "<m:Items>"+taskXML(*t, u.ID)+"</m:Items>"), nil
+		item, err := taskWithTodoXML(t, u.ID, body)
+		return ewsNotificationSuccess("GetItem", "<m:Items>"+item+"</m:Items>"), err
 	}
 	// Try mail first, then calendar object / contact by scanning user collections.
 	if msg, err := h.store.GetMessageByID(ctx, id); err == nil {

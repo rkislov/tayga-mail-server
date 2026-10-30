@@ -277,3 +277,99 @@ func TestTaskProgressPersistenceAndLegacyClients(t *testing.T) {
 		}
 	}
 }
+
+func TestEWSTaskAtomicReceiptAndCompletionTime(t *testing.T) {
+	ctx := context.Background()
+	cfg := config.StorageConfig{Driver: "sqlite", SQLite: config.SQLiteConfig{Path: filepath.Join(t.TempDir(), "receipt.db")}}
+	if pg := bookingPostgresConfig(t); pg != nil {
+		cfg = *pg
+	}
+	st, e := Open(ctx, cfg)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer func() { st.Close() }()
+	tenant, e := st.CreateTenant(ctx, "receipt")
+	if e != nil {
+		t.Fatal(e)
+	}
+	domain, e := st.CreateDomain(ctx, tenant.ID, "example.test")
+	if e != nil {
+		t.Fatal(e)
+	}
+	u, e := st.CreateUser(ctx, &User{TenantID: tenant.ID, DomainID: domain.ID, Email: "a@example.test", LocalPart: "a", AuthSource: "local", Enabled: true})
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = st.CreateEWSTask(ctx, u.ID, "create", &Task{Status: "invalid"}); e == nil {
+		t.Fatal("invalid task accepted")
+	}
+	var wg sync.WaitGroup
+	ids := make(chan string, 8)
+	errs := make(chan error, 8)
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			id, err := st.CreateEWSTask(ctx, u.ID, "create", &Task{Title: "Concurrent", Completed: true})
+			ids <- id
+			errs <- err
+		}()
+	}
+	wg.Wait()
+	close(ids)
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	var id string
+	for got := range ids {
+		if id != "" && id != got {
+			t.Fatal("concurrent duplicate", id, got)
+		}
+		id = got
+	}
+	rows, e := st.ListTasks(ctx, u.ID)
+	if e != nil || len(rows) != 1 {
+		t.Fatal(rows, e)
+	}
+	completed := rows[0].CompletedAt
+	if _, e = time.Parse(time.RFC3339Nano, completed); e != nil {
+		t.Fatal(completed, e)
+	}
+	task := rows[0]
+	task.Title = "Changed"
+	if e = st.SaveTask(ctx, u.ID, &task); e != nil {
+		t.Fatal(e)
+	}
+	if task.CompletedAt != completed {
+		t.Fatal("completion time changed on title edit")
+	}
+	st.Close()
+	st, e = Open(ctx, cfg)
+	if e != nil {
+		t.Fatal(e)
+	}
+	got, e := st.CreateEWSTask(ctx, u.ID, "create", &Task{Title: "Stale"})
+	if e != nil || got != id {
+		t.Fatal(got, e)
+	}
+	rows, e = st.ListTasks(ctx, u.ID)
+	if e != nil || len(rows) != 1 || rows[0].Title != "Changed" || rows[0].CompletedAt != completed {
+		t.Fatal(rows, e)
+	}
+	if e = st.DeleteTaskVersion(ctx, u.ID, id, 1); e != ErrTaskConflict {
+		t.Fatal("stale deletion allowed", e)
+	}
+	if e = st.DeleteTaskVersion(ctx, u.ID, id, task.Revision); e != nil {
+		t.Fatal(e)
+	}
+	if got, e = st.CreateEWSTask(ctx, u.ID, "create", &Task{}); e != nil || got != id {
+		t.Fatal(got, e)
+	}
+	if rows, e = st.ListTasks(ctx, u.ID); e != nil || len(rows) != 0 {
+		t.Fatal("resurrected task", rows, e)
+	}
+}

@@ -30,6 +30,7 @@ func TestTaygaEWSThunderbirdNative(t *testing.T) {
 	sentCount := 0
 	sentAttachment := false
 	var lostCreate atomic.Bool
+	var lostTaskCreate atomic.Bool
 	sentDateElement := regexp.MustCompile(`<(?:[A-Za-z0-9_]+:)?DateTimeSent\b[^>]*>[^<]*</(?:[A-Za-z0-9_]+:)?DateTimeSent>`)
 	var legacySentDate atomic.Bool
 	legacySentDate.Store(true)
@@ -47,6 +48,10 @@ func TestTaygaEWSThunderbirdNative(t *testing.T) {
 		}
 		return nil
 	}}
+	serverTask := &storage.Task{Title: "Задача с сервера", Body: "Русский текст", Due: "2026-11-04T12:00:00Z", Status: storage.TaskInProgress, PercentComplete: 25}
+	if err := st.SaveTask(ctx, u.ID, serverTask); err != nil {
+		t.Fatal(err)
+	}
 	calendar, _ := st.GetCalendarByName(ctx, u.ID, "default")
 	event := "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//Tayga//Test//EN\nBEGIN:VEVENT\nUID:server-event\nDTSTART:20261026T090000Z\nDTEND:20261026T100000Z\nSUMMARY:Server event\nRRULE:FREQ=DAILY;COUNT=4\nEND:VEVENT\nBEGIN:VEVENT\nUID:server-event\nRECURRENCE-ID:20261027T090000Z\nDTSTART:20261027T110000Z\nDTEND:20261027T120000Z\nSUMMARY:Exception\nEND:VEVENT\nEND:VCALENDAR\n"
 	saved, err := st.UpsertCalendarObject(ctx, &storage.CalendarObject{CalendarID: calendar.ID, UID: "server-event", HrefName: "server-event.ics", Component: "VEVENT", Data: event})
@@ -97,7 +102,7 @@ func TestTaygaEWSThunderbirdNative(t *testing.T) {
 			if len(mail) > 0 {
 				flags = mail[0].Flags
 			}
-			write(map[string]any{"calendarId": calendar.ID, "bookId": book, "events": evs, "contacts": cs, "mailFlags": flags,
+			write(map[string]any{"calendarId": calendar.ID, "bookId": book, "tasks": func() []storage.Task { v, _ := st.ListTasks(ctx, u.ID); return v }(), "serverTaskId": serverTask.ID, "events": evs, "contacts": cs, "mailFlags": flags,
 				"sentCopies": func() int {
 					mb, e := st.GetMailbox(ctx, u.ID, "Sent")
 					if e != nil {
@@ -117,6 +122,25 @@ func TestTaygaEWSThunderbirdNative(t *testing.T) {
 					http.Error(w, err.Error(), 500)
 					return
 				}
+			}
+			write(map[string]bool{"ok": true})
+			return
+		case "/test/tasks":
+			current, e := st.GetTask(ctx, u.ID, serverTask.ID)
+			if e != nil {
+				http.Error(w, e.Error(), 500)
+				return
+			}
+			if r.URL.Query().Get("delete") == "1" {
+				e = st.DeleteTask(ctx, u.ID, current.ID)
+			} else {
+				current.Title = "Задача изменена в вебе"
+				current.SetStatus(storage.TaskCompleted)
+				e = st.SaveTask(ctx, u.ID, current)
+			}
+			if e != nil {
+				http.Error(w, e.Error(), 500)
+				return
 			}
 			write(map[string]bool{"ok": true})
 			return
@@ -148,7 +172,7 @@ func TestTaygaEWSThunderbirdNative(t *testing.T) {
 			}
 			body, _ := io.ReadAll(r.Body)
 			r.Body = io.NopCloser(bytes.NewReader(body))
-			if strings.Contains(string(body), "TaygaCreateId") && strings.Contains(string(body), "UID:native-event") && !lostCreate.Swap(true) {
+			if strings.Contains(string(body), "TaygaCreateId") && ((strings.Contains(string(body), "UID:native-event") && !lostCreate.Swap(true)) || (strings.Contains(string(body), "UID:native-task") && !lostTaskCreate.Swap(true))) {
 				recorded := httptest.NewRecorder()
 				h.ServeHTTP(recorded, r.WithContext(withUser(r.Context(), u)))
 				if !strings.Contains(recorded.Body.String(), "NoError") {
@@ -175,7 +199,7 @@ func TestTaygaEWSThunderbirdNative(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	runctx, cancel := context.WithTimeout(ctx, 110*time.Second)
+	runctx, cancel := context.WithTimeout(ctx, 180*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(runctx, "node", "../../extensions/thunderbird-tayga/tests/thunderbird-smoke.mjs")
 	cmd.Env = append(os.Environ(), "TAYGA_EWS_FIXTURE="+server.URL)

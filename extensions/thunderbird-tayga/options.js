@@ -231,6 +231,9 @@ async function ewsStatus() {
       : data.lastSync
         ? `Последняя синхронизация: ${new Date(data.lastSync).toLocaleString()}. Локальных правок в очереди: ${data.pending.length}.`
         : "Синхронизация ещё не выполнялась.";
+  if (data.enabled && data.tasksSupported === false)
+    el("ews-status").textContent +=
+      " Для синхронизации задач требуется обновление сервера Tayga; локальные задачи сохранены.";
   el("ews-pending").replaceChildren();
   for (const pending of data.pending) {
     const item = document.createElement("li");
@@ -269,4 +272,6 @@ setInterval(() => {
   if (!document.hidden) ewsStatus().catch(() => {});
 }, 15000);
 
-el("rules-open").addEventListener("click", () => browser.tabs.create({url:browser.runtime.getURL("rules.html")}));
+el("rules-open").addEventListener("click", () =>
+  browser.tabs.create({ url: browser.runtime.getURL("rules.html") }),
+);
