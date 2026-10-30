@@ -23,6 +23,9 @@ type mamWirePage struct {
 }
 
 func readMAMWirePage(t *testing.T, c *resumeWireClient, id, resource string) mamWirePage {
+	return readArchiveWirePage(t, c, id, resource, "alice@example.com")
+}
+func readArchiveWirePage(t *testing.T, c *resumeWireClient, id, resource, archive string) mamWirePage {
 	t.Helper()
 	var page mamWirePage
 	for {
@@ -50,7 +53,7 @@ func readMAMWirePage(t *testing.T, c *resumeWireClient, id, resource string) mam
 				t.Fatal(err)
 			}
 			r := msg.Result
-			if r.QueryID != id || r.ID == "" || len(r.Forward.Message.IDs) != 1 || r.Forward.Message.IDs[0].By != "alice@example.com" || r.Forward.Message.IDs[0].ID != r.ID {
+			if r.QueryID != id || r.ID == "" || len(r.Forward.Message.IDs) != 1 || r.Forward.Message.IDs[0].By != archive || r.Forward.Message.IDs[0].ID != r.ID {
 				t.Fatalf("invalid MAM result/forwarded namespace/stable ID: %+v", r)
 			}
 			page.IDs = append(page.IDs, r.ID)

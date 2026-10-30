@@ -146,6 +146,8 @@ const I18N = {
     chat_peer_jid: "Email / JID",
     chat_start: "Открыть",
     chat_empty: "Нет сообщений",
+    chat_history_older: "Загрузить предыдущие сообщения",
+    chat_history_loading: "Загрузка истории…",
     nav_settings: "Настройки",
     nav_profile: "Профиль",
     nav_security: "Безопасность",
@@ -676,6 +678,8 @@ contacts_search: "Поиск контактов…",
     chat_peer_jid: "Email / JID",
     chat_start: "Open",
     chat_empty: "No messages",
+    chat_history_older: "Load earlier messages",
+    chat_history_loading: "Loading history…",
     nav_settings: "Settings",
     nav_profile: "Profile",
     nav_security: "Security",
@@ -1447,7 +1451,7 @@ const notesState = {
   shareTarget: null, saveTimer: null, drawing: false, dirty:false, revision:0, attachments:[], etags:{},
 };
 const filesState = { sharedRights:"write",listTarget:"",ownerID:"",sharedRoot:"", path: "", selected: null, entries: [] };
-const chatState = { peer: "", roster: [], messages: [], es: null, me: "", sending: false, presence: "online", presenceSaving: false };
+const chatState = { historyRevision: 0, history: null, peer: "", roster: [], messages: [], es: null, me: "", sending: false, presence: "online", presenceSaving: false };
 
 function show(id) {
   const account = id === "view-account";
@@ -1583,6 +1587,8 @@ function clearSession() {
   resetComposeAttachments();
   disableWebPush().catch(() => {});
   stopChatLive();
+  chatState.peer='';chatState.roster=[];chatState.messages=[];
+  $('chat-messages')?.replaceChildren();
   state.tokens = null;
  monitorRequest++;
   state.challenge = "";
@@ -5509,6 +5515,8 @@ function chatBare(jid) {
 }
 
 function stopChatLive() {
+  chatState.historyRevision++;
+  chatState.history = null;
   if (chatState.es) {
     try { chatState.es.close(); } catch {}
     chatState.es = null;
@@ -5526,7 +5534,9 @@ function startChatLive() {
     try {
       const data = await api("/api/v1/chat/roster");
       if (chatState.es !== es) return;
+      const previous=chatState.roster;
       chatState.roster = data.roster || [];
+      clearRemovedRoom(previous);
       chatState.me = data.me || state.email;
       chatState.presence = data.presence || 'online';
       renderChatRoster();
@@ -5535,6 +5545,7 @@ function startChatLive() {
     }
   });
   es.addEventListener("message", (ev) => {
+    if (chatState.es !== es) return;
     let data;
     try { data = JSON.parse(ev.data); } catch { return; }
     if(data.type==='presence'){const contact=chatState.roster.find(r=>chatBare(r.jid)===chatBare(data.from));if(contact){contact.presence=data.body;renderChatRoster()}return}
@@ -5659,40 +5670,75 @@ function renderChatRoster() {
 
 }
 
+function clearRemovedRoom(previousRoster) {
+  if (!previousRoster.some(r=>r.group&&chatBare(r.jid)===chatState.peer) || chatState.roster.some(r=>chatBare(r.jid)===chatState.peer)) return;
+  chatState.historyRevision++;chatState.history=null;chatState.peer='';chatState.messages=[];
+  $('chat-messages')?.replaceChildren();$('chat-thread')?.classList.add('hidden');$('chat-empty')?.classList.remove('hidden');
+}
+
 async function refreshChat() {
+  const guard=omemoGuard();
   try {
-    const data = await api("/api/v1/chat/roster");
+    const data = await api("/api/v1/chat/roster",{_guard:guard});guard();
+    const previous=chatState.roster;
     chatState.roster = data.roster || [];
     chatState.me = data.me || state.email;
     chatState.presence = data.presence || 'online';
-    renderChatRoster();
+    clearRemovedRoom(previous);renderChatRoster();
     if (chatState.peer) await openChatPeer(chatState.peer, true);
   } catch (err) {
+    try{guard()}catch{return}
     setMsg($("chat-roster-msg"), err.message, "err");
   }
 }
 
-async function openChatPeer(jid, keepPane) {
-  chatState.peer = chatBare(jid);
-  renderChatRoster();
-  $("chat-empty")?.classList.add("hidden");
-  $("chat-thread")?.classList.remove("hidden");
-  if ($("chat-peer")) $("chat-peer").textContent = chatState.roster.find(r=>chatBare(r.jid)===chatState.peer)?.name||chatState.peer;
-  const box = $("chat-messages");
-  if (box) box.innerHTML = "";
+function chatHistoryButton(history) {
+  const button=history.button;
+  button.hidden=history.complete;
+  button.disabled=history.loading;
+  button.textContent=t(history.loading?'chat_history_loading':'chat_history_older');
+}
+
+async function loadChatHistory(history) {
+  if (history.loading || history.complete || chatState.history!==history) return;
+  const box=$('chat-messages'),initial=!history.loaded;
+  const current=()=>{history.guard();if(chatState.history!==history||chatState.historyRevision!==history.revision||chatState.peer!==history.peer)throw new Error('stale chat history')};
+  history.loading=true;chatHistoryButton(history);
   try {
-    const data = await api("/api/v1/chat/history?with=" + encodeURIComponent(chatState.peer) + "&limit=80");
-    chatState.messages = data.messages || [];
-    if (!chatState.messages.length) {
-      if (box) box.innerHTML = `<p class="meta chat-empty-hint">${escapeHtml(t("chat_empty"))}</p>`;
-    } else {
-      chatState.messages.forEach((m) => appendChatBubble(m));
-      scrollChatBottom();
-    }
-  } catch (err) {
-    setMsg($("chat-msg"), err.message, "err");
+    const path=history.group?'/api/v1/chat/rooms/history?room='+encodeURIComponent(history.peer)+'&limit=80&before='+encodeURIComponent(history.before):'/api/v1/chat/history?with='+encodeURIComponent(history.peer)+'&limit=80';
+    const data=await api(path,{_guard:current});current();
+    const messages=data.messages||[],anchor=box.querySelector('.chat-bubble'),height=box.scrollHeight,top=box.scrollTop;
+    // Keep live SSE messages received while the page was loading. Existing IDs
+    // are skipped by appendChatBubble; older entries go before the live tail.
+    for(const message of messages){const bubble=appendChatBubble(message);if(bubble&&anchor)box.insertBefore(bubble,anchor)}
+    chatState.messages=[...messages,...chatState.messages];
+    history.loaded=true;history.before=data.first||history.before;
+    history.complete=!history.group||!!data.complete||messages.length===0;
+    history.loading=false;chatHistoryButton(history);
+    if(!box.querySelector('.chat-bubble')&&!box.querySelector('.chat-empty-hint')){const hint=document.createElement('p');hint.className='meta chat-empty-hint';hint.textContent=t('chat_empty');box.append(hint)}
+    if(initial)scrollChatBottom();else box.scrollTop=top+box.scrollHeight-height;
+    setMsg($('chat-msg'),'');
+  } catch(err) {
+    try{current()}catch{return}
+    setMsg($('chat-msg'),err.message,'err');
+  } finally {
+    if(chatState.history===history){history.loading=false;chatHistoryButton(history)}
   }
-  if (!keepPane) setMobilePane("read");
+}
+
+async function openChatPeer(jid, keepPane) {
+  const peer=chatBare(jid),revision=++chatState.historyRevision;
+  chatState.peer=peer;chatState.messages=[];
+  renderChatRoster();
+  $('chat-empty')?.classList.add('hidden');$('chat-thread')?.classList.remove('hidden');
+  const contact=chatState.roster.find(r=>chatBare(r.jid)===peer);
+  if($('chat-peer'))$('chat-peer').textContent=contact?.name||peer;
+  const box=$('chat-messages');if(!box)return;box.replaceChildren();
+  const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm chat-history-older';
+  const history={peer,revision,guard:omemoGuard(),group:!!contact?.group,before:'',complete:false,loaded:false,loading:false,button};
+  chatState.history=history;button.onclick=()=>loadChatHistory(history);box.prepend(button);
+  if(!keepPane)setMobilePane('read');
+  await loadChatHistory(history);
 }
 
 $("btn-chat-new")?.addEventListener("click", () => {

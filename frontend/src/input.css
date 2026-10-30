@@ -4024,3 +4024,6 @@ dialog.omemo-dialog[open]{display:flex;flex-direction:column}
 .xmpp-device-fields { display:grid; gap:16px; }
 .xmpp-device-secret { font-family:monospace; }
 .xmpp-device-dialog { max-width:660px; }
+
+.chat-history-older { align-self:center; flex:none; max-width:100%; white-space:normal; overflow-anchor:none; }
+.chat-history-older[hidden] { display:none; }

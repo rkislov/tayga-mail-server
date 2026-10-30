@@ -35,6 +35,7 @@ type RosterEntry struct {
 
 // HistoryMsg is a decoded MAM / chat history item.
 type HistoryMsg struct {
+	SenderJID  string          `json:"-"`
 	Nick       string          `json:"-"`
 	OriginID   string          `json:"-"`
 	OMEMO      string          `json:"omemo,omitempty"`
@@ -213,6 +214,8 @@ func (s *Server) UpsertChatRoster(ctx context.Context, userID, jid, name string)
 
 func (s *Server) ChatHistory(ctx context.Context, ownerBare, withBare string, limit int) ([]HistoryMsg, error) {
 	if s.isWebRoom(withBare) {
+		s.mucMu.Lock()
+		defer s.mucMu.Unlock()
 		return s.roomHistory(ctx, ownerBare, withBare, limit)
 	}
 	rows, err := s.queryMAM(ctx, ParseJID(ownerBare).Bare(), ParseJID(withBare).Bare(), limit)
