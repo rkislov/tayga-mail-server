@@ -125,7 +125,7 @@ func (s *Server) createChatRoom(ctx context.Context, email, name string, members
 		return ChatRoom{}, err
 	}
 	defer tx.Rollback()
-	if _, err = tx.ExecContext(ctx, s.rebind(`INSERT INTO web_chat_rooms(jid,name,owner_email) VALUES(?,?,?)`), room.JID, name, email); err != nil {
+	if _, err = tx.ExecContext(ctx, s.rebind(`INSERT INTO web_chat_rooms(jid,name,owner_email,membership_token) VALUES(?,?,?,?)`), room.JID, name, email, randomID()); err != nil {
 		return ChatRoom{}, err
 	}
 	for _, member := range all {
@@ -160,7 +160,7 @@ func (s *Server) LeaveChatRoom(ctx context.Context, email, jid string) error {
 	_, err = s.db.ExecContext(ctx, s.rebind(`DELETE FROM web_chat_members WHERE room_jid=? AND email=?`), jid, email)
 	if err == nil {
 		s.evictRoomMember(jid, email, "321")
-		s.hub.pushWeb(email, ChatEvent{Type: "roster"})
+		s.notifyRoomAffiliation(ctx, jid, email, "none")
 	}
 	return err
 }
@@ -176,16 +176,21 @@ func (s *Server) roomHistory(ctx context.Context, email, jid string, limit int) 
 func (s *Server) sendRoomMessage(ctx context.Context, email, jid, body string) (ChatEvent, error) {
 	s.mucMu.Lock()
 	defer s.mucMu.Unlock()
-	return s.sendRoomMessageAs(ctx, email, jid, body, email, "", email)
+	return s.sendRoomMessageAs(ctx, email, jid, body, webRoomNick(email), "", email+"/web")
 }
 func (s *Server) sendRoomMessageAs(ctx context.Context, email, jid, body, nick, originID, senderJID string) (ChatEvent, error) {
+	return s.storeRoomMessage(ctx, email, jid, body, nick, originID, senderJID, "")
+}
+
+// Caller holds mucMu through membership validation, persistence and delivery.
+func (s *Server) storeRoomMessage(ctx context.Context, email, jid, body, nick, originID, senderJID, cipher string) (ChatEvent, error) {
 	if err := s.requireRoomMember(ctx, email, jid); err != nil {
 		return ChatEvent{}, err
 	}
-	if strings.TrimSpace(body) == "" || len(body) > 65536 {
+	if cipher == "" && (strings.TrimSpace(body) == "" || len(body) > 65536) {
 		return ChatEvent{}, fmt.Errorf("message must contain 1–65536 bytes")
 	}
-	ev := ChatEvent{Type: "message", Room: jid, ID: randomID(), From: email, To: jid, Body: body, At: time.Now().UTC()}
+	ev := ChatEvent{Type: "message", Room: jid, ID: randomID(), From: email, To: jid, Body: body, OMEMO: cipher, Encrypted: cipher != "", At: time.Now().UTC()}
 	if sender, e := s.store.GetUserByEmail(ctx, email); e == nil {
 		ev.SenderName = strings.TrimSpace(sender.DisplayName)
 	}
@@ -202,7 +207,7 @@ func (s *Server) sendRoomMessageAs(ctx context.Context, email, jid, body, nick, 
 	if _, err = tx.ExecContext(ctx, s.rebind(`UPDATE web_chat_rooms SET next_archive_seq=? WHERE jid=?`), seq, jid); err != nil {
 		return ChatEvent{}, err
 	}
-	if _, err = tx.ExecContext(ctx, s.rebind(`INSERT INTO web_chat_messages(id,room_jid,sender,body,created_at,nick,origin_id,sender_jid,archive_seq) VALUES(?,?,?,?,?,?,?,?,?)`), ev.ID, jid, email, body, ev.At.Format(roomStampLayout), nick, originID, senderJID, seq); err != nil {
+	if _, err = tx.ExecContext(ctx, s.rebind(`INSERT INTO web_chat_messages(id,room_jid,sender,body,created_at,nick,origin_id,sender_jid,archive_seq,omemo) VALUES(?,?,?,?,?,?,?,?,?,?)`), ev.ID, jid, email, body, ev.At.Format(roomStampLayout), nick, originID, senderJID, seq, cipher); err != nil {
 		return ChatEvent{}, err
 	}
 	if err = tx.Commit(); err != nil {

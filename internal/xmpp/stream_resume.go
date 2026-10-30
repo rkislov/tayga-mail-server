@@ -127,6 +127,15 @@ func (s *Session) resumeStream(start xml.StartElement) error {
 }
 
 func (s *Session) resumeStoredStream(token string, n uint32, fail func(string) error) error {
+	// Serialize the archive boundary check and room rejoin with new messages.
+	// Never confirm a resumed stream that would omit encrypted room history.
+	s.srv.mucMu.Lock()
+	roomsLocked := true
+	defer func() {
+		if roomsLocked {
+			s.srv.mucMu.Unlock()
+		}
+	}()
 	s.srv.resumeMu.Lock()
 	old, ok := s.srv.resumable[token]
 	if !ok || old.userID != s.user.ID || old.credentialID != s.credentialID || time.Now().After(old.expires) {
@@ -139,6 +148,16 @@ func (s *Session) resumeStoredStream(token string, n uint32, fail func(string) e
 	}
 	delete(s.srv.resumable, token)
 	s.srv.resumeMu.Unlock()
+	for _, room := range old.rooms {
+		var missed bool
+		err := s.srv.db.QueryRowContext(context.Background(), s.srv.rebind(`SELECT EXISTS(SELECT 1 FROM web_chat_messages WHERE room_jid=? AND archive_seq>? AND omemo<>'')`), room.JID, room.ArchiveSeq).Scan(&missed)
+		if err != nil || missed {
+			// A full bind/join triggers the client's MAM catchup, whose forwarded
+			// envelope carries the authoritative sender JID. A legacy join replay
+			// cannot safely reconstruct OMEMO identities from reused nicknames.
+			return fail("item-not-found")
+		}
+	}
 	// A fresh bind of this resource supersedes a disconnected stream.
 	for _, current := range s.srv.hub.Sessions(old.jid.Bare()) {
 		if current.JID.Resource == old.jid.Resource {
@@ -169,17 +188,20 @@ func (s *Session) resumeStoredStream(token string, n uint32, fail func(string) e
 	if err != nil {
 		return err
 	}
+	for _, room := range old.rooms {
+		if err := s.handleMUCPresenceLocked(room.JID+"/"+room.Nick, "", `<x xmlns='`+mucNS+`'><history maxstanzas='200' since='`+room.Since.Format(time.RFC3339Nano)+`'/></x>`); err != nil {
+			return err
+		}
+	}
+	s.srv.mucMu.Unlock()
+	roomsLocked = false
+	// Hub registration may close a superseded resource and acquire mucMu.
 	if err := s.registerBoundSession(); err != nil {
 		return err
 	}
 	s.touchSession()
 	if old.presence != nil {
 		s.srv.recordPresence(context.Background(), s.JID.Full(), old.presence.State, old.presence.Status)
-	}
-	for _, room := range old.rooms {
-		if err := s.handleMUCPresence(room.JID+"/"+room.Nick, "", `<x xmlns='`+mucNS+`'><history maxstanzas='200' since='`+room.Since.Format(time.RFC3339Nano)+`'/></x>`); err != nil {
-			return err
-		}
 	}
 	if s.srv.log != nil {
 		s.srv.log.Info("xmpp stream resumed", "user_id", s.user.ID, "resource", s.JID.Resource, "replayed_stanzas", replayed)

@@ -59,4 +59,5 @@ func TestRoomArchivePostgres(t *testing.T) {
 	}
 	server := New(cfg, nil, st, nil, nil)
 	testRoomArchive(t, server, st.(*storage.Store), user)
+	testGroupOMEMO(t, server, st.(*storage.Store), user)
 }
