@@ -209,6 +209,7 @@ test("Filelink lifecycle uses real File data, reports abort and revokes deletion
   };
   browser.alarms = { onAlarm: event("alarm"), create() {} };
   h.context.browser = browser;
+  h.context.TaygaRules = require("../rules.js");
   h.context.AbortController = AbortController;
   h.context.console = console;
   h.context.fetch = h.client.fetcher;

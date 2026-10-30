@@ -268,3 +268,5 @@ ewsStatus().catch((error) => notice(error.message, true));
 setInterval(() => {
   if (!document.hidden) ewsStatus().catch(() => {});
 }, 15000);
+
+el("rules-open").addEventListener("click", () => browser.tabs.create({url:browser.runtime.getURL("rules.html")}));

@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>Tayga — правила почты</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="rules.css" />
+  </head>
+  <body class="rules-page">
+    <header>
+      <img src="icon.svg" width="44" height="44" alt="" />
+      <div>
+        <h1>Правила почты</h1>
+        <p id="account">Tayga · правила на сервере</p>
+      </div>
+      <a href="options.html">Настройки</a>
+    </header>
+    <p class="intro">
+      Правила обрабатывают новые входящие письма сверху вниз и работают, даже
+      когда Thunderbird закрыт.
+    </p>
+    <div class="toolbar">
+      <button id="new">＋ Создать правило</button
+      ><button id="save" class="primary">Сохранить на сервере</button
+      ><button id="reload">Обновить / отменить правки</button
+      ><span id="dirty"></span>
+    </div>
+    <p id="notice" role="status" aria-live="polite">Загрузка правил…</p>
+    <main>
+      <section class="rule-sidebar" aria-label="Список правил">
+        <h2>Порядок выполнения</h2>
+        <ol id="rules"></ol>
+        <p id="empty" hidden>Правил пока нет. Создайте первое правило.</p>
+      </section>
+      <section class="rule-editor">
+        <p id="placeholder">Выберите правило слева или создайте новое.</p>
+        <form id="editor" hidden>
+          <div class="editor-title">
+            <h2>Настройка правила</h2>
+            <div>
+              <button
+                type="button"
+                id="up"
+                aria-label="Переместить правило выше"
+              >
+                ↑</button
+              ><button
+                type="button"
+                id="down"
+                aria-label="Переместить правило ниже"
+              >
+                ↓</button
+              ><button type="button" id="duplicate">Дублировать</button
+              ><button type="button" id="delete" class="danger">Удалить</button>
+            </div>
+          </div>
+          <p id="unsupported" class="error" hidden>
+            Правило содержит поля, которые этот редактор не поддерживает. Для
+            изменения используйте Outlook. Остальные правила сохраняются
+            независимо.
+          </p>
+          <fieldset id="fields">
+            <label for="name">Название правила</label
+            ><input
+              id="name"
+              maxlength="256"
+              required
+              placeholder="Например, счета от поставщиков"
+            /><label class="check"
+              ><input id="enabled" type="checkbox" /> Правило включено</label
+            >
+            <div class="rule-block">
+              <h3>Когда письмо соответствует условиям</h3>
+              <p class="hint">
+                Должны выполняться все условия. Значения внутри одного условия
+                объединяются через «или». Без условий правило применяется ко
+                всем входящим письмам.
+              </p>
+              <div id="conditions"></div>
+              <button type="button" id="add-condition">
+                ＋ Добавить условие
+              </button>
+            </div>
+            <div class="rule-block">
+              <h3>Выполнить действия</h3>
+              <div id="actions"></div>
+              <button type="button" id="add-action">
+                ＋ Добавить действие
+              </button>
+            </div>
+            <div class="rule-block">
+              <h3>Кроме случаев, когда</h3>
+              <p class="hint">
+                Правило пропускает письмо, если выполняется хотя бы одно
+                исключение.
+              </p>
+              <div id="exceptions"></div>
+              <button type="button" id="add-exception">
+                ＋ Добавить исключение
+              </button>
+            </div>
+            <div class="rule-summary">
+              <h3>Описание правила</h3>
+              <p id="summary"></p>
+            </div>
+          </fieldset>
+        </form>
+      </section>
+    </main>
+    <p class="hint">
+      Эти правила доступны через EWS и совместимы с правилами Outlook,
+      поддерживаемыми Tayga. Они выполняются перед личным Sieve-скриптом.
+      Изменения вступают в силу после сохранения.
+    </p>
+    <script src="rules.js"></script>
+    <script src="rules-ui.js"></script>
+  </body>
+</html>

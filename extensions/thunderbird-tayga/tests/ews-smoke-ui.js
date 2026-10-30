@@ -55,6 +55,108 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     );
     stage = "sync";
     await background.ews.run();
+    stage = "rules UI";
+    const frame = document.createElement("iframe");
+    frame.src = browser.runtime.getURL("rules.html");
+    document.body.append(frame);
+    const until = async (test) => {
+      for (let i = 0; i < 200; i++) {
+        if (test()) return;
+        await sleep(25);
+      }
+      throw new Error(
+        "Rules UI timeout: " +
+          frame.contentDocument?.getElementById("notice")?.textContent,
+      );
+    };
+    await until(
+      () =>
+        frame.contentDocument?.getElementById("notice")?.textContent ===
+        "Правила загружены.",
+    );
+    const rd = frame.contentDocument,
+      re = (id) => rd.getElementById(id);
+    re("new").click();
+    re("name").value = "Счета <2026>";
+    re("name").dispatchEvent(new frame.contentWindow.Event("input"));
+    re("add-condition").click();
+    const terms = re("conditions").querySelector("textarea");
+    terms.value = "invoice\nсчёт";
+    terms.dispatchEvent(new frame.contentWindow.Event("input"));
+    const folderSelect = re("actions").querySelectorAll("select")[1];
+    const rulesBefore = await browser.runtime.sendMessage({
+      type: "tayga.rules.load",
+    });
+    const destination = rulesBefore.folders.find(
+      (f) => f.path === "Projects / 2026 / October",
+    );
+    assert(destination, "Rules folder picker lost hierarchy");
+    folderSelect.value = destination.id;
+    folderSelect.dispatchEvent(new frame.contentWindow.Event("change"));
+    re("add-exception").click();
+    const exception = re("exceptions").querySelector("textarea");
+    exception.value = "Do not file";
+    exception.dispatchEvent(new frame.contentWindow.Event("input"));
+    re("add-action").click();
+    const extraAction = re("actions")
+      .querySelectorAll(".rule-row")[1]
+      .querySelector("select");
+    extraAction.value = "MarkAsRead";
+    extraAction.dispatchEvent(new frame.contentWindow.Event("change"));
+    re("save").click();
+    await until(
+      () => re("notice").textContent === "Правила сохранены на сервере.",
+    );
+    let ruleData = await browser.runtime.sendMessage({
+      type: "tayga.rules.load",
+    });
+    assert(
+      ruleData.rules.length === 1 &&
+        ruleData.rules[0].name === "Счета <2026>" &&
+        ruleData.rules[0].conditions[0].values.length === 2 &&
+        ruleData.rules[0].exceptions[0].values[0] === "Do not file" &&
+        ruleData.rules[0].actions[1].kind === "MarkAsRead" &&
+        ruleData.rules[0].actions[0].folderId === destination.id,
+      "Rules roundtrip lost fields",
+    );
+    re("duplicate").click();
+    re("name").value = "Второе правило";
+    re("name").dispatchEvent(new frame.contentWindow.Event("input"));
+    re("up").click();
+    re("enabled").checked = false;
+    re("enabled").dispatchEvent(new frame.contentWindow.Event("change"));
+    re("save").click();
+    await until(
+      () => re("notice").textContent === "Правила сохранены на сервере.",
+    );
+    ruleData = await browser.runtime.sendMessage({ type: "tayga.rules.load" });
+    assert(
+      ruleData.rules[0].name === "Второе правило" &&
+        !ruleData.rules[0].enabled &&
+        ruleData.rules[1].enabled,
+      "Rule priority or enabled state lost",
+    );
+    let stale = false;
+    try {
+      await browser.runtime.sendMessage({
+        type: "tayga.rules.save",
+        ...rulesBefore,
+        rules: [],
+      });
+    } catch (error) {
+      stale = error.message.includes("другом клиенте");
+    }
+    assert(stale, "Stale rules overwrite was accepted");
+    await browser.runtime.sendMessage({
+      type: "tayga.rules.save",
+      ...ruleData,
+      rules: [],
+    });
+    frame.remove();
+    checks.push(
+      "rules GUI creates, duplicates, reorders, disables and saves EWS rules; stale writes rejected",
+    );
+    stage = "calendar";
     let server = await serverState();
     let state = await native("state");
     const calendar = Object.values(state.collections).find(
@@ -254,21 +356,38 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     checks.push(
       "native EWS mail account receives messages with Bearer authentication",
     );
-    stage = "download native EWS message";
-    const downloaded = await browser.messages.query({
-      subject: "Tayga EWS native smoke",
-    });
-    assert(downloaded.messages.length === 1, "Native message is not available");
-    const original = await browser.messages.getRaw(downloaded.messages[0].id, {
-      data_format: "File",
-    });
-    const originalText = await original.text();
     assert(
-      originalText.includes("Hello from EWS") &&
-        originalText.includes("Message-ID: <ews-native-test@example.com>"),
-      "Native EWS message body could not be downloaded",
+      mail.folders.some((f) => f.name === "October" && f.parent === "2026"),
+      "Nested native mail folders not synchronized: " +
+        JSON.stringify(mail.folders),
     );
-    checks.push("native EWS downloads the original message through GetItem");
+    checks.push("nested mail folders have correct names and parents");
+    const legacyDated = mail.inbox.find(
+      (m) => m.subject === "Tayga EWS native smoke",
+    );
+    assert(
+      legacyDated.date === 0,
+      "Legacy fixture did not reproduce zero list date",
+    );
+    await fetch(fixture + "/test/restore-dates", { method: "POST" });
+    const expectedDate = Date.parse("2026-10-19T09:34:56Z") / 1000;
+    let dated;
+    for (let i = 0; i < 150; i++) {
+      mail = await inspect({ op: "mail", update: true });
+      dated = mail.inbox.find((m) => m.subject === "Tayga EWS native smoke");
+      if (dated?.date === expectedDate) break;
+      await sleep(100);
+    }
+    assert(
+      dated?.date === expectedDate &&
+        dated.key === legacyDated.key &&
+        mail.inbox.length === 1,
+      "Existing native message date not repaired in place: " +
+        JSON.stringify(mail),
+    );
+    checks.push(
+      "existing zero-date native headers repaired in place from MIME Date, with timezone and without duplicates",
+    );
     const mailRecord = Object.values((await native("state")).mail)[0];
     const account = await browser.accounts.get(mailRecord.accountId);
     const compose = await browser.compose.beginNew({
@@ -332,6 +451,17 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     assert(!item.data, "Deleted remote contact survived a cursor reset");
     checks.push(
       "invalid cursor triggers full resync including remote deletions",
+    );
+    await inspect({ op: "removeManagedMail" });
+    await background.ews.stop();
+    await background.ews.run();
+    assert(
+      Object.keys((await native("state")).mail).length === 1,
+      "Managed account recovery duplicated records",
+    );
+    await inspect({ op: "mail" });
+    checks.push(
+      "manually removed managed EWS account is recreated without losing calendar/contact state",
     );
     await inspect({
       key: calendar.key,

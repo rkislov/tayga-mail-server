@@ -21,3 +21,5 @@ browser.runtime
   .catch((error) => {
     document.getElementById("status").textContent = error.message;
   });
+
+document.getElementById("open-rules").addEventListener("click",()=>{browser.tabs.create({url:browser.runtime.getURL("rules.html")});window.close();});

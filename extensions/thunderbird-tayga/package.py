@@ -8,7 +8,7 @@ root = Path(__file__).resolve().parent
 manifest = json.loads((root / 'manifest.json').read_text())
 out = root.parent.parent / 'dist' / f'tayga-thunderbird-v{manifest["version"]}.xpi'
 files = ['manifest.json', 'client.js', 'background.js', 'options.html', 'options.js',
-         'popup.html', 'popup.js', 'styles.css', 'icon.svg', 'ews.js', 'experiments/ews/api.js', 'experiments/ews/schema.json']
+         'rules.js', 'rules.html', 'rules-ui.js', 'rules.css', 'popup.html', 'popup.js', 'styles.css', 'icon.svg', 'ews.js', 'experiments/ews/api.js', 'experiments/ews/schema.json']
 out.parent.mkdir(exist_ok=True)
 with zipfile.ZipFile(out, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
     for name in files:
