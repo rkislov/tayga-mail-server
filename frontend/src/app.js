@@ -416,7 +416,7 @@ function showApp(name) {
   }
   $("compose-backdrop")?.classList.add("hidden");
   setNavOpen(false);
-  if (app === "profile") {loadMe();refreshSignature();refreshPasskeys();refreshMailSources();refreshTravelProfile();}
+  if (app === "profile") {loadMe();refreshSignature();refreshPasskeys();refreshMailSources();refreshTravelProfile();refreshXMPPDevices();}
   const migrationPane=$("app-migration");
   if (migrationPane) {
     if (!migrationPane._originalParent) migrationPane._originalParent=migrationPane.parentElement;
@@ -480,6 +480,7 @@ function isAuthPublicPath(path) {
 
 function clearSession() {
   if (typeof omemoCancelOperations === 'function') omemoCancelOperations();
+  if (typeof resetXMPPDevices === 'function') resetXMPPDevices();
   resetBranding();
   resetTasks();
   resetComposeAttachments();
@@ -2316,6 +2317,7 @@ $("btn-sieve-save").addEventListener("click", async () => {
 
 function enterAccount(tokens, email) {
   if (typeof omemoCancelOperations === 'function') omemoCancelOperations();
+  if (typeof resetXMPPDevices === 'function') resetXMPPDevices();
   state.tokens = tokens;
   state.email = email || state.email;
   localStorage.setItem("tayga.tokens", JSON.stringify(tokens));

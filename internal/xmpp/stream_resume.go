@@ -17,6 +17,7 @@ type resumableStream struct {
 	state        streamManagement
 	jid          JID
 	userID       string
+	credentialID string
 	carbons      bool
 	pepInterest  map[string]bool
 	pepCaps      string
@@ -53,7 +54,7 @@ func (s *Session) retainStream() {
 		s.mu.Unlock()
 		return
 	}
-	snapshot := resumableStream{state: s.sm, jid: s.JID, userID: s.user.ID, carbons: s.carbons, expires: time.Now().Add(resumeTTL)}
+	snapshot := resumableStream{state: s.sm, jid: s.JID, userID: s.user.ID, credentialID: s.credentialID, carbons: s.carbons, expires: time.Now().Add(resumeTTL)}
 	snapshot.pepInterest = s.pepInterest // replaced, never mutated after publication
 	snapshot.pepCaps, snapshot.pepDiscoID, snapshot.pepDiscoNode, snapshot.pepDiscoAt = s.pepCaps, s.pepDiscoID, s.pepDiscoNode, s.pepDiscoAt
 	snapshot.rooms = append([]mucResumeState(nil), s.mucResume...)
@@ -62,7 +63,13 @@ func (s *Session) retainStream() {
 		snapshot.presence = &p
 	}
 	s.mu.Unlock()
-	srv := s.srv
+	_ = s.withDeviceAccess(func() error {
+		s.srv.retainSnapshot(snapshot)
+		return nil
+	})
+}
+
+func (srv *Server) retainSnapshot(snapshot resumableStream) {
 	srv.resumeMu.Lock()
 	defer srv.resumeMu.Unlock()
 	if srv.resumable == nil {
@@ -106,19 +113,23 @@ func (s *Session) resumeStream(start xml.StartElement) error {
 	}
 	token := attr(start, "previd")
 	s.srv.resumeMu.Lock()
-	old, ok := s.srv.resumable[token]
+	_, ok := s.srv.resumable[token]
+	s.srv.resumeMu.Unlock()
 	if !ok {
-		s.srv.resumeMu.Unlock()
 		// On a network switch the new connection can arrive before TCP detects
 		// the old one is gone. Finish that reader before taking its SM snapshot;
 		// copying live counters would race with an in-flight stanza handler.
 		if condition := s.finishPreviousStream(token, uint32(n)); condition != "" {
 			return fail(condition)
 		}
-		s.srv.resumeMu.Lock()
-		old, ok = s.srv.resumable[token]
 	}
-	if !ok || old.userID != s.user.ID || time.Now().After(old.expires) {
+	return s.withDeviceAccess(func() error { return s.resumeStoredStream(token, uint32(n), fail) })
+}
+
+func (s *Session) resumeStoredStream(token string, n uint32, fail func(string) error) error {
+	s.srv.resumeMu.Lock()
+	old, ok := s.srv.resumable[token]
+	if !ok || old.userID != s.user.ID || old.credentialID != s.credentialID || time.Now().After(old.expires) {
 		s.srv.resumeMu.Unlock()
 		return fail("item-not-found")
 	}
@@ -135,6 +146,10 @@ func (s *Session) resumeStream(start xml.StartElement) error {
 		}
 	}
 	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return fmt.Errorf("connection closed")
+	}
 	s.JID = old.jid
 	s.sm = old.state
 	s.carbons = old.carbons
@@ -144,7 +159,7 @@ func (s *Session) resumeStream(start xml.StartElement) error {
 	s.bound = true
 	s.sm.ack(uint32(n))
 	replayed := len(s.sm.pending)
-	err = s.replayStreamLocked(token)
+	err := s.replayStreamLocked(token)
 	if err != nil {
 		// A second disconnect during replay must not discard room memberships
 		// that have not yet been re-established on this connection.
@@ -154,7 +169,9 @@ func (s *Session) resumeStream(start xml.StartElement) error {
 	if err != nil {
 		return err
 	}
-	s.srv.hub.Register(s)
+	if err := s.registerBoundSession(); err != nil {
+		return err
+	}
 	s.touchSession()
 	if old.presence != nil {
 		s.srv.recordPresence(context.Background(), s.JID.Full(), old.presence.State, old.presence.Status)
@@ -186,7 +203,7 @@ func (s *Session) finishPreviousStream(token string, h uint32) string {
 			continue
 		}
 		previous.mu.Lock()
-		matches := previous.user != nil && previous.user.ID == s.user.ID && previous.sm.resumable && previous.sm.token == token && previous.done != nil
+		matches := previous.user != nil && previous.user.ID == s.user.ID && previous.credentialID == s.credentialID && previous.sm.resumable && previous.sm.token == token && previous.done != nil
 		invalid := h-previous.sm.acknowledged > previous.sm.sent-previous.sm.acknowledged
 		conn, done := previous.conn, previous.done
 		previous.mu.Unlock()
@@ -244,4 +261,28 @@ func (sm *streamManagement) ack(h uint32) {
 		sm.pending = sm.pending[:len(sm.pending)-count]
 	}
 	sm.acknowledged = h
+}
+
+// DropDeviceStreams is called after credential revocation (or legacy-mode
+// retirement). A concurrent retain is serialized by the auth access gate.
+func (srv *Server) DropDeviceStreams(userID, credentialID string) {
+	srv.resumeMu.Lock()
+	defer srv.resumeMu.Unlock()
+	for token, stream := range srv.resumable {
+		if stream.userID == userID && stream.credentialID == credentialID {
+			delete(srv.resumable, token)
+		}
+	}
+}
+
+func (s *Session) withDeviceAccess(fn func() error) error {
+	if s.srv.authn == nil {
+		return fn()
+	} // Internal protocol fixtures without an auth layer.
+	if s.user == nil {
+		return fmt.Errorf("unauthenticated connection")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	return s.srv.authn.WithXMPPAccess(ctx, s.user.ID, s.credentialID, fn)
 }

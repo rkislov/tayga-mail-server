@@ -101,6 +101,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/me/branding", s.handleBranding)
 	mux.HandleFunc("/api/v1/admin/branding/", s.handleAdminBranding)
 	mux.HandleFunc("/api/v1/me/password", s.handleChangePassword)
+	mux.HandleFunc("/api/v1/me/xmpp-devices", s.handleXMPPDevices)
+	mux.HandleFunc("/api/v1/me/xmpp-devices/", s.handleXMPPDevices)
 	mux.HandleFunc("/api/v1/mail/signature", s.handleSignature)
 	mux.HandleFunc("/api/v1/travel", s.handleTravel)
 	mux.HandleFunc("/api/v1/travel/", s.handleTravel)

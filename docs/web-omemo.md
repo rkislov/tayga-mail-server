@@ -59,3 +59,5 @@
 Веб-клиент с OMEMO распространяется под GPL-3.0; текст — `frontend/LICENSE`. Серверный Go-код и отдельный модуль FlowSync остаются под Apache-2.0. Исходники веб-клиента находятся в `frontend/src`, сборка — `npm ci --prefix frontend && npm run build --prefix frontend`. Исходники libomemo.js 3.0.0: https://github.com/conversejs/libomemo.js (пакет и точные версии закреплены в `frontend/package-lock.json`). Лицензия библиотеки поставляется в `/assets/libomemo-LICENSE.txt`.
 
 Спецификации: https://xmpp.org/extensions/attic/xep-0384-0.3.0.html и https://xmpp.org/extensions/xep-0454.html.
+
+Управление входом нативных клиентов описано отдельно: [пароли устройств XMPP](xmpp-device-passwords.md). В настройках шифрования есть переход к этому разделу профиля; отзыв пароля и отзыв ключа OMEMO выполняются независимо.

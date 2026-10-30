@@ -4009,3 +4009,18 @@ dialog.omemo-dialog[open]{display:flex;flex-direction:column}
  .app-topbar .header-branding img {width:64px;height:32px}
  .app-topbar-title {flex:1 1 0}
 }
+
+/* Per-client XMPP credentials. Wide data scrolls inside its card on phones. */
+#xmpp-devices-card { min-width:0; grid-column:1 / -1; scroll-margin-top:132px; }
+.xmpp-device-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
+.xmpp-device-toolbar h3, .xmpp-device-toolbar .meta { flex:1; }
+.xmpp-device-toolbar button { width:auto; flex:0 0 auto; }
+.xmpp-device-lists, .xmpp-device-list { display:grid; min-width:0; gap:16px; }
+.xmpp-device-lists { gap:24px; }
+.xmpp-device-table-wrap { overflow:auto; max-width:100%; }
+.xmpp-device-table-wrap table { width:100%; min-width:620px; }
+.xmpp-device-table-wrap td { overflow-wrap:anywhere; max-width:300px; }
+.xmpp-device-table-wrap button { white-space:nowrap; width:auto; }
+.xmpp-device-fields { display:grid; gap:16px; }
+.xmpp-device-secret { font-family:monospace; }
+.xmpp-device-dialog { max-width:660px; }

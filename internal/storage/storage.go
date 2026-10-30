@@ -20,6 +20,14 @@ var (
 
 // Driver is the storage abstraction shared by protocol handlers.
 type Driver interface {
+	CreateXMPPDevicePassword(context.Context, *XMPPDevicePassword) error
+	GetXMPPDevicePassword(context.Context, string, string) (*XMPPDevicePassword, error)
+	ListXMPPDevicePasswords(context.Context, string) ([]XMPPDevicePassword, error)
+	TouchXMPPDevicePassword(context.Context, string, string) error
+	RevokeXMPPDevicePassword(context.Context, string, string) error
+	XMPPDevicesOnly(context.Context, string) (bool, error)
+	SetXMPPDevicesOnly(context.Context, string, bool) error
+
 	TravelMode(context.Context, string) (string, error)
 	SetTravelMode(context.Context, string, string) error
 	ClaimTravelJob(context.Context) (*TravelJob, error)

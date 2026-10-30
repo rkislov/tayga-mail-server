@@ -106,7 +106,8 @@ async function omemoSettings(){
  const footer=omemoNode('footer','omemo-footer'),refresh=omemoNode('button','btn-secondary',omemoText('Обновить устройства','Refresh devices'));
  refresh.type='button';
  const hint=omemoNode('p','meta',omemoText('Доверие, исключения и названия действуют в этом браузере. Отзыв собственного ключа на сервере действует для всей учётной записи. Очистка его данных удалит ключи и доступ к старым сообщениям.','Trust, exclusions and labels apply in this browser. Retiring your own key on the server applies to the whole account. Clearing its data removes keys and access to old messages.'));
- footer.append(refresh,hint);body.append(notice,content);dialog.append(header,body,footer);document.body.append(dialog);
+ const access=omemoNode('button','btn-secondary',omemoText('Пароли и доступ устройств','Device passwords and access'));access.type='button';access.onclick=()=>{dialog.close();showApp('profile');$('xmpp-devices-card')?.scrollIntoView({block:'start',behavior:'smooth'})};
+ footer.append(refresh,access,hint);body.append(notice,content);dialog.append(header,body,footer);document.body.append(dialog);
  let snapshot,devices=[],loading=false,busy=false,revision=0,changed=false;
  const active=()=>{try{sessionGuard();return dialog.isConnected}catch{return false}};
  const guard=c=>{if(c.account!==account||!active())throw Error(omemoText('Учётная запись изменилась. Откройте настройки заново.','Account changed. Reopen these settings.'))};
