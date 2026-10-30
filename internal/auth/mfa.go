@@ -179,7 +179,7 @@ func (m *MFAService) consumeCode(ctx context.Context, mfa *storage.UserMFA, code
 // verifyPassword checks credentials without MFA gating (used by web login).
 func (l *Layer) verifyPassword(ctx context.Context, username, password string) (*storage.User, error) {
 	username = strings.ToLower(strings.TrimSpace(username))
-	if username == "" || password == "" {
+	if username == "" || password == "" || strings.HasPrefix(password, XMPPDevicePasswordPrefix) {
 		return nil, ErrInvalidCredentials
 	}
 	domain := ""

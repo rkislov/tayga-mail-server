@@ -71,6 +71,9 @@ func (c *resumeWireClient) want(local, id string) resumeWireElement {
 }
 
 func newResumeWireClient(t *testing.T, srv *Server, listener net.Listener, resource string) *resumeWireClient {
+	return newResumeWireClientWithPassword(t, srv, listener, resource, "fixture-password")
+}
+func newResumeWireClientWithPassword(t *testing.T, srv *Server, listener net.Listener, resource, password string) *resumeWireClient {
 	t.Helper()
 	conn, err := net.DialTimeout("tcp", listener.Addr().String(), time.Second)
 	if err != nil {
@@ -95,7 +98,7 @@ func newResumeWireClient(t *testing.T, srv *Server, listener net.Listener, resou
 	header := `<stream:stream xmlns='jabber:client' xmlns:stream='http://etherx.jabber.org/streams' to='example.com' version='1.0'>`
 	c.send(header)
 	c.want("features", "")
-	c.send(`<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' mechanism='PLAIN'>` + base64.StdEncoding.EncodeToString([]byte("\x00alice\x00fixture-password")) + `</auth>`)
+	c.send(`<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' mechanism='PLAIN'>` + base64.StdEncoding.EncodeToString([]byte("\x00alice\x00"+password)) + `</auth>`)
 	c.want("success", "")
 	c.decoder = xml.NewDecoder(conn)
 	c.send(header)

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/tayga/tms/internal/config"
 	"github.com/tayga/tms/internal/storage"
@@ -33,17 +34,19 @@ type PasswordHasher interface {
 
 // Layer composes local auth with optional LDAP/OIDC providers per domain.
 type Layer struct {
-	sessions SessionRegistry
-	Store    storage.Driver
-	Hasher   PasswordHasher
-	LDAP     LDAPProvider
-	OIDC     OIDCProvider
-	Tokens   *TokenService
-	MFA      *MFAService
-	WebAuthn *WebAuthnService
-	OIDCCl   *OIDCClient
-	mfaCfg   config.MFAConfig
-	dir      *Directory // optional; used for EnabledFor checks
+	xmppMu    sync.Mutex
+	xmppLocks map[string]*xmppAccessLock
+	sessions  SessionRegistry
+	Store     storage.Driver
+	Hasher    PasswordHasher
+	LDAP      LDAPProvider
+	OIDC      OIDCProvider
+	Tokens    *TokenService
+	MFA       *MFAService
+	WebAuthn  *WebAuthnService
+	OIDCCl    *OIDCClient
+	mfaCfg    config.MFAConfig
+	dir       *Directory // optional; used for EnabledFor checks
 }
 
 // LDAPProvider is a per-domain LDAP authenticator.

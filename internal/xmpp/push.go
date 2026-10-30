@@ -53,6 +53,9 @@ func pushIQError(id, condition string) string {
 	return fmt.Sprintf(`<iq type='error' id='%s'><error type='cancel'><%s xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/></error></iq>`, xmlEscape(id), condition)
 }
 func (s *Session) handlePushIQ(id, typ, to, inner string) error {
+	return s.withDeviceAccess(func() error { return s.handleDevicePushIQ(id, typ, to, inner) })
+}
+func (s *Session) handleDevicePushIQ(id, typ, to, inner string) error {
 	if s.user == nil || s.srv.db == nil {
 		return s.writeString(iqAuthError(id))
 	}
@@ -167,7 +170,7 @@ func (s *Session) handlePushIQ(id, typ, to, inner string) error {
 		defer tx.Rollback()
 		_, e = tx.ExecContext(ctx, srv.rebind(`DELETE FROM xmpp_push_registrations WHERE user_id=? AND service=? AND node=?`), s.user.ID, jid.Bare(), node)
 		if e == nil {
-			_, e = tx.ExecContext(ctx, srv.rebind(`INSERT INTO xmpp_push_registrations(id,user_id,owner,service,node,options_xml,resource) VALUES(?,?,?,?,?,?,?)`), storage.NewID(), s.user.ID, s.JID.Bare(), jid.Bare(), node, options, s.JID.Resource)
+			_, e = tx.ExecContext(ctx, srv.rebind(`INSERT INTO xmpp_push_registrations(id,user_id,owner,service,node,options_xml,resource,credential_id) VALUES(?,?,?,?,?,?,?,?)`), storage.NewID(), s.user.ID, s.JID.Bare(), jid.Bare(), node, options, s.JID.Resource, s.credentialID)
 		}
 		if e == nil {
 			e = tx.Commit()
