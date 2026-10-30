@@ -246,7 +246,7 @@ const TaygaEWS = (() => {
         await this.native("configure", cfg);
         const capabilities = await this.soap(
           "GetFolder",
-          `<m:FolderShape><t:BaseShape>IdOnly</t:BaseShape><t:AdditionalProperties>${propertyRequest("TaygaSyncVersion")}${propertyRequest("TaygaTasksVersion")}</t:AdditionalProperties></m:FolderShape><m:FolderIds><t:DistinguishedFolderId Id="msgfolderroot"/></m:FolderIds>`,
+          `<m:FolderShape><t:BaseShape>IdOnly</t:BaseShape><t:AdditionalProperties>${propertyRequest("TaygaSyncVersion")}${propertyRequest("TaygaTasksVersion")}${propertyRequest("TaygaTaskRecurrenceVersion")}</t:AdditionalProperties></m:FolderShape><m:FolderIds><t:DistinguishedFolderId Id="msgfolderroot"/></m:FolderIds>`,
           cfg,
         );
         const supported = Array.from(
@@ -275,6 +275,17 @@ const TaygaEWS = (() => {
           );
         });
         this.status.tasksSupported = tasksSupported;
+        this.status.taskRecurrenceSupported = Array.from(
+          capabilities.getElementsByTagNameNS(T, "ExtendedProperty"),
+        ).some(
+          (p) =>
+            (
+              first(p, "ExtendedFieldURI")?.getAttribute("PropertySetId") || ""
+            ).toLowerCase() === P &&
+            first(p, "ExtendedFieldURI")?.getAttribute("PropertyName") ===
+              "TaygaTaskRecurrenceVersion" &&
+            text(p, "Value") === "1",
+        );
         // Explicit discovery also handles an upgrade with an unchanged hierarchy cursor.
         let taskCollection;
         if (tasksSupported) {

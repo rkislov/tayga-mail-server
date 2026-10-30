@@ -206,3 +206,47 @@ func TestGroupOMEMOReconnectFallsBackToMAM(t *testing.T) {
 		t.Fatal(page)
 	}
 }
+
+// Monal pulls bookmarks from its own bare JID after login and joins autojoin
+// entries. The creator on another device must get its room without an invite.
+func TestRoomBookmarksTCPReconnect(t *testing.T) {
+	srv, st, u := testServer(t)
+	ctx := context.Background()
+	srv.authn = auth.NewLayer(st, config.LDAPConfig{}, config.MFAConfig{}, config.OIDCConfig{})
+	hash, err := srv.authn.Hasher.Hash("fixture-password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = st.UpdateUserPassword(ctx, u.ID, hash); err != nil {
+		t.Fatal(err)
+	}
+	bob, err := st.CreateUser(ctx, &storage.User{TenantID: u.TenantID, DomainID: u.DomainID, LocalPart: "bob", Email: "bob@example.com", Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	room, err := srv.CreateChatRoom(ctx, u.Email, "From web", []string{bob.Email})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	for _, resource := range []string{"phone", "second-phone"} {
+		phone := newResumeWireClient(t, srv, ln, resource)
+		phone.send(`<iq type='get' id='bookmarks' to='` + u.Email + `'><pubsub xmlns='` + pepNS + `'><items node='` + bookmarksNode + `'/></pubsub></iq>`)
+		iq := phone.want("iq", "bookmarks")
+		if !strings.Contains(iq.Inner, room.JID) || !strings.Contains(iq.Inner, `autojoin='true'`) {
+			t.Fatal(iq)
+		}
+		phone.send(`<presence to='` + room.JID + `/Alice'><x xmlns='` + mucNS + `'><history maxstanzas='0'/></x></presence>`)
+		presence := phone.want("presence", "")
+		if strings.Contains(presence.Inner, "<error") || !strings.Contains(presence.Inner, "110") {
+			t.Fatal(presence)
+		}
+		phone.want("message", "")
+		phone.send(`<presence type='unavailable' to='` + room.JID + `/Alice'/>`)
+		phone.want("presence", "")
+	}
+}

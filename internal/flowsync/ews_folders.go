@@ -136,6 +136,9 @@ func (h *ewsHandler) getFolder(ctx context.Context, u *storage.User, body string
 			}
 		}
 		if found {
+			if taygaRequested(body, "TaygaTaskRecurrenceVersion") {
+				f.Inner += taygaProperty("TaygaTaskRecurrenceVersion", "1")
+			}
 			if taygaRequested(body, "TaygaTasksVersion") {
 				f.Inner += taygaProperty("TaygaTasksVersion", "1")
 			}

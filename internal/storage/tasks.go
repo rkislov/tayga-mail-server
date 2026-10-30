@@ -13,6 +13,8 @@ import (
 )
 
 type Task struct {
+	Recurring          bool    `json:"recurring"`
+	FullTaskResource   bool    `json:"-"` // Internal full-series write, never accepted from HTTP JSON.
 	OwnerID            string  `json:"owner_id"`
 	OwnerName          string  `json:"owner_name"`
 	OwnerEmail         string  `json:"owner_email"`
@@ -46,6 +48,13 @@ const (
 )
 
 var ErrInvalidTaskProgress = errors.New("invalid task status or percentage")
+var ErrTaskSeries = errors.New("recurring tasks must be edited in Thunderbird; assignment is not supported")
+
+func taskIsRecurring(raw string) bool {
+	var props map[string]string
+	return json.Unmarshal([]byte(raw), &props) == nil && props["_tayga:Recurring"] == "1"
+}
+
 var ErrTaskConflict = errors.New("task revision changed")
 
 // CreateEWSTask records the create receipt atomically. A lost response can be
@@ -280,6 +289,9 @@ func (s *Store) SaveTask(ctx context.Context, user string, t *Task) error {
 		if e != nil {
 			return e
 		}
+		if (previous.Recurring || taskIsRecurring(t.EWSProperties)) && (!t.FullTaskResource || previous.AssigneeID != "" || previous.SourceMessageID != "") {
+			return ErrTaskSeries
+		}
 		if !previous.CanUpdate {
 			return ErrUnauthorized
 		}
@@ -336,6 +348,9 @@ func (s *Store) SaveTask(ctx context.Context, user string, t *Task) error {
 }
 
 func (s *Store) insertTask(ctx context.Context, tx *sql.Tx, user, id string, t *Task) error {
+	if taskIsRecurring(t.EWSProperties) && (!t.FullTaskResource || t.AssigneeID != "") {
+		return ErrTaskSeries
+	}
 	if err := t.normalizeProgress(nil); err != nil {
 		return err
 	}

@@ -27,6 +27,7 @@ func scanTask(row taskScanner, viewer string) (*Task, error) {
 	if err != nil {
 		return nil, err
 	}
+	t.Recurring = taskIsRecurring(t.EWSProperties)
 	t.OwnerID = t.UserID
 	t.CanManage = t.UserID == viewer
 	t.CanUpdate = t.CanManage || (t.AssigneeID == viewer && t.AssignmentState == "accepted")
@@ -116,6 +117,9 @@ func (s *Store) AssignTask(ctx context.Context, user, id, action, assignee strin
 	}
 	if task.Revision != revision {
 		return nil, ErrNotFound
+	}
+	if task.Recurring {
+		return nil, ErrTaskSeries
 	}
 	oldAssignee := task.AssigneeID
 	oldState := task.AssignmentState

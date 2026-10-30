@@ -1,0 +1,1 @@
+ALTER TABLE web_chat_members ADD COLUMN bookmark_seeded BOOLEAN NOT NULL DEFAULT FALSE;

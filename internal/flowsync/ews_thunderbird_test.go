@@ -102,7 +102,15 @@ func TestTaygaEWSThunderbirdNative(t *testing.T) {
 			if len(mail) > 0 {
 				flags = mail[0].Flags
 			}
-			write(map[string]any{"calendarId": calendar.ID, "bookId": book, "tasks": func() []storage.Task { v, _ := st.ListTasks(ctx, u.ID); return v }(), "serverTaskId": serverTask.ID, "events": evs, "contacts": cs, "mailFlags": flags,
+			write(map[string]any{"calendarId": calendar.ID, "bookId": book, "tasks": func() []storage.Task { v, _ := st.ListTasks(ctx, u.ID); return v }(), "taskResources": func() map[string]string {
+				out := map[string]string{}
+				tasks, _ := st.ListTasks(ctx, u.ID)
+				for _, task := range tasks {
+					raw, _ := taskTodo(&task)
+					out[task.Title] = raw
+				}
+				return out
+			}(), "serverTaskId": serverTask.ID, "events": evs, "contacts": cs, "mailFlags": flags,
 				"sentCopies": func() int {
 					mb, e := st.GetMailbox(ctx, u.ID, "Sent")
 					if e != nil {

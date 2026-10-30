@@ -104,6 +104,14 @@ func (s *Session) handlePubSubIQ(ctx context.Context, id, typ, to, inner string)
 	if (operation != "items" && operation != "subscribe" && operation != "unsubscribe") && owner != s.JID.Bare() {
 		return fail("forbidden")
 	}
+	if node == bookmarksNode {
+		if owner != s.JID.Bare() {
+			return fail("forbidden")
+		}
+		if err := s.srv.syncRoomBookmarks(ctx, owner); err != nil {
+			return fail("internal-server-error")
+		}
+	}
 	var nodeID, access string
 	err := s.srv.db.QueryRowContext(ctx, s.srv.rebind(`SELECT id,access_model FROM xmpp_pep_nodes WHERE owner_bare_jid=? AND node=?`), owner, node).Scan(&nodeID, &access)
 	if err != nil && err != sql.ErrNoRows {
@@ -180,6 +188,16 @@ func (s *Session) handlePubSubIQ(ctx context.Context, id, typ, to, inner string)
 		}
 		if operation == "publish" && (len(op.Items) != 1 || strings.TrimSpace(op.Items[0].Payload) == "") {
 			return fail("bad-request")
+		}
+		if node == bookmarksNode {
+			if operation == "publish" && !validBookmark(op.Items[0].ID, op.Items[0].Payload) {
+				return fail("bad-request")
+			}
+			if a, ok := config["access_model"]; ok && a != "whitelist" {
+				return fail("not-acceptable")
+			}
+			config["access_model"] = "whitelist"
+			config["max_items"] = 0
 		}
 		if !exists {
 			nodeID, err = s.srv.ensurePEPNode(ctx, owner, node)
@@ -295,7 +313,7 @@ func parsePEPConfig(form pepForm) (map[string]any, bool) {
 				return nil, false
 			}
 		case "pubsub#access_model":
-			if v != "open" && v != "presence" {
+			if v != "open" && v != "presence" && v != "whitelist" {
 				return nil, false
 			}
 			out["access_model"] = v
@@ -330,7 +348,7 @@ func parsePEPConfig(form pepForm) (map[string]any, bool) {
 }
 
 func pepDefaultMaxItems(node string) int {
-	if node == "urn:xmpp:omemo:2:bundles" {
+	if node == "urn:xmpp:omemo:2:bundles" || node == bookmarksNode {
 		return 0
 	}
 	return 1

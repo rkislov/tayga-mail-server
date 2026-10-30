@@ -600,6 +600,7 @@ func (s *Server) destroyRoom(ctx context.Context, actor, jid string) error {
 	delete(s.mucWeb, jid)
 	delete(s.mucPending, jid)
 	for _, member := range members {
+		s.logBookmarkError(s.removeRoomBookmark(ctx, member, jid))
 		s.hub.pushWeb(member, ChatEvent{Type: "roster"})
 	}
 	return nil
@@ -803,6 +804,10 @@ func (s *Session) handleMUCIQ(id, typ, to, inner string) (bool, error) {
 			return fail("internal-server-error")
 		}
 		delete(srv.mucPending, room.JID)
+		members, _ := srv.roomMembers(ctx, room.JID)
+		for _, member := range members {
+			srv.logBookmarkError(srv.syncRoomBookmarksLocked(ctx, member))
+		}
 		return true, s.mucResult(id, to, "")
 	default:
 		return fail("feature-not-implemented")

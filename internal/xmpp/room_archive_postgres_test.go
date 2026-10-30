@@ -60,4 +60,9 @@ func TestRoomArchivePostgres(t *testing.T) {
 	server := New(cfg, nil, st, nil, nil)
 	testRoomArchive(t, server, st.(*storage.Store), user)
 	testGroupOMEMO(t, server, st.(*storage.Store), user)
+	bookmarkUser, err := st.CreateUser(ctx, &storage.User{TenantID: tenant.ID, DomainID: domain.ID, Email: "bookmark-owner@example.com", LocalPart: "bookmark-owner", Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	testRoomBookmarks(t, server, st.(*storage.Store), bookmarkUser)
 }

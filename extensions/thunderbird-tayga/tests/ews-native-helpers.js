@@ -79,6 +79,24 @@ async function taygaNativeTest(api, args) {
         target.addObserver(observer);
       }
     }
+    if (args.op === "occurrence") {
+      const changed = item.clone();
+      const rid = cal.createDateTime(args.rid);
+      if (args.timezone)
+        rid.timezone = cal.timezoneService.getTimezone(args.timezone);
+      if (args.remove) changed.recurrenceInfo.removeOccurrenceAt(rid);
+      else {
+        const occurrence = changed.recurrenceInfo.getOccurrenceFor(rid).clone();
+        if (args.title) occurrence.title = args.title;
+        if (args.completed) occurrence.isCompleted = true;
+        if (args.start) {
+          occurrence.entryDate = cal.createDateTime(args.start);
+          occurrence.dueDate = cal.createDateTime(args.due);
+        }
+        changed.recurrenceInfo.modifyException(occurrence, true);
+      }
+      await target.modifyItem(changed, item);
+    }
     if (args.op === "modify") {
       const changed = item.clone();
       if (args.title !== undefined) changed.title = args.title;

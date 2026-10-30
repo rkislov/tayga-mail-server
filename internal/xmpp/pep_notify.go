@@ -157,7 +157,11 @@ func (s *Session) notifyPEP(ctx context.Context, owner, node, payload string) {
 }
 func (s *Session) sendLastPEP(ctx context.Context, owner, node string) {
 	var last bool
-	if s.srv.db.QueryRowContext(ctx, s.srv.rebind(`SELECT send_last FROM xmpp_pep_nodes WHERE owner_bare_jid=? AND node=?`), owner, node).Scan(&last) != nil || !last {
+	var access string
+	if s.srv.db.QueryRowContext(ctx, s.srv.rebind(`SELECT send_last,access_model FROM xmpp_pep_nodes WHERE owner_bare_jid=? AND node=?`), owner, node).Scan(&last, &access) != nil || !last {
+		return
+	}
+	if owner != s.JID.Bare() && (node == bookmarksNode || !(access == "open" || omemoNode(node) || (access == "presence" && s.srv.pepPresenceAllowed(ctx, owner, s.JID.Bare())))) {
 		return
 	}
 	items, err := s.srv.getPEPItems(ctx, owner, node)
@@ -172,6 +176,7 @@ func (s *Session) sendCurrentDeviceLists(ctx context.Context) {
 	if s.user == nil {
 		return
 	}
+	s.srv.logBookmarkError(s.srv.syncRoomBookmarks(ctx, s.JID.Bare()))
 	s.mu.Lock()
 	nodes := make([]string, 0, len(s.pepInterest))
 	for node := range s.pepInterest {

@@ -126,7 +126,7 @@ func (h *easHandler) applyWritebacks(ctx context.Context, u *storage.User, kind 
 				switch {
 				case errors.Is(err, storage.ErrNotFound):
 					res.Status = 8
-				case errors.Is(err, errInvalidEASTask), errors.Is(err, storage.ErrUnauthorized):
+				case errors.Is(err, errInvalidEASTask), errors.Is(err, storage.ErrTaskSeries), errors.Is(err, storage.ErrUnauthorized):
 					res.Status = 6
 				default:
 					res.Status = 5
