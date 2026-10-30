@@ -37,13 +37,19 @@ A user can register up to 20 distinct service/node pairs. Re-enabling replaces t
 
 Notifications contain an empty `notification` element plus the vendor-supplied publish options. No message body, sender, attachment URL, unread count or OMEMO plaintext/key is sent. The options can contain vendor credentials and remain in the protected database; database backups are sensitive.
 
-There is at most one coalesced job per registration and at most 10,000 pending jobs globally. A generation counter preserves messages arriving while an earlier notification awaits a reply. Successful replies dequeue the acknowledged generation. Non-temporary IQ errors remove the rejected registration; temporary errors/timeouts retry with exponential backoff, up to five attempts, then disable the registration. A disconnected configured component retains pending work until it reconnects. Run one push worker per database. A process restart retains registrations and jobs; it can repeat a notification whose remote acknowledgement was lost, so vendor delivery is at least once.
+There is at most one coalesced job per registration and at most 10,000 pending jobs globally. A generation counter preserves messages arriving while an earlier notification awaits a reply. Successful replies dequeue the acknowledged generation. Valid permanent IQ errors (`cancel`, `auth`, `modify`) remove the rejected registration. Temporary errors, timeouts, DNS/TLS/transport failures and malformed replies retain it and retry with exponential backoff: 30 seconds, 1, 2, 4, 8, 16 and then 30 minutes. The 30-minute cap applies throughout an extended outage; retry counters saturate safely. New messages coalesce without resetting the backoff. Registration removal is reserved for explicit client disable, permanent gateway rejection or a deleted/disabled account. A transient account lookup failure defers work for one minute.
 
-Logs use `xmpp push attempt`, `xmpp push delivery failed` and `xmpp push rejected` with request ID, service and attempt number. Publish tokens and message content are not logged. Successful publication confirms the gateway's acceptance, not the operating system's notification display.
+A disconnected configured component retains pending work until it reconnects. Run one push worker per database. A process restart retains registrations, jobs and retry deadlines; it can repeat a notification whose remote acknowledgement was lost, so vendor delivery is at least once. Revocations received for a replaced registration and acknowledgements for an earlier request cannot remove current work.
+
+Logs distinguish `xmpp push registration updated`, `xmpp push attempt`, `xmpp push delivery failed`, `xmpp push rejected` and `xmpp push accepted`. Attempts include the request ID, service, attempt number and `retry_at`; failures also include the next scheduled retry. `accepted` means a correlated IQ result from the authenticated gateway; `pending_more` indicates newer coalesced events still need publication. `xmpp push account lookup deferred` and `xmpp push acknowledgement persistence failed` identify local storage problems. Publish tokens, node IDs and message content are not logged. Successful publication confirms the gateway's acceptance, not the operating system's notification display.
 
 ## ChatSecure availability
 
 On 2026-10-17, DNS lookups performed on `mail.kislovs.ru` resolved `chatsecure.org` but returned no usable address for `push.chatsecure.org` or its Heroku target. That prevents vendor registration/delivery independently of Tayga. Recheck DNS and the actual endpoint supplied by the installed app before interpreting a capability check as end-to-end success. ChatSecure's [standard push module](https://github.com/ChatSecure/ChatSecure-iOS/blob/38d6abba3e1c21156095ac3a1096d5e829df4b96/ChatSecureCore/Classes/Controllers/XMPP/OTRXMPPManager.m) is distinct from Secret-iOS's custom APNs command.
+
+On 2026-10-27, an address lookup from the mail server again failed for `push.chatsecure.org`; `eu.prod.push.monal-im.org` resolved to public IPv4 and IPv6 addresses. Three Monal registrations were present and the pending queue was empty. This read-only check did not send test notifications or verify their display on a phone.
+
+On 2026-10-28, recovery commit `105a830` was installed on `mail.kislovs.ru` as `0.9.34+xmpp.1`, preserving the deployed Thunderbird fixes from 0.9.33/0.9.34. The full Go suite and `go test -race ./internal/xmpp` passed. After installation, `/readyz` returned `ready`, STARTTLS on 5222 and direct TLS on 5223 both negotiated TLS 1.3 with a verified certificate, all three Monal registrations remained, and the queue was empty. A binary/configuration/verified SQLite backup was retained before replacement. Phone-side background delivery still requires a real incoming message and is tracked separately from these server checks.
 
 ## Validation and remaining interoperability
 
@@ -94,6 +100,19 @@ support. SASL2/SCRAM/channel binding, roster versioning, blocking and external
 STUN/TURN discovery remain separate compatibility work; they are not
 advertised as implemented.
 
-Automated tests cover registration ownership, malformed forms, replacement, cancellation, restart persistence, queue coalescing, retry exhaustion, privacy and forged acknowledgements. A test gateway completes STARTTLS with mutually verified certificates, bidi, EXTERNAL, stream restart and publication acknowledgement; negative cases reject untrusted certificates, wrong hostnames, missing TLS/bidi, failed authentication and spoofed reply identities.
+Automated tests cover registration ownership, malformed forms, replacement, cancellation, restart persistence, queue coalescing, recovery after extended gateway outages, malformed/temporary replies, transient account lookup errors, disabled accounts, counter overflow, privacy and forged acknowledgements. A test gateway completes STARTTLS with mutually verified certificates, bidi, EXTERNAL, stream restart and publication acknowledgement; negative cases reject untrusted certificates, wrong hostnames, missing TLS/bidi, failed authentication and spoofed reply identities.
 
 Real background delivery in ChatSecure remains unverified while its vendor endpoint is unavailable. General S2S federation, dialback, native MUC, arbitrary gateway compatibility and a full XMPP conformance claim are outside this implementation. A browser Web Push notification cannot wake the native ChatSecure application.
+
+### Monal device acceptance, 2026-10-28
+
+On server version `0.9.36 (ef02a7c)`, the operator confirmed that an incoming
+message produced a notification while Monal was in the background on iPhone.
+The server journal recorded two accepted publications to
+`eu.prod.push.monal-im.org` at 14:34 Moscow time. A subsequent read-only check
+found three Monal registrations and no pending push jobs. The operator also
+confirmed reconnection and retained chat history after switching from Wi-Fi
+to mobile data and back. The app version was not recorded for this check.
+This verifies that device scenario; ChatSecure and other gateways still need
+their own acceptance. No additional test message or notification was sent by
+the diagnostic tooling.

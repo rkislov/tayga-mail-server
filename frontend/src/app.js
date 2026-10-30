@@ -350,7 +350,7 @@ const notesState = {
   shareTarget: null, saveTimer: null, drawing: false, dirty:false, revision:0, attachments:[], etags:{},
 };
 const filesState = { sharedRights:"write",listTarget:"",ownerID:"",sharedRoot:"", path: "", selected: null, entries: [] };
-const chatState = { peer: "", roster: [], messages: [], es: null, me: "", sending: false, presence: "online", presenceSaving: false };
+const chatState = { historyRevision: 0, history: null, peer: "", roster: [], messages: [], es: null, me: "", sending: false, presence: "online", presenceSaving: false };
 
 function show(id) {
   const account = id === "view-account";
@@ -416,7 +416,7 @@ function showApp(name) {
   }
   $("compose-backdrop")?.classList.add("hidden");
   setNavOpen(false);
-  if (app === "profile") {loadMe();refreshSignature();refreshPasskeys();refreshMailSources();refreshTravelProfile();}
+  if (app === "profile") {loadMe();refreshSignature();refreshPasskeys();refreshMailSources();refreshTravelProfile();refreshXMPPDevices();}
   const migrationPane=$("app-migration");
   if (migrationPane) {
     if (!migrationPane._originalParent) migrationPane._originalParent=migrationPane.parentElement;
@@ -479,10 +479,15 @@ function isAuthPublicPath(path) {
 }
 
 function clearSession() {
+  if (typeof omemoCancelOperations === 'function') omemoCancelOperations();
+  if (typeof resetXMPPDevices === 'function') resetXMPPDevices();
+  resetBranding();
   resetTasks();
   resetComposeAttachments();
   disableWebPush().catch(() => {});
   stopChatLive();
+  chatState.peer='';chatState.roster=[];chatState.messages=[];
+  $('chat-messages')?.replaceChildren();
   state.tokens = null;
  monitorRequest++;
   state.challenge = "";
@@ -504,12 +509,15 @@ function forceLogin(msg) {
 }
 
 let tokenRefreshPromise = null;
+let tokenRefreshSession = null;
 
 async function refreshAccessToken() {
-  const refresh = state.tokens?.refresh_token;
+  const sessionTokens = state.tokens;
+  const refresh = sessionTokens?.refresh_token;
   if (!refresh) return false;
-  if (!tokenRefreshPromise) {
-    tokenRefreshPromise = (async () => {
+  if (!tokenRefreshPromise || tokenRefreshSession !== sessionTokens) {
+    tokenRefreshSession = sessionTokens;
+    const pending = (async () => {
       const res = await fetch("/api/v1/auth/token", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -518,28 +526,40 @@ async function refreshAccessToken() {
       const text = await res.text();
       let data = null;
       try { data = text ? JSON.parse(text) : null; } catch { data = null; }
-      if (!res.ok || !data?.access_token) return false;
+      if (!res.ok || !data?.access_token || state.tokens !== sessionTokens) return false;
       state.tokens = data;
       localStorage.setItem("tayga.tokens", JSON.stringify(data));
       return true;
-    })().finally(() => { tokenRefreshPromise = null; });
+    })().finally(() => {
+      if (tokenRefreshPromise === pending) {
+        tokenRefreshPromise = null;
+        tokenRefreshSession = null;
+      }
+    });
+    tokenRefreshPromise = pending;
   }
   return tokenRefreshPromise;
 }
 
 async function api(path, opts = {}) {
+  // Sensitive callers bind requests (including 401 retries) to their login.
+  const {_guard, ...requestOpts} = opts;
+  _guard?.();
   if(filesState.ownerID&&/^\/api\/v1\/files(?:[/?]|$)/.test(path)&&!/^\/api\/v1\/files\/(?:access|shares|library|office)/.test(path))path+=(path.includes('?')?'&':'?')+'owner_id='+encodeURIComponent(filesState.ownerID);
   const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
   if (state.tokens?.access_token) {
     headers.Authorization = "Bearer " + state.tokens.access_token;
   }
-  const res = await fetch(path, Object.assign({}, opts, { headers }));
+  const res = await fetch(path, Object.assign({}, requestOpts, { headers }));
   const text = await res.text();
+  _guard?.();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = { error: text }; }
   if (!res.ok) {
     if (res.status === 401 && !opts._authRetry && !isAuthPublicPath(path)) {
-      if (state.tokens?.refresh_token && await refreshAccessToken()) {
+      const refreshed = state.tokens?.refresh_token && await refreshAccessToken();
+      _guard?.();
+      if (refreshed) {
         return api(path, Object.assign({}, opts, { _authRetry: true }));
       }
       forceLogin(t("session_expired"));
@@ -625,6 +645,7 @@ async function loadMe() {
   try {
     const me = await api("/api/v1/me");
     state.me = me;
+    refreshBranding();
     refreshMailImagePreferences();
     state.email = me.email || state.email;
     $("acct-email").textContent = me.email;
@@ -1136,10 +1157,15 @@ async function refreshTenantDomains() {
           </label>
           <label class="field-check" title="${escapeHtml(mailImageText('Общий адресный справочник пользователей этого домена','Global address list for users in this domain'))}"><input type="checkbox" data-domain-gal="${escapeHtml(d.id)}" ${d.gal_enabled?'checked':''}> GAL</label>
           <label class="field-check" title="${escapeHtml(mailImageText('Коллеги этого домена в XMPP и веб-чате. В XMPP обновится при переподключении.','Domain colleagues in XMPP and web chat. Reconnect XMPP to refresh.'))}"><input type="checkbox" data-domain-xmpp-gal="${escapeHtml(d.id)}" ${d.xmpp_gal_enabled?'checked':''}> ${escapeHtml(mailImageText('Общий список контактов XMPP','XMPP shared contacts'))}</label>
+          <button type="button" class="btn-secondary" data-domain-branding="${escapeHtml(d.id)}">${escapeHtml(t("branding_title"))}</button>
+          <button type="button" class="btn-secondary" data-domain-aliases="${escapeHtml(d.id)}">${escapeHtml(mailImageText('Алиасы','Aliases'))}</button>
           <button type="button" class="btn-spray" data-open-domain="${escapeHtml(d.id)}" data-name="${escapeHtml(d.name)}">${escapeHtml(t("domains_open"))}</button>
           <button type="button" class="btn-secondary" data-del-domain="${escapeHtml(d.name)}" ${d.user_count > 0 ? "disabled" : ""}>${escapeHtml(t("domains_remove"))}</button>
         </span>
       </li>`).join("") || `<li><span class="meta">${escapeHtml(t("domains_empty"))}</span></li>`;
+    $('tenant-branding-button')?.classList.toggle('hidden', !state.me?.is_global_admin && state.me?.admin_scope !== 'tenant');
+    list.querySelectorAll('[data-domain-branding]').forEach(button=>button.onclick=()=>openAdminBranding('domains',items.find(d=>d.id===button.dataset.domainBranding)));
+    list.querySelectorAll('[data-domain-aliases]').forEach(button=>button.onclick=()=>openAdminAliases('domain',items.find(d=>d.id===button.dataset.domainAliases)));
     list.querySelectorAll("[data-open-domain]").forEach((btn) => {
       btn.addEventListener("click", () => {
         tenantNav.domainID = btn.dataset.openDomain;
@@ -1328,8 +1354,9 @@ async function refreshAdminUsers() {
             </select>
           </label>
 </td><td><div class="user-action-icons">
- ${[['quota','download',t('users_quota_action')],['toggle','disconnect',t(u.enabled?'users_disable':'users_enable')],['pass','key',t('users_reset_pw')],...(state.me?.is_global_admin?[['user-role','shield',mailImageText('Роль и права пользователя','User role and permissions')]]:[]),['mail-access','reply',mailImageText('Доступ к ящику','Mailbox access')],...((u.id!==state.me?.id&&!u.is_global_admin)?[['delete-user','delete',mailImageText('Удалить пользователя','Delete user')]]:[])].map(([action,icon,label])=>`<button type="button" class="btn-secondary user-action-icon" data-${action}="${escapeHtml(u.id)}" data-enabled="${u.enabled?'1':'0'}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${designIcon(icon)}</button>`).join('')}
+ ${[['quota','download',t('users_quota_action')],['toggle','disconnect',t(u.enabled?'users_disable':'users_enable')],['pass','key',t('users_reset_pw')],...(state.me?.is_global_admin?[['user-role','shield',mailImageText('Роль и права пользователя','User role and permissions')]]:[]),['mailbox-aliases','reply',mailImageText('Алиасы ящика','Mailbox aliases')],['mail-access','reply',mailImageText('Доступ к ящику','Mailbox access')],...((u.id!==state.me?.id&&!u.is_global_admin)?[['delete-user','delete',mailImageText('Удалить пользователя','Delete user')]]:[])].map(([action,icon,label])=>`<button type="button" class="btn-secondary user-action-icon" data-${action}="${escapeHtml(u.id)}" data-enabled="${u.enabled?'1':'0'}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${designIcon(icon)}</button>`).join('')}
  </div></td></tr>`).join("") || `<tr><td colspan="7" class="meta">${t("users_empty")}</td></tr>`;
+    list.querySelectorAll('[data-mailbox-aliases]').forEach(button=>button.onclick=()=>openAdminAliases('mailbox',users.find(u=>u.id===button.dataset.mailboxAliases)));
     list.querySelectorAll('[data-delete-user]').forEach(button=>button.onclick=async()=>{const user=users.find(u=>u.id===button.dataset.deleteUser);if(!await askConfirm(mailImageText('Удалить пользователя и его данные: ','Delete user and their data: ')+user.email+'?',{danger:true}))return;button.disabled=true;try{await api('/api/v1/admin/users/'+encodeURIComponent(user.id),{method:'DELETE'});await refreshAdminUsers()}catch(err){setMsg($('admin-msg'),err.message,'err');button.disabled=false}});
     list.querySelectorAll("[data-mail-access]").forEach(button=>button.onclick=()=>openMailboxAccess(button.dataset.mailAccess));list.querySelectorAll("[data-user-role]").forEach(button=>button.onclick=()=>openUserRole(users.find(u=>u.id===button.dataset.userRole)));
     list.querySelectorAll("[data-user-mig]").forEach((sel) => {
@@ -2291,6 +2318,8 @@ $("btn-sieve-save").addEventListener("click", async () => {
 });
 
 function enterAccount(tokens, email) {
+  if (typeof omemoCancelOperations === 'function') omemoCancelOperations();
+  if (typeof resetXMPPDevices === 'function') resetXMPPDevices();
   state.tokens = tokens;
   state.email = email || state.email;
   localStorage.setItem("tayga.tokens", JSON.stringify(tokens));
@@ -2995,7 +3024,22 @@ function getComposeText() {
   return el.value || "";
 }
 
-function openCompose({ to = "", cc = "", subject = "", body = "", bodyHTML = "" } = {}) {
+let composeSenderEpoch=0;
+async function loadComposeSenders(preferred='') {
+ const select=$('compose-from');if(!select)return;
+ const epoch=++composeSenderEpoch,userID=state.me?.id,primary=state.me?.email||'';
+ const add=address=>{const option=document.createElement('option');option.value=address;option.textContent=address;select.append(option)};
+ select.replaceChildren();if(primary)add(primary);select.disabled=true;renderComposeAttachments();
+ try{
+  const data=await api('/api/v1/mail/senders');
+  if(epoch!==composeSenderEpoch||state.me?.id!==userID)return;
+  select.replaceChildren();for(const address of data.addresses||[])add(address);
+  select.value=(data.addresses||[]).includes(preferred)?preferred:(data.default||primary);
+ }catch(error){if(epoch===composeSenderEpoch&&state.me?.id===userID)setMsg($('compose-msg'),mailImageText('Не удалось загрузить адреса отправителя. Повторно откройте окно письма.','Could not load sender addresses. Reopen the compose window.'),'err');}
+ finally{if(epoch===composeSenderEpoch&&state.me?.id===userID)select.disabled=false;renderComposeAttachments();}
+}
+
+function openCompose({ to = "", cc = "", from = "", subject = "", body = "", bodyHTML = "" } = {}) {
   if (composeAttachments.sending) return;
   resetComposeAttachments();
   $("compose-backdrop")?.classList.remove("hidden");
@@ -3010,6 +3054,7 @@ function openCompose({ to = "", cc = "", subject = "", body = "", bodyHTML = "" 
   const surface = composeBodyEl();
   if (surface?.dataset) surface.dataset.placeholder = t("body");
   setMsg($("compose-msg"), "");
+  loadComposeSenders(from);
   surface?.focus?.();
 }
 
@@ -3040,7 +3085,7 @@ $("compose-backdrop")?.addEventListener("click", (e) => {
   if (e.target === $("compose-backdrop")) $("compose-backdrop").classList.add("hidden");
 });
 $("btn-compose-send")?.addEventListener("click", async () => {
-  if (composeAttachments.sending || composeAttachments.entries.some(item=>item.status!=="ready")) return;
+  if (composeAttachments.sending || $("compose-from")?.disabled || composeAttachments.entries.some(item=>item.status!=="ready")) return;
   composeAttachments.sending = true;
   renderComposeAttachments();
   const to = ($("compose-to").value || "").split(/[,;]/).map((s) => s.trim()).filter(Boolean);
@@ -3050,6 +3095,7 @@ $("btn-compose-send")?.addEventListener("click", async () => {
     const text = getComposeText(), html = getComposeHTML();
     const attachments = composeAttachments.entries.filter(item=>!item.share).map(item=>item.ref);
     const payload = {
+      from: $("compose-from")?.value || state.me?.email || "",
       to,
       cc: ($("compose-cc")?.value || "").split(/[,;]/).map(value=>value.trim()).filter(Boolean),
       subject: $("compose-subject").value,
@@ -3159,11 +3205,15 @@ function calMonthStart(d) {
 }
 
 function showCalCompose(open) {
+ if($('form-cal-event')?.dataset.saving==='true')return;
+ if(open){calState.editingEvent=null;const form=$('form-cal-event');if(form)form.dataset.editorUser=state.me?.id || '';}
  if(open && $("cal-location")){delete $("cal-location").dataset.geo;$("cal-location").dispatchEvent(new Event("input"));}
   const dialog=mountCalendarEditor();
  if(dialog){if(open&&!dialog.open)dialog.showModal();if(!open&&dialog.open)dialog.close()}
  syncEventCalendarChoice();
   if (open) {
+    const title=$('event-editor-title');if(title){title.removeAttribute('data-i18n');title.textContent=t('new_event');}
+    if($('event-calendar-choice'))$('event-calendar-choice').disabled=false;
     setMsg($("cal-msg"), "");
     mountNewEventRecurrence();
     calState.attendees = [];
@@ -3214,7 +3264,7 @@ function renderCalReadAttachments(atts) {
       return `<div class="cal-attach-item">
         <button type="button" class="btn-secondary btn-sm" data-att-dl="${escapeHtml(a.id)}" data-name="${escapeHtml(a.filename || "file")}">${escapeHtml(a.filename || "file")}</button>
         <span class="meta">${escapeHtml(a.content_type || "")}${size}</span>
-        <button type="button" class="btn-secondary btn-sm" data-att-del="${escapeHtml(a.id)}">${escapeHtml(t("cal_attach_delete"))}</button>
+        ${a.read_only ? "" : `<button type="button" class="btn-secondary btn-sm" data-att-del="${escapeHtml(a.id)}">${escapeHtml(t("cal_attach_delete"))}</button>`}
       </div>`;
     }).join("");
     dd.querySelectorAll("[data-att-dl]").forEach((btn) => {
@@ -3636,6 +3686,7 @@ function renderCalDay() {
 }
 
 function startNewCalEvent(day = calState.selectedDay || calDayKey(new Date()), hour = 10) {
+  if($('form-cal-event')?.dataset.saving==='true')return;
   if(calState.defaultCalendarID)calState.calendarID=calState.defaultCalendarID;
   if (calState.calendars.find(c=>c.id===calState.calendarID)?.writable===false) {setMsg($("cal-msg"),t("cal_readonly"),"err");return;}
   clearTimeout(calState.dayClickTimer);
@@ -3643,6 +3694,7 @@ function startNewCalEvent(day = calState.selectedDay || calDayKey(new Date()), h
   $("form-cal-event")?.reset();
   delete $("form-cal-event").dataset.createdEvent;
   calState.uploadedFiles=new Set();
+  $('cal-start').type='datetime-local';$('cal-end').type='datetime-local';
   $("cal-start").value = day + "T" + String(hour).padStart(2,"0") + ":00";
   const end = new Date(day + "T" + String(hour).padStart(2,"0") + ":00");
   end.setHours(end.getHours() + 1);
@@ -3868,6 +3920,7 @@ function showCalReader(ev) {
   renderCalReadAttachments(ev.attachments || []);
   const recurring = !!ev.recurrence_id;
   const canEdit = calendar?.writable !== false && !ev.busy_only && (!recurring || ev.occurrence_organizer);
+  $('btn-cal-edit')?.classList.toggle('hidden',!canEditCalendarEvent(ev));
   $('btn-cal-recurrence')?.classList.toggle('hidden',!canEdit || !ev.recurrence_organizer);
   $('btn-cal-instance-edit')?.classList.toggle('hidden',!recurring || !canEdit);
   $('btn-cal-series-delete')?.classList.toggle('hidden',!recurring || !canEdit);
@@ -4004,6 +4057,7 @@ $("cal-backdrop")?.addEventListener("click", (e) => {
   if (e.target === $("cal-backdrop")) showCalCompose(false);
 });
 $("btn-cal-instance-edit")?.addEventListener("click",()=>openCalOccurrenceEditor());
+$("btn-cal-edit")?.addEventListener("click",()=>editCalendarRecord(calState.currentEvent));
 $("btn-cal-series-delete")?.addEventListener("click",()=>deleteCalEvent(true));
 $("btn-cal-delete")?.addEventListener("click",()=>deleteCalEvent(false));
 $("btn-cal-attendee-add")?.addEventListener("click", () => addCalAttendeesFromInput());
@@ -4051,8 +4105,11 @@ $("cal-read-files")?.addEventListener("change", async () => {
 
 $("form-cal-event")?.addEventListener("submit", async (e) => {
   e.preventDefault();
+  const form=$("form-cal-event"),editing=calState.editingEvent,userID=state.me?.id;
+  if(form.dataset.editorUser && form.dataset.editorUser!==userID)return;
+  if(editing && !canEditCalendarEvent(editing))return;
   addCalAttendeesFromInput();
-  calState.calendarID=$("event-calendar-choice")?.value || calState.calendarID;
+  calState.calendarID=editing?.calendar_id || $("event-calendar-choice")?.value || calState.calendarID;
   if(new Date($("cal-end").value)<=new Date($("cal-start").value)){setMsg($("cal-msg"),mailImageText("Конец должен быть позже начала","End must be after start"),"err");return;}
   if (!calState.calendarID) {
     try {
@@ -4065,20 +4122,21 @@ $("form-cal-event")?.addEventListener("submit", async (e) => {
     return;
   }
   let recurrence;
-  try {recurrence=readRecurrenceFields('cal-new-recurrence');} catch(error) {setMsg($('cal-msg'),error.message,'err');return;}
-  const form=$("form-cal-event");if(form.dataset.saving==="true")return;form.dataset.saving="true";
+  try {if(!editing)recurrence=readRecurrenceFields('cal-new-recurrence');} catch(error) {setMsg($('cal-msg'),error.message,'err');return;}
+  if(form.dataset.saving==="true")return;form.dataset.saving="true";
   const saveButton=form.querySelector('[type="submit"]');if(saveButton)saveButton.disabled=true;
   setMsg($("cal-msg"), "…");
   try {
     const created = form.dataset.createdEvent ? {id:form.dataset.createdEvent} : await api("/api/v1/calendar/calendars/" + encodeURIComponent(calState.calendarID) + "/events", {
-      method: "POST",
+      method: editing ? "PUT" : "POST",
       body: JSON.stringify({
+        id: editing?.id, etag: editing?.etag, all_day: editing?.all_day,
         summary: $("cal-summary").value,
         location: $("cal-location")?.value || "",
  geo: $("cal-location")?.dataset.geo || "",
         description: $("cal-description")?.value || "",
-        start: localInputToISO($("cal-start").value),
-        end: localInputToISO($("cal-end").value),
+        start: editing?.all_day ? $("cal-start").value+'T00:00:00.000Z' : localInputToISO($("cal-start").value),
+        end: editing?.all_day ? $("cal-end").value+'T00:00:00.000Z' : localInputToISO($("cal-end").value),
         recurrence,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
         attendees: calState.attendees.map((a) => ({
@@ -4088,6 +4146,7 @@ $("form-cal-event")?.addEventListener("submit", async (e) => {
         })),
       }),
     });
+    if(state.me?.id!==userID)return;
     if(created?.id)form.dataset.createdEvent=created.id;
     const files = $("cal-files")?.files;
     if (created?.id && files?.length) {
@@ -4095,17 +4154,21 @@ $("form-cal-event")?.addEventListener("submit", async (e) => {
         const key=file.name+":"+file.size+":"+file.lastModified;
         if(calState.uploadedFiles?.has(key))continue;
         await uploadCalAttachment(created.id, file);
+        if(state.me?.id!==userID)return;
         if(!calState.uploadedFiles)calState.uploadedFiles=new Set();calState.uploadedFiles.add(key);
       }
     }
     setMsg($("cal-msg"), "OK", "ok");
     $("form-cal-event").reset();
     calState.attendees = [];
+    calState.editingEvent = null;
     renderCalAttendeeChips();
+    delete form.dataset.saving;
     showCalCompose(false);
     await loadCalEvents();
     if (created?.id) openCalEvent(created.id);
   } catch (err) {
+    if(state.me?.id!==userID)return;
     setMsg($("cal-msg"), form.dataset.createdEvent ? mailImageText("Событие сохранено, но не все вложения загружены. Повторите сохранение, чтобы дозагрузить файлы: ","Event saved, but some attachments failed. Save again to retry uploads: ")+err.message : calendarRecurrenceError(err.message), "err");
   } finally {delete form.dataset.saving;if(saveButton)saveButton.disabled=false;}
 });
@@ -4351,6 +4414,8 @@ function chatBare(jid) {
 }
 
 function stopChatLive() {
+  chatState.historyRevision++;
+  chatState.history = null;
   if (chatState.es) {
     try { chatState.es.close(); } catch {}
     chatState.es = null;
@@ -4368,7 +4433,9 @@ function startChatLive() {
     try {
       const data = await api("/api/v1/chat/roster");
       if (chatState.es !== es) return;
+      const previous=chatState.roster;
       chatState.roster = data.roster || [];
+      clearRemovedRoom(previous);
       chatState.me = data.me || state.email;
       chatState.presence = data.presence || 'online';
       renderChatRoster();
@@ -4377,6 +4444,7 @@ function startChatLive() {
     }
   });
   es.addEventListener("message", (ev) => {
+    if (chatState.es !== es) return;
     let data;
     try { data = JSON.parse(ev.data); } catch { return; }
     if(data.type==='presence'){const contact=chatState.roster.find(r=>chatBare(r.jid)===chatBare(data.from));if(contact){contact.presence=data.body;renderChatRoster()}return}
@@ -4387,7 +4455,7 @@ function startChatLive() {
     const me = chatBare(chatState.me || state.email);
     const peer = data.room || (from === me ? to : from);
     if (!peer) return;
-    if (!chatState.roster.some((r) => chatBare(r.jid) === peer)) {
+    if (peer !== me && !chatState.roster.some((r) => chatBare(r.jid) === peer)) {
       chatState.roster.unshift({ jid: peer, name: "", subscription: "none", group: !!data.room });
       if(data.room) refreshChat();
       renderChatRoster();
@@ -4414,7 +4482,7 @@ function appendChatBubble(m) {
   if(messageKey)div.dataset.messageKey=messageKey;
   div.className = "chat-bubble" + (mine ? " is-mine" : "");
   div.innerHTML = `<p>${escapeHtml(m.body || "")}</p><time>${escapeHtml(m.at ? new Date(m.at).toLocaleString() : "")}</time>`;
-  if(chatState.roster.find(r=>r.jid===chatState.peer)?.group){const author=document.createElement("strong");author.textContent=chatState.roster.find(r=>r.jid===chatBare(m.from))?.name||chatBare(m.from);div.prepend(author)}
+  if(chatState.roster.find(r=>r.jid===chatState.peer)?.group){const author=document.createElement("strong");author.textContent=String(m.sender_name||'').trim()||(mine?String(state.me?.display_name||'').trim():'')||String(chatState.roster.find(r=>chatBare(r.jid)===chatBare(m.from))?.name||'').trim()||chatBare(m.from);author.title=chatBare(m.from);div.prepend(author)}
   const attachment=m.attachment||chatAttachment(m.body);
   if(m.encrypted){div.querySelector('p').textContent='🔒 OMEMO…';omemoRender(m,div)}
   if(attachment){if(m.body===attachment.url)div.querySelector("p").textContent=attachment.name;const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.textContent=mailImageText('Открыть файл: ','Open file: ')+attachment.name;button.onclick=()=>{try{const u=new URL(attachment.url,location.href);if(u.protocol!=='https:'||u.username||u.password)return;if(u.origin===location.origin)openDocumentPreview(attachment);else window.open(u.href,'_blank','noopener,noreferrer')}catch{}};div.append(button);addChatInlinePreview(div,attachment,button)}
@@ -4483,7 +4551,7 @@ function renderChatRoster() {
   const list = $("chat-roster");
   if (!list) return;
   const peer = chatBare(chatState.peer);
-  list.innerHTML = chatState.roster.map((r) => {
+  list.innerHTML = chatState.roster.filter(r=>r.group||chatBare(r.jid)!==chatBare(chatState.me||state.email)).map((r) => {
     const jid = chatBare(r.jid);
     const label = r.name || jid;
  const presence=r.group?mailImageText("Группа","Group"):t("presence_"+(r.presence||"unknown"));
@@ -4501,40 +4569,75 @@ function renderChatRoster() {
 
 }
 
+function clearRemovedRoom(previousRoster) {
+  if (!previousRoster.some(r=>r.group&&chatBare(r.jid)===chatState.peer) || chatState.roster.some(r=>chatBare(r.jid)===chatState.peer)) return;
+  chatState.historyRevision++;chatState.history=null;chatState.peer='';chatState.messages=[];
+  $('chat-messages')?.replaceChildren();$('chat-thread')?.classList.add('hidden');$('chat-empty')?.classList.remove('hidden');
+}
+
 async function refreshChat() {
+  const guard=omemoGuard();
   try {
-    const data = await api("/api/v1/chat/roster");
+    const data = await api("/api/v1/chat/roster",{_guard:guard});guard();
+    const previous=chatState.roster;
     chatState.roster = data.roster || [];
     chatState.me = data.me || state.email;
     chatState.presence = data.presence || 'online';
-    renderChatRoster();
+    clearRemovedRoom(previous);renderChatRoster();
     if (chatState.peer) await openChatPeer(chatState.peer, true);
   } catch (err) {
+    try{guard()}catch{return}
     setMsg($("chat-roster-msg"), err.message, "err");
   }
 }
 
-async function openChatPeer(jid, keepPane) {
-  chatState.peer = chatBare(jid);
-  renderChatRoster();
-  $("chat-empty")?.classList.add("hidden");
-  $("chat-thread")?.classList.remove("hidden");
-  if ($("chat-peer")) $("chat-peer").textContent = chatState.roster.find(r=>chatBare(r.jid)===chatState.peer)?.name||chatState.peer;
-  const box = $("chat-messages");
-  if (box) box.innerHTML = "";
+function chatHistoryButton(history) {
+  const button=history.button;
+  button.hidden=history.complete;
+  button.disabled=history.loading;
+  button.textContent=t(history.loading?'chat_history_loading':'chat_history_older');
+}
+
+async function loadChatHistory(history) {
+  if (history.loading || history.complete || chatState.history!==history) return;
+  const box=$('chat-messages'),initial=!history.loaded;
+  const current=()=>{history.guard();if(chatState.history!==history||chatState.historyRevision!==history.revision||chatState.peer!==history.peer)throw new Error('stale chat history')};
+  history.loading=true;chatHistoryButton(history);
   try {
-    const data = await api("/api/v1/chat/history?with=" + encodeURIComponent(chatState.peer) + "&limit=80");
-    chatState.messages = data.messages || [];
-    if (!chatState.messages.length) {
-      if (box) box.innerHTML = `<p class="meta chat-empty-hint">${escapeHtml(t("chat_empty"))}</p>`;
-    } else {
-      chatState.messages.forEach((m) => appendChatBubble(m));
-      scrollChatBottom();
-    }
-  } catch (err) {
-    setMsg($("chat-msg"), err.message, "err");
+    const path=history.group?'/api/v1/chat/rooms/history?room='+encodeURIComponent(history.peer)+'&limit=80&before='+encodeURIComponent(history.before):'/api/v1/chat/history?with='+encodeURIComponent(history.peer)+'&limit=80';
+    const data=await api(path,{_guard:current});current();
+    const messages=data.messages||[],anchor=box.querySelector('.chat-bubble'),height=box.scrollHeight,top=box.scrollTop;
+    // Keep live SSE messages received while the page was loading. Existing IDs
+    // are skipped by appendChatBubble; older entries go before the live tail.
+    for(const message of messages){const bubble=appendChatBubble(message);if(bubble&&anchor)box.insertBefore(bubble,anchor)}
+    chatState.messages=[...messages,...chatState.messages];
+    history.loaded=true;history.before=data.first||history.before;
+    history.complete=!history.group||!!data.complete||messages.length===0;
+    history.loading=false;chatHistoryButton(history);
+    if(!box.querySelector('.chat-bubble')&&!box.querySelector('.chat-empty-hint')){const hint=document.createElement('p');hint.className='meta chat-empty-hint';hint.textContent=t('chat_empty');box.append(hint)}
+    if(initial)scrollChatBottom();else box.scrollTop=top+box.scrollHeight-height;
+    setMsg($('chat-msg'),'');
+  } catch(err) {
+    try{current()}catch{return}
+    setMsg($('chat-msg'),err.message,'err');
+  } finally {
+    if(chatState.history===history){history.loading=false;chatHistoryButton(history)}
   }
-  if (!keepPane) setMobilePane("read");
+}
+
+async function openChatPeer(jid, keepPane) {
+  const peer=chatBare(jid),revision=++chatState.historyRevision;
+  chatState.peer=peer;chatState.messages=[];
+  renderChatRoster();
+  $('chat-empty')?.classList.add('hidden');$('chat-thread')?.classList.remove('hidden');
+  const contact=chatState.roster.find(r=>chatBare(r.jid)===peer);
+  if($('chat-peer'))$('chat-peer').textContent=contact?.name||peer;
+  const box=$('chat-messages');if(!box)return;box.replaceChildren();
+  const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm chat-history-older';
+  const history={peer,revision,guard:omemoGuard(),group:!!contact?.group,before:'',complete:false,loaded:false,loading:false,button};
+  chatState.history=history;button.onclick=()=>loadChatHistory(history);box.prepend(button);
+  if(!keepPane)setMobilePane('read');
+  await loadChatHistory(history);
 }
 
 $("btn-chat-new")?.addEventListener("click", () => {
@@ -4559,10 +4662,13 @@ $("form-chat-send")?.addEventListener("submit", async (e) => {
   e.preventDefault();
   const input=$("chat-body"),draft=input?.value||'',body=draft.trim(),peer=chatState.peer;
   if (!body || !peer || chatState.sending) return;
+  const guard=omemoGuard();
   chatState.sending=true;
   const button=e.currentTarget.querySelector('[type=submit]');if(button)button.disabled=true;
   try {
-    const ev=await omemoEnabled(peer)?await omemoSend(peer,body):await api('/api/v1/chat/send',{method:'POST',body:JSON.stringify({to:peer,body})});
+    const encryptedMode=await omemoEnabled(peer);guard();
+    const ev=encryptedMode?await omemoSend(peer,body):await api('/api/v1/chat/send',{method:'POST',body:JSON.stringify({to:peer,body}),_guard:guard});
+    guard();
     if(chatBare(chatState.peer)===chatBare(peer)){
       if(input && input.value===draft)input.value='';
       appendChatBubble(ev);scrollChatBottom();
@@ -5212,6 +5318,47 @@ $("btn-note-draw-save")?.addEventListener("click", async () => {
   }
 });
 
+$('btn-note-history')?.addEventListener('click', async () => {
+ if (!await flushNoteSave()) return;
+ const id = notesState.noteID;
+ if (!id) return;
+ const dialog = document.createElement('dialog');
+ dialog.className = 'migration-dialog'; dialog.setAttribute('aria-label', t('note_history'));
+ const title = document.createElement('h3'); title.textContent = t('note_history');
+ const close = document.createElement('button'); close.type = 'button'; close.className = 'btn-secondary'; close.textContent = t('close'); close.onclick = () => dialog.close();
+ const list = document.createElement('div');
+ const status = document.createElement('p'); status.className = 'msg'; status.setAttribute('role', 'status');
+ dialog.append(title, list, status, close); document.body.append(dialog);
+ dialog.addEventListener('close', () => dialog.remove(), {once:true}); dialog.showModal();
+ try {
+  const data = await api('/api/v1/notes/' + encodeURIComponent(id) + '/versions');
+  if (!dialog.isConnected) return;
+  if (!data.versions.length) list.textContent = t('note_history_empty');
+  for (const version of data.versions) {
+   const row = document.createElement('details');
+   const summary = document.createElement('summary'); summary.textContent = new Date(version.saved_at).toLocaleString() + ' · ' + (version.title || t('note_new'));
+   const preview = document.createElement('p'); preview.style.whiteSpace = 'pre-wrap'; preview.style.overflowWrap = 'anywhere'; preview.textContent = version.body_text;
+   row.append(summary, preview);
+   if (notesState.rights === 'write') {
+    const restore = document.createElement('button'); restore.type = 'button'; restore.className = 'btn-secondary'; restore.textContent = t('note_restore');
+    restore.onclick = async () => {
+     if (notesState.noteID !== id || !await flushNoteSave()) return;
+     restore.disabled = true;
+     try {
+      const revision = notesState.revision, etag = notesState.etags[id];
+      const note = await api('/api/v1/notes/' + encodeURIComponent(id) + '/versions/' + encodeURIComponent(version.id) + '/restore', {method:'POST', body:JSON.stringify({etag})});
+      if (notesState.noteID === id && notesState.revision === revision && !notesState.dirty) showNoteEditor(note);
+      await refreshNotes(); dialog.close();
+     } catch (err) { setMsg(status, err.message, 'err'); }
+     finally { restore.disabled = false; }
+    };
+    row.append(restore);
+   }
+   list.append(row);
+  }
+ } catch (err) { setMsg(status, err.message, 'err'); }
+});
+
 async function openNoteShare(kind) {
   notesState.shareTarget = kind; // folder | note
   $("note-share-backdrop")?.classList.remove("hidden");
@@ -5661,17 +5808,23 @@ $('chat-attach')?.addEventListener('click',()=>{
 $('chat-file')?.addEventListener('change',async e=>{
  const file=e.target.files?.[0],peer=chatState.peer;e.target.value='';if(!file||!peer||chatState.sending)return;
  if(file.size>WEB_UPLOAD_BYTES){setMsg($('chat-msg'),mailImageText('Максимум 10 ГиБ','Maximum 10 GiB'),'err');return}
- const encryptedMode=await omemoEnabled(peer);
+ const guard=omemoGuard();
  chatState.sending=true;$('chat-attach').disabled=true;
  const name=file.name.replace(/[\/\\\r\n]/g,'_'),path='chat/'+crypto.randomUUID()+'/'+name;let share;
  try {
+  const encryptedMode=await omemoEnabled(peer);guard();
   const encryptedFile=encryptedMode?await omemoEncryptFile(file):null;
+  guard();
   const upload=encryptedFile?.blob||file;
   const linkMode=!encryptedMode&&$('chat-file-mode')?.value==='link';
-  const slot=linkMode?null:await api('/api/v1/chat/upload',{method:'POST',body:JSON.stringify({name,size:upload.size,type:encryptedMode?"application/octet-stream":file.type})});
+  const slot=linkMode?null:await api('/api/v1/chat/upload',{method:'POST',body:JSON.stringify({name,size:upload.size,type:encryptedMode?"application/octet-stream":file.type}),_guard:guard});
+  guard();
   await new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest();xhr.open('PUT',slot?slot.put:'/api/v1/files/content?path='+encodeURIComponent(path));if(!slot)xhr.setRequestHeader('Authorization','Bearer '+state.tokens.access_token);xhr.timeout=0;xhr.upload.onprogress=ev=>{if(ev.lengthComputable)setMsg($('chat-msg'),Math.round(ev.loaded/ev.total*100)+'%')};xhr.onerror=xhr.ontimeout=()=>reject(new Error(mailImageText('Ошибка загрузки','Upload failed')));xhr.onload=()=>xhr.status>=200&&xhr.status<300?resolve():reject(new Error(mailImageText('Не удалось загрузить файл','Unable to upload file')));xhr.send(upload)});
-  share=slot?{url:slot.get}:await api('/api/v1/files/shares',{method:'POST',body:JSON.stringify({path,rights:'read',ttl_hours:168})});
-  const ev=encryptedMode?await omemoSend(peer,omemoFileURI(share.url,encryptedFile)):await api('/api/v1/chat/send',{method:'POST',body:JSON.stringify({to:peer,body:linkMode?name+'\n'+share.url:share.url})});
+  guard();
+  share=slot?{url:slot.get}:await api('/api/v1/files/shares',{method:'POST',body:JSON.stringify({path,rights:'read',ttl_hours:168}),_guard:guard});
+  guard();
+  const ev=encryptedMode?await omemoSend(peer,omemoFileURI(share.url,encryptedFile)):await api('/api/v1/chat/send',{method:'POST',body:JSON.stringify({to:peer,body:linkMode?name+'\n'+share.url:share.url}),_guard:guard});
+  guard();
   if(chatBare(chatState.peer)===chatBare(peer)){appendChatBubble(ev);scrollChatBottom()}
   setMsg($('chat-msg'),mailImageText('Файл отправлен. Ссылка действует 7 дней.','File sent. Link valid for 7 days.'),'ok');
  }catch(err){setMsg($('chat-msg'),err.message,'err')}

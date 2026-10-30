@@ -198,6 +198,13 @@ func TestMUCMultipleDevicesAndStreamResume(t *testing.T) {
 	a.authed = true
 	a.bound = true
 	a.sm = streamManagement{enabled: true, resumable: true, token: "room-resume"}
+	audience, err := srv.RoomOMEMOContext(ctx, bob.Email, room.JID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = srv.SendRoomOMEMO(ctx, bob.Email, room.JID, audience.Revision, groupCipherFixture); err != nil {
+		t.Fatal(err)
+	}
 	a.leaveMUC()
 	a.retainStream()
 	if _, err = srv.SendChatMessage(ctx, bob.Email, room.JID, "While disconnected"); err != nil {
@@ -211,6 +218,9 @@ func TestMUCMultipleDevicesAndStreamResume(t *testing.T) {
 	}
 	if !strings.Contains(rb.String(), "<resumed") || !strings.Contains(rb.String(), "While disconnected") || srv.muc[room.JID][resumed].Nick != "Alice" {
 		t.Fatal(rb.String())
+	}
+	if strings.Count(rb.String(), "<encrypted") != 1 || !strings.Contains(rb.String(), "jid='"+bob.Email+"/web'") {
+		t.Fatal("encrypted reconnect lost ciphertext or sender identity", rb.String())
 	}
 	rb.Reset()
 	if _, err = srv.SendChatMessage(ctx, bob.Email, room.JID, "After resume"); err != nil {

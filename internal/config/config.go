@@ -45,9 +45,11 @@ type Config struct {
 	Log         LogConfig         `yaml:"log"`
 }
 
-// FilesConfig integrates an administrator-operated Collabora Online service.
+// FilesConfig integrates an administrator-operated office service.
 type FilesConfig struct {
-	OfficeURL string `yaml:"office_url"` // HTTPS base URL; empty disables WOPI sessions
+	OfficeURL       string `yaml:"office_url"`      // HTTPS base URL; empty disables office sessions
+	OfficeProvider  string `yaml:"office_provider"` // empty/collabora | onlyoffice | r7
+	OfficeJWTSecret string `yaml:"office_jwt_secret"`
 }
 
 // SIEMConfig exports security events to a SIEM over syslog (CEF).
@@ -734,6 +736,14 @@ func (c *Config) Validate() error {
 		c.XMPP.PushServices[i] = service
 	}
 
+	switch c.Files.OfficeProvider {
+	case "", "collabora", "onlyoffice", "r7":
+	default:
+		return fmt.Errorf("files.office_provider must be collabora, onlyoffice or r7")
+	}
+	if c.Files.OfficeURL != "" && (c.Files.OfficeProvider == "onlyoffice" || c.Files.OfficeProvider == "r7") && len(c.Files.OfficeJWTSecret) < 32 {
+		return fmt.Errorf("files.office_jwt_secret must contain at least 32 bytes for ONLYOFFICE/R7")
+	}
 	if c.Files.OfficeURL != "" {
 		u, err := url.Parse(c.Files.OfficeURL)
 		if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {

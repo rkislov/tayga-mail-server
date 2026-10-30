@@ -33,7 +33,9 @@ seed:
 #   public_url: "https://mail.example.com"
 #   admins: ["admin@example.com"]
 # files:
-#   office_url: "https://office.example.com" # Optional separate Collabora server.
+#   office_url: "https://office.example.com" # Separate Collabora / ONLYOFFICE / R7 server.
+#   office_provider: "collabora" # collabora (default), onlyoffice, r7
+#   office_jwt_secret: "" # ONLYOFFICE/R7: same browser/inbox/outbox secret, >=32 bytes.
 # xmpp:
 #   push_services: [] # Allowlisted push gateway domains; verified TLS EXTERNAL + bidi. See docs/xmpp-push.md.
 #   enabled: false

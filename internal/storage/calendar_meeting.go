@@ -68,6 +68,18 @@ func (s *Store) calendarRecipientTx(ctx context.Context, tx *sql.Tx, email strin
 	if at < 1 {
 		return "", fmt.Errorf("invalid calendar recipient")
 	}
+	domainName := strings.ToLower(email[at+1:])
+	if normalized, e := NormalizeAliasDomain(domainName); e == nil {
+		domainName = normalized
+	}
+	var canonical string
+	err = tx.QueryRowContext(ctx, s.rebind(`SELECT d.name FROM domain_aliases a JOIN domains d ON d.id=a.domain_id WHERE a.name=?`), domainName).Scan(&canonical)
+	if err == nil {
+		return s.calendarRecipientTx(ctx, tx, email[:at]+"@"+canonical)
+	}
+	if err != sql.ErrNoRows {
+		return "", err
+	}
 	err = tx.QueryRowContext(ctx, s.rebind(`SELECT a.user_id FROM aliases a JOIN domains d ON d.id=a.domain_id WHERE LOWER(d.name)=LOWER(?) AND LOWER(a.local_part)=LOWER(?)`), email[at+1:], email[:at]).Scan(&id)
 	if err == sql.ErrNoRows {
 		return "", nil

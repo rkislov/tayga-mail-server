@@ -2,7 +2,9 @@ package httpapi
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -37,6 +39,87 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/v1/chat"), "/")
+	if path == "rooms/omemo" {
+		bridge, ok := s.xmpp.(interface {
+			RoomOMEMOContext(context.Context, string, string) (xmpp.RoomOMEMOContext, error)
+			SendRoomOMEMO(context.Context, string, string, string, string) (xmpp.ChatEvent, error)
+		})
+		if !ok {
+			writeJSON(w, 503, map[string]string{"error": "group OMEMO unavailable"})
+			return
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		var result any
+		var err error
+		switch r.Method {
+		case http.MethodGet:
+			result, err = bridge.RoomOMEMOContext(r.Context(), au.Email, r.URL.Query().Get("room"))
+		case http.MethodPost:
+			var req struct {
+				Room     string `json:"room"`
+				Revision string `json:"revision"`
+				XML      string `json:"xml"`
+			}
+			if json.NewDecoder(http.MaxBytesReader(w, r.Body, 512*1024)).Decode(&req) != nil {
+				writeJSON(w, 400, map[string]string{"error": "invalid group OMEMO request"})
+				return
+			}
+			result, err = bridge.SendRoomOMEMO(r.Context(), au.Email, req.Room, req.Revision, req.XML)
+		default:
+			writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+			return
+		}
+		if err != nil {
+			status := 400
+			if errors.Is(err, xmpp.ErrRoomAccess) {
+				status = 403
+			}
+			if errors.Is(err, xmpp.ErrRoomChanged) {
+				status = 409
+			}
+			writeJSON(w, status, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, 200, result)
+		return
+	}
+	if path == "rooms/history" {
+		if r.Method != http.MethodGet {
+			writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+			return
+		}
+		archive, ok := s.xmpp.(interface {
+			RoomHistoryPage(context.Context, string, string, string, int) (xmpp.RoomArchivePage, error)
+		})
+		if !ok {
+			writeJSON(w, 503, map[string]string{"error": "room archive unavailable"})
+			return
+		}
+		q := r.URL.Query()
+		limit := 80
+		if q.Get("limit") != "" {
+			n, e := strconv.Atoi(q.Get("limit"))
+			if e != nil || n < 1 || n > 100 {
+				writeJSON(w, 400, map[string]string{"error": "limit must be 1–100"})
+				return
+			}
+			limit = n
+		}
+		page, e := archive.RoomHistoryPage(r.Context(), au.Email, q.Get("room"), q.Get("before"), limit)
+		if e != nil {
+			status := 500
+			if errors.Is(e, xmpp.ErrRoomAccess) {
+				status = 403
+			} else if errors.Is(e, xmpp.ErrRoomCursor) {
+				status = 404
+			}
+			writeJSON(w, status, map[string]string{"error": e.Error()})
+			return
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		writeJSON(w, 200, page)
+		return
+	}
 	if path == "rooms" || strings.HasPrefix(path, "rooms/") {
 		groups, ok := s.xmpp.(interface {
 			CreateChatRoom(context.Context, string, string, []string) (xmpp.ChatRoom, error)
@@ -98,6 +181,48 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch {
+	case path == "omemo/devices":
+		bridge, ok := s.xmpp.(interface {
+			RetiredWebOMEMO(context.Context, string) ([]xmpp.RetiredOMEMODevice, error)
+			RetireWebOMEMO(context.Context, string, uint32, string) error
+		})
+		if !ok {
+			writeJSON(w, 503, map[string]string{"error": "OMEMO retirement unavailable"})
+			return
+		}
+		if r.Method == http.MethodGet {
+			devices, err := bridge.RetiredWebOMEMO(r.Context(), au.Email)
+			if err != nil {
+				writeJSON(w, 500, map[string]string{"error": "cannot read retired keys"})
+				return
+			}
+			writeJSON(w, 200, map[string]any{"retired": devices})
+			return
+		}
+		if r.Method != http.MethodPost {
+			writeJSON(w, 405, map[string]string{"error": "method not allowed"})
+			return
+		}
+		var req struct {
+			ID          uint32 `json:"id"`
+			IdentityKey string `json:"identity_key"`
+		}
+		if json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&req) != nil {
+			writeJSON(w, 400, map[string]string{"error": "invalid device"})
+			return
+		}
+		if err := bridge.RetireWebOMEMO(r.Context(), au.Email, req.ID, req.IdentityKey); err != nil {
+			status := http.StatusBadRequest
+			if errors.Is(err, xmpp.ErrOMEMOKeyChanged) {
+				status = http.StatusConflict
+			}
+			if errors.Is(err, sql.ErrNoRows) {
+				status = http.StatusNotFound
+			}
+			writeJSON(w, status, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, 200, map[string]bool{"ok": true})
 	case path == "omemo":
 		bridge, ok := s.xmpp.(interface {
 			ReadWebOMEMO(context.Context, string, string) ([]xmpp.OMEMOItem, error)

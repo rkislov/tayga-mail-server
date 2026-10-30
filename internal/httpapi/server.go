@@ -98,7 +98,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/auth/oidc/", s.handleOIDCRoutes)
 	mux.HandleFunc("/api/v1/me", s.handleMe)
 	mux.HandleFunc("/api/v1/me/avatar", s.handleAvatar)
+	mux.HandleFunc("/api/v1/me/branding", s.handleBranding)
+	mux.HandleFunc("/api/v1/admin/branding/", s.handleAdminBranding)
 	mux.HandleFunc("/api/v1/me/password", s.handleChangePassword)
+	mux.HandleFunc("/api/v1/me/xmpp-devices", s.handleXMPPDevices)
+	mux.HandleFunc("/api/v1/me/xmpp-devices/", s.handleXMPPDevices)
 	mux.HandleFunc("/api/v1/mail/signature", s.handleSignature)
 	mux.HandleFunc("/api/v1/travel", s.handleTravel)
 	mux.HandleFunc("/api/v1/travel/", s.handleTravel)
@@ -129,6 +133,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/files/uploads/", s.handleFileUploads)
 	mux.HandleFunc("/api/v1/files/office", s.handleOfficeSession)
 	mux.HandleFunc("/wopi/files/", s.handleWOPI)
+	mux.HandleFunc("/office/document/", s.handleDocumentServer)
 	mux.HandleFunc("/calendar/public/", s.handlePublicCalendar)
 	mux.HandleFunc("/s/", s.handlePublicShare)
 	mux.HandleFunc("/api/v1/sieve/scripts", s.handleSieveScripts)
@@ -180,6 +185,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/notifications", s.handleNotifications)
 	mux.HandleFunc("/api/v1/notifications/", s.handleNotifications)
 
+	mux.HandleFunc(storage.CalendarDownloadPath, s.handleCalendarDownload)
 	dav.Mount(mux, s.store, s.authn)
 	flowsync.Mount(mux, s.cfg, s.log, s.store, s.authn, s.ms, s.flowSubmit)
 

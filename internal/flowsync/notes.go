@@ -5,6 +5,7 @@ package flowsync
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -40,24 +41,7 @@ func (h *easHandler) syncNotes(ctx context.Context, u *storage.User, collectionI
 	}
 	adds := make([]noteAdd, 0, len(items))
 	for _, n := range items {
-		body := n.BodyHTML
-		bt := "2"
-		if body == "" {
-			body = n.BodyText
-			bt = "1"
-		}
-		subject := n.Title
-		if subject == "" {
-			subject = firstLine(n.BodyText)
-		}
-		adds = append(adds, noteAdd{
-			ServerID: n.ID,
-			Subject:  subject,
-			Body:     body,
-			BodyType: bt,
-			LastMod:  n.UpdatedAt.UTC().Format("2006-01-02T15:04:05.000Z"),
-			Created:  n.CreatedAt.UTC().Format("2006-01-02T15:04:05.000Z"),
-		})
+		adds = append(adds, noteSyncAdd(n))
 	}
 	if wbxml {
 		// Fall back to XML for Notes class in v1 (encoder parity later).
@@ -90,60 +74,135 @@ func renderNotesSyncXML(syncKey, collectionID string, adds []noteAdd, wb []write
 	return b.String()
 }
 
+type noteStateKey struct{}
+type noteWriteState struct {
+	Snapshot collectionState
+	Written  map[string]storage.NoteItem
+}
+
+func rememberNoteWrite(ctx context.Context, n *storage.NoteItem) {
+	if state, ok := ctx.Value(noteStateKey{}).(*noteWriteState); ok {
+		state.Written[n.ID] = *n
+	}
+}
+
+var errInvalidNote = errors.New("invalid note conversion")
+
+func noteSyncAdd(n *storage.NoteItem) noteAdd {
+	body, bt := n.BodyHTML, "2"
+	if body == "" {
+		body, bt = n.BodyText, "1"
+	}
+	subject := n.Title
+	if subject == "" {
+		subject = firstLine(n.BodyText)
+	}
+	return noteAdd{ServerID: n.ID, Subject: subject, Body: body, BodyType: bt, LastMod: n.UpdatedAt.UTC().Format("2006-01-02T15:04:05.000Z")}
+}
+
+func noteClientDocument(op clientOp) (noteutil.Node, bool, error) {
+	if op.ApplicationData != nil {
+		body := op.ApplicationData.child("Body")
+		if body == nil {
+			return noteutil.Node{}, false, nil
+		}
+		if body.value("Truncated") == "1" {
+			return noteutil.Node{}, true, errInvalidNote
+		}
+		switch body.value("Type") {
+		case "1":
+			return noteutil.DocumentFromText(body.value("Data")), true, nil
+		case "2":
+			doc, err := noteutil.DocumentFromSyncHTML(body.value("Data"))
+			if err != nil {
+				return doc, true, fmt.Errorf("%w: %s", errInvalidNote, err)
+			}
+			return doc, true, nil
+		default:
+			return noteutil.Node{}, true, errInvalidNote
+		}
+	}
+	body, ok := op.Fields["Body"]
+	return noteutil.DocumentFromHTMLOrText(body), ok, nil
+}
+
 func (h *easHandler) wbNotes(ctx context.Context, u *storage.User, folderID string, op clientOp) (string, error) {
-	switch op.Kind {
-	case "add":
-		if rights, err := h.store.NoteFolderRightsForUser(ctx, folderID, u.ID); err != nil || rights != "write" {
-			return "", fmt.Errorf("forbidden")
+	rights, err := h.store.NoteFolderRightsForUser(ctx, folderID, u.ID)
+	if err != nil || rights != "write" {
+		return op.ServerID, storage.ErrUnauthorized
+	}
+	doc, hasBody, err := noteClientDocument(op)
+	if err != nil {
+		return op.ServerID, err
+	}
+	if op.Kind == "add" {
+		if err := noteutil.ValidateSyncReplacement(noteutil.EmptyDoc(), doc); err != nil {
+			return "", fmt.Errorf("%w: %s", errInvalidNote, err)
 		}
+		raw := noteutil.MarshalDocumentJSON(doc)
+		html, text := noteutil.DeriveBodies(raw)
 		subject := op.Fields["Subject"]
-		body := op.Fields["Body"]
-		doc := noteutil.DocumentFromHTMLOrText(body)
-		docJSON := noteutil.MarshalDocumentJSON(doc)
-		htmlOut, textOut := noteutil.DeriveBodies(docJSON)
 		if subject == "" {
-			subject = firstLine(textOut)
+			subject = firstLine(text)
 		}
-		n, err := h.store.CreateNoteItem(ctx, &storage.NoteItem{
-			FolderID: folderID, UserID: u.ID, Title: subject,
-			DocumentJSON: docJSON, BodyHTML: htmlOut, BodyText: textOut,
-		})
+		n, err := h.store.CreateNoteItem(ctx, &storage.NoteItem{FolderID: folderID, UserID: u.ID, Title: subject, DocumentJSON: raw, BodyHTML: html, BodyText: text})
 		if err != nil {
 			return "", err
 		}
+		rememberNoteWrite(ctx, n)
 		return n.ID, nil
+	}
+	n, err := h.store.GetNoteItemByID(ctx, op.ServerID)
+	if err != nil {
+		return op.ServerID, err
+	}
+	if n.FolderID != folderID {
+		return op.ServerID, storage.ErrUnauthorized
+	}
+	if rights, err = h.store.NoteRightsForUser(ctx, n.ID, u.ID); err != nil || rights != "write" {
+		return op.ServerID, storage.ErrUnauthorized
+	}
+	if state, ok := ctx.Value(noteStateKey{}).(*noteWriteState); ok {
+		if written, exists := state.Written[n.ID]; exists {
+			if written.ETag != n.ETag {
+				return n.ID, storage.ErrNoteConflict
+			}
+		} else {
+			hash, err := noteSnapshotHash(n, state.Snapshot.itemPreferences())
+			if err != nil {
+				return n.ID, err
+			}
+			if state.Snapshot.Items[n.ID] == "" || state.Snapshot.Items[n.ID] != hash {
+				return n.ID, storage.ErrNoteConflict
+			}
+		}
+	}
+	switch op.Kind {
 	case "change":
-		rights, err := h.store.NoteRightsForUser(ctx, op.ServerID, u.ID)
-		if err != nil || rights != "write" {
-			return op.ServerID, fmt.Errorf("forbidden")
-		}
-		n, err := h.store.GetNoteItemByID(ctx, op.ServerID)
-		if err != nil {
-			return op.ServerID, err
-		}
-		if v := op.Fields["Subject"]; v != "" {
+		if v, ok := op.Fields["Subject"]; ok {
 			n.Title = v
 		}
-		if v := op.Fields["Body"]; v != "" {
-			doc := noteutil.DocumentFromHTMLOrText(v)
+		if op.ApplicationData != nil {
+			if subject := op.ApplicationData.child("Subject"); subject != nil {
+				n.Title = subject.Text
+			}
+		}
+		if hasBody {
+			if err := noteutil.ValidateSyncReplacement(noteutil.ParseDocumentJSON(n.DocumentJSON), doc); err != nil {
+				return n.ID, fmt.Errorf("%w: %s", errInvalidNote, err)
+			}
 			n.DocumentJSON = noteutil.MarshalDocumentJSON(doc)
 			n.BodyHTML, n.BodyText = noteutil.DeriveBodies(n.DocumentJSON)
 		}
 		if err := h.store.UpdateNoteItem(ctx, n); err != nil {
-			return op.ServerID, err
+			return n.ID, err
 		}
+		rememberNoteWrite(ctx, n)
 		return n.ID, nil
 	case "delete":
-		rights, err := h.store.NoteRightsForUser(ctx, op.ServerID, u.ID)
-		if err != nil || rights != "write" {
-			return op.ServerID, fmt.Errorf("forbidden")
-		}
-		if err := h.store.DeleteNoteItemByID(ctx, op.ServerID); err != nil {
-			return op.ServerID, err
-		}
-		return op.ServerID, nil
+		return n.ID, h.store.DeleteNoteItemIfMatch(ctx, n.ID, n.ETag)
 	default:
-		return op.ServerID, fmt.Errorf("unsupported op")
+		return n.ID, errInvalidNote
 	}
 }
 
@@ -155,8 +214,8 @@ func firstLine(s string) string {
 	if i := strings.IndexAny(s, "\r\n"); i >= 0 {
 		s = s[:i]
 	}
-	if len(s) > 80 {
-		s = s[:80]
+	if runes := []rune(s); len(runes) > 80 {
+		s = string(runes[:80])
 	}
 	return s
 }
@@ -203,7 +262,7 @@ func (h *ewsHandler) getNoteItem(ctx context.Context, u *storage.User, id string
 		xmlEscape(n.ID), xmlEscape(n.ETag), xmlEscape(subject), xmlEscape(body)), nil
 }
 
-func (h *ewsHandler) createStickyNote(ctx context.Context, u *storage.User, folderID, subject, body string) (string, error) {
+func (h *ewsHandler) createStickyNote(ctx context.Context, u *storage.User, folderID, subject string, doc noteutil.Node) (string, error) {
 	_ = h.store.EnsureNoteDefaults(ctx, u.ID)
 	if folderID == "" {
 		f, err := h.store.EnsureNoteFolder(ctx, u.ID, "notes", "Notes")
@@ -214,7 +273,6 @@ func (h *ewsHandler) createStickyNote(ctx context.Context, u *storage.User, fold
 	} else if rights, err := h.store.NoteFolderRightsForUser(ctx, folderID, u.ID); err != nil || rights != "write" {
 		return ewsFault("ErrorAccessDenied", "forbidden"), nil
 	}
-	doc := noteutil.DocumentFromHTMLOrText(body)
 	docJSON := noteutil.MarshalDocumentJSON(doc)
 	htmlOut, textOut := noteutil.DeriveBodies(docJSON)
 	if subject == "" {
@@ -227,5 +285,15 @@ func (h *ewsHandler) createStickyNote(ctx context.Context, u *storage.User, fold
 	if err != nil {
 		return "", err
 	}
-	return ewsCreateResponse("Message", n.ID), nil
+	return noteEWSResponse("CreateItem", n), nil
+}
+
+func noteSnapshotHash(n *storage.NoteItem, preferences syncPreferences) (string, error) {
+	raw := renderNotesSyncXML("unused", n.FolderID, []noteAdd{noteSyncAdd(n)}, nil)
+	tree, err := parseProtocolXML([]byte(raw))
+	if err != nil {
+		return "", err
+	}
+	hashes, _ := snapshotItemHashes(kindNotes, tree.find("Commands"), preferences, nil)
+	return hashes[n.ID], nil
 }

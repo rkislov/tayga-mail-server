@@ -176,6 +176,10 @@ func (s *Store) FreeBusyForUserExceptMeeting(ctx context.Context, userID string,
 }
 
 func (s *Store) FreeBusyForUserExceptOccurrence(ctx context.Context, userID string, from, to time.Time, uid, organizerEmail, rid string) ([]BusyInterval, error) {
+	user, err := s.GetUserByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
 	calIDs := map[string]struct{}{}
 	owned, err := s.ListCalendars(ctx, userID)
 	if err != nil {
@@ -203,6 +207,9 @@ func (s *Store) FreeBusyForUserExceptOccurrence(ctx context.Context, userID stri
 			return nil, err
 		}
 		for _, o := range objs {
+			if calutil.DeclinedBy(o.Data, user.Email) {
+				continue
+			}
 			skipRID := ""
 			if uid != "" && o.UID == uid {
 				p, err := calutil.ParseICS(o.Data)

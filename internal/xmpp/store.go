@@ -139,22 +139,48 @@ func (s *Server) ensurePEPNode(ctx context.Context, ownerBare, node string) (str
 	return id, err
 }
 
-func (s *Server) publishPEP(ctx context.Context, ownerBare, node, itemID, payload string) error {
-	nodeID, err := s.ensurePEPNode(ctx, ownerBare, node)
+func (s *Server) publishPEP(ctx context.Context, owner, node, itemID, payload string) error {
+	_, err := s.storePEPPublication(ctx, owner, node, itemID, payload)
+	return err
+}
+
+// Notify with the committed payload, not a client's stale list of retired IDs.
+func (s *Session) publishAndNotifyPEP(ctx context.Context, owner, node, itemID, payload string) error {
+	unlock := s.srv.lockPEPPublication(owner)
+	defer unlock()
+	payload, err := s.srv.storePEPPublication(ctx, owner, node, itemID, payload)
 	if err != nil {
 		return err
+	}
+	s.notifyPEP(ctx, owner, node, `<item id="`+xmlEscape(itemID)+`">`+payload+`</item>`)
+	return nil
+}
+
+func (s *Server) storePEPPublication(ctx context.Context, ownerBare, node, itemID, payload string) (string, error) {
+	nodeID, err := s.ensurePEPNode(ctx, ownerBare, node)
+	if err != nil {
+		return "", err
 	}
 	if itemID == "" {
 		itemID = "current"
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer tx.Rollback()
+	if legacyOMEMONode(node) {
+		if err = s.lockOMEMOOwner(ctx, tx, ownerBare); err != nil {
+			return "", err
+		}
+		payload, err = s.filterOMEMOPublication(ctx, tx, ownerBare, node, payload)
+		if err != nil {
+			return "", err
+		}
+	}
 	var max int
 	if err = tx.QueryRowContext(ctx, s.rebind(`SELECT max_items FROM xmpp_pep_nodes WHERE id=?`), nodeID).Scan(&max); err != nil {
-		return err
+		return "", err
 	}
 	id := storage.NewID()
 	_, err = tx.ExecContext(ctx, s.rebind(`
@@ -166,17 +192,25 @@ func (s *Server) publishPEP(ctx context.Context, ownerBare, node, itemID, payloa
 		id, nodeID, itemID, payload, time.Now().UTC(),
 	)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if max == 1 {
 		if _, err = tx.ExecContext(ctx, s.rebind(`DELETE FROM xmpp_pep_items WHERE node_id=? AND item_id<>?`), nodeID, itemID); err != nil {
-			return err
+			return "", err
 		}
 	}
-	return tx.Commit()
+	return payload, tx.Commit()
 }
 
 func (s *Server) getPEPItems(ctx context.Context, ownerBare, node string) ([]pepItem, error) {
+	if id := legacyBundleID(node); id != 0 && s.db != nil {
+		if err := s.checkOMEMODevice(ctx, ownerBare, id); err != nil {
+			if err == ErrOMEMORetired {
+				return nil, nil
+			}
+			return nil, err
+		}
+	}
 	if s.db == nil {
 		return nil, nil
 	}

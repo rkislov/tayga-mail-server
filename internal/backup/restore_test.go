@@ -38,6 +38,13 @@ func TestBackupRestoreRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	if _, err = srcStore.SaveDomainAlias(ctx, &storage.DomainAlias{DomainID: dom.ID, Name: "alias.test"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = srcStore.CreateAlias(ctx, dom.ID, u.ID, "sales"); err != nil {
+		t.Fatal(err)
+	}
 	_, _ = srcStore.PutSieveScript(ctx, u.ID, "default", "keep;")
 	_ = srcStore.SetActiveSieveScript(ctx, u.ID, "default")
 
@@ -86,6 +93,16 @@ func TestBackupRestoreRoundTrip(t *testing.T) {
 	}
 	if got.PasswordHash != "hash" {
 		t.Fatalf("hash %q", got.PasswordHash)
+	}
+
+	for _, address := range []string{"u@alias.test", "sales@acme.test", "sales@alias.test"} {
+		resolved, e := dstStore.ResolveRecipient(ctx, address)
+		if e != nil || resolved.ID != got.ID {
+			t.Fatal(address, resolved, e)
+		}
+	}
+	if _, err = backup.RestoreTarGz(ctx, dstStore, bytes.NewReader(buf.Bytes()), backup.RestoreOptions{SkipExisting: true}); err != nil {
+		t.Fatal("repeated alias restore", err)
 	}
 	mbs, _ := dstStore.ListMailboxes(ctx, got.ID)
 	if len(mbs) == 0 {

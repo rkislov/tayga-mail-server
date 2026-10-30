@@ -10,10 +10,12 @@ import (
 	"github.com/tayga/tms/internal/mailsearch"
 	"io"
 	"strings"
+	"time"
 )
 
 type messageContent struct {
 	Subject, From, To, Cc, ReplyTo, Text, HTML string
+	SentDate                                   time.Time
 	Attachments                                []messageAttachment
 	MIME                                       []byte
 	SMIME                                      bool
@@ -35,13 +37,24 @@ func (c messageContent) nativeBodyType() string {
 }
 
 func parseMessageContent(raw []byte) (messageContent, error) {
+	return readMessageContent(bytes.NewReader(raw), raw, false)
+}
+
+// Metadata discovery must not allocate/decode every attachment or reject a
+// readable message merely because a MIME part exceeds the body-preview limit.
+func parseMessageMetadata(source io.Reader) (messageContent, error) {
+	return readMessageContent(source, nil, true)
+}
+
+func readMessageContent(source io.Reader, raw []byte, metadataOnly bool) (messageContent, error) {
 	var out messageContent
-	r, err := msgmail.CreateReader(bytes.NewReader(raw))
+	r, err := msgmail.CreateReader(source)
 	if err != nil && !message.IsUnknownCharset(err) {
 		return out, err
 	}
 	defer r.Close()
 	out.MIME = raw
+	out.SentDate, _ = r.Header.Date()
 	media, params, _ := r.Header.ContentType()
 	out.SMIME = media == "application/pkcs7-mime" || media == "application/x-pkcs7-mime" || (media == "multipart/signed" && strings.Contains(params["protocol"], "pkcs7-signature"))
 	out.Subject = mailsearch.DecodeHeader(r.Header.Get("Subject"))
@@ -61,16 +74,19 @@ func parseMessageContent(raw []byte) (messageContent, error) {
 		if count == 256 {
 			return out, fmt.Errorf("too many MIME parts")
 		}
-		data, err := io.ReadAll(io.LimitReader(p.Body, (32<<20)+1))
-		if err != nil {
-			return out, err
-		}
-		if len(data) > 32<<20 {
-			return out, fmt.Errorf("MIME part too large")
-		}
-		total += len(data)
-		if total > 64<<20 {
-			return out, fmt.Errorf("decoded message too large")
+		var data []byte
+		if !metadataOnly {
+			data, err = io.ReadAll(io.LimitReader(p.Body, (32<<20)+1))
+			if err != nil {
+				return out, err
+			}
+			if len(data) > 32<<20 {
+				return out, fmt.Errorf("MIME part too large")
+			}
+			total += len(data)
+			if total > 64<<20 {
+				return out, fmt.Errorf("decoded message too large")
+			}
 		}
 		switch h := p.Header.(type) {
 		case *msgmail.InlineHeader:

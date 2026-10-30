@@ -1,26 +1,25 @@
 {
   "manifest_version": 2,
   "name": "Tayga Mail",
-  "description": "Auto-setup, Tayga theme, large-file links, and Sieve/vacation for Tayga Mail Server.",
-  "version": "0.9.0",
+  "description": "Tayga EWS: автоматическая двусторонняя синхронизация почты, календарей и контактов.",
+  "version": "2.0.0",
   "browser_specific_settings": {
     "gecko": {
       "id": "tayga@mail.local",
-      "strict_min_version": "115.0"
+      "strict_min_version": "145.0"
     }
   },
   "permissions": [
-    "accountsRead",
-    "accountsFolders",
-    "messagesRead",
-    "compose",
     "storage",
     "theme",
-    "menus",
-    "<all_urls>"
+    "https://*/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*",
+    "http://[::1]/*",
+    "alarms"
   ],
   "background": {
-    "scripts": ["background.js"]
+    "scripts": ["client.js", "ews.js", "background.js"]
   },
   "options_ui": {
     "page": "options.html",
@@ -28,6 +27,26 @@
   },
   "browser_action": {
     "default_title": "Tayga Mail",
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_icon": "icon.svg"
+  },
+  "icons": {
+    "32": "icon.svg",
+    "64": "icon.svg"
+  },
+  "cloud_file": {
+    "name": "Tayga Mail",
+    "management_url": "options.html",
+    "reuse_uploads": false
+  },
+  "experiment_apis": {
+    "taygaEws": {
+      "schema": "experiments/ews/schema.json",
+      "parent": {
+        "scopes": ["addon_parent"],
+        "paths": [["taygaEws"]],
+        "script": "experiments/ews/api.js"
+      }
+    }
   }
 }

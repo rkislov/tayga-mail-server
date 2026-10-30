@@ -1,6 +1,6 @@
 # XMPP compatibility implementation plan
 
-Updated for 0.9.18, 2026-10-17. This is an implementation checklist, not a claim of complete RFC/XEP conformance.
+Updated 2026-10-29. This is an implementation checklist, not a claim of complete RFC/XEP conformance.
 
 ## Current batch: core connection and archive correctness
 
@@ -20,15 +20,152 @@ Updated for 0.9.18, 2026-10-17. This is an implementation checklist, not a claim
 - [x] Normalize authentication and binding JIDs using PRECIS/IDNA and validate length/characters.
 - [x] XEP-0198 resumption after reauthentication, owner-bound tokens, acknowledged-prefix removal and replay without recounting.
 - [x] Bound replay storage: 120 seconds, 1 MiB per session, 4 retained sessions per user, 256 globally and 16 MiB aggregate.
-- [ ] Real-client network-switch/background interop verification. Retained streams are in-memory and do not survive a server restart; offline messages remain database-backed.
+- [x] Treat `encoding/xml` unexpected EOF on an open stream as a transport loss; preserve counters for a partially received stanza without acknowledging it. Clean stream closure still invalidates resumption.
+- [x] Resume an authenticated owner's stream even when the old TCP connection has not detected the disconnect. Validate the token and acknowledgement first, close only that transport, and wait for reader/room cleanup before using its snapshot.
+- [x] Bound the complete replay to a 10-second write deadline; retain pending messages and room state if that replay disconnects again.
+- [x] Loopback TCP tests: SASL, two resources, received/sent Carbons, invalid counters, undetected and repeated disconnects, partial incoming XML, replay without duplicate Carbons, and explicit logout. Additional tests cover the cleanup window, cross-account rejection, replay failure and counter wrap.
+- [x] Monal/iPhone on server 0.9.36: operator confirmed background push delivery and reconnection with history intact after Wi-Fi → mobile data → Wi-Fi (2026-10-28; app version not recorded).
+- [ ] Repeat device acceptance for Conversations and ChatSecure, and large-history paging in native clients. Retained streams are in-memory and do not survive a server restart; offline messages remain database-backed.
 - [ ] Existing-identity normalization collision audit before any stored identity migration.
+
+Validation on 2026-10-28: `go test ./...` and `go test -race ./internal/xmpp` passed for stream recovery. Commit `de68881` was installed as `0.9.34+xmpp.2` after a verified SQLite/binary/configuration backup, and is included in release 0.9.36. The service passed `/readyz`; STARTTLS 5222 and direct TLS 5223 both negotiated TLS 1.3 with certificate verification. Three Monal push registrations remained. Subsequent Monal device acceptance is recorded above and in [native push](xmpp-push.md).
+
+Archive acceptance added on 2026-10-28: a loopback TCP scenario loads 257
+messages through two authenticated resources, traverses forward/backward
+pages, commits and delivers a new live message between queries, and resumes
+the phone stream before continuing from its last cursor. It checks result
+correlation, forwarded namespaces, stable IDs, count-only requests, foreign
+cursor rejection and that history is not copied as Carbons to the other
+resource. The server's 100-message page cap is exercised by requesting 500.
+Separate regressions cover cursors outside the new peer/time filters and
+unsupported, duplicate, multivalued or malformed filter input. Unsupported
+filters return an error before any history is streamed.
+
+Validation for the archive changes: `go test ./...`,
+`go test -race ./internal/xmpp` and `go vet ./internal/xmpp` passed. The tests
+use temporary SQLite databases and local TCP sockets; no production message
+contents or push tokens are copied into fixtures.
+
+Deployment on 2026-10-28: archive commit `bc37051` installed as
+`0.9.36+xmpp.1`; binary SHA-256
+`1ae9f8c347e9cd057494649ab227d3bd651dc4dfac860f715b58eee89b0a0fcf`.
+The previous binary, configuration and a verified SQLite backup are in
+`/var/backups/tayga/pre-0.9.36-xmpp.1-vUWjj9d1`. Readiness passed, and external
+STARTTLS 5222/direct TLS 5223 probes negotiated TLS 1.3 with verified
+certificates. Three Monal registrations remained and the push queue was
+empty; no ERROR-level entries were found in the post-restart journal check.
+
+Probe limitation: two external attempts with `to` preceding the namespace
+attributes in the initial XML stream header timed out before STARTTLS.
+The same header worked over server loopback, while external probes with
+namespace attributes first completed on both ports. The cause has not been
+established; this is a separate network-path diagnostic item, not evidence
+that the server parser rejects that valid XML attribute order.
+
+## Web OMEMO session isolation (2026-10-29)
+
+Pending browser operations now retain their originating login, including time
+spent waiting for a Web Lock, PEP requests, token refresh/retry, cached plaintext
+and encrypted-file previews. Logout and relogin invalidate that context without
+deleting local keys. Late refresh replies cannot replace a newer login's tokens
+or share its pending refresh promise. Already dispatched requests may finish for
+the original account; subsequent work is rejected after a login change.
+
+Validation: the session-isolation, device-settings and independent browser-device
+scripts passed, as did `go test ./...`. An isolated Go server with the built web
+assets passed the actual HTTP API scenario: two browser devices, encrypted
+delivery, deduplication, settings, logout/relogin, retained device ID and cached
+plaintext. Independent Node.js AES-GCM encryption/decryption verifies the file
+wire format in both directions. Native Monal/Conversations encrypted-file and
+history acceptance remains pending; this batch does not claim that interop.
+See [web OMEMO](web-omemo.md) for commands and storage boundaries.
+
+Deployment on 2026-10-29: commit `4ed691e` installed as `0.9.36+xmpp.2`
+(built `2026-10-29T11:20:40Z`), binary SHA-256
+`2741108375c3288949da0530af54385db2f504b1b6edb7a0a62f8f0faa16b5da`.
+The binary/configuration/verified SQLite backup is
+`/var/backups/tayga/pre-0.9.36-xmpp.2-oXTiYHnp`.
+Public readiness and the served JavaScript hash matched the build; canonical
+external STARTTLS 5222 and direct TLS 5223 probes negotiated TLS 1.3 with
+certificate verification. All three push registrations remained, the queue was
+empty, and the recent journal contained no ERROR-level application entries.
+These probes did not send user messages or trigger native push acceptance.
+
+## Encrypted attachment transport (2026-10-29)
+
+The web receiver accepts the historical Conversations 16-byte IV alongside the
+XEP-0454 12-byte IV; new uploads still emit only the 12-byte form. Malformed URLs
+are rejected before download. Chat upload/download capability URLs now support
+credential-free CORS and preflight requests. HEAD retains its method when
+delegating to the public share handler, returns no body and does not consume a
+download count; ordinary public file/folder shares also accept metadata-only HEAD.
+
+The HTTP regression reproduced the previous 405 preflight responses and HEAD
+body/download-count changes before the fix. `go test ./...`, the OMEMO device,
+settings and session scripts, independent Apple CryptoKit and Node.js wire-format
+checks all passed. A disposable HTTPS instance with two browser origins passed
+the UI upload → encrypted message → PNG/PDF preview/download cycle, including
+legacy-IV receipt and no key fragments, credentials or referrers in file GETs.
+These are transport/format tests, not native-app acceptance. Sources, commands
+and remaining device checks are recorded in [web OMEMO](web-omemo.md).
+
+Deployment on 2026-10-29: commit `ffe9e53` installed as `0.9.36+xmpp.3`
+(built `2026-10-29T13:54:25Z`), binary SHA-256
+`6999ccc9373cef0aa4d95cd9e8f02ef31bfd15ae57f0a2f27192499b395f0e0c`.
+Previous binary/configuration and verified SQLite backup:
+`/var/backups/tayga/pre-0.9.36-xmpp.3-5JZLrieS`.
+External readiness, served JavaScript hash and PUT/GET CORS preflights passed.
+Canonical STARTTLS 5222/direct TLS 5223 probes both negotiated verified TLS 1.3;
+three push registrations remained, the queue was empty, and the recent journal
+check found no ERROR-level application entries. On 2026-10-29 the operator
+confirmed encrypted files open in both directions, web ↔ Monal, on this build.
+The app version was not recorded; Conversations acceptance and native bytewise
+comparison remain unverified.
+
+## Local OMEMO device exclusion (2026-10-29)
+
+An explicit setting excludes an old device from new encrypted sends while keeping
+delivery to remaining verified devices. It applies to this browser/account only,
+including other own devices; it neither changes the public PEP list nor revokes
+account access. Missing or rotated excluded bundles do not block other recipients,
+but unknown active devices still do. Sending with no recipient device fails even
+if own-device copies are available. Cached history remains readable; uncached
+incoming messages from an excluded sender are rejected until explicit verification.
+
+Exclusions survive reload, PEP removal and reappearance. Restoring a device requires
+fresh publication and a fingerprint comparison; a stale verification dialog cannot
+undo an exclusion saved in another tab. Trust revocation remains distinct and
+continues to block sends pending verification or explicit exclusion.
+
+The four-browser scenario in `scripts/check-omemo-devices.mjs` verifies real ratchet
+delivery/decryption, missing and changed keys, own/recipient exclusion, empty
+recipient rejection, cached history, independent browser trust, restoration and
+mobile layout. The actual HTTP API scenario also checks exclusion/restoration with
+the embedded web build. Global device withdrawal and key-loss recovery remain
+separate work; see [web OMEMO](web-omemo.md).
+
+Deployment on 2026-10-29: commit `d322d4b` installed as `0.9.36+xmpp.4`
+(built `2026-10-29T16:24:19Z`), binary SHA-256
+`c686dff049f4cfa17b5456e2e945848ccd17d3f664f23ed441acf28a7bc69127`.
+Previous binary/configuration and verified SQLite backup:
+`/var/backups/tayga/pre-0.9.36-xmpp.4-pTZ0ZgfA`.
+Public readiness and the served JavaScript SHA-256 matched the build
+(`9831625cad5bb135cfef6683ecd1b96be22a2c2607db13c0a98976c4a0aa1002`).
+External canonical STARTTLS 5222 and direct TLS 5223 probes negotiated TLS 1.3
+with certificate verification. The four-device, settings, session, HTTP API and
+HTTPS file scenarios passed, as did `go test ./...`.
+The temporary upload hit `/tmp`'s per-user quota before installation; the partial
+upload was removed and the verified package installed from `/var/tmp`. The working
+binary was not changed until the complete package and backup had been verified.
 
 ## Next batches
 
 - [ ] RFC 6120/6121: complete stream-state/error checks, IQ routing, presence priority/probes and roster transition tests.
 - [ ] RFC 7622 (with RFC 9844): strict JID normalization and validation; audit existing identities for collisions before migration.
 - [x] XEP-0198: acknowledgements and bounded resumable sessions; disconnect, replay, expiry and ownership tests (real-client verification remains above).
-- [ ] XEP-0313/0059: MAM query discovery/preferences and full protocol interoperability, including concurrent archive writes.
+- [x] MAM query-form discovery and owner-scoped persistent archive preferences (XEP-0441).
+- [x] XEP-0313/0059: TCP paging beyond 100 messages on two resources, live archive writes between pages and continuation after SM resume; owner-scoped cursors remain valid when query filters change.
+- [ ] Full MAM interoperability: exact resource-specific JID filtering, insertion ordering for timestamp ties, a consistent snapshot within each page under concurrent writes, and the unadvertised `mam:2#extended` profile. Current bare-JID filtering and timestamp/stanza-ID ordering do not complete these requirements.
 - [x] XEP-0359: account-assigned stable IDs, matching MAM cursors and live/offline/Carbons/web copies across C2S, web, OMEMO, bot and component entry points.
 - [x] XEP-0280: shared sent/received copies for supported direct-message paths; expanded MUC eligibility remains pending.
 - [x] XEP-0352: active/inactive state; suppress only repeated identical availability while inactive. Messages and subscription requests remain immediate.

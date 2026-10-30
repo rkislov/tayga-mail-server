@@ -10,15 +10,16 @@ import (
 )
 
 type SessionInfo struct {
-	ID         string    `json:"id"`
-	UserID     string    `json:"user_id"`
-	Email      string    `json:"email"`
-	Protocol   string    `json:"protocol"`
-	Address    string    `json:"address"`
-	Agent      string    `json:"agent"`
-	Started    time.Time `json:"started_at"`
-	Seen       time.Time `json:"last_seen"`
-	Connection bool      `json:"connection"`
+	CredentialID string    `json:"credential_id,omitempty"`
+	ID           string    `json:"id"`
+	UserID       string    `json:"user_id"`
+	Email        string    `json:"email"`
+	Protocol     string    `json:"protocol"`
+	Address      string    `json:"address"`
+	Agent        string    `json:"agent"`
+	Started      time.Time `json:"started_at"`
+	Seen         time.Time `json:"last_seen"`
+	Connection   bool      `json:"connection"`
 }
 type activeSession struct {
 	SessionInfo

@@ -15,20 +15,23 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tayga/tms/internal/auth"
 	"github.com/tayga/tms/internal/storage"
 )
 
 type Session struct {
-	mucResume []mucResumeState // protected by mu; captured on disconnect
-	csi       clientState
-	sessionID string
-	srv       *Server
-	log       *slog.Logger
-	conn      net.Conn
-	br        *bufio.Reader
-	bw        *bufio.Writer
-	dec       *xml.Decoder
-	tlsCfg    *tls.Config
+	mucResume    []mucResumeState // protected by mu; captured on disconnect
+	csi          clientState
+	sessionID    string
+	credentialID string
+	srv          *Server
+	log          *slog.Logger
+	conn         net.Conn
+	done         chan struct{} // closed after serve has finished cleanup and retained SM state
+	br           *bufio.Reader
+	bw           *bufio.Writer
+	dec          *xml.Decoder
+	tlsCfg       *tls.Config
 
 	sm           streamManagement
 	mu           sync.Mutex
@@ -56,6 +59,7 @@ func newSession(srv *Server, c net.Conn, alreadyTLS bool) *Session {
 		srv:      srv,
 		log:      srv.log,
 		conn:     c,
+		done:     make(chan struct{}),
 		br:       br,
 		bw:       bw,
 		dec:      xml.NewDecoder(br),
@@ -72,9 +76,10 @@ func (s *Session) Close() {
 		return
 	}
 	s.closed = true
+	bound := s.bound
 	s.srv.authn.ForgetSession(s.sessionID)
 	s.mu.Unlock()
-	if s.bound {
+	if bound {
 		s.srv.recordPresence(context.Background(), s.JID.Full(), "offline", "")
 		s.srv.hub.Unregister(s)
 		s.leaveMUC()
@@ -125,13 +130,18 @@ func (s *Session) writeString(str string) error {
 }
 
 func (s *Session) serve() {
+	defer close(s.done)
 	defer s.Close()
 	_ = s.conn.SetDeadline(time.Now().Add(5 * time.Minute))
 	err := s.handleStream()
 	var netErr net.Error
-	if errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed) || errors.As(err, &netErr) {
-		s.Close()
-		s.retainStream()
+	var xmlErr *xml.SyntaxError
+	// encoding/xml wraps EOF inside an open <stream:stream> as a SyntaxError.
+	// A mobile transport loss is resumable; malformed XML and a clean stream
+	// close are not (the latter explicitly disables resumption in stanzaLoop).
+	disconnected := errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, net.ErrClosed) || errors.As(err, &netErr) || (errors.As(err, &xmlErr) && xmlErr.Msg == "unexpected EOF")
+	if disconnected {
+		s.retainDisconnectedStream()
 	}
 	if err != nil && err != io.EOF {
 		s.log.Info("xmpp session ended", "err", err, "jid", s.JID.Full(), "authenticated", s.authed, "bound", s.bound,
@@ -288,6 +298,9 @@ func (s *Session) saslAuth(mech, b64 string) (authErr error) {
 		return fmt.Errorf("bad sasl payload")
 	}
 	user, secret := parts[1], parts[2]
+	if !s.tlsDone && strings.HasPrefix(secret, auth.XMPPDevicePasswordPrefix) {
+		return fmt.Errorf("device passwords require TLS")
+	}
 	if user == "" {
 		return fmt.Errorf("empty authentication identity")
 	}
@@ -313,9 +326,10 @@ func (s *Session) saslAuth(mech, b64 string) (authErr error) {
 	defer cancel()
 
 	var u *storage.User
+	var credentialID string
 	switch strings.ToUpper(mech) {
 	case "PLAIN":
-		u, err = s.srv.authn.Authenticate(ctx, user, secret)
+		u, credentialID, err = s.srv.authn.AuthenticateXMPP(ctx, user, secret)
 	case "X-OAUTH2":
 		u, err = s.srv.authn.AuthenticateToken(ctx, user, secret)
 	default:
@@ -324,9 +338,15 @@ func (s *Session) saslAuth(mech, b64 string) (authErr error) {
 	if err != nil {
 		return err
 	}
+	s.mu.Lock()
 	s.user = u
-	s.sessionID = s.srv.authn.TrackSession(u, "XMPP", s.conn.RemoteAddr().String(), "XMPP", s.streamID, true, s.disconnectAdmin)
+	s.credentialID = credentialID
 	s.JID = ParseJID(u.Email)
+	s.sessionID, err = s.srv.authn.TrackXMPPSession(ctx, u, credentialID, s.conn.RemoteAddr().String(), "XMPP", s.streamID, s.disconnectAdmin)
+	s.mu.Unlock()
+	if err != nil {
+		return err
+	}
 	s.log.Info("xmpp authentication succeeded", "user_id", u.ID, "domain", s.streamDomain, "peer", s.conn.RemoteAddr().String())
 	return nil
 }
@@ -381,14 +401,25 @@ func (s *Session) handleBindOrSessionIQ(se xml.StartElement, domain string) erro
 	if err != nil {
 		return s.writeString(iqBadRequest(id))
 	}
-	s.JID.Resource = normalized.Resource
-	if s.JID.Domain == "" {
-		s.JID.Domain = domain
+	err = s.withDeviceAccess(func() error {
+		s.mu.Lock()
+		if s.closed {
+			s.mu.Unlock()
+			return fmt.Errorf("connection closed")
+		}
+		s.JID.Resource = normalized.Resource
+		if s.JID.Domain == "" {
+			s.JID.Domain = domain
+		}
+		s.bound = true
+		s.mu.Unlock()
+		s.touchSession()
+		return s.registerBoundSession()
+	})
+	if err != nil {
+		return err
 	}
 	s.log.Info("xmpp resource bound", "jid", s.JID.Full())
-	s.bound = true
-	s.touchSession()
-	s.srv.hub.Register(s)
 	if err := s.writeString(fmt.Sprintf(
 		`<iq type='result' id='%s'><bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'><jid>%s</jid></bind></iq>`,
 		xmlEscape(id), xmlEscape(s.JID.Full()),
@@ -403,6 +434,12 @@ func (s *Session) handleBindOrSessionIQ(se xml.StartElement, domain string) erro
 
 func (s *Session) stanzaLoop() error {
 	for {
+		s.mu.Lock()
+		closed := s.closed
+		s.mu.Unlock()
+		if closed {
+			return io.EOF
+		}
 		tok, err := s.dec.Token()
 		if err != nil {
 			return err
@@ -473,6 +510,9 @@ func (s *Session) handleMessage(se xml.StartElement) error {
 	}
 	if to == "" {
 		return nil
+	}
+	if err := s.srv.checkOMEMOSender(context.Background(), s.JID.Bare(), encryptedElement("<message>"+inner+"</message>")); err != nil {
+		return s.writeString(fmt.Sprintf(`<message from='%s' to='%s'%s type='error'><error type='cancel'><not-allowed xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/><text xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'>OMEMO key unavailable</text></error></message>`, xmlEscape(to), xmlEscape(s.JID.Full()), attrIf("id", id)))
 	}
 	if s.srv.isWebRoom(to) {
 		return s.handleMUCMessage(to, typ, id, inner)
@@ -589,6 +629,20 @@ func (s *Session) handlePresence(se xml.StartElement) error {
 		if other != s {
 			other.SendRaw([]byte(stanza))
 		}
+	}
+	return nil
+}
+
+// An administrative disconnect may arrive between setting bound and inserting
+// the resource into the hub. Do not leave a closed resource discoverable.
+func (s *Session) registerBoundSession() error {
+	s.srv.hub.Register(s)
+	s.mu.Lock()
+	closed := s.closed
+	s.mu.Unlock()
+	if closed {
+		s.srv.hub.Unregister(s)
+		return net.ErrClosed
 	}
 	return nil
 }

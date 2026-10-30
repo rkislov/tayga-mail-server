@@ -1,5 +1,18 @@
 const I18N = {
   ru: {
+ branding_enabled: "Свой брендинг", branding_tenant: "Брендинг тенанта", branding_domain: "Брендинг домена",
+    branding_title: "Брендинг шапки",
+    branding_hint: "Брендинг домена заменяет брендинг тенанта. Если свой брендинг выключен, используется оформление тенанта или Тайга Майл. Подпись платформы всегда видна.",
+    branding_name: "Название",
+    branding_image: "Картинка для шапки",
+    branding_file_hint: "PNG или JPEG до 1 МБ, до 4096 × 4096 пикселей. Картинка вписывается целиком.",
+    branding_attribution: "Работает на платформе Тайга Майл",
+    branding_remove_image: "Убрать картинку",
+    branding_reset: "Сбросить брендинг",
+    branding_invalid: "Выберите PNG или JPEG до 1 МБ, до 4096 × 4096 пикселей.",
+    branding_save_error: "Не удалось сохранить брендинг. Попробуйте ещё раз.",
+
+    edit: "Редактировать",
 "presence_label":"Мой статус","presence_online":"В сети","presence_away":"Отошёл","presence_dnd":"Не беспокоить","presence_offline":"Не в сети","presence_unknown":"Статус недоступен","presence_request":"Запрашивает ваш статус","presence_accept":"Разрешить","presence_reject":"Отклонить","presence_request_action":"Запросить статус",
 
 "task_owner":"Автор","task_assignee":"Исполнитель","task_unassigned":"Не назначен","task_assignment_pending":"Ожидает принятия","task_assignment_accepted":"Принята исполнителем","task_assignment_declined":"Отклонена исполнителем","task_accept":"Принять","task_decline":"Отклонить","task_assign":"Назначить","task_revoke":"Отозвать назначение","task_revoke_confirm":"Отозвать назначение? Исполнитель потеряет доступ к задаче.","task_assignment_hint":"Выберите сотрудника вашей организации. Он получит запрос на принятие задачи.","task_assignee_search":"Поиск по имени или email","task_assignee_choose":"Без нового назначения","task_progress_only":"Вы можете менять состояние и прогресс. Описание, срок и назначение изменяет автор.","task_pending_hint":"Примите задачу, чтобы обновлять её состояние и прогресс.","task_notifications":"Уведомления о задачах","task_unread":"непрочитано","task_history":"История изменений","task_prev":"Назад","task_next":"Далее","task_action_create":"Задача создана","task_action_assign":"Назначена задача","task_action_accept":"Исполнитель принял задачу","task_action_decline":"Исполнитель отклонил задачу","task_action_revoke":"Назначение отозвано","task_action_delete":"Задача удалена","task_action_update":"Задача изменена","task_action_complete":"Задача завершена","task_action_reopen":"Задача открыта повторно","task_history_empty":"Изменений пока нет","task_notifications_empty":"Уведомлений пока нет","task_unavailable":"Задача удалена или доступ к ней отозван.","task_change_title":"название","task_change_body":"описание","task_change_due":"срок","task_change_progress":"прогресс","task_change_properties":"параметры синхронизации","task_change_assignment":"назначение","task_change_task":"создание",
@@ -10,6 +23,7 @@ const I18N = {
  mig_skip_tls: "Не проверять сертификат старого сервера", mig_skip_tls_hint: "Только для этой задачи. Для доверенного сервера с самоподписанным сертификатом.",
  nav_antispam: "Антиспам",
 "saved":"Сохранено","ca_self_hint":"Временный сертификат для тестовой установки. Браузер не доверяет ему автоматически.","ca_pem_hint":"Импорт готового сертификата и закрытого ключа. Ключ должен соответствовать сертификату.","ca_acme_hint":"Домен должен указывать на этот сервер в публичном DNS. Порт 80 должен быть доступен снаружи.","ca_configure":"Открыть настройки →","users_status":"Состояние","users_active":"Активен","users_disabled":"Отключён","users_storage":"Использовано / квота","users_actions":"Действия","users_quota_action":"Квота","language_topbar_hint":"Выберите язык с помощью значка глобуса справа сверху.","profile_admin":"Администратор","profile_user":"Пользователь","profile_auth":"Способ входа","profile_unlimited":"Без ограничения объёма","signature_title":"Подпись к письму","signature_hint":"Подпись сохраняется в учётной записи и доступна на других устройствах. Переносы строк сохраняются.","signature_new":"Добавлять в новые письма","signature_reply":"Добавлять в ответы","signature_preview":"Предпросмотр","signature_empty":"Подпись пока не задана","nav_mailsecurity":"Защита почты","security_filters_hint":"Антиспам, антивирус и письма, помещённые в карантин.","security_antivirus":"Антивирус ClamAV","security_antispam":"Антиспам Rspamd","monitor_messages":"Количество писем","monitor_bytes":"Объём писем","monitor_queue":"Исходящая очередь","monitor_history_hint":"Наблюдения каждые 5 секунд, пока открыта страница. Это количество сохранённых писем, а не счётчик всего принятого трафика.",
+    note_history: "История версий", note_history_empty: "Предыдущих версий пока нет.", note_restore: "Восстановить",
     note_copy_local: "Копировать мой текст", note_load_server: "Загрузить серверную версию", note_keep_local: "Сохранить мою версию", note_reload_confirm: "Заменить текст в редакторе версией с сервера? Локальные изменения будут потеряны.",
     note_bullets: "Маркированный список",
     note_numbers: "Нумерованный список",
@@ -132,6 +146,8 @@ const I18N = {
     chat_peer_jid: "Email / JID",
     chat_start: "Открыть",
     chat_empty: "Нет сообщений",
+    chat_history_older: "Загрузить предыдущие сообщения",
+    chat_history_loading: "Загрузка истории…",
     nav_settings: "Настройки",
     nav_profile: "Профиль",
     nav_security: "Безопасность",
@@ -516,6 +532,19 @@ contacts_search: "Поиск контактов…",
     save: "Сохранить",
   },
   en: {
+ branding_enabled: "Custom branding", branding_tenant: "Tenant branding", branding_domain: "Domain branding",
+    branding_title: "Header branding",
+    branding_hint: "Domain branding overrides tenant branding. When disabled, tenant branding or Tayga Mail is used. Platform attribution always stays visible.",
+    branding_name: "Name",
+    branding_image: "Header image",
+    branding_file_hint: "PNG or JPEG up to 1 MB, at most 4096 × 4096 pixels. The entire image is displayed.",
+    branding_attribution: "Powered by Tayga Mail",
+    branding_remove_image: "Remove image",
+    branding_reset: "Reset branding",
+    branding_invalid: "Choose a PNG or JPEG up to 1 MB, at most 4096 × 4096 pixels.",
+    branding_save_error: "Could not save branding. Please try again.",
+
+    edit: "Edit",
 "presence_label":"My status","presence_online":"Online","presence_away":"Away","presence_dnd":"Do not disturb","presence_offline":"Offline","presence_unknown":"Status unavailable","presence_request":"Requests your presence","presence_accept":"Allow","presence_reject":"Decline","presence_request_action":"Request presence",
 
 "task_owner":"Author","task_assignee":"Assignee","task_unassigned":"Unassigned","task_assignment_pending":"Awaiting acceptance","task_assignment_accepted":"Accepted","task_assignment_declined":"Declined","task_accept":"Accept","task_decline":"Decline","task_assign":"Assign","task_revoke":"Revoke assignment","task_revoke_confirm":"Revoke this assignment? The assignee will lose access to the task.","task_assignment_hint":"Choose a colleague in your organization. They will receive an invitation to accept the task.","task_assignee_search":"Search by name or email","task_assignee_choose":"No new assignment","task_progress_only":"You can update status and progress. The author manages details, dates and assignment.","task_pending_hint":"Accept this task to update its status and progress.","task_notifications":"Task notifications","task_unread":"unread","task_history":"Change history","task_prev":"Previous","task_next":"Next","task_action_create":"Task created","task_action_assign":"Task assigned","task_action_accept":"Assignee accepted the task","task_action_decline":"Assignee declined the task","task_action_revoke":"Assignment revoked","task_action_delete":"Task deleted","task_action_update":"Task updated","task_action_complete":"Task completed","task_action_reopen":"Task reopened","task_history_empty":"No changes yet","task_notifications_empty":"No notifications yet","task_unavailable":"Task deleted or access revoked.","task_change_title":"title","task_change_body":"description","task_change_due":"due date","task_change_progress":"progress","task_change_properties":"sync properties","task_change_assignment":"assignment","task_change_task":"creation",
@@ -526,6 +555,7 @@ contacts_search: "Поиск контактов…",
  mig_skip_tls: "Skip source server certificate verification", mig_skip_tls_hint: "This migration only. Use for a trusted server with a self-signed certificate.",
  nav_antispam: "Antispam",
 "saved":"Saved","ca_self_hint":"Temporary certificate for a test installation. Browsers do not trust it automatically.","ca_pem_hint":"Import a certificate and its matching private key.","ca_acme_hint":"Public DNS must point to this server, with port 80 accessible from outside.","ca_configure":"Open settings →","users_status":"Status","users_active":"Active","users_disabled":"Disabled","users_storage":"Used / quota","users_actions":"Actions","users_quota_action":"Quota","language_topbar_hint":"Choose your language using the globe in the upper right.","profile_admin":"Administrator","profile_user":"User","profile_auth":"Authentication","profile_unlimited":"Unlimited storage","signature_title":"Mail signature","signature_hint":"Saved to your account and available on other devices. Line breaks are preserved.","signature_new":"Add to new messages","signature_reply":"Add to replies","signature_preview":"Preview","signature_empty":"No signature yet","nav_mailsecurity":"Mail protection","security_filters_hint":"Spam and antivirus settings, and quarantined messages.","security_antivirus":"ClamAV antivirus","security_antispam":"Rspamd antispam","monitor_messages":"Message count","monitor_bytes":"Mail storage","monitor_queue":"Outbound queue","monitor_history_hint":"Samples every 5 seconds while this page is open. These are stored message counts, not total inbound traffic.",
+    note_history: "Version history", note_history_empty: "No previous versions yet.", note_restore: "Restore",
     note_copy_local: "Copy my text", note_load_server: "Load server version", note_keep_local: "Save my version", note_reload_confirm: "Replace the editor text with the server version? Local changes will be lost.",
     note_bullets: "Bullet list",
     note_numbers: "Numbered list",
@@ -648,6 +678,8 @@ contacts_search: "Поиск контактов…",
     chat_peer_jid: "Email / JID",
     chat_start: "Open",
     chat_empty: "No messages",
+    chat_history_older: "Load earlier messages",
+    chat_history_loading: "Loading history…",
     nav_settings: "Settings",
     nav_profile: "Profile",
     nav_security: "Security",
@@ -1419,7 +1451,7 @@ const notesState = {
   shareTarget: null, saveTimer: null, drawing: false, dirty:false, revision:0, attachments:[], etags:{},
 };
 const filesState = { sharedRights:"write",listTarget:"",ownerID:"",sharedRoot:"", path: "", selected: null, entries: [] };
-const chatState = { peer: "", roster: [], messages: [], es: null, me: "", sending: false, presence: "online", presenceSaving: false };
+const chatState = { historyRevision: 0, history: null, peer: "", roster: [], messages: [], es: null, me: "", sending: false, presence: "online", presenceSaving: false };
 
 function show(id) {
   const account = id === "view-account";
@@ -1485,7 +1517,7 @@ function showApp(name) {
   }
   $("compose-backdrop")?.classList.add("hidden");
   setNavOpen(false);
-  if (app === "profile") {loadMe();refreshSignature();refreshPasskeys();refreshMailSources();refreshTravelProfile();}
+  if (app === "profile") {loadMe();refreshSignature();refreshPasskeys();refreshMailSources();refreshTravelProfile();refreshXMPPDevices();}
   const migrationPane=$("app-migration");
   if (migrationPane) {
     if (!migrationPane._originalParent) migrationPane._originalParent=migrationPane.parentElement;
@@ -1548,10 +1580,15 @@ function isAuthPublicPath(path) {
 }
 
 function clearSession() {
+  if (typeof omemoCancelOperations === 'function') omemoCancelOperations();
+  if (typeof resetXMPPDevices === 'function') resetXMPPDevices();
+  resetBranding();
   resetTasks();
   resetComposeAttachments();
   disableWebPush().catch(() => {});
   stopChatLive();
+  chatState.peer='';chatState.roster=[];chatState.messages=[];
+  $('chat-messages')?.replaceChildren();
   state.tokens = null;
  monitorRequest++;
   state.challenge = "";
@@ -1573,12 +1610,15 @@ function forceLogin(msg) {
 }
 
 let tokenRefreshPromise = null;
+let tokenRefreshSession = null;
 
 async function refreshAccessToken() {
-  const refresh = state.tokens?.refresh_token;
+  const sessionTokens = state.tokens;
+  const refresh = sessionTokens?.refresh_token;
   if (!refresh) return false;
-  if (!tokenRefreshPromise) {
-    tokenRefreshPromise = (async () => {
+  if (!tokenRefreshPromise || tokenRefreshSession !== sessionTokens) {
+    tokenRefreshSession = sessionTokens;
+    const pending = (async () => {
       const res = await fetch("/api/v1/auth/token", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1587,28 +1627,40 @@ async function refreshAccessToken() {
       const text = await res.text();
       let data = null;
       try { data = text ? JSON.parse(text) : null; } catch { data = null; }
-      if (!res.ok || !data?.access_token) return false;
+      if (!res.ok || !data?.access_token || state.tokens !== sessionTokens) return false;
       state.tokens = data;
       localStorage.setItem("tayga.tokens", JSON.stringify(data));
       return true;
-    })().finally(() => { tokenRefreshPromise = null; });
+    })().finally(() => {
+      if (tokenRefreshPromise === pending) {
+        tokenRefreshPromise = null;
+        tokenRefreshSession = null;
+      }
+    });
+    tokenRefreshPromise = pending;
   }
   return tokenRefreshPromise;
 }
 
 async function api(path, opts = {}) {
+  // Sensitive callers bind requests (including 401 retries) to their login.
+  const {_guard, ...requestOpts} = opts;
+  _guard?.();
   if(filesState.ownerID&&/^\/api\/v1\/files(?:[/?]|$)/.test(path)&&!/^\/api\/v1\/files\/(?:access|shares|library|office)/.test(path))path+=(path.includes('?')?'&':'?')+'owner_id='+encodeURIComponent(filesState.ownerID);
   const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
   if (state.tokens?.access_token) {
     headers.Authorization = "Bearer " + state.tokens.access_token;
   }
-  const res = await fetch(path, Object.assign({}, opts, { headers }));
+  const res = await fetch(path, Object.assign({}, requestOpts, { headers }));
   const text = await res.text();
+  _guard?.();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = { error: text }; }
   if (!res.ok) {
     if (res.status === 401 && !opts._authRetry && !isAuthPublicPath(path)) {
-      if (state.tokens?.refresh_token && await refreshAccessToken()) {
+      const refreshed = state.tokens?.refresh_token && await refreshAccessToken();
+      _guard?.();
+      if (refreshed) {
         return api(path, Object.assign({}, opts, { _authRetry: true }));
       }
       forceLogin(t("session_expired"));
@@ -1694,6 +1746,7 @@ async function loadMe() {
   try {
     const me = await api("/api/v1/me");
     state.me = me;
+    refreshBranding();
     refreshMailImagePreferences();
     state.email = me.email || state.email;
     $("acct-email").textContent = me.email;
@@ -2205,10 +2258,15 @@ async function refreshTenantDomains() {
           </label>
           <label class="field-check" title="${escapeHtml(mailImageText('Общий адресный справочник пользователей этого домена','Global address list for users in this domain'))}"><input type="checkbox" data-domain-gal="${escapeHtml(d.id)}" ${d.gal_enabled?'checked':''}> GAL</label>
           <label class="field-check" title="${escapeHtml(mailImageText('Коллеги этого домена в XMPP и веб-чате. В XMPP обновится при переподключении.','Domain colleagues in XMPP and web chat. Reconnect XMPP to refresh.'))}"><input type="checkbox" data-domain-xmpp-gal="${escapeHtml(d.id)}" ${d.xmpp_gal_enabled?'checked':''}> ${escapeHtml(mailImageText('Общий список контактов XMPP','XMPP shared contacts'))}</label>
+          <button type="button" class="btn-secondary" data-domain-branding="${escapeHtml(d.id)}">${escapeHtml(t("branding_title"))}</button>
+          <button type="button" class="btn-secondary" data-domain-aliases="${escapeHtml(d.id)}">${escapeHtml(mailImageText('Алиасы','Aliases'))}</button>
           <button type="button" class="btn-spray" data-open-domain="${escapeHtml(d.id)}" data-name="${escapeHtml(d.name)}">${escapeHtml(t("domains_open"))}</button>
           <button type="button" class="btn-secondary" data-del-domain="${escapeHtml(d.name)}" ${d.user_count > 0 ? "disabled" : ""}>${escapeHtml(t("domains_remove"))}</button>
         </span>
       </li>`).join("") || `<li><span class="meta">${escapeHtml(t("domains_empty"))}</span></li>`;
+    $('tenant-branding-button')?.classList.toggle('hidden', !state.me?.is_global_admin && state.me?.admin_scope !== 'tenant');
+    list.querySelectorAll('[data-domain-branding]').forEach(button=>button.onclick=()=>openAdminBranding('domains',items.find(d=>d.id===button.dataset.domainBranding)));
+    list.querySelectorAll('[data-domain-aliases]').forEach(button=>button.onclick=()=>openAdminAliases('domain',items.find(d=>d.id===button.dataset.domainAliases)));
     list.querySelectorAll("[data-open-domain]").forEach((btn) => {
       btn.addEventListener("click", () => {
         tenantNav.domainID = btn.dataset.openDomain;
@@ -2397,8 +2455,9 @@ async function refreshAdminUsers() {
             </select>
           </label>
 </td><td><div class="user-action-icons">
- ${[['quota','download',t('users_quota_action')],['toggle','disconnect',t(u.enabled?'users_disable':'users_enable')],['pass','key',t('users_reset_pw')],...(state.me?.is_global_admin?[['user-role','shield',mailImageText('Роль и права пользователя','User role and permissions')]]:[]),['mail-access','reply',mailImageText('Доступ к ящику','Mailbox access')],...((u.id!==state.me?.id&&!u.is_global_admin)?[['delete-user','delete',mailImageText('Удалить пользователя','Delete user')]]:[])].map(([action,icon,label])=>`<button type="button" class="btn-secondary user-action-icon" data-${action}="${escapeHtml(u.id)}" data-enabled="${u.enabled?'1':'0'}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${designIcon(icon)}</button>`).join('')}
+ ${[['quota','download',t('users_quota_action')],['toggle','disconnect',t(u.enabled?'users_disable':'users_enable')],['pass','key',t('users_reset_pw')],...(state.me?.is_global_admin?[['user-role','shield',mailImageText('Роль и права пользователя','User role and permissions')]]:[]),['mailbox-aliases','reply',mailImageText('Алиасы ящика','Mailbox aliases')],['mail-access','reply',mailImageText('Доступ к ящику','Mailbox access')],...((u.id!==state.me?.id&&!u.is_global_admin)?[['delete-user','delete',mailImageText('Удалить пользователя','Delete user')]]:[])].map(([action,icon,label])=>`<button type="button" class="btn-secondary user-action-icon" data-${action}="${escapeHtml(u.id)}" data-enabled="${u.enabled?'1':'0'}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${designIcon(icon)}</button>`).join('')}
  </div></td></tr>`).join("") || `<tr><td colspan="7" class="meta">${t("users_empty")}</td></tr>`;
+    list.querySelectorAll('[data-mailbox-aliases]').forEach(button=>button.onclick=()=>openAdminAliases('mailbox',users.find(u=>u.id===button.dataset.mailboxAliases)));
     list.querySelectorAll('[data-delete-user]').forEach(button=>button.onclick=async()=>{const user=users.find(u=>u.id===button.dataset.deleteUser);if(!await askConfirm(mailImageText('Удалить пользователя и его данные: ','Delete user and their data: ')+user.email+'?',{danger:true}))return;button.disabled=true;try{await api('/api/v1/admin/users/'+encodeURIComponent(user.id),{method:'DELETE'});await refreshAdminUsers()}catch(err){setMsg($('admin-msg'),err.message,'err');button.disabled=false}});
     list.querySelectorAll("[data-mail-access]").forEach(button=>button.onclick=()=>openMailboxAccess(button.dataset.mailAccess));list.querySelectorAll("[data-user-role]").forEach(button=>button.onclick=()=>openUserRole(users.find(u=>u.id===button.dataset.userRole)));
     list.querySelectorAll("[data-user-mig]").forEach((sel) => {
@@ -3360,6 +3419,8 @@ $("btn-sieve-save").addEventListener("click", async () => {
 });
 
 function enterAccount(tokens, email) {
+  if (typeof omemoCancelOperations === 'function') omemoCancelOperations();
+  if (typeof resetXMPPDevices === 'function') resetXMPPDevices();
   state.tokens = tokens;
   state.email = email || state.email;
   localStorage.setItem("tayga.tokens", JSON.stringify(tokens));
@@ -4064,7 +4125,22 @@ function getComposeText() {
   return el.value || "";
 }
 
-function openCompose({ to = "", cc = "", subject = "", body = "", bodyHTML = "" } = {}) {
+let composeSenderEpoch=0;
+async function loadComposeSenders(preferred='') {
+ const select=$('compose-from');if(!select)return;
+ const epoch=++composeSenderEpoch,userID=state.me?.id,primary=state.me?.email||'';
+ const add=address=>{const option=document.createElement('option');option.value=address;option.textContent=address;select.append(option)};
+ select.replaceChildren();if(primary)add(primary);select.disabled=true;renderComposeAttachments();
+ try{
+  const data=await api('/api/v1/mail/senders');
+  if(epoch!==composeSenderEpoch||state.me?.id!==userID)return;
+  select.replaceChildren();for(const address of data.addresses||[])add(address);
+  select.value=(data.addresses||[]).includes(preferred)?preferred:(data.default||primary);
+ }catch(error){if(epoch===composeSenderEpoch&&state.me?.id===userID)setMsg($('compose-msg'),mailImageText('Не удалось загрузить адреса отправителя. Повторно откройте окно письма.','Could not load sender addresses. Reopen the compose window.'),'err');}
+ finally{if(epoch===composeSenderEpoch&&state.me?.id===userID)select.disabled=false;renderComposeAttachments();}
+}
+
+function openCompose({ to = "", cc = "", from = "", subject = "", body = "", bodyHTML = "" } = {}) {
   if (composeAttachments.sending) return;
   resetComposeAttachments();
   $("compose-backdrop")?.classList.remove("hidden");
@@ -4079,6 +4155,7 @@ function openCompose({ to = "", cc = "", subject = "", body = "", bodyHTML = "" 
   const surface = composeBodyEl();
   if (surface?.dataset) surface.dataset.placeholder = t("body");
   setMsg($("compose-msg"), "");
+  loadComposeSenders(from);
   surface?.focus?.();
 }
 
@@ -4109,7 +4186,7 @@ $("compose-backdrop")?.addEventListener("click", (e) => {
   if (e.target === $("compose-backdrop")) $("compose-backdrop").classList.add("hidden");
 });
 $("btn-compose-send")?.addEventListener("click", async () => {
-  if (composeAttachments.sending || composeAttachments.entries.some(item=>item.status!=="ready")) return;
+  if (composeAttachments.sending || $("compose-from")?.disabled || composeAttachments.entries.some(item=>item.status!=="ready")) return;
   composeAttachments.sending = true;
   renderComposeAttachments();
   const to = ($("compose-to").value || "").split(/[,;]/).map((s) => s.trim()).filter(Boolean);
@@ -4119,6 +4196,7 @@ $("btn-compose-send")?.addEventListener("click", async () => {
     const text = getComposeText(), html = getComposeHTML();
     const attachments = composeAttachments.entries.filter(item=>!item.share).map(item=>item.ref);
     const payload = {
+      from: $("compose-from")?.value || state.me?.email || "",
       to,
       cc: ($("compose-cc")?.value || "").split(/[,;]/).map(value=>value.trim()).filter(Boolean),
       subject: $("compose-subject").value,
@@ -4228,11 +4306,15 @@ function calMonthStart(d) {
 }
 
 function showCalCompose(open) {
+ if($('form-cal-event')?.dataset.saving==='true')return;
+ if(open){calState.editingEvent=null;const form=$('form-cal-event');if(form)form.dataset.editorUser=state.me?.id || '';}
  if(open && $("cal-location")){delete $("cal-location").dataset.geo;$("cal-location").dispatchEvent(new Event("input"));}
   const dialog=mountCalendarEditor();
  if(dialog){if(open&&!dialog.open)dialog.showModal();if(!open&&dialog.open)dialog.close()}
  syncEventCalendarChoice();
   if (open) {
+    const title=$('event-editor-title');if(title){title.removeAttribute('data-i18n');title.textContent=t('new_event');}
+    if($('event-calendar-choice'))$('event-calendar-choice').disabled=false;
     setMsg($("cal-msg"), "");
     mountNewEventRecurrence();
     calState.attendees = [];
@@ -4283,7 +4365,7 @@ function renderCalReadAttachments(atts) {
       return `<div class="cal-attach-item">
         <button type="button" class="btn-secondary btn-sm" data-att-dl="${escapeHtml(a.id)}" data-name="${escapeHtml(a.filename || "file")}">${escapeHtml(a.filename || "file")}</button>
         <span class="meta">${escapeHtml(a.content_type || "")}${size}</span>
-        <button type="button" class="btn-secondary btn-sm" data-att-del="${escapeHtml(a.id)}">${escapeHtml(t("cal_attach_delete"))}</button>
+        ${a.read_only ? "" : `<button type="button" class="btn-secondary btn-sm" data-att-del="${escapeHtml(a.id)}">${escapeHtml(t("cal_attach_delete"))}</button>`}
       </div>`;
     }).join("");
     dd.querySelectorAll("[data-att-dl]").forEach((btn) => {
@@ -4705,6 +4787,7 @@ function renderCalDay() {
 }
 
 function startNewCalEvent(day = calState.selectedDay || calDayKey(new Date()), hour = 10) {
+  if($('form-cal-event')?.dataset.saving==='true')return;
   if(calState.defaultCalendarID)calState.calendarID=calState.defaultCalendarID;
   if (calState.calendars.find(c=>c.id===calState.calendarID)?.writable===false) {setMsg($("cal-msg"),t("cal_readonly"),"err");return;}
   clearTimeout(calState.dayClickTimer);
@@ -4712,6 +4795,7 @@ function startNewCalEvent(day = calState.selectedDay || calDayKey(new Date()), h
   $("form-cal-event")?.reset();
   delete $("form-cal-event").dataset.createdEvent;
   calState.uploadedFiles=new Set();
+  $('cal-start').type='datetime-local';$('cal-end').type='datetime-local';
   $("cal-start").value = day + "T" + String(hour).padStart(2,"0") + ":00";
   const end = new Date(day + "T" + String(hour).padStart(2,"0") + ":00");
   end.setHours(end.getHours() + 1);
@@ -4937,6 +5021,7 @@ function showCalReader(ev) {
   renderCalReadAttachments(ev.attachments || []);
   const recurring = !!ev.recurrence_id;
   const canEdit = calendar?.writable !== false && !ev.busy_only && (!recurring || ev.occurrence_organizer);
+  $('btn-cal-edit')?.classList.toggle('hidden',!canEditCalendarEvent(ev));
   $('btn-cal-recurrence')?.classList.toggle('hidden',!canEdit || !ev.recurrence_organizer);
   $('btn-cal-instance-edit')?.classList.toggle('hidden',!recurring || !canEdit);
   $('btn-cal-series-delete')?.classList.toggle('hidden',!recurring || !canEdit);
@@ -5073,6 +5158,7 @@ $("cal-backdrop")?.addEventListener("click", (e) => {
   if (e.target === $("cal-backdrop")) showCalCompose(false);
 });
 $("btn-cal-instance-edit")?.addEventListener("click",()=>openCalOccurrenceEditor());
+$("btn-cal-edit")?.addEventListener("click",()=>editCalendarRecord(calState.currentEvent));
 $("btn-cal-series-delete")?.addEventListener("click",()=>deleteCalEvent(true));
 $("btn-cal-delete")?.addEventListener("click",()=>deleteCalEvent(false));
 $("btn-cal-attendee-add")?.addEventListener("click", () => addCalAttendeesFromInput());
@@ -5120,8 +5206,11 @@ $("cal-read-files")?.addEventListener("change", async () => {
 
 $("form-cal-event")?.addEventListener("submit", async (e) => {
   e.preventDefault();
+  const form=$("form-cal-event"),editing=calState.editingEvent,userID=state.me?.id;
+  if(form.dataset.editorUser && form.dataset.editorUser!==userID)return;
+  if(editing && !canEditCalendarEvent(editing))return;
   addCalAttendeesFromInput();
-  calState.calendarID=$("event-calendar-choice")?.value || calState.calendarID;
+  calState.calendarID=editing?.calendar_id || $("event-calendar-choice")?.value || calState.calendarID;
   if(new Date($("cal-end").value)<=new Date($("cal-start").value)){setMsg($("cal-msg"),mailImageText("Конец должен быть позже начала","End must be after start"),"err");return;}
   if (!calState.calendarID) {
     try {
@@ -5134,20 +5223,21 @@ $("form-cal-event")?.addEventListener("submit", async (e) => {
     return;
   }
   let recurrence;
-  try {recurrence=readRecurrenceFields('cal-new-recurrence');} catch(error) {setMsg($('cal-msg'),error.message,'err');return;}
-  const form=$("form-cal-event");if(form.dataset.saving==="true")return;form.dataset.saving="true";
+  try {if(!editing)recurrence=readRecurrenceFields('cal-new-recurrence');} catch(error) {setMsg($('cal-msg'),error.message,'err');return;}
+  if(form.dataset.saving==="true")return;form.dataset.saving="true";
   const saveButton=form.querySelector('[type="submit"]');if(saveButton)saveButton.disabled=true;
   setMsg($("cal-msg"), "…");
   try {
     const created = form.dataset.createdEvent ? {id:form.dataset.createdEvent} : await api("/api/v1/calendar/calendars/" + encodeURIComponent(calState.calendarID) + "/events", {
-      method: "POST",
+      method: editing ? "PUT" : "POST",
       body: JSON.stringify({
+        id: editing?.id, etag: editing?.etag, all_day: editing?.all_day,
         summary: $("cal-summary").value,
         location: $("cal-location")?.value || "",
  geo: $("cal-location")?.dataset.geo || "",
         description: $("cal-description")?.value || "",
-        start: localInputToISO($("cal-start").value),
-        end: localInputToISO($("cal-end").value),
+        start: editing?.all_day ? $("cal-start").value+'T00:00:00.000Z' : localInputToISO($("cal-start").value),
+        end: editing?.all_day ? $("cal-end").value+'T00:00:00.000Z' : localInputToISO($("cal-end").value),
         recurrence,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
         attendees: calState.attendees.map((a) => ({
@@ -5157,6 +5247,7 @@ $("form-cal-event")?.addEventListener("submit", async (e) => {
         })),
       }),
     });
+    if(state.me?.id!==userID)return;
     if(created?.id)form.dataset.createdEvent=created.id;
     const files = $("cal-files")?.files;
     if (created?.id && files?.length) {
@@ -5164,17 +5255,21 @@ $("form-cal-event")?.addEventListener("submit", async (e) => {
         const key=file.name+":"+file.size+":"+file.lastModified;
         if(calState.uploadedFiles?.has(key))continue;
         await uploadCalAttachment(created.id, file);
+        if(state.me?.id!==userID)return;
         if(!calState.uploadedFiles)calState.uploadedFiles=new Set();calState.uploadedFiles.add(key);
       }
     }
     setMsg($("cal-msg"), "OK", "ok");
     $("form-cal-event").reset();
     calState.attendees = [];
+    calState.editingEvent = null;
     renderCalAttendeeChips();
+    delete form.dataset.saving;
     showCalCompose(false);
     await loadCalEvents();
     if (created?.id) openCalEvent(created.id);
   } catch (err) {
+    if(state.me?.id!==userID)return;
     setMsg($("cal-msg"), form.dataset.createdEvent ? mailImageText("Событие сохранено, но не все вложения загружены. Повторите сохранение, чтобы дозагрузить файлы: ","Event saved, but some attachments failed. Save again to retry uploads: ")+err.message : calendarRecurrenceError(err.message), "err");
   } finally {delete form.dataset.saving;if(saveButton)saveButton.disabled=false;}
 });
@@ -5420,6 +5515,8 @@ function chatBare(jid) {
 }
 
 function stopChatLive() {
+  chatState.historyRevision++;
+  chatState.history = null;
   if (chatState.es) {
     try { chatState.es.close(); } catch {}
     chatState.es = null;
@@ -5437,7 +5534,9 @@ function startChatLive() {
     try {
       const data = await api("/api/v1/chat/roster");
       if (chatState.es !== es) return;
+      const previous=chatState.roster;
       chatState.roster = data.roster || [];
+      clearRemovedRoom(previous);
       chatState.me = data.me || state.email;
       chatState.presence = data.presence || 'online';
       renderChatRoster();
@@ -5446,6 +5545,7 @@ function startChatLive() {
     }
   });
   es.addEventListener("message", (ev) => {
+    if (chatState.es !== es) return;
     let data;
     try { data = JSON.parse(ev.data); } catch { return; }
     if(data.type==='presence'){const contact=chatState.roster.find(r=>chatBare(r.jid)===chatBare(data.from));if(contact){contact.presence=data.body;renderChatRoster()}return}
@@ -5456,7 +5556,7 @@ function startChatLive() {
     const me = chatBare(chatState.me || state.email);
     const peer = data.room || (from === me ? to : from);
     if (!peer) return;
-    if (!chatState.roster.some((r) => chatBare(r.jid) === peer)) {
+    if (peer !== me && !chatState.roster.some((r) => chatBare(r.jid) === peer)) {
       chatState.roster.unshift({ jid: peer, name: "", subscription: "none", group: !!data.room });
       if(data.room) refreshChat();
       renderChatRoster();
@@ -5483,7 +5583,7 @@ function appendChatBubble(m) {
   if(messageKey)div.dataset.messageKey=messageKey;
   div.className = "chat-bubble" + (mine ? " is-mine" : "");
   div.innerHTML = `<p>${escapeHtml(m.body || "")}</p><time>${escapeHtml(m.at ? new Date(m.at).toLocaleString() : "")}</time>`;
-  if(chatState.roster.find(r=>r.jid===chatState.peer)?.group){const author=document.createElement("strong");author.textContent=chatState.roster.find(r=>r.jid===chatBare(m.from))?.name||chatBare(m.from);div.prepend(author)}
+  if(chatState.roster.find(r=>r.jid===chatState.peer)?.group){const author=document.createElement("strong");author.textContent=String(m.sender_name||'').trim()||(mine?String(state.me?.display_name||'').trim():'')||String(chatState.roster.find(r=>chatBare(r.jid)===chatBare(m.from))?.name||'').trim()||chatBare(m.from);author.title=chatBare(m.from);div.prepend(author)}
   const attachment=m.attachment||chatAttachment(m.body);
   if(m.encrypted){div.querySelector('p').textContent='🔒 OMEMO…';omemoRender(m,div)}
   if(attachment){if(m.body===attachment.url)div.querySelector("p").textContent=attachment.name;const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.textContent=mailImageText('Открыть файл: ','Open file: ')+attachment.name;button.onclick=()=>{try{const u=new URL(attachment.url,location.href);if(u.protocol!=='https:'||u.username||u.password)return;if(u.origin===location.origin)openDocumentPreview(attachment);else window.open(u.href,'_blank','noopener,noreferrer')}catch{}};div.append(button);addChatInlinePreview(div,attachment,button)}
@@ -5552,7 +5652,7 @@ function renderChatRoster() {
   const list = $("chat-roster");
   if (!list) return;
   const peer = chatBare(chatState.peer);
-  list.innerHTML = chatState.roster.map((r) => {
+  list.innerHTML = chatState.roster.filter(r=>r.group||chatBare(r.jid)!==chatBare(chatState.me||state.email)).map((r) => {
     const jid = chatBare(r.jid);
     const label = r.name || jid;
  const presence=r.group?mailImageText("Группа","Group"):t("presence_"+(r.presence||"unknown"));
@@ -5570,40 +5670,75 @@ function renderChatRoster() {
 
 }
 
+function clearRemovedRoom(previousRoster) {
+  if (!previousRoster.some(r=>r.group&&chatBare(r.jid)===chatState.peer) || chatState.roster.some(r=>chatBare(r.jid)===chatState.peer)) return;
+  chatState.historyRevision++;chatState.history=null;chatState.peer='';chatState.messages=[];
+  $('chat-messages')?.replaceChildren();$('chat-thread')?.classList.add('hidden');$('chat-empty')?.classList.remove('hidden');
+}
+
 async function refreshChat() {
+  const guard=omemoGuard();
   try {
-    const data = await api("/api/v1/chat/roster");
+    const data = await api("/api/v1/chat/roster",{_guard:guard});guard();
+    const previous=chatState.roster;
     chatState.roster = data.roster || [];
     chatState.me = data.me || state.email;
     chatState.presence = data.presence || 'online';
-    renderChatRoster();
+    clearRemovedRoom(previous);renderChatRoster();
     if (chatState.peer) await openChatPeer(chatState.peer, true);
   } catch (err) {
+    try{guard()}catch{return}
     setMsg($("chat-roster-msg"), err.message, "err");
   }
 }
 
-async function openChatPeer(jid, keepPane) {
-  chatState.peer = chatBare(jid);
-  renderChatRoster();
-  $("chat-empty")?.classList.add("hidden");
-  $("chat-thread")?.classList.remove("hidden");
-  if ($("chat-peer")) $("chat-peer").textContent = chatState.roster.find(r=>chatBare(r.jid)===chatState.peer)?.name||chatState.peer;
-  const box = $("chat-messages");
-  if (box) box.innerHTML = "";
+function chatHistoryButton(history) {
+  const button=history.button;
+  button.hidden=history.complete;
+  button.disabled=history.loading;
+  button.textContent=t(history.loading?'chat_history_loading':'chat_history_older');
+}
+
+async function loadChatHistory(history) {
+  if (history.loading || history.complete || chatState.history!==history) return;
+  const box=$('chat-messages'),initial=!history.loaded;
+  const current=()=>{history.guard();if(chatState.history!==history||chatState.historyRevision!==history.revision||chatState.peer!==history.peer)throw new Error('stale chat history')};
+  history.loading=true;chatHistoryButton(history);
   try {
-    const data = await api("/api/v1/chat/history?with=" + encodeURIComponent(chatState.peer) + "&limit=80");
-    chatState.messages = data.messages || [];
-    if (!chatState.messages.length) {
-      if (box) box.innerHTML = `<p class="meta chat-empty-hint">${escapeHtml(t("chat_empty"))}</p>`;
-    } else {
-      chatState.messages.forEach((m) => appendChatBubble(m));
-      scrollChatBottom();
-    }
-  } catch (err) {
-    setMsg($("chat-msg"), err.message, "err");
+    const path=history.group?'/api/v1/chat/rooms/history?room='+encodeURIComponent(history.peer)+'&limit=80&before='+encodeURIComponent(history.before):'/api/v1/chat/history?with='+encodeURIComponent(history.peer)+'&limit=80';
+    const data=await api(path,{_guard:current});current();
+    const messages=data.messages||[],anchor=box.querySelector('.chat-bubble'),height=box.scrollHeight,top=box.scrollTop;
+    // Keep live SSE messages received while the page was loading. Existing IDs
+    // are skipped by appendChatBubble; older entries go before the live tail.
+    for(const message of messages){const bubble=appendChatBubble(message);if(bubble&&anchor)box.insertBefore(bubble,anchor)}
+    chatState.messages=[...messages,...chatState.messages];
+    history.loaded=true;history.before=data.first||history.before;
+    history.complete=!history.group||!!data.complete||messages.length===0;
+    history.loading=false;chatHistoryButton(history);
+    if(!box.querySelector('.chat-bubble')&&!box.querySelector('.chat-empty-hint')){const hint=document.createElement('p');hint.className='meta chat-empty-hint';hint.textContent=t('chat_empty');box.append(hint)}
+    if(initial)scrollChatBottom();else box.scrollTop=top+box.scrollHeight-height;
+    setMsg($('chat-msg'),'');
+  } catch(err) {
+    try{current()}catch{return}
+    setMsg($('chat-msg'),err.message,'err');
+  } finally {
+    if(chatState.history===history){history.loading=false;chatHistoryButton(history)}
   }
-  if (!keepPane) setMobilePane("read");
+}
+
+async function openChatPeer(jid, keepPane) {
+  const peer=chatBare(jid),revision=++chatState.historyRevision;
+  chatState.peer=peer;chatState.messages=[];
+  renderChatRoster();
+  $('chat-empty')?.classList.add('hidden');$('chat-thread')?.classList.remove('hidden');
+  const contact=chatState.roster.find(r=>chatBare(r.jid)===peer);
+  if($('chat-peer'))$('chat-peer').textContent=contact?.name||peer;
+  const box=$('chat-messages');if(!box)return;box.replaceChildren();
+  const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm chat-history-older';
+  const history={peer,revision,guard:omemoGuard(),group:!!contact?.group,before:'',complete:false,loaded:false,loading:false,button};
+  chatState.history=history;button.onclick=()=>loadChatHistory(history);box.prepend(button);
+  if(!keepPane)setMobilePane('read');
+  await loadChatHistory(history);
 }
 
 $("btn-chat-new")?.addEventListener("click", () => {
@@ -5628,10 +5763,13 @@ $("form-chat-send")?.addEventListener("submit", async (e) => {
   e.preventDefault();
   const input=$("chat-body"),draft=input?.value||'',body=draft.trim(),peer=chatState.peer;
   if (!body || !peer || chatState.sending) return;
+  const guard=omemoGuard();
   chatState.sending=true;
   const button=e.currentTarget.querySelector('[type=submit]');if(button)button.disabled=true;
   try {
-    const ev=await omemoEnabled(peer)?await omemoSend(peer,body):await api('/api/v1/chat/send',{method:'POST',body:JSON.stringify({to:peer,body})});
+    const encryptedMode=await omemoEnabled(peer);guard();
+    const ev=encryptedMode?await omemoSend(peer,body):await api('/api/v1/chat/send',{method:'POST',body:JSON.stringify({to:peer,body}),_guard:guard});
+    guard();
     if(chatBare(chatState.peer)===chatBare(peer)){
       if(input && input.value===draft)input.value='';
       appendChatBubble(ev);scrollChatBottom();
@@ -6281,6 +6419,47 @@ $("btn-note-draw-save")?.addEventListener("click", async () => {
   }
 });
 
+$('btn-note-history')?.addEventListener('click', async () => {
+ if (!await flushNoteSave()) return;
+ const id = notesState.noteID;
+ if (!id) return;
+ const dialog = document.createElement('dialog');
+ dialog.className = 'migration-dialog'; dialog.setAttribute('aria-label', t('note_history'));
+ const title = document.createElement('h3'); title.textContent = t('note_history');
+ const close = document.createElement('button'); close.type = 'button'; close.className = 'btn-secondary'; close.textContent = t('close'); close.onclick = () => dialog.close();
+ const list = document.createElement('div');
+ const status = document.createElement('p'); status.className = 'msg'; status.setAttribute('role', 'status');
+ dialog.append(title, list, status, close); document.body.append(dialog);
+ dialog.addEventListener('close', () => dialog.remove(), {once:true}); dialog.showModal();
+ try {
+  const data = await api('/api/v1/notes/' + encodeURIComponent(id) + '/versions');
+  if (!dialog.isConnected) return;
+  if (!data.versions.length) list.textContent = t('note_history_empty');
+  for (const version of data.versions) {
+   const row = document.createElement('details');
+   const summary = document.createElement('summary'); summary.textContent = new Date(version.saved_at).toLocaleString() + ' · ' + (version.title || t('note_new'));
+   const preview = document.createElement('p'); preview.style.whiteSpace = 'pre-wrap'; preview.style.overflowWrap = 'anywhere'; preview.textContent = version.body_text;
+   row.append(summary, preview);
+   if (notesState.rights === 'write') {
+    const restore = document.createElement('button'); restore.type = 'button'; restore.className = 'btn-secondary'; restore.textContent = t('note_restore');
+    restore.onclick = async () => {
+     if (notesState.noteID !== id || !await flushNoteSave()) return;
+     restore.disabled = true;
+     try {
+      const revision = notesState.revision, etag = notesState.etags[id];
+      const note = await api('/api/v1/notes/' + encodeURIComponent(id) + '/versions/' + encodeURIComponent(version.id) + '/restore', {method:'POST', body:JSON.stringify({etag})});
+      if (notesState.noteID === id && notesState.revision === revision && !notesState.dirty) showNoteEditor(note);
+      await refreshNotes(); dialog.close();
+     } catch (err) { setMsg(status, err.message, 'err'); }
+     finally { restore.disabled = false; }
+    };
+    row.append(restore);
+   }
+   list.append(row);
+  }
+ } catch (err) { setMsg(status, err.message, 'err'); }
+});
+
 async function openNoteShare(kind) {
   notesState.shareTarget = kind; // folder | note
   $("note-share-backdrop")?.classList.remove("hidden");
@@ -6730,17 +6909,23 @@ $('chat-attach')?.addEventListener('click',()=>{
 $('chat-file')?.addEventListener('change',async e=>{
  const file=e.target.files?.[0],peer=chatState.peer;e.target.value='';if(!file||!peer||chatState.sending)return;
  if(file.size>WEB_UPLOAD_BYTES){setMsg($('chat-msg'),mailImageText('Максимум 10 ГиБ','Maximum 10 GiB'),'err');return}
- const encryptedMode=await omemoEnabled(peer);
+ const guard=omemoGuard();
  chatState.sending=true;$('chat-attach').disabled=true;
  const name=file.name.replace(/[\/\\\r\n]/g,'_'),path='chat/'+crypto.randomUUID()+'/'+name;let share;
  try {
+  const encryptedMode=await omemoEnabled(peer);guard();
   const encryptedFile=encryptedMode?await omemoEncryptFile(file):null;
+  guard();
   const upload=encryptedFile?.blob||file;
   const linkMode=!encryptedMode&&$('chat-file-mode')?.value==='link';
-  const slot=linkMode?null:await api('/api/v1/chat/upload',{method:'POST',body:JSON.stringify({name,size:upload.size,type:encryptedMode?"application/octet-stream":file.type})});
+  const slot=linkMode?null:await api('/api/v1/chat/upload',{method:'POST',body:JSON.stringify({name,size:upload.size,type:encryptedMode?"application/octet-stream":file.type}),_guard:guard});
+  guard();
   await new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest();xhr.open('PUT',slot?slot.put:'/api/v1/files/content?path='+encodeURIComponent(path));if(!slot)xhr.setRequestHeader('Authorization','Bearer '+state.tokens.access_token);xhr.timeout=0;xhr.upload.onprogress=ev=>{if(ev.lengthComputable)setMsg($('chat-msg'),Math.round(ev.loaded/ev.total*100)+'%')};xhr.onerror=xhr.ontimeout=()=>reject(new Error(mailImageText('Ошибка загрузки','Upload failed')));xhr.onload=()=>xhr.status>=200&&xhr.status<300?resolve():reject(new Error(mailImageText('Не удалось загрузить файл','Unable to upload file')));xhr.send(upload)});
-  share=slot?{url:slot.get}:await api('/api/v1/files/shares',{method:'POST',body:JSON.stringify({path,rights:'read',ttl_hours:168})});
-  const ev=encryptedMode?await omemoSend(peer,omemoFileURI(share.url,encryptedFile)):await api('/api/v1/chat/send',{method:'POST',body:JSON.stringify({to:peer,body:linkMode?name+'\n'+share.url:share.url})});
+  guard();
+  share=slot?{url:slot.get}:await api('/api/v1/files/shares',{method:'POST',body:JSON.stringify({path,rights:'read',ttl_hours:168}),_guard:guard});
+  guard();
+  const ev=encryptedMode?await omemoSend(peer,omemoFileURI(share.url,encryptedFile)):await api('/api/v1/chat/send',{method:'POST',body:JSON.stringify({to:peer,body:linkMode?name+'\n'+share.url:share.url}),_guard:guard});
+  guard();
   if(chatBare(chatState.peer)===chatBare(peer)){appendChatBubble(ev);scrollChatBottom()}
   setMsg($('chat-msg'),mailImageText('Файл отправлен. Ссылка действует 7 дней.','File sent. Link valid for 7 days.'),'ok');
  }catch(err){setMsg($('chat-msg'),err.message,'err')}
@@ -6797,7 +6982,7 @@ const CONFIG_SECTIONS = {
   seed: ["Первоначальная учётная запись", "Параметры создания первой организации и администратора."],
   storage: ["База данных", "Параметры bootstrap YAML, доступные только для чтения."],
   mailstore: ["Письма и S3", "Каталог maildir и зеркало объектного хранилища."],
-  files: ["Файлы и офис", "Адрес отдельного Collabora Online для совместного редактирования."],
+  files: ["Файлы и офис · ONLYOFFICE / Р7", "Подключение Collabora Online, ONLYOFFICE или Р7 для совместного редактирования."],
   ha: ["Высокая доступность", "Лидер, аренда узла и закрепление писателей за пользователями."],
   http: ["Веб-интерфейс и HTTP", "HTTP/HTTPS, публичный адрес и глобальные администраторы."],
   tls: ["TLS и ACME", "Сертификаты сервисов и автоматическая выдача через ACME."],
@@ -6861,7 +7046,7 @@ function configFieldHTML(field, path, locked = false) {
   else if (field.kind === "strings") input = `<textarea id="${id}" class="field-input" rows="3" ${disabled}>${escapeHtml((value || []).join("\n"))}</textarea>`;
   else if (field.options?.length) {
     const options = [...new Set([...(!field.options.includes(value ?? "") ? [value ?? ""] : []), ...field.options])];
-    input = `<select id="${id}" class="field-input" ${disabled}>${options.map(option => `<option value="${escapeHtml(option)}" ${value === option ? "selected" : ""}>${escapeHtml(option)}</option>`).join("")}</select>`;
+    input = `<select id="${id}" class="field-input" ${disabled}>${options.map(option => `<option value="${escapeHtml(option)}" ${value === option ? "selected" : ""}>${escapeHtml(configEditor.section === "files" && field.key === "office_provider" ? ({"":configText("Collabora Online (по умолчанию)","Collabora Online (default)"),collabora:"Collabora Online",onlyoffice:"ONLYOFFICE Document Server",r7:"Р7 — Сервер документов"}[option] || option) : option)}</option>`).join("")}</select>`;
   } else {
     const type = field.secret ? "password" : ["integer", "number"].includes(field.kind) ? "number" : "text";
     input = `<input id="${id}" class="field-input" type="${type}" value="${escapeHtml(field.secret ? "" : value ?? "")}" ${type === "number" ? `step="${field.kind === "integer" ? "1" : "any"}"` : ""} ${field.kind === "duration" ? 'placeholder="30s, 5m, 24h"' : ""} ${field.secret ? `autocomplete="new-password" placeholder="${escapeHtml(value ? t("config_secret_saved") : t("config_secret_empty"))}"` : ""} ${disabled} />`;
@@ -6930,7 +7115,7 @@ async function openAdminConfig(section) {
   const group = CONFIG_GROUPS.find(group => group.sections.includes(section));
   $("config-category").textContent = group ? configText(...group.title) : "";
   $("config-lede").textContent = configDescription(section);
-  $("config-notice").textContent = t(schema.read_only ? "config_bootstrap_hint" : "config_restart_hint");
+  $("config-notice").textContent = section === "files" ? configText("Изменения применяются сразу. После смены подключения откройте документы заново.", "Changes apply immediately. Reopen documents after changing the connection.") : t(schema.read_only ? "config_bootstrap_hint" : "config_restart_hint");
   $("config-save").classList.toggle("hidden", !!schema.read_only);
   $("config-search").value = "";
   setMsg($("config-msg"), "");
@@ -7168,7 +7353,7 @@ function replyToMessage(message, all=false, dialog=null) {
   let quoted=message.text || '';
   if (!quoted && message.html) {const doc=new DOMParser().parseFromString(message.html,'text/html');doc.querySelectorAll('script,style').forEach(node=>node.remove());quoted=doc.body.textContent || '';}
   ensureComposeCC();
-  openCompose({to,cc:all?(message.reply_all_cc || []).join(', '):'',subject:/^re\s*:/i.test(message.subject || '')?message.subject:'Re: '+(message.subject || ''),body:'\n\n---\n'+quoted.slice(0,10000)});
+  openCompose({to,from:message.reply_from||'',cc:all?(message.reply_all_cc || []).join(', '):'',subject:/^re\s*:/i.test(message.subject || '')?message.subject:'Re: '+(message.subject || ''),body:'\n\n---\n'+quoted.slice(0,10000)});
 }
 function forwardMailMessage(message, dialog=null) {
   if (composeAttachments.sending) return;
@@ -7238,7 +7423,8 @@ function mountEditorDialog(id, className) {
  dialog.querySelectorAll(".compose-panel").forEach(panel=>{panel.removeAttribute("role");panel.removeAttribute("aria-modal")});
   old.replaceWith(dialog);document.body.append(dialog);
   if(id==='contact-backdrop'){const form=$('form-contact');const actions=form?.querySelector('.actions');if(actions){actions.classList.add('event-editor-footer');const save=actions.querySelector('[type=submit]');if(save){save.className='btn-spray';save.textContent=mailImageText('Сохранить контакт','Save contact')}const cancel=$('btn-contact-close');if(cancel){cancel.className='btn-secondary';cancel.textContent=mailImageText('Отмена','Cancel')}}}
-  dialog.addEventListener('click',event=>{if(event.target===dialog){const bounds=dialog.getBoundingClientRect();if(event.clientX<bounds.left||event.clientX>bounds.right||event.clientY<bounds.top||event.clientY>bounds.bottom)dialog.close()}});
+  dialog.addEventListener('cancel',event=>{if(dialog.querySelector('form')?.dataset.saving==='true')event.preventDefault()});
+  dialog.addEventListener('click',event=>{if(event.target===dialog && dialog.querySelector('form')?.dataset.saving!=='true'){const bounds=dialog.getBoundingClientRect();if(event.clientX<bounds.left||event.clientX>bounds.right||event.clientY<bounds.top||event.clientY>bounds.bottom)dialog.close()}});
   return dialog;
 }
 function mountCalendarEditor() {
@@ -7272,13 +7458,50 @@ function syncEventCalendarChoice() {
   select.value=calState.calendarID;
 }
 
+function canEditCalendarEvent(record) {
+  return !!record && !record.busy_only && record.recurrence_organizer !== false &&
+    calState.calendars.some(calendar=>calendar.id===record.calendar_id && calendar.writable!==false && !calendar.external);
+}
+
+async function editCalendarRecord(selected) {
+  if(!canEditCalendarEvent(selected) || $('form-cal-event')?.dataset.saving==='true')return;
+  const userID=state.me?.id;
+  try {
+    const record=await api('/api/v1/calendar/events/'+encodeURIComponent(selected.object_id || selected.id));
+    if(state.me?.id!==userID || !canEditCalendarEvent(record))return;
+    calState.calendarID=record.calendar_id;
+    const form=$('form-cal-event');form.reset();delete form.dataset.createdEvent;
+    calState.uploadedFiles=new Set();
+    showCalCompose(true);
+    calState.editingEvent=record;
+    form.dataset.editorUser=userID;
+    const series=!!record.recurrence?.raw;
+    const title=$('event-editor-title');title.removeAttribute('data-i18n');
+    title.textContent=series?mailImageText('Редактировать всю серию','Edit entire series'):mailImageText('Редактировать событие','Edit event');
+    $('event-calendar-choice').disabled=true;
+    $('cal-new-recurrence')?.remove();
+    for(const key of ['summary','location','description'])$('cal-'+key).value=record[key] || '';
+    $('cal-location').dataset.geo=record.geo || '';
+    for(const key of ['start','end']) {
+      $('cal-'+key).type=record.all_day?'date':'datetime-local';
+      $('cal-'+key).step='1';
+      $('cal-'+key).value=record.all_day?String(record[key]).slice(0,10):calendarLocalInput(record[key])+':'+String(new Date(record[key]).getSeconds()).padStart(2,'0');
+    }
+    calState.attendees=(record.attendees || []).map(a=>({...a,kind:a.kind || 'individual'}));
+    renderCalAttendeeChips();
+    setMsg($('cal-msg'),series?mailImageText('Изменения затронут всю серию. Правило повторения и напоминания сохранятся.','Changes apply to the entire series. The recurrence rule and reminders are preserved.'):record.all_day?mailImageText('Событие на весь день. Дата окончания не включается.','All-day event. The end date is exclusive.'):'');
+  } catch(error) {setMsg($('cal-load-msg'),error.message,'err');}
+}
+
 async function openEntityModal(kind,id) {
   let dialog=$('entity-reader-dialog');if(!dialog){dialog=document.createElement('dialog');dialog.id='entity-reader-dialog';dialog.className='mail-message-dialog';document.body.append(dialog)}
   dialog.dataset.entity=id;dialog.replaceChildren();
   const close=document.createElement('button');close.type='button';close.className='btn-secondary btn-sm';close.textContent=mailImageText('Закрыть','Close');close.addEventListener('click',()=>dialog.close());
   const content=document.createElement('div');content.textContent=mailImageText('Загрузка…','Loading…');dialog.append(close,content);if(!dialog.open)dialog.showModal();
   try{
-    const record=await api((kind==='calendar'?'/api/v1/calendar/events/':'/api/v1/contacts/cards/')+encodeURIComponent(id));
+    const cached=kind==='calendar'?calState.events.find(event=>event.id===id):null;
+    const query=cached?.recurrence_id?'?'+new URLSearchParams({recurrence_id:cached.recurrence_id}):'';
+    const record=await api((kind==='calendar'?'/api/v1/calendar/events/':'/api/v1/contacts/cards/')+encodeURIComponent(cached?.object_id || id)+query);
     if(!dialog.open||dialog.dataset.entity!==id)return;
     if(kind==='calendar'){calState.eventID=id;showCalReader(record)}else{contactState.cardID=id;showContactReader(record)}
     const reader=$(kind==='calendar'?'cal-reader':'contact-reader');
@@ -7288,7 +7511,8 @@ async function openEntityModal(kind,id) {
       addButton(mailImageText('Написать письмо','Write email'),()=>{dialog.close();showApp('mail');openCompose({to:record.email||''})});
       const edit=addButton(mailImageText('Редактировать','Edit'),()=>{dialog.close();editContactRecord(record)});edit.disabled=!!record.readonly;
     }else{
-      addButton(mailImageText('Создать похожее событие','Create similar event'),()=>{dialog.close();startNewCalEvent(calEventDayKey(record));$('cal-summary').value=record.summary||'';$('cal-location').value=record.location||'';$('cal-description').value=record.description||''});
+      const edit=addButton(mailImageText('Редактировать','Edit'),()=>{dialog.close();editCalendarRecord(record)});edit.disabled=!canEditCalendarEvent(record);
+      addButton(mailImageText('Создать похожее событие','Create similar event'),()=>{dialog.close();startNewCalEvent(calEventDayKey(record));$('cal-summary').value=record.summary||'';$('cal-location').value=record.location||'';$('cal-location').dataset.geo=record.geo||'';$('cal-description').value=record.description||''});
     }
     const remove=addButton(mailImageText('Удалить','Delete'),async()=>{
       dialog.close();if(!await askConfirm(t('delete_confirm'),{danger:true})){dialog.showModal();return}
@@ -8185,7 +8409,7 @@ function fileAction(label,run,icon='') {
   if(icon)button.innerHTML=designIcon(icon);else button.textContent=label;button.onclick=run;return button;
 }
 function libraryMessage(error) {
-  return ({507:mailImageText('Квота файлов исчерпана. Очистите корзину или удалите ненужные версии.','File quota exceeded. Empty trash or remove old versions.'),409:mailImageText('Файл изменён или путь уже занят. Обновите список и повторите действие.','File changed or the destination exists. Refresh and retry.'),423:mailImageText('Документ открыт для редактирования. Закройте редактор и повторите действие.','Document is locked for editing. Close the editor and retry.'),503:mailImageText('Офисный редактор ещё не подключён. Администратор может указать адрес Collabora в настройках сервера → Файлы.','Office is not connected yet. Configure Collabora in server settings → Files.')})[error.status]||error.message;
+  return ({507:mailImageText('Квота файлов исчерпана. Очистите корзину или удалите ненужные версии.','File quota exceeded. Empty trash or remove old versions.'),409:mailImageText('Файл изменён или путь уже занят. Обновите список и повторите действие.','File changed or the destination exists. Refresh and retry.'),423:mailImageText('Документ открыт для редактирования. Закройте редактор и повторите действие.','Document is locked for editing. Close the editor and retry.'),503:mailImageText('Офисный редактор ещё не подключён. Администратор может подключить Collabora, ONLYOFFICE или Р7 в настройках сервера → Файлы.','Office is not connected yet. Configure Collabora, ONLYOFFICE or R7 in server settings → Files.')})[error.status]||error.message;
 }
 async function openFileHistory(kind,path='') {
   const view=fileLibraryDialog(kind==='trash'?mailImageText('Корзина','Trash'):mailImageText('Версии файла','File versions')+' · '+path);
@@ -8226,6 +8450,12 @@ async function openOfficeDocument(path,name) {
   const owner=filesState.ownerID,v=fileLibraryDialog(name,true);v.status.textContent=mailImageText('Подключение к редактору…','Connecting to editor…');
   try{
     const session=await api('/api/v1/files/office?lang='+encodeURIComponent(document.documentElement.lang||'ru'),{method:'POST',body:JSON.stringify({path,owner_id:owner})});if(!v.dialog.open)return;
+    if(session.provider==='onlyoffice'||session.provider==='r7'){
+      const endpoint=new URL(session.url);if(endpoint.origin!==location.origin||endpoint.protocol!=='https:')throw new Error('Invalid office origin');
+      const frame=document.createElement('iframe');frame.title=name;frame.allow='clipboard-read; clipboard-write; fullscreen';frame.referrerPolicy='no-referrer';frame.src=endpoint.href;v.body.append(frame);
+      v.status.textContent=session.writable?mailImageText('Сохранение — в меню редактора. После закрытия дождитесь сохранения файла на сервере.','Use Save in the editor. After closing, allow time for the file to be saved on the server.'):mailImageText('Только просмотр','Read only');
+      const close=async()=>{if(session.writable&&!await askConfirm(mailImageText('Закрыть редактор? Изменения сохранятся после завершения сеанса; это может занять несколько секунд.','Close the editor? Changes are saved after the session ends; this may take a few seconds.')))return;v.dialog.close();refreshFiles()};v.close.onclick=close;v.dialog.addEventListener('cancel',event=>{event.preventDefault();close()});return;
+    }
     const endpoint=new URL(session.url);if(endpoint.protocol!=='https:')throw new Error('HTTPS required');
     const frame=document.createElement('iframe');frame.name='tayga-office-'+crypto.randomUUID();frame.title=name;frame.allow='clipboard-read; clipboard-write; fullscreen';frame.referrerPolicy='no-referrer';
     const form=document.createElement('form');form.method='POST';form.action=endpoint.href;form.target=frame.name;form.hidden=true;
@@ -8360,7 +8590,7 @@ function resetComposeAttachments() {
 }
 function renderComposeAttachments() {
   const items=composeAttachments.entries, busy=composeAttachments.sending||!!composeAttachments.preparing;
-  const send=$('btn-compose-send');if(send)send.disabled=busy||items.some(item=>item.status!=='ready');
+  const send=$('btn-compose-send');if(send)send.disabled=busy||!!$('compose-from')?.disabled||items.some(item=>item.status!=='ready');
   if($('compose-attach'))$('compose-attach').disabled=composeAttachments.sending;
   const list=$('compose-uploads');if(!list)return;list.replaceChildren();list.hidden=!items.length;
   for(const item of items){
@@ -8511,6 +8741,11 @@ async function editMailSource(source={}) {
 // OMEMO legacy (XEP-0384 0.3): ratchet operations are supplied by libomemo.js.
 const omemoNS='eu.siacs.conversations.axolotl';
 let omemoLibrary,omemoDB;
+function omemoCancelOperations(){state.omemoSessionGeneration=(state.omemoSessionGeneration||0)+1;for(const dialog of document.querySelectorAll('.omemo-dialog'))dialog.close()}
+function omemoGuard(){
+ const account=omemoAccount(),generation=state.omemoSessionGeneration||0;
+ return ()=>{if(!account||account!==omemoAccount()||generation!==(state.omemoSessionGeneration||0))throw Error('Учётная запись изменилась. Повторите действие. / Account changed. Try again.')};
+}
 const omemoB64=b=>{let s='';for(const v of new Uint8Array(b))s+=String.fromCharCode(v);return btoa(s)};
 const omemoBytes=s=>Uint8Array.from(atob(s.trim()),c=>c.charCodeAt(0)).buffer;
 const omemoHex=b=>Array.from(new Uint8Array(b),v=>v.toString(16).padStart(2,'0')).join('');
@@ -8519,6 +8754,14 @@ const omemoXML=s=>{const d=new DOMParser().parseFromString(s,'application/xml');
 const omemoElement=(d,n)=>d.getElementsByTagNameNS(omemoNS,n)[0];
 const omemoElements=(d,n)=>Array.from(d.getElementsByTagNameNS(omemoNS,n));
 function omemoAccount(){return chatBare(state.email);}
+function omemoIsRoom(peer){return /^[^@]+@web-groups\./.test(chatBare(peer))||typeof chatState!=='undefined'&&!!chatState.roster.find(r=>r.jid===peer)?.group}
+function omemoMessageRoom(message){return message.room||(omemoIsRoom(message.to)?chatBare(message.to):'')}
+function omemoCacheKey(message){const room=omemoMessageRoom(message);return room?JSON.stringify([room,chatBare(message.from),String(message.id)]):chatBare(message.from)+'|'+message.id}
+async function omemoAudience(peer,guard=omemoGuard()){
+ if(omemoIsRoom(peer)){const audience=await api('/api/v1/chat/rooms/omemo?room='+encodeURIComponent(peer),{_guard:guard});guard();return audience}
+ return {members:[...new Set([peer,omemoAccount()])].map(jid=>({jid,name:''}))};
+}
+
 async function omemoDatabase(){
  if(!omemoDB)omemoDB=new Promise((resolve,reject)=>{const r=indexedDB.open('tayga-omemo-v1',1);r.onupgradeneeded=()=>{r.result.createObjectStore('accounts');r.result.createObjectStore('messages')};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});return omemoDB;
 }
@@ -8526,15 +8769,15 @@ async function omemoRead(store,key){const db=await omemoDatabase();return new Pr
 async function omemoWrite(account,data,message){const db=await omemoDatabase();return new Promise((resolve,reject)=>{const tx=db.transaction(['accounts','messages'],'readwrite');tx.objectStore('accounts').put(data,account);if(message)tx.objectStore('messages').put(message.body,[account,message.key]);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||Error('OMEMO storage failed'))})}
 async function omemoLocked(fn){
  if(!isSecureContext||!navigator.locks)throw Error('OMEMO требует HTTPS и поддержку Web Locks / OMEMO requires HTTPS and Web Locks');
- const account=omemoAccount();if(!account)throw Error('Sign in first');
- return navigator.locks.request('tayga-omemo:'+account,async()=>{const lib=await (omemoLibrary||=import('/assets/libomemo.js'));const data=await omemoRead('accounts',account)||{store:{},enabled:{},trust:{}};const store=new lib.InMemoryStore();store.store=data.store;
- store.isTrustedIdentity=(address,key)=>data.trust[address]===omemoB64(key);
- const result=await fn({account,lib,data,store,save:m=>omemoWrite(account,data,m)});return result});
+ const account=omemoAccount(),guard=omemoGuard();guard();
+ return navigator.locks.request('tayga-omemo:'+account,async()=>{guard();const lib=await (omemoLibrary||=import('/assets/libomemo.js'));guard();const data=await omemoRead('accounts',account)||{store:{},enabled:{},trust:{}};guard();const store=new lib.InMemoryStore();store.store=data.store;
+ store.isTrustedIdentity=(address,key)=>!data.excludedDevices?.[address]&&data.trust[address]===omemoB64(key);
+ const result=await fn({account,lib,data,store,guard,save:async m=>{guard();await omemoWrite(account,data,m);guard()},request:async(path,opts)=>{guard();const result=await api(path,{...opts,_guard:guard});guard();return result}});guard();return result});
 }
-async function omemoPEP(owner,node){const r=await api('/api/v1/chat/omemo?owner='+encodeURIComponent(owner)+'&node='+encodeURIComponent(node));return r.items?.find(i=>i.id==='current')?.xml||r.items?.[0]?.xml||''}
-async function omemoPublish(node,xml){await api('/api/v1/chat/omemo',{method:'PUT',body:JSON.stringify({node,xml})})}
-async function omemoDevices(jid){const raw=await omemoPEP(jid,omemoNS+'.devicelist');if(!raw)return [];const ids=omemoElements(omemoXML(raw),'device').map(e=>Number(e.getAttribute('id')));if(ids.length>100||ids.some(i=>!Number.isInteger(i)||i<1||i>2147483647))throw Error('Invalid device list');return [...new Set(ids)]}
-async function omemoBundle(jid,id){const raw=await omemoPEP(jid,omemoNS+'.bundles:'+id);if(!raw)throw Error('Нет ключей устройства / Missing device bundle: '+id);const doc=omemoXML(raw);const key=omemoElement(doc,'identityKey'),signed=omemoElement(doc,'signedPreKeyPublic'),sig=omemoElement(doc,'signedPreKeySignature'),prekeys=omemoElements(doc,'preKeyPublic');if(!key||!signed||!sig||!prekeys.length)throw Error('Incomplete OMEMO bundle');const pre=prekeys[crypto.getRandomValues(new Uint32Array(1))[0]%prekeys.length];return {registrationId:id,identityKey:omemoBytes(key.textContent),signedPreKey:{keyId:Number(signed.getAttribute('signedPreKeyId')),publicKey:omemoBytes(signed.textContent),signature:omemoBytes(sig.textContent)},preKey:{keyId:Number(pre.getAttribute('preKeyId')),publicKey:omemoBytes(pre.textContent)}}}
+async function omemoPEP(owner,node,guard=omemoGuard()){guard();const r=await api('/api/v1/chat/omemo?owner='+encodeURIComponent(owner)+'&node='+encodeURIComponent(node),{_guard:guard});guard();return r.items?.find(i=>i.id==='current')?.xml||r.items?.[0]?.xml||''}
+async function omemoPublish(ctx,node,xml){await ctx.request('/api/v1/chat/omemo',{method:'PUT',body:JSON.stringify({node,xml})})}
+async function omemoDevices(jid,guard=omemoGuard()){const raw=await omemoPEP(jid,omemoNS+'.devicelist',guard);if(!raw)return [];const ids=omemoElements(omemoXML(raw),'device').map(e=>Number(e.getAttribute('id')));if(ids.length>100||ids.some(i=>!Number.isInteger(i)||i<1||i>2147483647))throw Error('Invalid device list');return [...new Set(ids)]}
+async function omemoBundle(jid,id,guard=omemoGuard()){const raw=await omemoPEP(jid,omemoNS+'.bundles:'+id,guard);if(!raw)throw Error('Нет ключей устройства / Missing device bundle: '+id);const doc=omemoXML(raw);const key=omemoElement(doc,'identityKey'),signed=omemoElement(doc,'signedPreKeyPublic'),sig=omemoElement(doc,'signedPreKeySignature'),prekeys=omemoElements(doc,'preKeyPublic');if(!key||!signed||!sig||!prekeys.length)throw Error('Incomplete OMEMO bundle');const pre=prekeys[crypto.getRandomValues(new Uint32Array(1))[0]%prekeys.length];return {registrationId:id,identityKey:omemoBytes(key.textContent),signedPreKey:{keyId:Number(signed.getAttribute('signedPreKeyId')),publicKey:omemoBytes(signed.textContent),signature:omemoBytes(sig.textContent)},preKey:{keyId:Number(pre.getAttribute('preKeyId')),publicKey:omemoBytes(pre.textContent)}}}
 async function omemoInitialize(ctx){
  const {lib,data,store,save}=ctx;
  if(!data.id){data.id=crypto.getRandomValues(new Uint32Array(1))[0]%2147483646+1;store.put('identityKey',await lib.KeyHelper.generateIdentityKeyPair());store.put('registrationId',data.id);data.prekeys=[];data.nextPrekey=1;const signed=await lib.KeyHelper.generateSignedPreKey(store.getIdentityKeyPair(),1,omemoNS);store.storeSignedPreKey(1,signed.keyPair);data.signature=signed.signature;await save()}
@@ -8542,50 +8785,90 @@ async function omemoInitialize(ctx){
  while(data.prekeys.length<100){const pre=await lib.KeyHelper.generatePreKey(data.nextPrekey++);store.storePreKey(pre.keyId,pre.keyPair);data.prekeys.push(pre.keyId)}
  await save(); // Persist private keys before advertising public material.
  const signed=store.loadSignedPreKey(1).keyPair;
- await omemoPublish(omemoNS+'.bundles:'+data.id,`<bundle xmlns="${omemoNS}"><signedPreKeyPublic signedPreKeyId="1">${omemoB64(signed.pubKey)}</signedPreKeyPublic><signedPreKeySignature>${omemoB64(data.signature)}</signedPreKeySignature><identityKey>${omemoB64(store.getIdentityKeyPair().pubKey)}</identityKey><prekeys>${data.prekeys.map(id=>`<preKeyPublic preKeyId="${id}">${omemoB64(store.get('25519KeypreKey'+id).pubKey)}</preKeyPublic>`).join('')}</prekeys></bundle>`);
- const devices=await omemoDevices(ctx.account);if(!devices.includes(data.id)){if(devices.length>=100)throw Error('Too many own devices');devices.push(data.id);await omemoPublish(omemoNS+'.devicelist',`<list xmlns="${omemoNS}">${devices.map(id=>`<device id="${id}"/>`).join('')}</list>`)}
+ await omemoPublish(ctx,omemoNS+'.bundles:'+data.id,`<bundle xmlns="${omemoNS}"><signedPreKeyPublic signedPreKeyId="1">${omemoB64(signed.pubKey)}</signedPreKeyPublic><signedPreKeySignature>${omemoB64(data.signature)}</signedPreKeySignature><identityKey>${omemoB64(store.getIdentityKeyPair().pubKey)}</identityKey><prekeys>${data.prekeys.map(id=>`<preKeyPublic preKeyId="${id}">${omemoB64(store.get('25519KeypreKey'+id).pubKey)}</preKeyPublic>`).join('')}</prekeys></bundle>`);
+ const devices=await omemoDevices(ctx.account,ctx.guard);ctx.guard();if(!devices.includes(data.id)){if(devices.length>=100)throw Error('Too many own devices');devices.push(data.id);await omemoPublish(ctx,omemoNS+'.devicelist',`<list xmlns="${omemoNS}">${devices.map(id=>`<device id="${id}"/>`).join('')}</list>`)}
 }
-async function omemoEnabled(peer){const data=await omemoRead('accounts',omemoAccount());return !!data?.enabled?.[peer]}
+async function omemoEnabled(peer){const guard=omemoGuard(),data=await omemoRead('accounts',omemoAccount());guard();return !!data?.enabled?.[peer]}
+function omemoExcludeDevice(ctx,jid,id){
+ if(jid===ctx.account&&id===ctx.data.id)throw Error(omemoText('Этот браузер нельзя исключить.','This browser cannot be excluded.'));
+ const address=new ctx.lib.OMEMOAddress(jid,id).toString();
+ ctx.data.excludedDevices||={};ctx.data.excludedDevices[address]={jid,id};
+ delete ctx.data.trust[address];ctx.store.removeSession(address);
+}
 async function omemoSend(peer,body){
  return omemoLocked(async ctx=>{
  const {lib,store,data,save,account}=ctx;if(new TextEncoder().encode(body).length>120000)throw Error('OMEMO: сообщение слишком большое');if(!data.enabled[peer])throw Error('OMEMO is not enabled');await omemoInitialize(ctx);
- const recipients=await omemoDevices(peer);if(!recipients.length)throw Error('У собеседника нет OMEMO-устройств / No recipient devices');const own=await omemoDevices(account);const targets=[...recipients.filter(id=>peer!==account||id!==data.id).map(id=>[peer,id]),...own.filter(id=>id!==data.id&&peer!==account).map(id=>[account,id])];
- const prepared=[];for(const [jid,id] of targets){const bundle=await omemoBundle(jid,id),address=new lib.OMEMOAddress(jid,id);if(!await store.isTrustedIdentity(address.toString(),bundle.identityKey))throw Error('Подтвердите ключ устройства в OMEMO / Verify device key: '+jid+' #'+id);prepared.push({bundle,address})}
+ const audience=await omemoAudience(peer,ctx.guard),targets=[];
+ for(const {jid} of audience.members){
+  const ids=await omemoDevices(jid,ctx.guard);
+  const available=ids.filter(id=>!(jid===account&&id===data.id)&&!data.excludedDevices?.[new lib.OMEMOAddress(jid,id).toString()]);
+  if((jid!==account||!audience.room&&peer===account)&&!available.length)throw Error(omemoText('Нет доступных устройств OMEMO у участника: ','No available OMEMO devices for: ')+jid);
+  targets.push(...available.map(id=>[jid,id]));
+ }
+ const activeTargets=targets;
+ if(!activeTargets.length)throw Error(omemoText('Нет устройств для получения сообщения.','No recipient devices available.'));
+ if(activeTargets.length>200)throw Error(omemoText('Максимум 200 устройств на сообщение. Исключите неиспользуемые устройства в настройках.','Maximum 200 devices per message. Exclude unused devices in settings.'));
+ // Legacy OMEMO routes wrapped keys by a numeric RID. Monal selects the first
+ // matching key; don't send a message that would silently exclude a collision.
+ const rids=new Set();for(const [,id] of activeTargets){if(rids.has(id))throw Error(omemoText('Совпадают ID устройств участников: ','Participants have conflicting device IDs: ')+id);rids.add(id)}
+ const prepared=[];for(const [jid,id] of activeTargets){const bundle=await omemoBundle(jid,id,ctx.guard),address=new lib.OMEMOAddress(jid,id);if(!await store.isTrustedIdentity(address.toString(),bundle.identityKey))throw Error('Подтвердите ключ устройства в OMEMO / Verify device key: '+jid+' #'+id);prepared.push({bundle,address})}
  const key=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12));const aes=await crypto.subtle.importKey('raw',key,'AES-GCM',false,['encrypt']);const encrypted=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv},aes,new TextEncoder().encode(body)));const material=new Uint8Array(32);material.set(key);material.set(encrypted.slice(-16),16);
  let keys='';for(const {bundle,address} of prepared){const cipher=new lib.SessionCipher(store,address,omemoNS);if(!await cipher.hasOpenSession())await new lib.SessionBuilder(store,address,omemoNS).processPreKey(bundle);const wrapped=await cipher.encrypt(material.buffer);const bytes=typeof wrapped.body==='string'?Uint8Array.from(wrapped.body,c=>c.charCodeAt(0)):wrapped.body;keys+=`<key rid="${address.getDeviceId()}"${wrapped.type===3?' prekey="true"':''}>${omemoB64(bytes)}</key>`}
  const xml=`<encrypted xmlns="${omemoNS}"><header sid="${data.id}">${keys}<iv>${omemoB64(iv)}</iv></header><payload>${omemoB64(encrypted.slice(0,-16))}</payload></encrypted>`;
- await save();if(omemoAccount()!==account)throw Error('Account changed');const ev=await api('/api/v1/chat/omemo',{method:'POST',body:JSON.stringify({to:peer,xml})});await save({key:chatBare(ev.from)+'|'+ev.id,body});return {...ev,body,encrypted:false,decrypted:true};
+ await save();const ev=await ctx.request(audience.room?'/api/v1/chat/rooms/omemo':'/api/v1/chat/omemo',{method:'POST',body:JSON.stringify(audience.room?{room:peer,revision:audience.revision,xml}:{to:peer,xml})});await save({key:omemoCacheKey(ev),body});return {...ev,body,encrypted:false,decrypted:true};
  });
 }
 async function omemoDecrypt(message){
  return omemoLocked(async ctx=>{
- const {lib,store,data,account,save}=ctx;if(!data.id)throw Error('Включите OMEMO на этом устройстве / Enable OMEMO on this device');const from=chatBare(message.from),cacheKey=from+'|'+message.id;
+ const {lib,store,data,account,save}=ctx;if(!data.id)throw Error('Включите OMEMO на этом устройстве / Enable OMEMO on this device');const from=chatBare(message.from),cacheKey=omemoCacheKey(message);
  const cached=await omemoRead('messages',[account,cacheKey]);if(cached!==undefined)return cached;
  const doc=omemoXML(message.omemo||'');if(doc.documentElement.namespaceURI!==omemoNS)throw Error('This OMEMO version is not supported');
  const header=omemoElement(doc,'header'),sid=Number(header?.getAttribute('sid'));if(!Number.isInteger(sid)||sid<1)throw Error('Invalid sender device');const keys=omemoElements(doc,'key').filter(k=>Number(k.getAttribute('rid'))===data.id);if(!keys.length)throw Error('Сообщение не адресовано этому устройству / Not encrypted for this device');
- const address=new lib.OMEMOAddress(from,sid),bundle=await omemoBundle(from,sid);if(!await store.isTrustedIdentity(address.toString(),bundle.identityKey))throw Error('Подтвердите ключ отправителя в OMEMO / Verify sender key: #'+sid);
- const key=keys[0],cipher=new lib.SessionCipher(store,address,omemoNS),raw=omemoBytes(key.textContent);const result=await (['true','1'].includes(key.getAttribute('prekey'))?cipher.decryptPreKeyWhisperMessage(raw):cipher.decryptWhisperMessage(raw));
- const material=new Uint8Array(result.plaintext),payload=omemoElement(doc,'payload');if(!payload){await save();await omemoInitialize(ctx);return ''}
- if(material.length!==32&&material.length!==16)throw Error('Invalid payload key');const encrypted=new Uint8Array(omemoBytes(payload.textContent)),combined=new Uint8Array(encrypted.length+(material.length===32?16:0));combined.set(encrypted);if(material.length===32)combined.set(material.slice(16),encrypted.length);
- const aes=await crypto.subtle.importKey('raw',material.slice(0,16),'AES-GCM',false,['decrypt']);const plaintext=await crypto.subtle.decrypt({name:'AES-GCM',iv:omemoBytes(omemoElement(doc,'iv').textContent)},aes,combined);const body=new TextDecoder('utf-8',{fatal:true}).decode(plaintext);
+ const address=new lib.OMEMOAddress(from,sid);
+ if(data.excludedDevices?.[address.toString()])throw Error(omemoText('Устройство отправителя исключено в этом браузере.','The sender device is excluded in this browser.'));
+ const bundle=await omemoBundle(from,sid,ctx.guard);if(!await store.isTrustedIdentity(address.toString(),bundle.identityKey))throw Error('Подтвердите ключ отправителя в OMEMO / Verify sender key: #'+sid);
+ // RID collisions in received legacy traffic: each trial has its own store.
+ // Failed authentication must not consume a prekey or advance the saved ratchet.
+ let lastError,successful,body='';
+ for(const key of keys){
+  try{
+   const trial=new lib.InMemoryStore();trial.store=structuredClone(store.store);trial.isTrustedIdentity=store.isTrustedIdentity;
+   const cipher=new lib.SessionCipher(trial,address,omemoNS),raw=omemoBytes(key.textContent);
+   const result=await (['true','1'].includes(key.getAttribute('prekey'))?cipher.decryptPreKeyWhisperMessage(raw):cipher.decryptWhisperMessage(raw));
+   const material=new Uint8Array(result.plaintext),payload=omemoElement(doc,'payload');body='';
+   if(payload){
+    if(material.length!==32&&material.length!==16)throw Error('Invalid payload key');
+    const encrypted=new Uint8Array(omemoBytes(payload.textContent)),combined=new Uint8Array(encrypted.length+(material.length===32?16:0));combined.set(encrypted);if(material.length===32)combined.set(material.slice(16),encrypted.length);
+    const aes=await crypto.subtle.importKey('raw',material.slice(0,16),'AES-GCM',false,['decrypt']);
+    const plaintext=await crypto.subtle.decrypt({name:'AES-GCM',iv:omemoBytes(omemoElement(doc,'iv').textContent)},aes,combined);
+    body=new TextDecoder('utf-8',{fatal:true}).decode(plaintext);
+   }
+   successful=trial;break;
+  }catch(error){lastError=error}
+ }
+ if(!successful)throw lastError||Error('Cannot decrypt OMEMO key');
+ store.store=successful.store;data.store=successful.store;
  await save({key:cacheKey,body});await omemoInitialize(ctx);return body;
  });
 }
 async function omemoRender(message,element){
- try{const body=await omemoDecrypt(message);if(!element.isConnected||element.dataset.encryption==='omemo')return;const currentPeer=chatState.peer;const actualPeer=chatBare(message.from)===omemoAccount()?chatBare(message.to):chatBare(message.from);if(currentPeer!==actualPeer)return;const anchor=document.createComment('omemo');element.replaceWith(anchor);const bubble=appendChatBubble({...message,body,encrypted:false,decrypted:true});if(bubble)anchor.replaceWith(bubble);else anchor.remove();scrollChatBottom()}
+ const guard=omemoGuard();
+ try{const body=await omemoDecrypt(message);guard();if(!element.isConnected||element.dataset.encryption==='omemo')return;const currentPeer=chatState.peer;const actualPeer=omemoMessageRoom(message)||(chatBare(message.from)===omemoAccount()?chatBare(message.to):chatBare(message.from));if(currentPeer!==actualPeer)return;const box=element.parentElement,atBottom=box.scrollHeight-box.scrollTop-box.clientHeight<80;const anchor=document.createComment('omemo');element.replaceWith(anchor);const bubble=appendChatBubble({...message,body,encrypted:false,decrypted:true});if(bubble)anchor.replaceWith(bubble);else anchor.remove();if(atBottom)scrollChatBottom()}
  catch(error){if(element.isConnected&&element.dataset.encryption!=='omemo')element.querySelector('p').textContent='🔒 '+error.message}
 }
 const omemoText=(ru,en)=>typeof lang!=='undefined'&&lang==='en'?en:ru;
 function omemoNode(tag,className,text){const node=document.createElement(tag);if(className)node.className=className;if(text!==undefined)node.textContent=text;return node}
 function omemoDeviceStatus(device,snapshot){
+ if(snapshot.retired?.has(device.id)&&device.jid===omemoAccount())return 'retired';
  if(device.current)return 'current';
+ if(snapshot.excluded?.[device.address])return 'excluded';
  if(device.error)return 'unavailable';
  const trusted=snapshot.trust[device.address];
  return trusted===device.fingerprint?'trusted':trusted?'changed':'unverified';
 }
 async function omemoSettings(){
- const peer=chatState.peer,account=omemoAccount();
- if(!peer||chatState.roster.find(r=>r.jid===peer)?.group||document.querySelector('.omemo-dialog'))return;
+ const peer=chatState.peer,account=omemoAccount(),sessionGuard=omemoGuard();
+ if(!peer||document.querySelector('.omemo-dialog'))return;
  const dialog=omemoNode('dialog','document-preview omemo-dialog');
  dialog.setAttribute('aria-labelledby','omemo-dialog-title');
  const header=omemoNode('header'),title=omemoNode('strong','',omemoText('Шифрование чата','Chat encryption'));
@@ -8596,12 +8879,13 @@ async function omemoSettings(){
  const content=omemoNode('div','omemo-content');
  const footer=omemoNode('footer','omemo-footer'),refresh=omemoNode('button','btn-secondary',omemoText('Обновить устройства','Refresh devices'));
  refresh.type='button';
- const hint=omemoNode('p','meta',omemoText('Ключи и названия устройств хранятся в этом браузере. Очистка его данных удалит ключи и доступ к старым сообщениям.','Keys and device names are stored in this browser. Clearing its data removes keys and access to old messages.'));
- footer.append(refresh,hint);body.append(notice,content);dialog.append(header,body,footer);document.body.append(dialog);
- let snapshot,devices=[],loading=false,busy=false,revision=0,changed=false;
- const active=()=>dialog.isConnected&&omemoAccount()===account;
+ const hint=omemoNode('p','meta',omemoText('Доверие, исключения и названия действуют в этом браузере. Отзыв собственного ключа на сервере действует для всей учётной записи. Очистка его данных удалит ключи и доступ к старым сообщениям.','Trust, exclusions and labels apply in this browser. Retiring your own key on the server applies to the whole account. Clearing its data removes keys and access to old messages.'));
+ const access=omemoNode('button','btn-secondary',omemoText('Пароли и доступ устройств','Device passwords and access'));access.type='button';access.onclick=()=>{dialog.close();showApp('profile');$('xmpp-devices-card')?.scrollIntoView({block:'start',behavior:'smooth'})};
+ footer.append(refresh,access,hint);body.append(notice,content);dialog.append(header,body,footer);document.body.append(dialog);
+ let snapshot,audience={members:[]},devices=[],loading=false,busy=false,revision=0,changed=false;
+ const active=()=>{try{sessionGuard();return dialog.isConnected}catch{return false}};
  const guard=c=>{if(c.account!==account||!active())throw Error(omemoText('Учётная запись изменилась. Откройте настройки заново.','Account changed. Reopen these settings.'))};
- dialog.onclose=()=>{revision++;dialog.remove();if(omemoAccount()===account&&chatState.peer===peer){$('chat-omemo')?.focus();if(changed&&typeof openChatPeer==='function')void openChatPeer(peer,true)}};
+ dialog.onclose=()=>{revision++;const sameSession=active();dialog.remove();if(sameSession&&chatState.peer===peer){$('chat-omemo')?.focus();if(changed&&typeof openChatPeer==='function')void openChatPeer(peer,true)}};
  dialog.showModal();
  function disableActions(value){for(const b of dialog.querySelectorAll('button'))if(b!==close)b.disabled=value}
  async function change(action){
@@ -8609,7 +8893,7 @@ async function omemoSettings(){
   const focusedRow=document.activeElement?.closest('.omemo-device');const focusOwner=focusedRow?.dataset.deviceOwner,focusID=focusedRow?.dataset.deviceId;
   busy=true;disableActions(true);notice.textContent='';
   try{
-   await omemoLocked(async c=>{guard(c);await action(c);guard(c);await c.save();snapshot.enabled=!!c.data.enabled[peer];snapshot.trust={...c.data.trust};snapshot.names={...c.data.deviceNames}});
+   await omemoLocked(async c=>{guard(c);await action(c);guard(c);await c.save();snapshot.enabled=!!c.data.enabled[peer];snapshot.trust={...c.data.trust};snapshot.names={...c.data.deviceNames};snapshot.excluded={...c.data.excludedDevices}});
    if(active()){changed=true;render();const row=Array.from(content.querySelectorAll('.omemo-device')).find(r=>r.dataset.deviceOwner===focusOwner&&r.dataset.deviceId===focusID);(row?.querySelector('summary')||content.querySelector('[data-omemo-action=toggle]'))?.focus();await renderOMEMOButton()}
   }catch(error){if(active())notice.textContent=error.message}
   finally{busy=false;if(active())disableActions(false)}
@@ -8620,23 +8904,41 @@ async function omemoSettings(){
   details.append(summary);
   const panel=omemoNode('div','omemo-key-details');
   panel.append(omemoNode('p','meta',device.jid+' · ID '+device.id));
-  if(!device.error){
+  if(!device.error&&status!=='retired'){
    panel.append(omemoNode('p','',device.current?omemoText('Это отпечаток данного браузера. Сравните его с ключом веб-устройства в Monal или Conversations.','This is this browser’s fingerprint. Compare it with the web device key in Monal or Conversations.'):omemoText('Сверьте этот отпечаток с отпечатком на самом устройстве или по другому доверенному каналу.','Compare this fingerprint with the one on the device, or through another trusted channel.')));
    const code=omemoNode('code','omemo-fingerprint',device.displayFingerprint);code.tabIndex=0;
    const copy=omemoNode('button','btn-secondary btn-sm',omemoText('Скопировать отпечаток','Copy fingerprint'));copy.type='button';
    copy.onclick=async()=>{try{await navigator.clipboard.writeText(device.displayFingerprint);if(active())notice.textContent=omemoText('Отпечаток скопирован.','Fingerprint copied.')}catch{const selection=getSelection(),range=document.createRange();range.selectNodeContents(code);selection.removeAllRanges();selection.addRange(range);notice.textContent=omemoText('Отпечаток выделен — скопируйте его вручную.','Fingerprint selected — copy it manually.')}};
    panel.append(code,copy);
    if(!device.current){
-    const verify=omemoNode('button',status==='trusted'?'btn-secondary':'btn-spray',status==='trusted'?omemoText('Отозвать доверие','Revoke trust'):omemoText('Отпечатки совпадают — доверять','Fingerprints match — trust'));
+    const verify=omemoNode('button',status==='trusted'?'btn-secondary':'btn-spray',status==='trusted'?omemoText('Отозвать доверие','Revoke trust'):status==='excluded'?omemoText('Отпечатки совпадают — включить','Fingerprints match — enable'):omemoText('Отпечатки совпадают — доверять','Fingerprints match — trust'));
     verify.type='button';verify.dataset.omemoAction=status==='trusted'?'revoke':'verify';
     verify.onclick=()=>change(async c=>{
      if(status==='trusted'){if(c.data.trust[device.address]===device.fingerprint)delete c.data.trust[device.address];return}
-     const latest=await omemoBundle(device.jid,device.id);guard(c);
+     if(!!c.data.excludedDevices?.[device.address] !== (status==='excluded'))throw Error(omemoText('Настройка устройства изменилась. Обновите список.','The device setting changed. Refresh the list.'));
+     if(!(await omemoDevices(device.jid,c.guard)).includes(device.id))throw Error(omemoText('Устройство больше не объявлено. Переподключите его и обновите список.','The device is no longer advertised. Reconnect it and refresh the list.'));
+     const latest=await omemoBundle(device.jid,device.id,c.guard);guard(c);
      if(omemoB64(latest.identityKey)!==device.fingerprint)throw Error(omemoText('Ключ изменился во время проверки. Обновите устройства и сравните новый отпечаток.','The key changed during verification. Refresh devices and compare the new fingerprint.'));
-     c.data.trust[device.address]=device.fingerprint;c.store.removeSession(device.address);c.store.saveIdentity(device.address,latest.identityKey);
+     delete c.data.excludedDevices?.[device.address];c.data.trust[device.address]=device.fingerprint;c.store.removeSession(device.address);c.store.saveIdentity(device.address,latest.identityKey);
     });
     panel.append(verify);
    }
+  }
+  if(!device.current&&!['excluded','retired'].includes(status)){
+   panel.append(omemoNode('p','meta',omemoText('Старое устройство можно исключить: новые сообщения из этого браузера будут доступны только оставшимся проверенным устройствам. Новые сообщения от исключённого устройства также потребуют повторной проверки. Вход в аккаунт на нём сохранится.','You can exclude an old device: new messages from this browser will be available only to the remaining verified devices. New messages from the excluded device will also require verification again. It can still sign in.')));
+   const exclude=omemoNode('button','btn-secondary',omemoText('Не отправлять на устройство','Do not send to this device'));exclude.type='button';exclude.dataset.omemoAction='exclude';exclude.onclick=()=>change(c=>omemoExcludeDevice(c,device.jid,device.id));panel.append(exclude);
+  }
+  if(device.jid===account&&!device.current&&status!=='retired'){
+   const retirement=omemoNode('details','omemo-device-retirement');
+   retirement.append(omemoNode('summary','',omemoText('Потерянное устройство: отозвать ключ','Lost device: retire key')));
+   retirement.append(omemoNode('p','meta',omemoText('Сервер удалит этот ключ из списка и запретит его повторную публикацию. Отменить отзыв нельзя. Другим клиентам нужно обновить список устройств. Пароль входа и уже полученные сообщения останутся на устройстве; с действующим паролем оно сможет создать новый ключ. При потере устройства также смените пароль аккаунта и попросите администратора завершить его действующие сеансы.','The server will remove this key and reject its republication. Retirement cannot be undone. Other clients need to refresh their device lists. The device keeps its sign-in password and received messages; a valid password lets it create a new key. If it is lost, also change your account password and ask your administrator to end its active sessions.')));
+   const retire=omemoNode('button','btn-secondary',omemoText('Отозвать этот ключ на сервере','Retire this key on the server'));retire.type='button';retire.dataset.omemoAction='retire';
+   retire.onclick=()=>change(async c=>{
+    if(device.id===c.data.id)throw Error(omemoText('Нельзя отозвать ключ текущего браузера здесь.','You cannot retire this browser’s key here.'));
+    await c.request('/api/v1/chat/omemo/devices',{method:'POST',body:JSON.stringify({id:device.id,identity_key:device.fingerprint||''})});guard(c);
+    omemoExcludeDevice(c,account,device.id);snapshot.retired.add(device.id);
+   });
+   retirement.append(retire);panel.append(retirement);
   }
   const label=omemoNode('label','omemo-device-label',omemoText('Название для вас','Your device label'));
   const input=omemoNode('input','field-input');input.type='text';input.maxLength=60;input.value=snapshot.names[device.address]||'';input.placeholder=device.current?omemoText('Этот браузер','This browser'):omemoText('Например, iPhone или рабочий ноутбук','For example, iPhone or work laptop');
@@ -8648,23 +8950,30 @@ async function omemoSettings(){
   content.replaceChildren();
   const overview=omemoNode('section','omemo-overview'),top=omemoNode('div','omemo-overview-heading');
   top.append(omemoNode('strong','',snapshot.enabled?omemoText('Шифрование включено','Encryption is on'):omemoText('Шифрование выключено','Encryption is off')));
-  const toggle=omemoNode('button','btn-secondary',snapshot.enabled?omemoText('Выключить','Turn off'):omemoText('Включить','Turn on'));toggle.type='button';toggle.dataset.omemoAction='toggle';toggle.setAttribute('aria-label',snapshot.enabled?omemoText('Выключить шифрование чата','Turn off chat encryption'):omemoText('Включить шифрование чата','Turn on chat encryption'));toggle.onclick=()=>change(c=>{c.data.enabled[peer]=!snapshot.enabled});top.append(toggle);overview.append(top);
+  const toggle=omemoNode('button','btn-secondary',snapshot.enabled?omemoText('Выключить','Turn off'):omemoText('Включить','Turn on'));toggle.type='button';toggle.dataset.omemoAction='toggle';toggle.setAttribute('aria-label',snapshot.enabled?omemoText('Выключить шифрование чата','Turn off chat encryption'):omemoText('Включить шифрование чата','Turn on chat encryption'));toggle.onclick=()=>change(c=>{if(snapshot.retired.has(c.data.id))throw Error(omemoText('Ключ этого браузера отозван.','This browser’s key is retired.'));c.data.enabled[peer]=!snapshot.enabled});top.append(toggle);overview.append(top);
   overview.append(omemoNode('p','meta',chatState.roster.find(r=>r.jid===peer)?.name||peer));
-  const others=devices.filter(d=>!d.current),pending=others.filter(d=>omemoDeviceStatus(d,snapshot)!=='trusted'),missing=others.some(d=>d.error),hasPeer=devices.some(d=>d.jid===peer&&!d.current);
-  let text=!hasPeer?omemoText('У собеседника пока нет устройств с OMEMO. Попросите его включить шифрование.','Your contact has no OMEMO devices yet. Ask them to enable encryption.'):missing?omemoText('Некоторые ключи недоступны. Переподключите соответствующее устройство и обновите список.','Some keys are unavailable. Reconnect that device and refresh the list.'):pending.length?omemoText('Нужно проверить устройств: ','Devices to verify: ')+pending.length:snapshot.enabled?omemoText('Все устройства проверены. Можно отправлять зашифрованные сообщения.','All devices are verified. You can send encrypted messages.'):omemoText('Все устройства проверены. Включите шифрование для этого чата.','All devices are verified. Turn on encryption for this chat.');
+  const excluded=devices.filter(d=>omemoDeviceStatus(d,snapshot)==='excluded'),others=devices.filter(d=>!d.current&&!['excluded','retired'].includes(omemoDeviceStatus(d,snapshot))),pending=others.filter(d=>omemoDeviceStatus(d,snapshot)!=='trusted'),missing=others.some(d=>d.error),hasPeer=audience.room?audience.members.every(m=>m.jid===account||others.some(d=>d.jid===m.jid))&&others.length>0:others.some(d=>d.jid===peer);
+  let text=!hasPeer?(audience.room?omemoText('У каждого участника должно быть хотя бы одно доступное проверенное устройство.','Each participant needs at least one available verified device.'):omemoText('Нет доступных устройств получателя. Включите и проверьте хотя бы одно устройство.','No recipient devices available. Enable and verify at least one device.')):missing?omemoText('Некоторые ключи недоступны. Переподключите соответствующее устройство и обновите список.','Some keys are unavailable. Reconnect that device and refresh the list.'):pending.length?omemoText('Нужно проверить устройств: ','Devices to verify: ')+pending.length:excluded.length?omemoText('Оставшиеся устройства проверены.','The remaining devices are verified.'):snapshot.enabled?omemoText('Все устройства проверены. Можно отправлять зашифрованные сообщения.','All devices are verified. You can send encrypted messages.'):omemoText('Все устройства проверены. Включите шифрование для этого чата.','All devices are verified. Turn on encryption for this chat.');
+  if(excluded.length)text+=' '+omemoText('Исключено в этом браузере: ','Excluded in this browser: ')+excluded.length+'.';
   if(snapshot.enabled&&pending.length)text+=' '+omemoText('До проверки отправка будет приостановлена.','Sending is paused until verification.');
-  overview.append(omemoNode('p','',text));content.append(overview);
-  for(const jid of [...new Set([peer,account])]){
-   const group=omemoNode('section','omemo-device-group');group.append(omemoNode('h3','',jid===account?omemoText('Мои устройства','My devices'):omemoText('Устройства собеседника','Contact’s devices')));
+  if(snapshot.retired.has(snapshot.id))text=omemoText('Ключ этого браузера отозван на сервере. Отправка с ним недоступна. Для нового ключа используйте другой профиль браузера и заново проверьте отпечатки. Сохранённая здесь история остаётся доступна.','This browser’s key has been retired on the server. Sending with it is disabled. Use a different browser profile for a new key and verify fingerprints again. History already saved here remains available.');
+  overview.append(omemoNode('p','',text));
+  if(audience.room)overview.append(omemoNode('p','meta',omemoText('Настройка шифрует ваши сообщения из этого браузера. Остальные участники включают шифрование на своих устройствах.','This setting encrypts your messages from this browser. Other participants enable encryption on their own devices.')));
+  content.append(overview);
+  for(const {jid,name} of audience.members){
+   const group=omemoNode('section','omemo-device-group');group.append(omemoNode('h3','',jid===account?omemoText('Мои устройства','My devices'):audience.room?(name||jid):omemoText('Устройства собеседника','Contact’s devices')));
+   if(audience.room&&jid!==account&&name)group.append(omemoNode('p','meta',jid));
    const list=omemoNode('ul','omemo-device-list');
    for(const device of devices.filter(d=>d.jid===jid)){
     const status=omemoDeviceStatus(device,snapshot),row=omemoNode('li','omemo-device');row.dataset.deviceId=String(device.id);row.dataset.deviceOwner=jid;row.dataset.keyStatus=status;
     const heading=omemoNode('div','omemo-device-heading'),info=omemoNode('div');
     info.append(omemoNode('strong','',snapshot.names[device.address]||(device.current?omemoText('Этот браузер','This browser'):omemoText('Устройство ','Device ')+device.id)));
-    const labels={current:omemoText('Ваш ключ','Your key'),trusted:omemoText('Проверено','Verified'),unverified:omemoText('Нужно проверить','Needs verification'),changed:omemoText('Ключ изменился','Key changed'),unavailable:omemoText('Ключ недоступен','Key unavailable')};
+    const labels={retired:omemoText('Отозван на сервере','Retired on server'),current:omemoText('Ваш ключ','Your key'),trusted:omemoText('Проверено','Verified'),excluded:omemoText('Исключено здесь','Excluded here'),unverified:omemoText('Нужно проверить','Needs verification'),changed:omemoText('Ключ изменился','Key changed'),unavailable:omemoText('Ключ недоступен','Key unavailable')};
     const badge=omemoNode('span','omemo-device-status',labels[status]);badge.dataset.status=status;heading.append(info,badge);row.append(heading);
     if(status==='changed')row.append(omemoNode('p','omemo-device-warning',omemoText('Прежнее подтверждение больше не действует. Сверьте новый отпечаток.','The previous verification no longer applies. Compare the new fingerprint.')));
-    if(device.error)row.append(omemoNode('p','meta',omemoText('Устройство не опубликовало доступный набор ключей.','This device has no accessible key bundle.')));
+    if(status==='excluded')row.append(omemoNode('p','meta',omemoText('Новые сообщения из этого браузера не отправляются на это устройство. Для возврата сравните его текущий отпечаток.','New messages from this browser are not sent to this device. To enable it again, compare its current fingerprint.')));
+    if(status==='retired')row.append(omemoNode('p','meta',omemoText('Повторная публикация этого ID запрещена. Отзыв ключа не завершает вход в аккаунт.','Republication of this ID is blocked. Retiring a key does not sign the device out.')));
+    if(device.error&&status!=='retired')row.append(omemoNode('p','meta',device.advertised?omemoText('Устройство не опубликовало доступный набор ключей.','This device has no accessible key bundle.'):omemoText('Устройство больше не объявлено. Для возврата переподключите его и обновите список.','The device is no longer advertised. To enable it again, reconnect it and refresh the list.')));
     keyDetails(device,row);list.append(row);
    }
    if(!list.childElementCount)group.append(omemoNode('p','meta',omemoText('Устройства пока не найдены.','No devices found yet.')));
@@ -8676,14 +8985,35 @@ async function omemoSettings(){
   if(loading||busy||!active())return;
   loading=true;disableActions(true);const current=++revision;notice.textContent=omemoText('Получаем список устройств…','Loading devices…');
   try{
-   snapshot=await omemoLocked(async c=>{guard(c);await omemoInitialize(c);guard(c);return {id:c.data.id,enabled:!!c.data.enabled[peer],trust:{...c.data.trust},names:{...c.data.deviceNames},lib:c.lib,identityKey:c.store.getIdentityKeyPair().pubKey}});
+   const retirement=await api('/api/v1/chat/omemo/devices',{_guard:sessionGuard});sessionGuard();
+   const retired=new Set((retirement.retired||[]).map(d=>d.id));
+   snapshot=await omemoLocked(async c=>{guard(c);if(c.data.id&&!retired.has(c.data.id))await omemoInitialize(c);guard(c);return {id:c.data.id,retired,enabled:!!c.data.enabled[peer],trust:{...c.data.trust},excluded:{...c.data.excludedDevices},names:{...c.data.deviceNames},lib:c.lib,identityKey:c.data.id?c.store.getIdentityKeyPair().pubKey:null}});
+   if(!snapshot.id){
+    content.replaceChildren();notice.textContent='';
+    const intro=omemoNode('section','omemo-overview');intro.append(omemoNode('h3','',omemoText('Подключить этот браузер','Connect this browser')));
+    intro.append(omemoNode('p','',omemoText('Здесь пока нет ключа OMEMO. Создайте новый ключ, затем сравните его отпечаток на своих устройствах и проверьте ключи собеседника. Доверие не переносится автоматически.','This browser has no OMEMO key yet. Create a key, compare its fingerprint on your other devices, and verify your contact’s keys. Trust is not transferred automatically.')));
+    intro.append(omemoNode('p','meta',omemoText('Если данные прежнего браузера потеряны, новый ключ не откроет старые зашифрованные сообщения. Их можно читать на устройствах, где сохранились ключи и история. После подключения отзовите ключ потерянного устройства в разделе «Мои устройства».','If the previous browser’s data was lost, the new key cannot open old encrypted messages. Read them on devices that retain their keys and history. After connecting, retire the lost device’s key under My devices.')));
+    const connect=omemoNode('button','btn-spray',omemoText('Создать ключ для этого браузера','Create a key for this browser'));connect.type='button';connect.dataset.omemoAction='connect';
+    connect.onclick=async()=>{
+     if(loading||busy||!active())return;busy=true;disableActions(true);let success=false;
+     try{await omemoLocked(async c=>{guard(c);await omemoInitialize(c)});success=true;changed=true}catch(error){if(active())notice.textContent=error.message}
+     finally{busy=false;if(active())disableActions(false)}
+     if(success)await load();
+    };
+    intro.append(connect);content.append(intro);return;
+   }
+   audience=await omemoAudience(peer,sessionGuard);
    const next=[];
-   for(const jid of [...new Set([peer,account])]){
-    const ids=await omemoDevices(jid);if(jid===account&&!ids.includes(snapshot.id))ids.unshift(snapshot.id);
+   for(const {jid} of audience.members){
+    const ids=await omemoDevices(jid,sessionGuard);if(jid===account&&!ids.includes(snapshot.id))ids.unshift(snapshot.id);
+    const advertised=new Set(ids);
+    if(jid===account)for(const id of snapshot.retired)if(!ids.includes(id))ids.push(id);
+    // Keep exclusions visible even while a device is absent from its PEP list.
+    for(const device of Object.values(snapshot.excluded))if(device.jid===jid&&!ids.includes(device.id))ids.push(device.id);
     for(let i=0;i<ids.length;i+=4){
      next.push(...await Promise.all(ids.slice(i,i+4).map(async id=>{
-      const device={jid,id,address:new snapshot.lib.OMEMOAddress(jid,id).toString(),current:jid===account&&id===snapshot.id};
-      try{const key=device.current?snapshot.identityKey:(await omemoBundle(jid,id)).identityKey;device.fingerprint=omemoB64(key);device.displayFingerprint=omemoFingerprint(key)}catch(error){device.error=error.message}
+      const device={jid,id,address:new snapshot.lib.OMEMOAddress(jid,id).toString(),current:jid===account&&id===snapshot.id,advertised:advertised.has(id)};
+      try{if(jid===account&&snapshot.retired.has(id))throw Error('Retired');if(!device.advertised)throw Error('Device not advertised');const key=device.current?snapshot.identityKey:(await omemoBundle(jid,id,sessionGuard)).identityKey;device.fingerprint=omemoB64(key);device.displayFingerprint=omemoFingerprint(key)}catch(error){device.error=error.message}
       return device;
      })));
     }
@@ -8698,7 +9028,7 @@ async function omemoSettings(){
 }
 async function renderOMEMOButton(){
  let b=$('chat-omemo');if(!b){b=omemoNode('button','btn-secondary btn-sm');b.id='chat-omemo';b.type='button';b.onclick=omemoSettings;$('chat-peer')?.after(b)}
- const peer=chatState.peer,account=omemoAccount();b.hidden=!peer||!!chatState.roster.find(r=>r.jid===peer)?.group;
+ const peer=chatState.peer,account=omemoAccount();b.hidden=!peer;
  b.setAttribute('aria-haspopup','dialog');
  try{const enabled=await omemoEnabled(peer);if(peer===chatState.peer&&account===omemoAccount()){b.textContent=enabled?omemoText('Шифрование: вкл.','Encryption: on'):omemoText('Шифрование: выкл.','Encryption: off');b.title=omemoText('Устройства и ключи OMEMO','OMEMO devices and keys');b.removeAttribute('aria-pressed')}}catch{b.textContent=omemoText('Шифрование','Encryption')}
 }
@@ -8714,8 +9044,11 @@ async function omemoEncryptFile(file){
 function omemoFileURI(url,file){const u=new URL(url);if(u.protocol!=='https:'||u.username||u.password)throw Error('OMEMO file requires HTTPS');return 'aesgcm:'+u.href.slice(6).split('#')[0]+'#'+omemoHex(file.iv)+omemoHex(file.key)}
 function omemoFileDescriptor(body){
  const lines=String(body||'').split('\n');if(lines.length>2||(lines.length===2&&!/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(lines[1])))throw Error('Invalid encrypted attachment');const line=lines[0];if(!line.startsWith('aesgcm://'))return null;
- const u=new URL('https:'+line.slice(7));if(u.username||u.password||!/^#[a-f0-9]{88}$/i.test(u.hash))throw Error('Invalid encrypted file URL');
- const bytes=Uint8Array.from(u.hash.slice(1).match(/../g),x=>parseInt(x,16)),iv=bytes.slice(0,12),key=bytes.slice(12);u.hash='';
+ if(/[\s\\\x00-\x1f\x7f]/.test(line))throw Error('Invalid encrypted file URL');
+ const u=new URL('https:'+line.slice(7));if(u.username||u.password||!/^#(?:[a-f0-9]{88}|[a-f0-9]{96})$/i.test(u.hash))throw Error('Invalid encrypted file URL');
+ // Emit only the XEP-0454 12-byte IV; also read the historical 16-byte
+ // Conversations format. The final 32 bytes always contain the AES key.
+ const bytes=Uint8Array.from(u.hash.slice(1).match(/../g),x=>parseInt(x,16)),iv=bytes.slice(0,-32),key=bytes.slice(-32);u.hash='';
  return {url:u.href,iv,key,name:decodeURIComponent(u.pathname.split('/').pop())||'file'};
 }
 async function omemoDecryptFile(descriptor,blob){
@@ -8725,10 +9058,149 @@ async function omemoDecryptFile(descriptor,blob){
 }
 function omemoAttachmentBubble(message,element){
  if(!String(message.body||'').startsWith('aesgcm://'))return;
- const text=element.querySelector('p');text.textContent='🔒 Зашифрованный файл';
+ const guard=omemoGuard(),text=element.querySelector('p');text.textContent='🔒 Зашифрованный файл';
  let file;try{file=omemoFileDescriptor(message.body)}catch(e){text.textContent=e.message;return}
  text.textContent='🔒 '+file.name;const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.textContent='Открыть зашифрованный файл';element.append(button);
- button.onclick=async()=>{button.disabled=true;try{const response=await fetch(file.url,{credentials:'omit',referrerPolicy:'no-referrer'});if(!response.ok)throw Error('Файл недоступен');const encrypted=await boundedPreviewBlob(response,omemoFileLimit+16),blob=await omemoDecryptFile(file,encrypted);await openDocumentPreview({name:file.name,blob,size:blob.size})}catch(e){text.textContent='Не удалось расшифровать файл: '+e.message}finally{button.disabled=false}};
+ button.onclick=async()=>{button.disabled=true;try{guard();const response=await fetch(file.url,{credentials:'omit',referrerPolicy:'no-referrer'});guard();if(!response.ok)throw Error('Файл недоступен');const encrypted=await boundedPreviewBlob(response,omemoFileLimit+16),blob=await omemoDecryptFile(file,encrypted);guard();await openDocumentPreview({name:file.name,blob,size:blob.size})}catch(e){text.textContent='Не удалось расшифровать файл: '+e.message}finally{button.disabled=false}};
+}
+// SPDX-License-Identifier: GPL-3.0-only
+// The generated secret exists only in its one-time dialog, never in storage.
+let xmppDevicesRevision = 0;
+const xmppDevicesAPI = '/api/v1/me/xmpp-devices';
+function xmppDeviceNode(tag, className = '', text = '') {
+  const node = document.createElement(tag); node.className = className; node.textContent = text; return node;
+}
+function xmppDeviceButton(text, action, primary = false) {
+  const button = xmppDeviceNode('button', primary ? 'btn-spray' : 'btn-secondary', text);
+  button.type = 'button'; button.onclick = action; return button;
+}
+function xmppDeviceError(error) {
+  const messages = {
+    device_connection_required: ['Сначала подключите хотя бы один клиент с новым паролем устройства.', 'Connect at least one client with a device password first.'],
+    device_limit: ['Можно создать не более 50 действующих паролей.', 'Up to 50 active device passwords are allowed.'],
+    invalid_device_name: ['Введите название от 1 до 80 символов.', 'Enter a name between 1 and 80 characters.'],
+    device_not_found: ['Устройство или соединение уже удалено. Обновите список.', 'The device or connection is gone. Refresh the list.'],
+    xmpp_device_operation_failed: ['Не удалось выполнить операцию. Обновите список и повторите.', 'Operation failed. Refresh the list and try again.']
+  };
+  return messages[error.message] ? mailImageText(...messages[error.message]) : error.message;
+}
+function resetXMPPDevices() {
+  xmppDevicesRevision++;
+  for (const dialog of document.querySelectorAll('.xmpp-device-dialog')) { dialog.querySelectorAll('input').forEach(input => { input.value = ''; }); dialog.close(); dialog.remove(); }
+  $('xmpp-devices-card')?.replaceChildren();
+}
+async function refreshXMPPDevices() {
+  const host = $('profile-security'); if (!host || !state.tokens?.access_token) return;
+  let card = $('xmpp-devices-card');
+  if (!card) { card = xmppDeviceNode('section', 'card stack-gap'); card.id = 'xmpp-devices-card'; host.prepend(card); }
+  const query = card.querySelector('input[type=search]')?.value || '';
+  const revision = ++xmppDevicesRevision, guard = omemoGuard();
+  const active = () => { try { guard(); return revision === xmppDevicesRevision; } catch { return false; } };
+  card.replaceChildren(xmppDeviceNode('p', 'meta', mailImageText('Загрузка устройств XMPP…', 'Loading XMPP devices…')));
+  try {
+    const data = await api(xmppDevicesAPI, { _guard: guard }); if (!active()) return;
+    const header = xmppDeviceNode('div', 'xmpp-device-toolbar');
+    header.append(xmppDeviceNode('h3', 'heading', mailImageText('Устройства XMPP', 'XMPP devices')),
+      xmppDeviceButton(mailImageText('Обновить', 'Refresh'), refreshXMPPDevices),
+      xmppDeviceButton(mailImageText('Создать пароль устройства', 'Create device password'), createXMPPDeviceDialog, true));
+    const hint = xmppDeviceNode('p', 'meta', mailImageText(
+      'Создайте отдельный пароль для каждого клиента: Monal, Conversations или другого приложения. Он работает только в XMPP. Отзыв отключает все соединения с этим паролем, восстановление сессий и связанные push-подписки.',
+      'Create a separate password for each client: Monal, Conversations or another app. It works only with XMPP. Revoking it disconnects every connection using it, disables session resume and removes associated push subscriptions.'));
+    const status = xmppDeviceNode('p', 'msg'); status.setAttribute('role', 'status');
+    const policy = xmppDeviceNode('label', 'field-check');
+    const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.checked = !!data.devices_only;
+    checkbox.onchange = async () => {
+      const only = checkbox.checked; checkbox.checked = !!data.devices_only;
+      if (!confirm(mailImageText(only
+        ? 'Разрешить XMPP только с паролями устройств? Клиенты с обычным паролем или общим токеном отключатся; их push-подписки будут удалены. Сначала замените пароль в каждом приложении. Почта и веб-вход продолжат работать.'
+        : 'Снова разрешить обычный пароль и общий токен для входа в XMPP?', only
+        ? 'Allow XMPP only with device passwords? Clients using an account password or general token will disconnect and their push registrations will be removed. Update each app first. Mail and web login will keep working.'
+        : 'Allow account passwords and general tokens for XMPP again?'))) return;
+      checkbox.disabled = true;
+      try { await api(xmppDevicesAPI + '/policy', { method: 'PUT', body: JSON.stringify({ devices_only: only }), _guard: guard }); if (active()) await refreshXMPPDevices(); }
+      catch (error) { if (active()) { status.textContent = xmppDeviceError(error); checkbox.disabled = false; } }
+    };
+    policy.append(checkbox, xmppDeviceNode('span', '', mailImageText('Только пароли устройств для XMPP', 'Device passwords only for XMPP')));
+    const policyHint = xmppDeviceNode('p', 'meta', mailImageText(data.devices_only
+      ? 'Включено. Обычный пароль и общие токены больше не подходят для XMPP.'
+      : 'Переходный режим: прежние способы входа ещё разрешены. Подключите клиент с новым паролем, затем включите ограничение.', data.devices_only
+      ? 'Enabled. Account passwords and general tokens are no longer accepted for XMPP.'
+      : 'Migration mode: existing login methods are still allowed. Connect with a new device password, then enable the restriction.'));
+    const search = document.createElement('input'); search.type = 'search'; search.value = query; search.className = 'field-input'; search.placeholder = mailImageText('Поиск по названию, ресурсу или IP', 'Search by name, resource or IP'); search.setAttribute('aria-label', search.placeholder);
+    const lists = xmppDeviceNode('div', 'xmpp-device-lists');
+    const perform = async (url, confirmation, button) => {
+      if (!confirm(confirmation)) return; button.disabled = true;
+      try { await api(url, { method: 'DELETE', _guard: guard }); if (active()) await refreshXMPPDevices(); }
+      catch (error) { if (active()) { status.textContent = xmppDeviceError(error); button.disabled = false; } }
+    };
+    const date = value => value ? new Date(value).toLocaleString(state.lang === 'en' ? 'en-US' : 'ru-RU') : '—';
+    const deviceName = id => data.devices.find(d => d.id === id)?.name || mailImageText('Обычный пароль / общий токен', 'Account password / general token');
+    const paginatedTable = (title, columns, rows, render, textForSearch) => {
+      const section = xmppDeviceNode('section', 'xmpp-device-list'), heading = xmppDeviceNode('h4', '', title);
+      const wrap = xmppDeviceNode('div', 'xmpp-device-table-wrap'), table = xmppDeviceNode('table', 'admin-users-table');
+      const thead = document.createElement('thead'), headRow = document.createElement('tr');
+      columns.forEach(text => headRow.append(xmppDeviceNode('th', '', text))); thead.append(headRow);
+      const tbody = document.createElement('tbody'); table.append(thead, tbody); wrap.append(table);
+      const pager = xmppDeviceNode('div', 'xmpp-device-toolbar'), counter = xmppDeviceNode('span', 'meta'); let page = 0;
+      const prev = xmppDeviceButton(mailImageText('Назад', 'Previous'), () => { page--; draw(); });
+      const next = xmppDeviceButton(mailImageText('Далее', 'Next'), () => { page++; draw(); }); pager.append(counter, prev, next);
+      const draw = () => {
+        const filtered = rows.filter(row => textForSearch(row).toLocaleLowerCase().includes(search.value.trim().toLocaleLowerCase()));
+        page = Math.min(Math.max(page, 0), Math.max(0, Math.ceil(filtered.length / 8) - 1)); tbody.replaceChildren();
+        filtered.slice(page * 8, page * 8 + 8).forEach(item => {
+          const tr = document.createElement('tr'); render(item).forEach(content => { const td = document.createElement('td'); if (typeof content === 'string') td.textContent = content; else td.append(content); tr.append(td); }); tbody.append(tr);
+        });
+        if (!filtered.length) { const tr = document.createElement('tr'), td = xmppDeviceNode('td', 'meta', mailImageText('Нет записей', 'No entries')); td.colSpan = columns.length; tr.append(td); tbody.append(tr); }
+        counter.textContent = filtered.length ? `${page * 8 + 1}–${Math.min(page * 8 + 8, filtered.length)} / ${filtered.length}` : '0';
+        prev.disabled = page === 0; next.disabled = (page + 1) * 8 >= filtered.length;
+      };
+      search.addEventListener('input', () => { page = 0; draw(); }); section.append(heading, wrap, pager); lists.append(section); draw();
+    };
+    paginatedTable(mailImageText('Пароли устройств', 'Device passwords'),
+      [mailImageText('Устройство', 'Device'), mailImageText('Создан / последний вход', 'Created / last login'), mailImageText('Состояние', 'Status'), mailImageText('Действия', 'Actions')], data.devices, device => {
+        const times = xmppDeviceNode('div', '', date(device.created_at)); times.append(xmppDeviceNode('p', 'meta', date(device.last_used_at)));
+        const live = data.sessions.filter(s => s.credential_id === device.id).length;
+        const label = device.revoked_at ? mailImageText('Отозван', 'Revoked') : live ? mailImageText(`Подключений: ${live}`, `Connections: ${live}`) : device.last_used_at ? mailImageText('Не подключено', 'Disconnected') : mailImageText('Ожидает первого входа', 'Waiting for first login');
+        const action = device.revoked_at ? xmppDeviceNode('span', 'meta', date(device.revoked_at)) : xmppDeviceButton(mailImageText('Отозвать', 'Revoke'), event => perform(xmppDevicesAPI + '/' + encodeURIComponent(device.id), mailImageText(`Отозвать пароль «${device.name}»? Все использующие его соединения отключатся. Вход с ним больше невозможен. Локальная история на устройстве останется.`, `Revoke “${device.name}”? All connections using it will close and it cannot be used again. Local history remains on the device.`), event.currentTarget));
+        return [device.name, times, label, action];
+      }, device => device.name);
+    paginatedTable(mailImageText('Сейчас подключены', 'Connected now'),
+      [mailImageText('Клиент / ресурс', 'Client / resource'), mailImageText('Пароль устройства', 'Device password'), 'IP', mailImageText('Последняя активность', 'Last activity'), mailImageText('Действия', 'Actions')], data.sessions, session =>
+      [session.agent, deviceName(session.credential_id), session.address, date(session.last_seen), xmppDeviceButton(mailImageText('Отключить', 'Disconnect'), event => perform(xmppDevicesAPI + '/sessions/' + encodeURIComponent(session.id), mailImageText('Закрыть это соединение? Клиент сможет подключиться снова. Чтобы запретить вход, отзовите его пароль.', 'Close this connection? The client can reconnect. Revoke its password to prevent login.'), event.currentTarget))], session => [session.agent, session.address, deviceName(session.credential_id)].join(' '));
+    const note = xmppDeviceNode('p', 'meta', mailImageText('Показаны до 100 последних паролей, действующие — первыми. При потере устройства отдельно отзовите его ключ OMEMO в настройках шифрования чата. Пароль доступа и ключ шифрования — разные настройки.', 'Up to 100 recent passwords are shown, active ones first. If a device is lost, also retire its OMEMO key in the chat encryption settings. Access credentials and encryption keys are separate settings.'));
+    card.replaceChildren(header, hint, policy, policyHint, search, status, lists, note);
+  } catch (error) { if (active()) card.replaceChildren(xmppDeviceNode('p', 'msg', xmppDeviceError(error)), xmppDeviceButton(mailImageText('Повторить', 'Retry'), refreshXMPPDevices)); }
+}
+function createXMPPDeviceDialog() {
+  if (document.querySelector('.xmpp-device-dialog')) return;
+  const guard = omemoGuard(), dialog = xmppDeviceNode('dialog', 'mail-source-dialog xmpp-device-dialog');
+  const form = document.createElement('form'), header = document.createElement('header'), title = xmppDeviceNode('h3', 'heading', mailImageText('Пароль для устройства XMPP', 'XMPP device password'));
+  title.id = 'xmpp-device-title'; dialog.setAttribute('aria-labelledby', title.id);
+  header.append(title, xmppDeviceButton(mailImageText('Закрыть', 'Close'), () => dialog.close()));
+  const fields = xmppDeviceNode('div', 'xmpp-device-fields'), label = xmppDeviceNode('label', 'field-label', mailImageText('Название устройства', 'Device name'));
+  const name = document.createElement('input'); name.className = 'field-input'; name.required = true; name.maxLength = 80; name.autocomplete = 'off'; name.placeholder = 'Monal · iPhone'; label.append(name); fields.append(label);
+  const hint = xmppDeviceNode('p', 'meta', mailImageText('Пароль будет показан один раз. Введите его вместо обычного пароля в настройках приложения XMPP. Логин, сервер и порт оставьте прежними. Создание пароля не меняет ключи OMEMO.', 'The password is shown once. Use it instead of your account password in your XMPP app. Keep the username, server and port unchanged. Creating a password does not change OMEMO keys.'));
+  const status = xmppDeviceNode('p', 'msg'); status.setAttribute('role', 'status');
+  const footer = document.createElement('footer'), submit = xmppDeviceNode('button', 'btn-spray', mailImageText('Создать пароль', 'Create password')); submit.type = 'submit'; footer.append(submit);
+  let secretInput;
+  form.onsubmit = async event => {
+    event.preventDefault(); if (!form.reportValidity() || submit.disabled) return; submit.disabled = true;
+    try {
+      const data = await api(xmppDevicesAPI, { method: 'POST', body: JSON.stringify({ name: name.value }), _guard: guard }); guard();
+      if (!dialog.open) { refreshXMPPDevices(); return; }
+      const secretLabel = xmppDeviceNode('label', 'field-label', mailImageText('Сохраните пароль сейчас', 'Save this password now'));
+      secretInput = document.createElement('input'); secretInput.className = 'field-input xmpp-device-secret'; secretInput.readOnly = true; secretInput.autocomplete = 'off'; secretInput.spellcheck = false; secretInput.value = data.password; data.password = ''; secretLabel.append(secretInput); fields.replaceChildren(secretLabel);
+      const copy = xmppDeviceButton(mailImageText('Копировать', 'Copy'), async () => {
+        try { guard(); await navigator.clipboard.writeText(secretInput.value); guard(); if (dialog.open) status.textContent = mailImageText('Пароль скопирован.', 'Password copied.'); }
+        catch { if (dialog.open) { secretInput.focus(); secretInput.select(); status.textContent = mailImageText('Выделите и скопируйте пароль вручную.', 'Select and copy the password manually.'); } }
+      });
+      footer.replaceChildren(copy, xmppDeviceButton(mailImageText('Готово', 'Done'), () => dialog.close(), true));
+      status.textContent = mailImageText('Пароль создан. Подключите клиент и обновите список устройств, чтобы проверить вход.', 'Password created. Connect your client and refresh the device list to verify the login.');
+      refreshXMPPDevices();
+    } catch (error) { try { guard(); if (dialog.open) { status.textContent = xmppDeviceError(error); submit.disabled = false; } } catch {} }
+  };
+  dialog.onclose = () => { if (secretInput) secretInput.value = ''; name.value = ''; dialog.remove(); };
+  form.append(header, fields, hint, status, footer); dialog.append(form); document.body.append(dialog); dialog.showModal(); name.focus();
 }
 // Domain organization chart backed by distribution groups.
 function directoryLabel(ru, en) { return mailImageText(ru, en); }
@@ -9053,3 +9525,201 @@ function showDirectoryPreview(report,applied){
 }
 $('btn-org-structure')?.addEventListener('click',()=>openOrganization());
 $('btn-org-structure-admin')?.addEventListener('click',()=>{if(tenantNav.domainID)openOrganization(tenantNav.domainID);});
+function aliasErrorText(message) {
+  const messages={
+    'address already exists':['Этот адрес уже занят доменом, ящиком, алиасом или группой.','This address is already used by a domain, mailbox, alias or group.'],
+    'invalid alias or target mailbox':['Проверьте адрес алиаса и целевой ящик.','Check the alias address and target mailbox.'],
+    'alias or target not found':['Алиас или ящик уже удалён. Обновите список.','The alias or mailbox was deleted. Reload the list.'],
+    'forbidden':['Недостаточно прав для управления этим адресом.','You do not have permission to manage this address.'],
+    'global admin required':['Алиасами доменов управляет глобальный администратор.','Domain aliases require a global administrator.'],
+    'cannot save alias':['Не удалось сохранить алиас. Повторите попытку.','Could not save the alias. Please try again.']
+  };
+  return messages[message]?directoryLabel(...messages[message]):message;
+}
+async function openAdminAliases(kind, target) {
+  const isDomain=kind==='domain';
+  const title=isDomain?directoryLabel('Алиасы домена','Domain aliases'):directoryLabel('Алиасы ящика','Mailbox aliases');
+  const dialog=directoryDialog(title+' — '+(isDomain?target.name:target.email),'org-editor');
+  dialog.classList.add('alias-dialog');
+  const description=document.createElement('p');description.className='meta';
+  description.textContent=isDomain
+    ?directoryLabel('Адреса с тем же именем получателя доставляются в основной домен. Пользователи могут отправлять с этих адресов. Настройте MX, SPF и DKIM домена-алиаса.','Addresses with the same local part deliver to the primary domain and are available for sending. Configure MX, SPF and DKIM for the alias domain.')
+    :directoryLabel('Дополнительные адреса доступны для получения и отправки почты. Вход выполняется по основному адресу.','Additional addresses are available for receiving and sending mail. Sign in with the primary address.');
+  const status=document.createElement('p');status.className='msg';status.setAttribute('role','status');
+  const list=document.createElement('div');list.className='alias-list';
+  const form=document.createElement('form');form.className='alias-form';
+  const addressLabel=document.createElement('label');addressLabel.className='field';
+  addressLabel.textContent=isDomain?directoryLabel('Домен-алиас','Alias domain'):directoryLabel('Имя до @','Local part before @');
+  const input=document.createElement('input');input.className='field-input';input.required=true;input.maxLength=isDomain?253:64;input.autocomplete='off';input.spellcheck=false;
+  input.placeholder=isDomain?'example.org':'sales';addressLabel.append(input);form.append(addressLabel);
+  const domainLabel=document.createElement('label');domainLabel.className='field';domainLabel.textContent=directoryLabel('Домен адреса','Address domain');
+  const domainSelect=document.createElement('select');domainSelect.className='field-input';domainLabel.append(domainSelect);
+  if(!isDomain)form.append(domainLabel);
+  const actions=document.createElement('div');actions.className='org-toolbar';
+  const save=directoryButton(directoryLabel('Добавить алиас','Add alias'),null,true);save.type='submit';
+  const cancel=directoryButton(t('cancel'),()=>reset());cancel.hidden=true;actions.append(save,cancel);form.append(actions);
+  dialog.append(description,status,list,form);
+  const base='/api/v1/admin/'+(isDomain?'domains/':'users/')+encodeURIComponent(target.id)+'/aliases';
+  let aliases=[],editing=null,busy=false;
+  const writable=!isDomain||!!state.me?.is_global_admin;
+  form.hidden=!writable;
+  function reset(){editing=null;input.value='';domainSelect.disabled=false;save.textContent=directoryLabel('Добавить алиас','Add alias');cancel.hidden=true;}
+  function lock(value){busy=value;dialog.querySelectorAll('button,input,select').forEach(el=>el.disabled=value);if(!value&&editing)domainSelect.disabled=true;}
+  function render(){
+    list.replaceChildren();
+    if(!aliases.length){const empty=document.createElement('p');empty.className='meta';empty.textContent=directoryLabel('Алиасов пока нет.','No aliases yet.');list.append(empty);}
+    for(const alias of aliases){
+      const row=document.createElement('div');row.className='alias-row';
+      const address=document.createElement('span');address.textContent=isDomain?alias.name:alias.email;row.append(address);
+      if(writable){
+        const controls=document.createElement('div');controls.className='org-toolbar';
+        controls.append(directoryButton(directoryLabel('Изменить','Edit'),()=>{
+          editing=alias;input.value=isDomain?alias.name:alias.local_part;
+          domainSelect.value=alias.domain_id;domainSelect.disabled=true;
+          save.textContent=directoryLabel('Сохранить','Save');cancel.hidden=false;input.focus();
+        }),directoryButton(directoryLabel('Удалить','Delete'),async()=>{
+          if(busy||!await askConfirm(directoryLabel('Удалить алиас ','Delete alias ')+(isDomain?alias.name:alias.email)+'?',{danger:true}))return;
+          lock(true);setMsg(status,'','');
+          try{await api(base+'/'+encodeURIComponent(alias.id),{method:'DELETE'});reset();await reload();}
+          catch(error){setMsg(status,aliasErrorText(error.message),'err');}finally{lock(false);}
+        }));row.append(controls);
+      }
+      list.append(row);
+    }
+  }
+  async function reload(){const data=await api(base);if(!dialog.isConnected)return;aliases=data.aliases||[];render();}
+  form.addEventListener('submit',async event=>{
+    event.preventDefault();if(busy)return;lock(true);setMsg(status,'','');
+    const payload=isDomain?{name:input.value.trim()}:{local_part:input.value.trim(),domain_id:editing?editing.domain_id:domainSelect.value};
+    try{await api(base+(editing?'/'+encodeURIComponent(editing.id):''),{method:editing?'PATCH':'POST',body:JSON.stringify(payload)});reset();await reload();setMsg(status,directoryLabel('Алиас сохранён.','Alias saved.'),'ok');}
+    catch(error){setMsg(status,aliasErrorText(error.message),'err');}finally{lock(false);}
+  });
+  lock(true);
+  try{
+    if(!isDomain){
+      const data=await api('/api/v1/admin/domains?tenant_id='+encodeURIComponent(target.tenant_id));
+      for(const domain of data.domains||[]){const option=document.createElement('option');option.value=domain.id;option.textContent='@'+domain.name;domainSelect.append(option);}
+      domainSelect.value=target.domain_id;
+    }
+    await reload();
+  }catch(error){setMsg(status,aliasErrorText(error.message),'err');}finally{lock(false);}
+}
+// Attribution is part of the application, outside all customizable images.
+let brandingRevision = 0;
+function renderHeaderBranding(value) {
+  const image = $('header-branding-image');
+  $('header-branding-name').textContent = value.name || 'Tayga Mail';
+  if (value.image) image.src = value.image;
+  else image.removeAttribute('src');
+  image.classList.toggle('hidden', !value.image);
+}
+function resetBranding() {
+  brandingRevision++;
+  document.querySelector('dialog.branding-dialog')?.close();
+  renderHeaderBranding({});
+}
+async function refreshBranding() {
+  const revision = ++brandingRevision;
+  try {
+    const value = await api('/api/v1/me/branding');
+    if (revision === brandingRevision) renderHeaderBranding(value);
+  } catch {
+    if (revision === brandingRevision) renderHeaderBranding({});
+  }
+}
+
+async function openAdminBranding(kind, target) {
+  document.querySelector('dialog.branding-dialog')?.close();
+  const dialog = directoryDialog(t(kind === 'domains' ? 'branding_domain' : 'branding_tenant') + ' — ' + target.name);
+  dialog.classList.add('branding-dialog');
+  dialog.append($('branding-template').content.cloneNode(true));
+  // Templates are inert until opened; translate the newly inserted elements.
+  dialog.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+  const el = id => dialog.querySelector('#' + id);
+  const form = el('branding-form'), status = el('branding-msg');
+  const base = '/api/v1/admin/branding/' + kind + '/' + encodeURIComponent(target.id);
+  let draft = {enabled:false, name:'', image:''}, busy = false, reading = false, revision = 0;
+  function preview() {
+    el('branding-preview-name').textContent = draft.enabled ? draft.name || 'Tayga Mail' : (kind === 'domains' ? t('mig_inherit') : 'Tayga Mail');
+    const image = el('branding-preview-image');
+    if (draft.enabled && draft.image) image.src = draft.image;
+    else image.removeAttribute('src');
+    image.classList.toggle('hidden', !draft.enabled || !draft.image);
+  }
+  function fill(value) {
+    draft = value;
+    el('branding-name').value = value.name;
+    el('branding-enabled').checked = value.enabled;
+    el('branding-file').value = '';
+    preview();
+  }
+  function lock(value) {
+    busy = value;
+    [...form.elements].forEach(control => { control.disabled = value; });
+  }
+  el('branding-name').oninput = event => { draft.name = event.target.value; preview(); };
+  el('branding-enabled').onchange = event => { draft.enabled = event.target.checked; preview(); };
+  el('branding-file').onchange = async event => {
+    const file = event.target.files[0];
+    if (!file) return;
+    const read = ++revision;
+    reading = true;
+    el('branding-form').querySelector('[type=submit]').disabled = true;
+    try {
+      if (!['image/png', 'image/jpeg'].includes(file.type) || file.size > 1048576) throw Error();
+      const bitmap = await createImageBitmap(file);
+      const valid = bitmap.width <= 4096 && bitmap.height <= 4096;
+      bitmap.close();
+      if (!valid) throw Error();
+      const image = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      if (read !== revision || !dialog.isConnected) return;
+      draft.image = image;
+      draft.enabled = true;
+      el('branding-enabled').checked = true;
+      preview();
+      setMsg(status, '');
+    } catch {
+      if (read === revision && dialog.isConnected) {
+        event.target.value = '';
+        setMsg(status, t('branding_invalid'), 'err');
+      }
+    } finally {
+      if (read === revision) { reading = false; el('branding-form').querySelector('[type=submit]').disabled = busy; }
+    }
+  };
+  el('branding-remove-image').onclick = () => {
+    revision++; reading = false;
+    draft.image = '';
+    el('branding-file').value = '';
+    form.querySelector('[type=submit]').disabled = busy;
+    preview();
+  };
+  async function save(value) {
+    if (busy || reading) return;
+    lock(true); setMsg(status, '');
+    try {
+      const saved = await api(base, {method:'PUT', body:JSON.stringify(value)});
+      if (!dialog.isConnected) return;
+      fill(saved);
+      setMsg(status, t('saved'), 'ok');
+      await refreshBranding();
+    } catch { if (dialog.isConnected) setMsg(status, t('branding_save_error'), 'err'); }
+    finally { lock(false); }
+  }
+  form.onsubmit = event => { event.preventDefault(); save({...draft, name:draft.name.trim()}); };
+  el('branding-reset').onclick = () => {
+    revision++; reading = false;
+    save({enabled:false, name:'', image:''});
+  };
+  lock(true);
+  try {
+    const value = await api(base);
+    if (dialog.isConnected) { fill(value); lock(false); }
+  } catch (err) { if (dialog.isConnected) setMsg(status, err.message, 'err'); }
+}
+$('tenant-branding-button')?.addEventListener('click', () => openAdminBranding('tenants', {id:tenantNav.tenantID, name:tenantNav.tenantName}));

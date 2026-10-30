@@ -22,22 +22,26 @@ type Server struct {
 	mucMu      sync.Mutex
 	muc        map[string]map[*Session]mucOccupant
 	mucPending map[string]*Session
+	mucWeb     map[string]map[string]webRoomOccupant // protected by mucMu
 
-	pushMu sync.Mutex
+	pushMu       sync.Mutex
+	pepPublishMu sync.Mutex
+	pepOwners    map[string]*pepOwnerLock // Per-owner commit/notification order.
 
-	resumeMu  sync.Mutex
-	resumable map[string]resumableStream
-	upload    UploadHandler
-	uploadMu  sync.RWMutex
-	cfg       *config.Config
-	log       *slog.Logger
-	store     storage.Driver
-	authn     *auth.Layer
-	tls       *tlsutil.Manager
-	tlsCfg    *tls.Config
-	hub       *Hub
-	domain    string
-	db        *sql.DB
+	resumeMu       sync.Mutex
+	resumable      map[string]resumableStream
+	closingStreams map[*Session]struct{} // transports being cleaned up before SM snapshot publication
+	upload         UploadHandler
+	uploadMu       sync.RWMutex
+	cfg            *config.Config
+	log            *slog.Logger
+	store          storage.Driver
+	authn          *auth.Layer
+	tls            *tlsutil.Manager
+	tlsCfg         *tls.Config
+	hub            *Hub
+	domain         string
+	db             *sql.DB
 
 	webPresenceMu sync.Mutex
 	presence      map[string]map[string]presenceState

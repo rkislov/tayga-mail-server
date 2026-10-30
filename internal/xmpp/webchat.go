@@ -11,6 +11,7 @@ import (
 
 // ChatEvent is pushed to web clients over SSE.
 type ChatEvent struct {
+	SenderName string          `json:"sender_name,omitempty"`
 	OMEMO      string          `json:"omemo,omitempty"`
 	Room       string          `json:"room,omitempty"`
 	Attachment *ChatAttachment `json:"attachment,omitempty"`
@@ -35,6 +36,8 @@ type RosterEntry struct {
 
 // HistoryMsg is a decoded MAM / chat history item.
 type HistoryMsg struct {
+	SenderName string          `json:"sender_name,omitempty"`
+	SenderJID  string          `json:"-"`
 	Nick       string          `json:"-"`
 	OriginID   string          `json:"-"`
 	OMEMO      string          `json:"omemo,omitempty"`
@@ -172,6 +175,11 @@ func (s *Server) ListChatRoster(ctx context.Context, userID string) ([]RosterEnt
 	}
 	out := make([]RosterEntry, 0, len(items))
 	for _, it := range items {
+		// Own devices can create a self-roster entry. The account already has a
+		// dedicated presence row; keep its history/roster data, but not a duplicate contact.
+		if ParseJID(it.JID).Bare() == ParseJID(user.Email).Bare() {
+			continue
+		}
 		name := s.rosterDisplayName(ctx, userID, it.JID, it.Name)
 		presence := "unknown"
 		if it.Subscription == "to" || it.Subscription == "both" {
@@ -213,6 +221,8 @@ func (s *Server) UpsertChatRoster(ctx context.Context, userID, jid, name string)
 
 func (s *Server) ChatHistory(ctx context.Context, ownerBare, withBare string, limit int) ([]HistoryMsg, error) {
 	if s.isWebRoom(withBare) {
+		s.mucMu.Lock()
+		defer s.mucMu.Unlock()
 		return s.roomHistory(ctx, ownerBare, withBare, limit)
 	}
 	rows, err := s.queryMAM(ctx, ParseJID(ownerBare).Bare(), ParseJID(withBare).Bare(), limit)
@@ -294,6 +304,7 @@ func (s *Server) SubscribeChat(bare string) (<-chan ChatEvent, func()) {
 		s.hub.mu.RUnlock()
 		if n == 0 {
 			s.recordPresence(context.Background(), bare+"/web", "offline", "")
+			s.leaveWebRooms(ParseJID(bare).Bare())
 		}
 	}
 }
