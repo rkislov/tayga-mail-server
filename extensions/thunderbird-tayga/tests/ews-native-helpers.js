@@ -5,6 +5,14 @@ async function taygaNativeTest(api, args) {
       interfaces: Object.keys(Ci).filter((k) => /ews|outgoing/i.test(k)),
       factories: Object.keys(Cc).filter((k) => /ews/.test(k)),
     };
+  if (args.op === "removeManagedMail") {
+    const record = Object.values(api.state.mail)[0];
+    const account = Array.from(MailServices.accounts.accounts).find(
+      (a) => a.key === record.accountId,
+    );
+    MailServices.accounts.removeAccount(account, false);
+    return { ok: true };
+  }
   if (args.op === "mail") {
     const record = Object.values(api.state.mail)[0];
     const server = MailServices.accounts.getIncomingServer(record.serverKey);
@@ -16,11 +24,13 @@ async function taygaNativeTest(api, args) {
     return {
       folders: folders.map((f) => ({
         name: f.name,
+        parent: f.parent?.name,
         count: f.getTotalMessages(false),
       })),
       inbox: inbox
         ? Array.from(inbox.messages).map((m) => ({
             subject: m.subject,
+            date: m.dateInSeconds,
             key: m.messageKey,
           }))
         : [],

@@ -300,6 +300,25 @@ var taygaEws = class extends ExtensionCommon.ExtensionAPI {
     };
     this.save();
   }
+  managedIncoming(record) {
+    if (!record) return null;
+    try {
+      const account = Array.from(MailServices.accounts.accounts).find(
+        (a) => a.key === record.accountId,
+      );
+      const incoming = account?.incomingServer;
+      if (
+        !incoming ||
+        incoming.key !== record.serverKey ||
+        incoming.type !== "ews" ||
+        !incoming.getBoolValue("tayga_ews_managed")
+      )
+        return null;
+      return incoming;
+    } catch {
+      return null;
+    }
+  }
   async configure(args) {
     const url = new URL(args.baseUrl);
     if (
@@ -314,7 +333,12 @@ var taygaEws = class extends ExtensionCommon.ExtensionAPI {
       throw new Error("Invalid EWS session.");
     const scope = this.scope(args.baseUrl, args.email);
     for (const [key, record] of Object.entries(this.state.mail)) {
-      const server = MailServices.accounts.getIncomingServer(record.serverKey);
+      const server = this.managedIncoming(record);
+      if (!server) {
+        delete this.state.mail[key];
+        this.save();
+        continue;
+      }
       server.doBiff = key === scope;
     }
     let record = this.state.mail[scope];
@@ -607,17 +631,16 @@ var taygaEws = class extends ExtensionCommon.ExtensionAPI {
       }
       case "syncMail": {
         if (this.session)
-          MailServices.accounts
-            .getIncomingServer(this.state.mail[this.session.scope].serverKey)
-            .performBiff(null);
+          this.managedIncoming(
+            this.state.mail[this.session.scope],
+          )?.performBiff(null);
         return { ok: true };
       }
       case "stop":
         this.session = null;
         for (const record of Object.values(this.state.mail)) {
-          const server = MailServices.accounts.getIncomingServer(
-            record.serverKey,
-          );
+          const server = this.managedIncoming(record);
+          if (!server) continue;
           server.doBiff = false;
           server.password = "";
         }

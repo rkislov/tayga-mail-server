@@ -74,6 +74,10 @@ try {
     "styles.css",
     "icon.svg",
     "ews.js",
+    "rules.js",
+    "rules.html",
+    "rules-ui.js",
+    "rules.css",
     "experiments/ews/api.js",
     "experiments/ews/schema.json",
   ]) {
@@ -85,7 +89,7 @@ try {
   );
   manifest.background.scripts.push("smoke-background.js");
   if (process.env.TAYGA_EWS_FIXTURE)
-    manifest.permissions.push("compose", "compose.send", "accountsRead", "messagesRead");
+    manifest.permissions.push("compose", "compose.send", "accountsRead");
   await writeFile(join(extension, "manifest.json"), JSON.stringify(manifest));
   await writeFile(
     join(extension, "smoke-background.js"),

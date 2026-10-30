@@ -35,7 +35,7 @@ const TaygaEWS = (() => {
     scope(cfg) {
       return cfg.baseUrl + "\n" + cfg.email.toLowerCase();
     }
-    async soap(op, body, cfg) {
+    async soap(op, body, cfg, independent = false) {
       const wire = `<?xml version="1.0" encoding="utf-8"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" xmlns:m="${M}" xmlns:t="${T}"><s:Header><t:RequestServerVersion Version="Exchange2013"/></s:Header><s:Body><m:${op}${op === "CreateItem" ? ' SendMeetingInvitations="SendToNone"' : op === "UpdateItem" ? ' ConflictResolution="NeverOverwrite" SendMeetingInvitationsOrCancellations="SendToNone"' : ""}>${body}</m:${op}></s:Body></s:Envelope>`;
       const send = (session) =>
         this.client.fetcher(session.baseUrl + "/EWS/Exchange.asmx", {
@@ -49,7 +49,7 @@ const TaygaEWS = (() => {
           credentials: "omit",
           redirect: "error",
           cache: "no-store",
-          signal: this.controller
+          signal: this.controller && !independent
             ? AbortSignal.any([
                 this.controller.signal,
                 AbortSignal.timeout(120000),
@@ -59,7 +59,7 @@ const TaygaEWS = (() => {
       let response = await send(cfg);
       if (response.status === 401) {
         Object.assign(cfg, await this.client.refresh(cfg));
-        await this.native("configure", cfg);
+        if (!independent) await this.native("configure", cfg);
         response = await send(cfg);
       }
       if (!response.ok) {
@@ -72,7 +72,8 @@ const TaygaEWS = (() => {
         "application/xml",
       );
       if (first(doc, "parsererror")) throw new Error("EWS: некорректный XML.");
-      const messages = doc.getElementsByTagNameNS(M, op + "ResponseMessage");
+      const direct = ["GetInboxRules", "UpdateInboxRules"].includes(op);
+      const messages = doc.getElementsByTagNameNS(M, op + (direct ? "Response" : "ResponseMessage"));
       if (messages.length !== 1)
         throw new Error(`EWS ${op}: некорректный ответ сервера.`);
       const message = messages[0],

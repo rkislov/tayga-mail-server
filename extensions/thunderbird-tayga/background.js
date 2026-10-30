@@ -5,6 +5,7 @@ const ews = new TaygaEWS.Engine(
   (command, args) => browser.taygaEws.invoke(command, args),
   browser.storage.local,
 );
+const rules = new TaygaRules.Service(client, ews);
 const syncEWS = () =>
   ews.run().catch((error) => console.error("Tayga EWS:", error.message));
 let pendingMFA = null;
@@ -49,6 +50,8 @@ async function message(msg, sender) {
   if (sender.id !== browser.runtime.id || !msg?.type?.startsWith("tayga."))
     return;
   switch (msg.type) {
+    case "tayga.rules.load": return rules.load();
+    case "tayga.rules.save": return rules.save(msg);
     case "tayga.ews.status":
       return ews.summary();
     case "tayga.ews.sync":
