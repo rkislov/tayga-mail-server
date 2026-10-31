@@ -12,6 +12,20 @@ import (
 
 const groupCipherFixture = `<encrypted xmlns="eu.siacs.conversations.axolotl"><header sid="42"><key rid="7" prekey="true">YWJj</key><iv>AAAAAAAAAAAAAAAA</iv></header><payload>YWJj</payload></encrypted>`
 
+func TestRoomOMEMOFallbackDoesNotExposeOrInventPlaintext(t *testing.T) {
+	userMessage := roomCipherExtras(groupCipherFixture)
+	if !strings.Contains(userMessage, "<body>"+roomOMEMOFallback+"</body>") || !strings.Contains(userMessage, groupCipherFixture) {
+		t.Fatal("encrypted user message must remain visible to legacy clients without changing ciphertext")
+	}
+	keyTransport := strings.Replace(groupCipherFixture, "<payload>YWJj</payload>", "", 1)
+	if strings.Contains(roomCipherExtras(keyTransport), "<body>") {
+		t.Fatal("silent key transport must not become a visible user message")
+	}
+	if roomCipherExtras("") != "" {
+		t.Fatal("ordinary messages must not be labelled encrypted")
+	}
+}
+
 func TestGroupOMEMO(t *testing.T) { srv, st, a := testServer(t); testGroupOMEMO(t, srv, st, a) }
 func testGroupOMEMO(t *testing.T, srv *Server, st *storage.Store, alice *storage.User) {
 	t.Helper()
@@ -64,7 +78,7 @@ received:
 		}
 	}
 	live := bb.String()
-	if !strings.Contains(live, "jid='"+alice.Email+"/web'") || !strings.Contains(live, ev.ID) || strings.Contains(live, "<body>") || strings.Index(live, "<presence") > strings.Index(live, "<message") {
+	if !strings.Contains(live, "jid='"+alice.Email+"/web'") || !strings.Contains(live, ev.ID) || !strings.Contains(live, "<body>"+roomOMEMOFallback+"</body>") || strings.Index(live, "<presence") > strings.Index(live, "<message") {
 		t.Fatal("missing authoritative web presence before ciphertext", live)
 	}
 	// A new native resource learns about existing web occupants before messages.

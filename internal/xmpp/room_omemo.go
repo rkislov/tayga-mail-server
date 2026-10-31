@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"encoding/xml"
 	"errors"
 	"fmt"
 )
@@ -85,11 +86,22 @@ func (s *Server) SendRoomOMEMO(ctx context.Context, actor, room, revision, raw s
 	return s.storeRoomMessage(ctx, actor, room, "", webRoomNick(actor), "", actor+"/web", cipher)
 }
 
+const roomOMEMOFallback = "Это сообщение зашифровано с помощью OMEMO."
+
 func roomCipherExtras(cipher string) string {
 	if cipher == "" {
 		return ""
 	}
-	return cipher + `<store xmlns='urn:xmpp:hints'/><encryption xmlns='urn:xmpp:eme:0' namespace='` + legacyOMEMO + `' name='OMEMO'/>`
+	// A fixed, non-sensitive fallback distinguishes encrypted user messages
+	// from silent key transports. Monal 6.4.24 otherwise drops OMEMO messages
+	// when backscrolling MAM history. Never retain a client's fallback: it may
+	// contain plaintext. The database and web API remain ciphertext-only.
+	var wire encryptedWire
+	fallback := ""
+	if xml.Unmarshal([]byte(cipher), &wire) == nil && wire.Payload != "" {
+		fallback = `<body>` + roomOMEMOFallback + `</body>`
+	}
+	return fallback + cipher + `<store xmlns='urn:xmpp:hints'/><encryption xmlns='urn:xmpp:eme:0' namespace='` + legacyOMEMO + `' name='OMEMO'/>`
 }
 
 // Also notify about offline members. Native clients use these updates to refresh
