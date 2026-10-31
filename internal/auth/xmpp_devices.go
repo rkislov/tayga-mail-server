@@ -78,6 +78,11 @@ func (a *Layer) CreateXMPPDevicePassword(ctx context.Context, userID, name strin
 	password := XMPPDevicePasswordPrefix + id + "." + secret
 	sum := sha256.Sum256([]byte(password))
 	device := &storage.XMPPDevicePassword{ID: id, UserID: userID, Name: name, SecretHash: hex.EncodeToString(sum[:]), CreatedAt: time.Now().UTC()}
+	k, err := a.newXMPPSCRAMKey(ctx, userID, id, device.SecretHash, password)
+	if err != nil {
+		return nil, "", err
+	}
+	device.SCRAM = &k
 	if err = a.Store.CreateXMPPDevicePassword(ctx, device); err != nil {
 		return nil, "", err
 	}
@@ -147,8 +152,16 @@ func (a *Layer) WithXMPPAccess(ctx context.Context, userID, credentialID string,
 	return fn()
 }
 func (a *Layer) TrackXMPPSession(ctx context.Context, user *storage.User, credentialID, address, agent, key string, close func() error) (string, error) {
+	return a.trackXMPPSession(ctx, user, credentialID, address, agent, key, close, nil)
+}
+func (a *Layer) trackXMPPSession(ctx context.Context, user *storage.User, credentialID, address, agent, key string, close func() error, verify func() error) (string, error) {
 	var id string
 	err := a.WithXMPPAccess(ctx, user.ID, credentialID, func() error {
+		if verify != nil {
+			if err := verify(); err != nil {
+				return err
+			}
+		}
 		if credentialID != "" {
 			if err := a.Store.TouchXMPPDevicePassword(ctx, user.ID, credentialID); err != nil {
 				return err

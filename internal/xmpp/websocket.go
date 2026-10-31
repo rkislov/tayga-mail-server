@@ -228,6 +228,9 @@ func (s *Session) handleWebSocketStream() error {
 				return s.webSocketFailure("unsupported-version", opened)
 			}
 			s.streamDomain = jid.Domain
+			if err := s.setStreamFrom(attr(start, "from")); err != nil {
+				return s.webSocketFailure("invalid-from", opened)
+			}
 			if err := s.writeString(fmt.Sprintf(`<open xmlns='%s' from='%s' id='%s' version='1.0' xml:lang='en'/>`, framingNS, xmlEscape(jid.Domain), s.streamID)); err != nil {
 				return err
 			}
@@ -238,6 +241,9 @@ func (s *Session) handleWebSocketStream() error {
 			continue
 		}
 		if expectOpen {
+			return s.webSocketFailure("policy-violation", opened)
+		}
+		if s.scram != nil && start.Name.Space != saslNS && start.Name.Space != sasl2NS {
 			return s.webSocketFailure("policy-violation", opened)
 		}
 		if start.Name.Space == "urn:ietf:params:xml:ns:xmpp-tls" {
@@ -253,20 +259,15 @@ func (s *Session) handleWebSocketStream() error {
 			continue
 		}
 		switch {
-		case start.Name.Space == "urn:ietf:params:xml:ns:xmpp-sasl" && start.Name.Local == "auth" && !s.authed:
-			body, err := readElementText(s.dec, start)
-			if err == nil {
-				err = s.saslAuth(attr(start, "mechanism"), body)
-			}
+		case start.Name.Space == saslNS || start.Name.Space == sasl2NS:
+			restart, err := s.handleSASL(start)
 			if err != nil {
-				_ = s.writeString(`<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'><not-authorized/></failure>`)
 				return s.webSocketFailure("not-authorized", opened)
 			}
-			if err := s.writeString(`<success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>`); err != nil {
-				return err
+			if restart {
+				expectOpen, opened = true, false
 			}
-			s.authed, expectOpen, opened = true, true, false
-			s.streamID = randomID()
+
 		case start.Name.Space == smNamespace && s.authed:
 			if err := s.handleStreamManagement(start); err != nil {
 				return err

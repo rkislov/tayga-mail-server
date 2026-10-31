@@ -172,6 +172,11 @@ func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
 			return
 		}
+		// New accounts can use SCRAM immediately; legacy accounts enroll after
+		// a successful TLS XMPP login. No plaintext password is persisted.
+		if err := s.authn.EnrollXMPPSCRAM(r.Context(), u, "", req.Password); err != nil {
+			s.log.Warn("new account SCRAM enrollment deferred", "user_id", u.ID)
+		}
 		if s.ms != nil {
 			root, _ := s.ms.EnsureUser(email)
 			_, _ = s.store.EnsureMailbox(r.Context(), u.ID, "INBOX", root)
@@ -216,15 +221,11 @@ func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "only local users support password reset"})
 			return
 		}
-		hash, err := s.authn.Hasher.Hash(req.Password)
-		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "hash failed"})
+		if err := s.authn.SetLocalPassword(r.Context(), id, req.Password); err != nil {
+			writeJSON(w, 500, map[string]string{"error": "cannot change password"})
 			return
 		}
-		if err := s.store.UpdateUserPassword(r.Context(), id, hash); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-			return
-		}
+
 		writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 
 	case path != "" && r.Method == http.MethodPatch:

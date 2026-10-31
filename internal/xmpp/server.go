@@ -1,9 +1,11 @@
 package xmpp
 
 import (
+	"bufio"
 	"context"
 	"crypto/tls"
 	"database/sql"
+	"encoding/xml"
 	"fmt"
 	"log/slog"
 	"net"
@@ -104,7 +106,7 @@ func (s *Server) Start(ctx context.Context) error {
 				s.log.Warn("xmpp listen_tls set but TLS missing; skipping", "addr", sp.addr)
 				continue
 			}
-			ln, err = tls.Listen("tcp", sp.addr, s.tlsCfg)
+			ln, err = net.Listen("tcp", sp.addr)
 		} else {
 			ln, err = net.Listen("tcp", sp.addr)
 		}
@@ -145,7 +147,16 @@ func (s *Server) acceptLoop(ln net.Listener, alreadyTLS bool) {
 			s.log.Debug("xmpp accept", "err", err)
 			continue
 		}
-		go newSession(s, c, alreadyTLS).serve()
+		session := newSession(s, c, alreadyTLS)
+		_, wrappedTLS := c.(*tls.Conn)
+		if alreadyTLS && !wrappedTLS && session.tlsCfg != nil {
+			tc := tls.Server(c, session.sessionTLSConfig())
+			session.conn = tc
+			session.br = bufio.NewReader(tc)
+			session.bw = bufio.NewWriter(tc)
+			session.dec = xml.NewDecoder(session.br)
+		}
+		go session.serve()
 	}
 }
 

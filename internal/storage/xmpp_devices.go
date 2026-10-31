@@ -11,13 +11,14 @@ var ErrXMPPDeviceLimit = errors.New("maximum of 50 active XMPP device passwords"
 var ErrXMPPDeviceNotTested = errors.New("connect at least one client using a device password first")
 
 type XMPPDevicePassword struct {
-	ID         string     `json:"id"`
-	UserID     string     `json:"-"`
-	Name       string     `json:"name"`
-	SecretHash string     `json:"-"`
-	CreatedAt  time.Time  `json:"created_at"`
-	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
-	RevokedAt  *time.Time `json:"revoked_at,omitempty"`
+	SCRAM      *XMPPSCRAMKey `json:"-"`
+	ID         string        `json:"id"`
+	UserID     string        `json:"-"`
+	Name       string        `json:"name"`
+	SecretHash string        `json:"-"`
+	CreatedAt  time.Time     `json:"created_at"`
+	LastUsedAt *time.Time    `json:"last_used_at,omitempty"`
+	RevokedAt  *time.Time    `json:"revoked_at,omitempty"`
 }
 
 func (s *Store) CreateXMPPDevicePassword(ctx context.Context, d *XMPPDevicePassword) error {
@@ -39,6 +40,11 @@ func (s *Store) CreateXMPPDevicePassword(ctx context.Context, d *XMPPDevicePassw
 	_, err = tx.ExecContext(ctx, s.rebind(`INSERT INTO xmpp_device_passwords(id,user_id,name,secret_hash,created_at) VALUES(?,?,?,?,?)`), d.ID, d.UserID, d.Name, d.SecretHash, d.CreatedAt)
 	if err != nil {
 		return err
+	}
+	if d.SCRAM != nil {
+		if err = s.putXMPPSCRAMKey(ctx, tx, d.UserID, *d.SCRAM); err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
 }
@@ -118,6 +124,9 @@ func (s *Store) RevokeXMPPDevicePassword(ctx context.Context, userID, id string)
 		return ErrNotFound
 	}
 	if _, err = tx.ExecContext(ctx, s.rebind(`DELETE FROM xmpp_push_registrations WHERE user_id=? AND credential_id=?`), userID, id); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, s.rebind(`DELETE FROM xmpp_scram_keys WHERE user_id=? AND credential_id=?`), userID, id); err != nil {
 		return err
 	}
 	return tx.Commit()

@@ -122,15 +122,11 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 403, map[string]string{"error": "current password is incorrect"})
 		return
 	}
-	hash, err := s.authn.Hasher.Hash(req.New)
-	if err != nil {
-		writeJSON(w, 500, map[string]string{"error": "cannot hash password"})
-		return
-	}
-	if err = s.store.UpdateUserPassword(r.Context(), user.ID, hash); err != nil {
+	if err = s.authn.SetLocalPassword(r.Context(), user.ID, req.New); err != nil {
 		writeJSON(w, 500, map[string]string{"error": "cannot change password"})
 		return
 	}
+
 	if err = s.store.DeleteOAuthTokensByUser(r.Context(), user.ID); err != nil {
 		writeJSON(w, 500, map[string]string{"error": "password changed but token revocation failed"})
 		return

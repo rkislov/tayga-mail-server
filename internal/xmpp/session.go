@@ -21,6 +21,12 @@ import (
 )
 
 type Session struct {
+	streamFrom       string
+	authMechanisms   []string
+	channelBindings  map[string][]byte
+	localCertificate []byte
+	scram            *scramExchange
+
 	mucResume    []mucResumeState // protected by mu; captured on disconnect
 	csi          clientState
 	sessionID    string
@@ -174,6 +180,9 @@ func (s *Session) handleStream() error {
 			domain = s.srv.domain
 		}
 		s.streamDomain = strings.ToLower(strings.TrimSpace(domain))
+		if err := s.setStreamFrom(attr(se, "from")); err != nil {
+			return err
+		}
 		if err := s.openStream(domain); err != nil {
 			return err
 		}
@@ -211,7 +220,7 @@ func (s *Session) writeFeatures() error {
 	}
 	canAuth := s.tlsDone || !s.srv.cfg.XMPP.RequireTLS
 	if canAuth && !s.authed {
-		b.WriteString(`<mechanisms xmlns='urn:ietf:params:xml:ns:xmpp-sasl'><mechanism>PLAIN</mechanism><mechanism>X-OAUTH2</mechanism></mechanisms>`)
+		b.WriteString(s.authenticationFeatures())
 	}
 	if canAuth && s.authed && !s.bound {
 		b.WriteString(`<sm xmlns="urn:xmpp:sm:3"/><csi xmlns="urn:xmpp:csi:0"/>`)
@@ -231,21 +240,32 @@ func (s *Session) negotiate(domain string) error {
 		if !ok {
 			continue
 		}
+		if s.scram != nil && se.Name.Space != saslNS && se.Name.Space != sasl2NS {
+			return fmt.Errorf("unexpected traffic during SASL")
+		}
 		switch {
+		case se.Name.Space == saslNS || se.Name.Space == sasl2NS:
+			restart, err := s.handleSASL(se)
+			if err != nil {
+				return err
+			}
+			if restart {
+				return s.handleStream()
+			}
 		case se.Name.Space == smNamespace:
 			if err := s.handleStreamManagement(se); err != nil {
 				return err
 			}
 		case se.Name.Local == "starttls" && se.Name.Space == "urn:ietf:params:xml:ns:xmpp-tls":
 			_ = s.dec.Skip()
-			if s.tlsCfg == nil {
+			if s.tlsCfg == nil || s.tlsDone || s.authed {
 				_ = s.writeString(`<failure xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>`)
 				return fmt.Errorf("tls not configured")
 			}
 			if err := s.writeString(`<proceed xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>`); err != nil {
 				return err
 			}
-			tc := tls.Server(s.conn, s.tlsCfg)
+			tc := tls.Server(s.conn, s.sessionTLSConfig())
 			if err := tc.Handshake(); err != nil {
 				return err
 			}
@@ -254,22 +274,6 @@ func (s *Session) negotiate(domain string) error {
 			s.bw = bufio.NewWriter(tc)
 			s.dec = xml.NewDecoder(s.br)
 			s.tlsDone = true
-			s.streamID = randomID()
-			return s.handleStream()
-		case se.Name.Local == "auth" && se.Name.Space == "urn:ietf:params:xml:ns:xmpp-sasl":
-			mech := attr(se, "mechanism")
-			raw, err := readElementText(s.dec, se)
-			if err != nil {
-				return err
-			}
-			if err := s.saslAuth(mech, raw); err != nil {
-				_ = s.writeString(`<failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'><not-authorized/></failure>`)
-				return err
-			}
-			if err := s.writeString(`<success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>`); err != nil {
-				return err
-			}
-			s.authed = true
 			s.streamID = randomID()
 			return s.handleStream()
 		case se.Name.Local == "iq" && (se.Name.Space == "jabber:client" || se.Name.Space == ""):
@@ -325,6 +329,9 @@ func (s *Session) saslAuth(mech, b64 string) (authErr error) {
 		return fmt.Errorf("invalid authentication identity")
 	}
 	user = jid.Bare()
+	if jid.Domain != s.streamDomain || (s.streamFrom != "" && user != s.streamFrom) {
+		return fmt.Errorf("stream identity mismatch")
+	}
 	if parts[0] != "" && ParseJID(parts[0]).Bare() != user {
 		return fmt.Errorf("authorization identity mismatch")
 	}
@@ -353,6 +360,11 @@ func (s *Session) saslAuth(mech, b64 string) (authErr error) {
 	s.mu.Unlock()
 	if err != nil {
 		return err
+	}
+	if mech == "PLAIN" && s.tlsDone {
+		if enrollErr := s.srv.authn.EnrollXMPPSCRAM(ctx, u, credentialID, secret); enrollErr != nil {
+			s.log.Warn("xmpp SCRAM enrollment deferred", "user_id", u.ID)
+		}
 	}
 	s.log.Info("xmpp authentication succeeded", "user_id", u.ID, "domain", s.streamDomain, "peer", s.conn.RemoteAddr().String())
 	return nil
