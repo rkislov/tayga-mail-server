@@ -104,9 +104,9 @@ func (s *Session) handlePubSubIQ(ctx context.Context, id, typ, to, inner string)
 	if (operation != "items" && operation != "subscribe" && operation != "unsubscribe") && owner != s.JID.Bare() {
 		return fail("forbidden")
 	}
-	if node == bookmarksNode {
+	if bookmarkNode(node) {
 		if s.srv.log != nil {
-			s.srv.log.Info("xmpp bookmark request", "jid", s.JID.Full(), "operation", operation, "type", typ)
+			s.srv.log.Info("xmpp bookmark request", "jid", s.JID.Full(), "operation", operation, "type", typ, "node", node)
 		}
 		if owner != s.JID.Bare() {
 			return fail("forbidden")
@@ -193,15 +193,15 @@ func (s *Session) handlePubSubIQ(ctx context.Context, id, typ, to, inner string)
 		if operation == "publish" && (len(op.Items) != 1 || strings.TrimSpace(op.Items[0].Payload) == "") {
 			return fail("bad-request")
 		}
-		if node == bookmarksNode {
-			if operation == "publish" && !validBookmark(op.Items[0].ID, op.Items[0].Payload) {
+		if bookmarkNode(node) {
+			if node == bookmarksNode && operation == "publish" && !validBookmark(op.Items[0].ID, op.Items[0].Payload) {
 				return fail("bad-request")
 			}
 			if a, ok := config["access_model"]; ok && a != "whitelist" {
 				return fail("not-acceptable")
 			}
 			config["access_model"] = "whitelist"
-			config["max_items"] = 0
+			config["max_items"] = pepDefaultMaxItems(node)
 		}
 		if !exists {
 			nodeID, err = s.srv.ensurePEPNode(ctx, owner, node)
@@ -228,7 +228,15 @@ func (s *Session) handlePubSubIQ(ctx context.Context, id, typ, to, inner string)
 		if item.ID == "" {
 			item.ID = "current"
 		}
-		if err = s.publishAndNotifyPEP(ctx, owner, node, item.ID, item.Payload); err != nil {
+		if node == legacyBookmarksNode {
+			err = s.replaceLegacyBookmarks(ctx, owner, item.ID, item.Payload)
+		} else {
+			err = s.publishAndNotifyPEP(ctx, owner, node, item.ID, item.Payload)
+		}
+		if err != nil {
+			if errors.Is(err, errInvalidBookmarks) {
+				return fail("bad-request")
+			}
 			if errors.Is(err, ErrOMEMORetired) {
 				return fail("forbidden")
 			}
@@ -243,6 +251,11 @@ func (s *Session) handlePubSubIQ(ctx context.Context, id, typ, to, inner string)
 			return fail("forbidden")
 		}
 		items, err := s.srv.getPEPItems(ctx, owner, node)
+		if node == legacyBookmarksNode {
+			var item pepItem
+			item, err = s.srv.legacyBookmarkItem(ctx, owner)
+			items = []pepItem{item}
+		}
 		if err != nil {
 			return fail("internal-server-error")
 		}
@@ -260,13 +273,26 @@ func (s *Session) handlePubSubIQ(ctx context.Context, id, typ, to, inner string)
 			}
 		}
 		b.WriteString(`</items></pubsub>`)
-		if node == bookmarksNode && s.srv.log != nil {
-			s.srv.log.Info("xmpp bookmarks returned", "jid", s.JID.Full(), "count", len(items))
+		if bookmarkNode(node) && s.srv.log != nil {
+			s.srv.log.Info("xmpp bookmarks returned", "jid", s.JID.Full(), "available_count", len(items), "node", node)
 		}
 		return reply(b.String())
 	case "retract":
 		if typ != "set" || len(op.Items) != 1 || op.Items[0].ID == "" {
 			return fail("bad-request")
+		}
+		if node == legacyBookmarksNode {
+			item, err := s.srv.legacyBookmarkItem(ctx, owner)
+			if err != nil {
+				return fail("internal-server-error")
+			}
+			if item.ItemID != op.Items[0].ID {
+				return fail("item-not-found")
+			}
+			if err = s.replaceLegacyBookmarks(ctx, owner, item.ItemID, `<storage xmlns='storage:bookmarks'/>`); err != nil {
+				return fail("internal-server-error")
+			}
+			return reply("")
 		}
 		result, err := s.srv.db.ExecContext(ctx, s.srv.rebind(`DELETE FROM xmpp_pep_items WHERE node_id=? AND item_id=?`), nodeID, op.Items[0].ID)
 		if err != nil {
@@ -287,6 +313,11 @@ func (s *Session) handlePubSubIQ(ctx context.Context, id, typ, to, inner string)
 		if typ != "set" {
 			return fail("bad-request")
 		}
+		if node == legacyBookmarksNode {
+			if err = s.replaceLegacyBookmarks(ctx, owner, "current", `<storage xmlns='storage:bookmarks'/>`); err != nil {
+				return fail("internal-server-error")
+			}
+		}
 		var notify bool
 		if err = s.srv.db.QueryRowContext(ctx, s.srv.rebind(`SELECT notify_delete FROM xmpp_pep_nodes WHERE id=?`), nodeID).Scan(&notify); err != nil {
 			return fail("internal-server-error")
@@ -294,6 +325,9 @@ func (s *Session) handlePubSubIQ(ctx context.Context, id, typ, to, inner string)
 		recipients := s.pepRecipients(ctx, owner, node)
 		if err = s.srv.deletePEPNode(ctx, owner, node); err != nil {
 			return fail("internal-server-error")
+		}
+		if node == bookmarksNode {
+			s.notifyLegacyBookmarks(ctx, owner)
 		}
 		if notify {
 			for _, session := range recipients {

@@ -131,7 +131,7 @@ func (s *Session) pepRecipients(ctx context.Context, owner, node string) []*Sess
 	}
 	var result []*Session
 	for peer := range peers {
-		allowed := peer == owner || access == "open" || omemoNode(node) || (access == "presence" && s.srv.pepPresenceAllowed(ctx, owner, peer))
+		allowed := peer == owner || (!bookmarkNode(node) && (access == "open" || omemoNode(node) || (access == "presence" && s.srv.pepPresenceAllowed(ctx, owner, peer))))
 		if !allowed {
 			continue
 		}
@@ -151,17 +151,33 @@ func (s *Session) sendPEPEvent(owner, content string) {
 	s.SendRaw([]byte(fmt.Sprintf(`<message type='headline' id='%s' from='%s' to='%s'><event xmlns='http://jabber.org/protocol/pubsub#event'>%s</event></message>`, xmlEscape(randomID()), xmlEscape(owner), xmlEscape(s.JID.Full()), content)))
 }
 func (s *Session) notifyPEP(ctx context.Context, owner, node, payload string) {
+	s.notifyPEPOnly(ctx, owner, node, payload)
+	if node == bookmarksNode {
+		s.notifyLegacyBookmarks(ctx, owner)
+	}
+}
+func (s *Session) notifyPEPOnly(ctx context.Context, owner, node, payload string) {
 	for _, session := range s.pepRecipients(ctx, owner, node) {
 		session.sendPEPEvent(owner, `<items node='`+xmlEscape(node)+`'>`+payload+`</items>`)
 	}
 }
 func (s *Session) sendLastPEP(ctx context.Context, owner, node string) {
+	if node == legacyBookmarksNode {
+		if owner != s.JID.Bare() {
+			return
+		}
+		item, err := s.srv.legacyBookmarkItem(ctx, owner)
+		if err == nil {
+			s.sendPEPEvent(owner, `<items node='`+xmlEscape(node)+`'><item id='`+xmlEscape(item.ItemID)+`'>`+item.Payload+`</item></items>`)
+		}
+		return
+	}
 	var last bool
 	var access string
 	if s.srv.db.QueryRowContext(ctx, s.srv.rebind(`SELECT send_last,access_model FROM xmpp_pep_nodes WHERE owner_bare_jid=? AND node=?`), owner, node).Scan(&last, &access) != nil || !last {
 		return
 	}
-	if owner != s.JID.Bare() && (node == bookmarksNode || !(access == "open" || omemoNode(node) || (access == "presence" && s.srv.pepPresenceAllowed(ctx, owner, s.JID.Bare())))) {
+	if owner != s.JID.Bare() && (bookmarkNode(node) || !(access == "open" || omemoNode(node) || (access == "presence" && s.srv.pepPresenceAllowed(ctx, owner, s.JID.Bare())))) {
 		return
 	}
 	items, err := s.srv.getPEPItems(ctx, owner, node)

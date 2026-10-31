@@ -13,6 +13,8 @@ import (
 
 const bookmarksNode = "urn:xmpp:bookmarks:1"
 
+func bookmarkNode(node string) bool { return node == bookmarksNode || node == legacyBookmarksNode }
+
 func validBookmark(id, payload string) bool {
 	jid, err := NormalizeJID(id)
 	if err != nil || jid.Local == "" || jid.Resource != "" || jid.Bare() != id {
@@ -58,6 +60,10 @@ func (s *Server) syncRoomBookmarksLocked(ctx context.Context, owner string) erro
 	if err != nil {
 		return err
 	}
+	legacyID, err := s.ensurePEPNode(ctx, owner, legacyBookmarksNode)
+	if err != nil {
+		return err
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -66,6 +72,12 @@ func (s *Server) syncRoomBookmarksLocked(ctx context.Context, owner string) erro
 	// Repair old generic PEP nodes as well: bookmarks are always private and
 	// multi-item. Never publish room names/nicknames to roster contacts.
 	if _, err = tx.ExecContext(ctx, s.rebind(`UPDATE xmpp_pep_nodes SET access_model='whitelist',max_items=0,send_last=?,notify_retract=?,notify_delete=? WHERE id=?`), true, true, true, nodeID); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, s.rebind(`UPDATE xmpp_pep_nodes SET access_model='whitelist',max_items=1,send_last=?,notify_retract=?,notify_delete=? WHERE id=?`), true, true, true, legacyID); err != nil {
+		return err
+	}
+	if err = s.importLegacyBookmarksTx(ctx, tx, nodeID, legacyID); err != nil {
 		return err
 	}
 	rows, err := tx.QueryContext(ctx, s.rebind(`SELECT r.jid,r.name FROM web_chat_rooms r JOIN web_chat_members m ON m.room_jid=r.jid JOIN users u ON u.email=m.email JOIN users o ON o.email=r.owner_email WHERE m.email=? AND m.bookmark_seeded=? AND u.enabled=? AND o.enabled=? AND u.tenant_id=o.tenant_id AND u.auth_source<>'resource'`), owner, false, true, true)

@@ -65,4 +65,5 @@ func TestRoomArchivePostgres(t *testing.T) {
 		t.Fatal(err)
 	}
 	testRoomBookmarks(t, server, st.(*storage.Store), bookmarkUser)
+	testLegacyBookmarksBridge(t, server, st.(*storage.Store), bookmarkUser)
 }

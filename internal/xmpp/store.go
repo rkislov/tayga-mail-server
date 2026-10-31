@@ -129,7 +129,7 @@ func (s *Server) ensurePEPNode(ctx context.Context, ownerBare, node string) (str
 	}
 	id = storage.NewID()
 	access := "presence"
-	if node == bookmarksNode {
+	if bookmarkNode(node) {
 		access = "whitelist"
 	}
 	_, err = s.db.ExecContext(ctx, s.rebind(
