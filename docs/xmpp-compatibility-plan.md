@@ -242,3 +242,7 @@ Bound native resources update their activity in the shared session registry and 
 Full-JID IQ requests and replies now reach the addressed device; spoofed `from` attributes are replaced with the authenticated sender. Missing resources return service-unavailable for requests and never generate reply loops. A request must have exactly one payload. IQs to authenticated components are forwarded as well. Server-owned roster/session operations reject another account as their target. This enables device capability queries without misinterpreting them as server commands; presence-priority routing and the other RFC 6121 items remain pending.
 
 The XEP-0357 publisher is implemented with conditional discovery and real protocol handling. External transport is restricted to configured push domains using verified TLS, EXTERNAL and bidi. Native ChatSecure delivery still depends on its vendor service. See [configuration, tests and limits](xmpp-push.md).
+
+### 31.10.2026: SASL2/SCRAM
+
+Реализованы SASL2, SCRAM-SHA-256/PLUS и TLS binding с XEP-0474. [Переход паролей, ограничения и проверки](xmpp-sasl2.md). Включены в 0.9.40 вместе с WebSocket. Реальные Monal/Conversations проверяются отдельно после установки; полная матрица совместимости не закрыта.

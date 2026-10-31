@@ -32,3 +32,8 @@ SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
 CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+XDG SCRAM (github.com/xdg-go/scram), stringprep (github.com/xdg-go/stringprep),
+and PBKDF2 (github.com/xdg-go/pbkdf2): Apache License 2.0.
+Copyright David A. Golden and the respective contributors.
+Used for password normalization, SCRAM verifier derivation and interoperability tests.

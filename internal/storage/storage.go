@@ -20,6 +20,11 @@ var (
 
 // Driver is the storage abstraction shared by protocol handlers.
 type Driver interface {
+	EnsureXMPPSCRAMSalt(context.Context, string) (string, error)
+	XMPPSCRAMKeys(context.Context, string) (string, []XMPPSCRAMKey, error)
+	ActiveXMPPDevicePasswords(context.Context, string) ([]XMPPDevicePassword, error)
+	SaveXMPPSCRAMKey(context.Context, string, XMPPSCRAMKey) error
+	UpdateUserPasswordWithSCRAM(context.Context, string, string, XMPPSCRAMKey) error
 	CreateXMPPDevicePassword(context.Context, *XMPPDevicePassword) error
 	GetXMPPDevicePassword(context.Context, string, string) (*XMPPDevicePassword, error)
 	ListXMPPDevicePasswords(context.Context, string) ([]XMPPDevicePassword, error)
