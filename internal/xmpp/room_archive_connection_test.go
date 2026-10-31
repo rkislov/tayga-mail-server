@@ -14,6 +14,73 @@ import (
 	"github.com/tayga/tms/internal/storage"
 )
 
+// Released Monal first asks for one latest ID (MLignore), then only messages
+// after that ID. An empty catchup is correct when all messages predate its first
+// join. Explicit backscroll must still return the full page, with fixed fallback
+// text so Monal does not silently discard encrypted user messages as key traffic.
+func TestRoomMAMMonalFirstJoinAndBackscroll(t *testing.T) {
+	srv, st, u := testServer(t)
+	ctx := context.Background()
+	srv.authn = auth.NewLayer(st, config.LDAPConfig{}, config.MFAConfig{}, config.OIDCConfig{})
+	hash, err := srv.authn.Hasher.Hash("fixture-password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = st.UpdateUserPassword(ctx, u.ID, hash); err != nil {
+		t.Fatal(err)
+	}
+	bob, err := st.CreateUser(ctx, &storage.User{TenantID: u.TenantID, DomainID: u.DomainID, LocalPart: "bob", Email: "bob@example.com", Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	room, err := srv.CreateChatRoom(ctx, u.Email, "First join", []string{bob.Email})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	for _, body := range []string{"first", "second"} {
+		ev, err := srv.SendChatMessage(ctx, u.Email, room.JID, body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, ev.ID)
+	}
+	audience, err := srv.RoomOMEMOContext(ctx, u.Email, room.JID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ev, err := srv.SendRoomOMEMO(ctx, u.Email, room.JID, audience.Revision, groupCipherFixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids = append(ids, ev.ID)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	phone := newResumeWireClient(t, srv, ln, "new-phone")
+	phone.send(`<presence to='` + room.JID + `/Alice'><x xmlns='` + mucNS + `'><history maxstanzas='0'/></x></presence>`)
+	phone.want("presence", "")
+	phone.want("message", "") // Only subject; maxstanzas=0 must not be overridden.
+	query := func(id, rsm string) mamWirePage {
+		phone.send(`<iq to='` + room.JID + `' type='set' id='` + id + `'><query xmlns='urn:xmpp:mam:2' queryid='` + id + `'><x xmlns='jabber:x:data' type='submit'><field var='FORM_TYPE' type='hidden'><value>urn:xmpp:mam:2</value></field><field var='end'><value>` + time.Now().UTC().Add(time.Minute).Format(time.RFC3339) + `</value></field></x><set xmlns='http://jabber.org/protocol/rsm'>` + rsm + `</set></query></iq>`)
+		return readArchiveWirePage(t, phone, id, "new-phone", room.JID)
+	}
+	latest := query("MLignore:prime", `<max>1</max><before/>`)
+	if !reflect.DeepEqual(latest.IDs, ids[2:]) || latest.Count != 3 || latest.Complete {
+		t.Fatalf("latest-ID priming must not expand or rewrite the query: %+v", latest)
+	}
+	catchup := query("MLcatchup:next", `<max>50</max><after>`+latest.Last+`</after>`)
+	if len(catchup.IDs) != 0 || !catchup.Complete {
+		t.Fatalf("there are no newer messages: %+v", catchup)
+	}
+	history := query("MLhistory:backscroll", `<max>50</max><before/>`)
+	if !reflect.DeepEqual(history.IDs, ids) || !reflect.DeepEqual(history.Encrypted, ids[2:]) || !history.Complete {
+		t.Fatalf("backscroll must preserve all old IDs and ciphertext: %+v", history)
+	}
+}
+
 func TestRoomMAMTCPReconnectAndRemovedMember(t *testing.T) {
 	srv, st, u := testServer(t)
 	ctx := context.Background()

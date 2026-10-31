@@ -140,6 +140,21 @@ func (s *Session) handleRoomMAM(ctx context.Context, id, typ, room, inner string
 	if err != nil {
 		return fail("internal-server-error")
 	}
+	if s.log != nil {
+		mode := "forward"
+		if f.Before != nil {
+			mode = "before"
+			if *f.Before == "" {
+				mode = "latest"
+			}
+		} else if f.After != nil {
+			mode = "after"
+		}
+		// Only pagination metadata: no query IDs, cursors, message bodies or keys.
+		s.log.Info("xmpp MUC archive page", "jid", s.JID.Full(), "room", room,
+			"mode", mode, "limit", f.Limit, "date_filter", f.Start != nil || f.End != nil,
+			"returned", len(p.Messages), "total", p.Total, "complete", p.Complete)
+	}
 	for _, m := range p.Messages {
 		// MAM room messages omit 'to' and identify the actual publisher in this
 		// non-anonymous room. Never copy client-supplied identity metadata.

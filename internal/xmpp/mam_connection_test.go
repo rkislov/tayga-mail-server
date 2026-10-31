@@ -68,7 +68,7 @@ func readArchiveWirePage(t *testing.T, c *resumeWireClient, id, resource, archiv
 			}
 			page.IDs = append(page.IDs, r.ID)
 			if m := r.Forward.Message; m.Encrypted != nil {
-				if m.Body != "" || m.Encrypted.Header == "" || strings.Contains(archive, "@web-groups.") && m.Identity.Item.JID == "" {
+				if (m.Body != "" && m.Body != roomOMEMOFallback) || m.Encrypted.Header == "" || strings.Contains(archive, "@web-groups.") && (m.Identity.Item.JID == "" || m.Body != roomOMEMOFallback) {
 					t.Fatalf("invalid encrypted archive envelope: %+v", m)
 				}
 				page.Encrypted = append(page.Encrypted, r.ID)
