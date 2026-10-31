@@ -25,7 +25,7 @@ func TestMonalPEPDiscoveryRequirements(t *testing.T) {
 	if err := s.writeDiscoInfo("features", user.Email); err != nil {
 		t.Fatal(err)
 	}
-	for _, expected := range []string{"<identity category='pubsub' type='pep'", "filtered-notifications", "publish-options", "publish", "subscribe", "create-nodes", "delete-items", "delete-nodes", "persistent-items", "retrieve-items", "auto-create"} {
+	for _, expected := range []string{"<identity category='pubsub' type='pep'", "filtered-notifications", "publish-options", "publish", "subscribe", "create-nodes", "delete-items", "delete-nodes", "persistent-items", "retrieve-items", "auto-create", "pubsub#item-ids", "pubsub#multi-items", "pubsub#config-node-max"} {
 		if !strings.Contains(out.String(), expected) {
 			t.Fatalf("missing %s: %s", expected, out.String())
 		}

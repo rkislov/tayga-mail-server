@@ -207,6 +207,9 @@ func (s *Session) writeDiscoInfo(id, to string) error {
 			`<feature var='http://jabber.org/protocol/pubsub#access-open'/>`+
 			`<feature var='http://jabber.org/protocol/pubsub#auto-create'/>`+
 			`<feature var='http://jabber.org/protocol/pubsub#retrieve-items'/>`+
+			`<feature var='http://jabber.org/protocol/pubsub#item-ids'/>`+
+			`<feature var='http://jabber.org/protocol/pubsub#multi-items'/>`+
+			`<feature var='http://jabber.org/protocol/pubsub#config-node-max'/>`+
 			`<feature var='http://jabber.org/protocol/pubsub#filtered-notifications'/>`+
 			`<feature var='http://jabber.org/protocol/pubsub#subscribe'/>`+
 			`<feature var='http://jabber.org/protocol/pubsub#create-nodes'/>`+

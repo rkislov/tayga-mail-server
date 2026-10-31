@@ -105,10 +105,14 @@ func (s *Session) handlePubSubIQ(ctx context.Context, id, typ, to, inner string)
 		return fail("forbidden")
 	}
 	if node == bookmarksNode {
+		if s.srv.log != nil {
+			s.srv.log.Info("xmpp bookmark request", "jid", s.JID.Full(), "operation", operation, "type", typ)
+		}
 		if owner != s.JID.Bare() {
 			return fail("forbidden")
 		}
 		if err := s.srv.syncRoomBookmarks(ctx, owner); err != nil {
+			s.srv.logBookmarkError(err)
 			return fail("internal-server-error")
 		}
 	}
@@ -256,6 +260,9 @@ func (s *Session) handlePubSubIQ(ctx context.Context, id, typ, to, inner string)
 			}
 		}
 		b.WriteString(`</items></pubsub>`)
+		if node == bookmarksNode && s.srv.log != nil {
+			s.srv.log.Info("xmpp bookmarks returned", "jid", s.JID.Full(), "count", len(items))
+		}
 		return reply(b.String())
 	case "retract":
 		if typ != "set" || len(op.Items) != 1 || op.Items[0].ID == "" {
