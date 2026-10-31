@@ -237,7 +237,7 @@ func TestRoomBookmarksTCPReconnect(t *testing.T) {
 		phone := newResumeWireClient(t, srv, ln, resource)
 		phone.send(`<iq type='get' id='account-info' to='` + u.Email + `'><query xmlns='` + discoInfo + `'/></iq>`)
 		info := phone.want("iq", "account-info")
-		for _, feature := range []string{"pubsub#item-ids", "pubsub#multi-items", "pubsub#config-node-max"} {
+		for _, feature := range []string{"pubsub#item-ids", "pubsub#multi-items", "pubsub#config-node-max", "urn:xmpp:bookmarks:1#compat-pep"} {
 			if !strings.Contains(info.Inner, feature) {
 				t.Fatalf("Monal bookmark discovery missing %s: %+v", feature, info)
 			}

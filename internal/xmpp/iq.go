@@ -210,6 +210,7 @@ func (s *Session) writeDiscoInfo(id, to string) error {
 			`<feature var='http://jabber.org/protocol/pubsub#item-ids'/>`+
 			`<feature var='http://jabber.org/protocol/pubsub#multi-items'/>`+
 			`<feature var='http://jabber.org/protocol/pubsub#config-node-max'/>`+
+			`<feature var='urn:xmpp:bookmarks:1#compat-pep'/>`+
 			`<feature var='http://jabber.org/protocol/pubsub#filtered-notifications'/>`+
 			`<feature var='http://jabber.org/protocol/pubsub#subscribe'/>`+
 			`<feature var='http://jabber.org/protocol/pubsub#create-nodes'/>`+
