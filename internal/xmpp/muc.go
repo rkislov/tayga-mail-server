@@ -48,6 +48,9 @@ func mucRole(affiliation string) string {
 	return "participant"
 }
 func (s *Session) mucError(kind, id, to, condition string) error {
+	if s.log != nil {
+		s.log.Info("xmpp MUC request rejected", "jid", s.JID.Full(), "room", ParseJID(to).Bare(), "kind", kind, "condition", condition)
+	}
 	return s.writeString(fmt.Sprintf(`<%s from='%s' to='%s'%s type='error'><error type='cancel'><%s xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/></error></%s>`, kind, xmlEscape(to), xmlEscape(s.JID.Full()), attrIf("id", id), condition, kind))
 }
 func (s *Session) mucResult(id, to, payload string) error {
@@ -291,6 +294,9 @@ func (s *Session) handleMUCPresenceLocked(to, typ, inner string) error {
 		}
 	}
 	occupants[s] = occupant
+	if !already && s.log != nil {
+		s.log.Info("xmpp MUC joined", "jid", s.JID.Full(), "room", room.JID)
+	}
 	for other := range occupants {
 		codes := ""
 		if other == s {
@@ -642,6 +648,9 @@ func (s *Session) handleMUCIQ(id, typ, to, inner string) (bool, error) {
 	}
 	if xml.Unmarshal([]byte(inner), &q) != nil || q.Node != "" || q.XMLName.Local != "query" {
 		return fail("bad-request")
+	}
+	if s.log != nil {
+		s.log.Info("xmpp MUC IQ request", "jid", s.JID.Full(), "room", jid.Bare(), "type", typ, "namespace", q.XMLName.Space)
 	}
 	if jid.Local == "" {
 		if typ != "get" {

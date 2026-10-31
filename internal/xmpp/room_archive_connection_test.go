@@ -235,10 +235,24 @@ func TestRoomBookmarksTCPReconnect(t *testing.T) {
 	defer ln.Close()
 	for _, resource := range []string{"phone", "second-phone"} {
 		phone := newResumeWireClient(t, srv, ln, resource)
+		phone.send(`<iq type='get' id='account-info' to='` + u.Email + `'><query xmlns='` + discoInfo + `'/></iq>`)
+		info := phone.want("iq", "account-info")
+		for _, feature := range []string{"pubsub#item-ids", "pubsub#multi-items", "pubsub#config-node-max"} {
+			if !strings.Contains(info.Inner, feature) {
+				t.Fatalf("Monal bookmark discovery missing %s: %+v", feature, info)
+			}
+		}
 		phone.send(`<iq type='get' id='bookmarks' to='` + u.Email + `'><pubsub xmlns='` + pepNS + `'><items node='` + bookmarksNode + `'/></pubsub></iq>`)
 		iq := phone.want("iq", "bookmarks")
 		if !strings.Contains(iq.Inner, room.JID) || !strings.Contains(iq.Inner, `autojoin='true'`) {
 			t.Fatal(iq)
+		}
+		phone.send(`<iq type='get' id='room-info' to='` + room.JID + `'><query xmlns='` + discoInfo + `'/></iq>`)
+		info = phone.want("iq", "room-info")
+		for _, feature := range []string{"muc_membersonly", "muc_nonanonymous", "urn:xmpp:mam:2"} {
+			if !strings.Contains(info.Inner, feature) {
+				t.Fatalf("Monal group discovery missing %s: %+v", feature, info)
+			}
 		}
 		phone.send(`<presence to='` + room.JID + `/Alice'><x xmlns='` + mucNS + `'><history maxstanzas='0'/></x></presence>`)
 		presence := phone.want("presence", "")
