@@ -171,7 +171,7 @@ binary was not changed until the complete package and backup had been verified.
 - [x] XEP-0352: active/inactive state; suppress only repeated identical availability while inactive. Messages and subscription requests remain immediate.
 - [ ] XEP-0363 and OMEMO: test key publication, multi-device trust, encrypted attachments and history with Conversations.
 - [x] XEP-0045 local members-only profile: shared web/native rooms, membership, affiliations, invitations, bounded join history and tenant isolation. See [limits](xmpp.md); this is not complete XEP-0045 conformance.
-- [ ] RFC 7395: authenticated XMPP WebSocket transport with framing, origin checks and limits.
+- [x] RFC 7395 transport: opt-in HTTPS `/xmpp-websocket`, mandatory SASL, standalone XML framing, same-origin checks, bounds, shared SM resume/device revocation and TCP/WSS interoperability. Verified in tests and Chrome on 31 October; not yet deployed or included in 0.9.39. See [configuration and limits](xmpp-websocket.md). Automatic endpoint discovery and wider client acceptance remain pending.
 - [x] Web Push: persistent subscriptions, VAPID, service worker, delivery retries, subscription removal and notification privacy. Browser/device delivery verification remains pending.
 - [x] XEP-0357 publisher: persistent registrations, bounded queue, component and allowlisted TLS EXTERNAL/bidi routes, authenticated acknowledgements and retry/removal. See [native push](xmpp-push.md). Real ChatSecure background delivery is still blocked by vendor DNS/availability.
 - [ ] RFC 6120/7712: S2S federation, DNS discovery, authenticated domain association, queues and abuse limits.

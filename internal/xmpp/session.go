@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gorilla/websocket"
 	"github.com/tayga/tms/internal/auth"
 	"github.com/tayga/tms/internal/storage"
 )
@@ -27,7 +28,8 @@ type Session struct {
 	srv          *Server
 	log          *slog.Logger
 	conn         net.Conn
-	done         chan struct{} // closed after serve has finished cleanup and retained SM state
+	ws           *websocket.Conn // nil for TCP; writes serialized by mu
+	done         chan struct{}   // closed after serve has finished cleanup and retained SM state
 	br           *bufio.Reader
 	bw           *bufio.Writer
 	dec          *xml.Decoder
@@ -133,7 +135,12 @@ func (s *Session) serve() {
 	defer close(s.done)
 	defer s.Close()
 	_ = s.conn.SetDeadline(time.Now().Add(5 * time.Minute))
-	err := s.handleStream()
+	var err error
+	if s.ws != nil {
+		err = s.handleWebSocketStream()
+	} else {
+		err = s.handleStream()
+	}
 	var netErr net.Error
 	var xmlErr *xml.SyntaxError
 	// encoding/xml wraps EOF inside an open <stream:stream> as a SyntaxError.
@@ -446,47 +453,8 @@ func (s *Session) stanzaLoop() error {
 		}
 		switch t := tok.(type) {
 		case xml.StartElement:
-			s.touchSession()
-			if t.Name.Space == csiNamespace {
-				if err := s.handleClientState(t); err != nil {
-					return err
-				}
-				continue
-			}
-			if t.Name.Space == smNamespace {
-				if err := s.handleStreamManagement(t); err != nil {
-					return err
-				}
-				continue
-			}
-			if t.Name.Space != "" && t.Name.Space != "jabber:client" {
-				if err := s.dec.Skip(); err != nil {
-					return err
-				}
-				continue
-			}
-			switch t.Name.Local {
-			case "message":
-				if err := s.handleMessage(t); err != nil {
-					return err
-				}
-			case "presence":
-				if err := s.handlePresence(t); err != nil {
-					return err
-				}
-			case "iq":
-				if err := s.handleIQ(t); err != nil {
-					return err
-				}
-			default:
-				_ = s.dec.Skip()
-			}
-			if t.Name.Local == "message" || t.Name.Local == "presence" || t.Name.Local == "iq" {
-				s.mu.Lock()
-				if s.sm.enabled {
-					s.sm.received++
-				}
-				s.mu.Unlock()
+			if err := s.handleBoundElement(t); err != nil {
+				return err
 			}
 		case xml.EndElement:
 			if t.Name.Local == "stream" {
@@ -498,6 +466,53 @@ func (s *Session) stanzaLoop() error {
 			}
 		}
 	}
+}
+
+// handleBoundElement is shared by TCP and RFC 7395 transports.
+func (s *Session) handleBoundElement(t xml.StartElement) error {
+	s.touchSession()
+	if t.Name.Space == csiNamespace {
+		if err := s.handleClientState(t); err != nil {
+			return err
+		}
+		return nil
+	}
+	if t.Name.Space == smNamespace {
+		if err := s.handleStreamManagement(t); err != nil {
+			return err
+		}
+		return nil
+	}
+	if t.Name.Space != "" && t.Name.Space != "jabber:client" {
+		if err := s.dec.Skip(); err != nil {
+			return err
+		}
+		return nil
+	}
+	switch t.Name.Local {
+	case "message":
+		if err := s.handleMessage(t); err != nil {
+			return err
+		}
+	case "presence":
+		if err := s.handlePresence(t); err != nil {
+			return err
+		}
+	case "iq":
+		if err := s.handleIQ(t); err != nil {
+			return err
+		}
+	default:
+		_ = s.dec.Skip()
+	}
+	if t.Name.Local == "message" || t.Name.Local == "presence" || t.Name.Local == "iq" {
+		s.mu.Lock()
+		if s.sm.enabled {
+			s.sm.received++
+		}
+		s.mu.Unlock()
+	}
+	return nil
 }
 
 func (s *Session) handleMessage(se xml.StartElement) error {

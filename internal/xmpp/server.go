@@ -43,11 +43,13 @@ type Server struct {
 	domain         string
 	db             *sql.DB
 
-	webPresenceMu sync.Mutex
-	presence      map[string]map[string]presenceState
-	mu            sync.Mutex
-	ln            []net.Listener
-	closed        bool
+	webPresenceMu  sync.Mutex
+	presence       map[string]map[string]presenceState
+	mu             sync.Mutex
+	ln             []net.Listener
+	closed         bool
+	webSockets     map[*Session]struct{} // protected by mu, including pre-auth connections
+	webSocketCount int                   // includes HTTP upgrades in flight; protected by mu
 }
 
 func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth.Layer, tlsMgr *tlsutil.Manager) *Server {
@@ -89,7 +91,7 @@ func (s *Server) Start(ctx context.Context) error {
 	if s.cfg.XMPP.ListenTLS != "" {
 		specs = append(specs, spec{addr: s.cfg.XMPP.ListenTLS, name: "xmpp-c2s-tls", implicit: true})
 	}
-	if len(specs) == 0 {
+	if len(specs) == 0 && !s.cfg.XMPP.WebSocket {
 		s.log.Warn("xmpp enabled but no listen addresses")
 		return nil
 	}
@@ -152,7 +154,14 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	s.closed = true
 	lns := append([]net.Listener(nil), s.ln...)
 	s.ln = nil
+	webSockets := make([]*Session, 0, len(s.webSockets))
+	for session := range s.webSockets {
+		webSockets = append(webSockets, session)
+	}
 	s.mu.Unlock()
+	for _, session := range webSockets {
+		_ = session.conn.Close() // Unblock readers, including unauthenticated handshakes.
+	}
 	for _, ln := range lns {
 		_ = ln.Close()
 	}
