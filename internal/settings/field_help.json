@@ -703,6 +703,10 @@
     "label": "ManageSieve",
     "description": "Адрес сервиса редактирования Sieve-фильтров, обычно :4190."
   },
+  "xmpp.websocket": {
+    "label": "XMPP через WebSocket",
+    "description": "Разрешить XMPP по защищённому адресу wss://ваш-сервер/xmpp-websocket на HTTPS-порту. Требуются отдельный вход XMPP и совпадение адреса страницы с сервером. Применяется после перезапуска."
+  },
   "xmpp.listen": {
     "label": "XMPP / STARTTLS",
     "description": "Адрес XMPP C2S с возможностью STARTTLS, обычно :5222."

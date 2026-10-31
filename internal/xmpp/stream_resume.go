@@ -255,21 +255,21 @@ func (s *Session) finishPreviousStream(token string, h uint32) string {
 // retransmission neither advances counters nor inserts duplicate queue entries.
 func (s *Session) replayStreamLocked(token string) error {
 	if s.conn != nil {
-		_ = s.conn.SetWriteDeadline(time.Now().Add(stanzaWriteTimeout))
-		defer s.conn.SetWriteDeadline(time.Time{})
+		s.setWriteDeadline(time.Now().Add(stanzaWriteTimeout))
+		defer s.setWriteDeadline(time.Time{})
 	}
-	if _, err := s.bw.WriteString(fmt.Sprintf(`<resumed xmlns='urn:xmpp:sm:3' previd='%s' h='%d'/>`, xmlEscape(token), s.sm.received)); err != nil {
+	if err := s.writeElementLocked(fmt.Sprintf(`<resumed xmlns='urn:xmpp:sm:3' previd='%s' h='%d'/>`, xmlEscape(token), s.sm.received)); err != nil {
 		return err
 	}
 	for _, raw := range s.sm.pending {
-		if _, err := s.bw.WriteString(raw); err != nil {
+		if err := s.writeElementLocked(raw); err != nil {
 			return err
 		}
 	}
-	if _, err := s.bw.WriteString(`<r xmlns='urn:xmpp:sm:3'/>`); err != nil {
+	if err := s.writeElementLocked(`<r xmlns='urn:xmpp:sm:3'/>`); err != nil {
 		return err
 	}
-	return s.bw.Flush()
+	return s.flushElementsLocked()
 }
 
 func (sm *streamManagement) ack(h uint32) {

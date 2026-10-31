@@ -3,8 +3,8 @@ module github.com/tayga/tms
 go 1.26.0
 
 require (
-	github.com/SherClockHolmes/webpush-go v1.4.0
 	blitiri.com.ar/go/spf v1.6.0
+	github.com/SherClockHolmes/webpush-go v1.4.0
 	github.com/emersion/go-ical v0.0.0-20250609112844-439c63cef608
 	github.com/emersion/go-imap v1.2.1
 	github.com/emersion/go-message v0.18.2
@@ -18,6 +18,7 @@ require (
 	github.com/go-webauthn/webauthn v0.18.2
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
+	github.com/gorilla/websocket v1.5.3
 	github.com/lib/pq v1.10.9
 	github.com/prometheus/client_golang v1.22.0
 	github.com/rest-mail/go-arc v0.2.3

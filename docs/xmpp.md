@@ -18,6 +18,8 @@ Canonical requirements: [tms-xmpp-001.md](./tms-xmpp-001.md).
 
 Module: `internal/xmpp`. C2S listeners default **`xmpp.enabled: false`**; the web Chat app uses the same hub/MAM even when C2S is off. Enable C2S for external clients.
 
+An opt-in [RFC 7395 WebSocket transport](xmpp-websocket.md) is also implemented: HTTPS `/xmpp-websocket`, shared SASL/session/SM handling, origin checks and bounded XML frames. It is prepared for the release after 0.9.39; production deployment and endpoint discovery are separate steps.
+
 ## Web messenger (user UI)
 
 In the shell nav: **Чат / Chat**.

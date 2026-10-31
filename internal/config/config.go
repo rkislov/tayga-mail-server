@@ -361,6 +361,7 @@ type XMPPConfig struct {
 	PushServices []string `yaml:"push_services"` // explicit remote push domains; TLS EXTERNAL + bidi only
 
 	Enabled         bool                  `yaml:"enabled"`
+	WebSocket       bool                  `yaml:"websocket"`  // RFC 7395 on HTTPS /xmpp-websocket; opt-in
 	Listen          string                `yaml:"listen"`     // C2S STARTTLS, default :5222
 	ListenTLS       string                `yaml:"listen_tls"` // C2S implicit TLS, optional (:5223)
 	S2SListen       string                `yaml:"s2s_listen"` // S2S, default empty until federation

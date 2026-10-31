@@ -41,8 +41,8 @@ func isCountedStanza(raw string) bool {
 func (s *Session) writeLocked(raw string) error {
 	// A stalled mobile client must not hold routing or group locks indefinitely.
 	if s.conn != nil {
-		_ = s.conn.SetWriteDeadline(time.Now().Add(stanzaWriteTimeout))
-		defer s.conn.SetWriteDeadline(time.Time{})
+		s.setWriteDeadline(time.Now().Add(stanzaWriteTimeout))
+		defer s.setWriteDeadline(time.Time{})
 	}
 	counted := s.sm.enabled && isCountedStanza(raw)
 	if counted && s.sm.sent-s.sm.acknowledged >= 1024 {
@@ -60,15 +60,15 @@ func (s *Session) writeLocked(raw string) error {
 	if counted {
 		s.sm.sent++
 	}
-	if _, err := s.bw.WriteString(raw); err != nil {
+	if err := s.writeElementLocked(raw); err != nil {
 		return err
 	}
 	if counted {
-		if _, err := s.bw.WriteString(`<r xmlns='urn:xmpp:sm:3'/>`); err != nil {
+		if err := s.writeElementLocked(`<r xmlns='urn:xmpp:sm:3'/>`); err != nil {
 			return err
 		}
 	}
-	return s.bw.Flush()
+	return s.flushElementsLocked()
 }
 
 func (s *Session) handleStreamManagement(start xml.StartElement) error {

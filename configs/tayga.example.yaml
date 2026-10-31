@@ -39,6 +39,7 @@ seed:
 # xmpp:
 #   push_services: [] # Allowlisted push gateway domains; verified TLS EXTERNAL + bidi. See docs/xmpp-push.md.
 #   enabled: false
+#   websocket: false # Opt-in RFC 7395 at wss://mail.example.com/xmpp-websocket (HTTPS only).
 #   listen: ":5222"
 #   listen_tls: ":5223"
 #   require_tls: true

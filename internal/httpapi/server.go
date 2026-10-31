@@ -80,6 +80,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/calendar/subscriptions", s.handleCalendarSubscriptions)
 	mux.HandleFunc("/healthz", s.handleHealthz)
 	mux.HandleFunc("/readyz", s.handleReadyz)
+	mux.HandleFunc("/xmpp-websocket", s.handleXMPPWebSocket)
 	mux.HandleFunc("/.well-known/mta-sts.txt", s.handleMTASTSPolicy)
 	mux.Handle("/metrics", promhttp.Handler())
 
