@@ -4,6 +4,7 @@ package flowsync
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 	"net/http"
@@ -14,6 +15,45 @@ import (
 
 	"github.com/tayga/tms/internal/storage"
 )
+
+func TestComposeLargePhotoReplyAndReplay(t *testing.T) {
+	photo := bytes.Repeat([]byte{0xff, 0xd8, 0x36, 0x71}, (7<<20)/4)
+	wantPhoto := sha256.Sum256(photo)
+	raw := []byte("From: alice@example.com\r\nTo: bob@example.com\r\nSubject: Re: Photo\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=photo\r\n\r\n--photo\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nОтвет с фотографией\r\n--photo\r\nContent-Type: image/jpeg\r\nContent-Disposition: attachment; filename=photo.jpg\r\nContent-Transfer-Encoding: base64\r\n\r\n" + base64.StdEncoding.EncodeToString(photo) + "\r\n--photo--\r\n")
+	for _, command := range []string{"SmartReply", "SmartForward", "SendMail"} {
+		t.Run(command, func(t *testing.T) {
+			ctx, st, u, h, _, _ := syncFixture(t)
+			source := composeSource(t, ctx, h, u, []byte("From: bob@example.com\r\n\r\nOriginal"))
+			options := ""
+			if command != "SendMail" {
+				options = `<ReplaceMime/><Source><FolderId>` + source.MailboxID + `</FolderId><ItemId>` + source.ID + `</ItemId></Source>`
+			}
+			submissions := 0
+			h.sender = &mailSubmission{store: st, ms: h.ms, submit: func(_ context.Context, _ *storage.User, recipients []string, submitted []byte) error {
+				submissions++
+				content, err := parseMessageContent(submitted)
+				if err != nil || strings.Join(recipients, ",") != "bob@example.com" || len(content.Attachments) != 1 {
+					t.Fatalf("invalid large submission: recipients=%v attachments=%d err=%v", recipients, len(content.Attachments), err)
+				}
+				if sha256.Sum256(content.Attachments[0].Data) != wantPhoto || !strings.Contains(content.Text, "Ответ с фотографией") {
+					t.Fatal("photo or reply content changed")
+				}
+				return nil
+			}}
+			for attempt := 0; attempt < 2; attempt++ {
+				// Retry the same message over XML too: its base64 envelope is
+				// larger than the MIME and WBXML, but must not resubmit the mail.
+				w, trace := composeRequestTransport(t, h, u, command, "large-photo-retry", options, raw, attempt == 0)
+				if w.Code != http.StatusOK || w.Body.Len() != 0 || trace.Result != "compose_accepted" {
+					t.Fatalf("large photo rejected: HTTP=%d body=%q result=%s", w.Code, w.Body.String(), trace.Result)
+				}
+			}
+			if submissions != 1 {
+				t.Fatalf("retry submitted %d messages", submissions)
+			}
+		})
+	}
+}
 
 func composeSource(t *testing.T, ctx context.Context, h *easHandler, u *storage.User, raw []byte) *storage.Message {
 	t.Helper()
@@ -38,15 +78,26 @@ func composeSource(t *testing.T, ctx context.Context, h *easHandler, u *storage.
 
 func composeRequest(t *testing.T, h *easHandler, u *storage.User, command, id, options string, mime []byte) (*httptest.ResponseRecorder, *requestTrace) {
 	t.Helper()
+	return composeRequestTransport(t, h, u, command, id, options, mime, true)
+}
+
+func composeRequestTransport(t *testing.T, h *easHandler, u *storage.User, command, id, options string, mime []byte, wbxml bool) (*httptest.ResponseRecorder, *requestTrace) {
+	t.Helper()
 	xml := fmt.Sprintf(`<%s xmlns="ComposeMail:"><ClientId>%s</ClientId>%s<Mime>%s</Mime></%s>`,
 		command, id, options, base64.StdEncoding.EncodeToString(mime), command)
-	wire, err := encodeWire(xml)
-	if err != nil {
-		t.Fatal(err)
+	wire := []byte(xml)
+	contentType := "application/xml"
+	if wbxml {
+		var err error
+		wire, err = encodeWire(xml)
+		if err != nil {
+			t.Fatal(err)
+		}
+		contentType = "application/vnd.ms-sync.wbxml"
 	}
 	trace := &requestTrace{}
 	r := httptest.NewRequest("POST", "/Microsoft-Server-ActiveSync?Cmd="+command+"&DeviceId=iphone&DeviceType=iPhone", bytes.NewReader(wire))
-	r.Header.Set("Content-Type", "application/vnd.ms-sync.wbxml")
+	r.Header.Set("Content-Type", contentType)
 	r.Header.Set("MS-ASProtocolVersion", "16.1")
 	r = r.WithContext(context.WithValue(withUser(r.Context(), u), traceKey{}, trace))
 	w := httptest.NewRecorder()

@@ -17,6 +17,9 @@ import (
 )
 
 type SubmitFunc func(context.Context, *storage.User, []string, []byte) error
+
+const maxSubmissionMessageBytes = 32 << 20
+
 type mailSubmission struct {
 	store  storage.Driver
 	ms     *mailstore.Store
@@ -28,7 +31,7 @@ func (s *mailSubmission) send(ctx context.Context, u *storage.User, clientID str
 	if s == nil || s.submit == nil {
 		return fmt.Errorf("SMTP submission unavailable")
 	}
-	if len(raw) == 0 || len(raw) > 32<<20 {
+	if len(raw) == 0 || len(raw) > maxSubmissionMessageBytes {
 		return fmt.Errorf("invalid message size")
 	}
 	message, err := mail.ReadMessage(bytes.NewReader(raw))

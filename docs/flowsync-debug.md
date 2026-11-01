@@ -23,3 +23,13 @@ journalctl -u tayga --since '10 minutes ago' -o cat | grep 'flowsync'
 После диагностики установите `protocol_debug: false` и перезапустите службу, чтобы прекратить подробные записи. Обычный журнал запросов остаётся включённым. HTTP 200 не означает успешную операцию Exchange: проверяйте `result` и `ResponseCode`.
 
 Для SendMail/SmartReply/SmartForward поле `result=compose_accepted` означает приём в очередь отправки, а не доставку внешнему получателю. `compose_source_not_found`, `compose_invalid_mime`, `compose_merge_failed` и `compose_submission_failed` различают причины отказа; окончательная доставка проверяется в почтовом журнале. MIME и содержимое писем в эти диагностические сообщения не попадают.
+
+С версии 0.9.43 обычный журнал содержит `request_content_length` (заявленный
+HTTP-размер, `-1` — неизвестен), а для чтения ActiveSync также `request_bytes`
+и `request_limit_bytes`. Ноль прочитанных байт при `request_too_large` может
+означать ранний отказ по Content-Length. Этот отказ возвращает HTTP 413.
+`request_read_failed` и `request_cancelled` обозначают прерванное чтение,
+`request_invalid_wbxml` и `request_invalid_document` — ошибки разбора.
+Прежний HTTP 400 с текстом `invalid or oversized request` не позволял отличить
+обрыв от превышения лимита; для старых записей одного размера ответа недостаточно,
+чтобы достоверно установить размер отправленного письма.

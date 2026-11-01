@@ -6,6 +6,7 @@ package flowsync
 import (
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/xml"
 	"fmt"
@@ -28,6 +29,54 @@ type easHandler struct {
 }
 
 type easVersionKey struct{}
+
+func easRequestLimit(command string) int64 {
+	switch strings.ToLower(command) {
+	case "sendmail", "smartreply", "smartforward":
+		// The MIME submission limit applies to the decoded message. XML carries
+		// that message in base64; WBXML carries it as opaque bytes. Allow either
+		// representation plus a bounded envelope, without increasing sync limits.
+		return int64(base64.StdEncoding.EncodedLen(maxSubmissionMessageBytes)) + (64 << 10)
+	default:
+		return 8 << 20
+	}
+}
+
+func readEASRequest(w http.ResponseWriter, r *http.Request, command string) ([]byte, bool) {
+	limit := easRequestLimit(command)
+	trace := traceRequest(r)
+	if trace != nil {
+		trace.RequestLimit = limit
+	}
+	tooLarge := func() ([]byte, bool) {
+		if trace != nil {
+			trace.Result = "request_too_large"
+		}
+		http.Error(w, "request exceeds size limit", http.StatusRequestEntityTooLarge)
+		return nil, false
+	}
+	if r.ContentLength > limit {
+		return tooLarge()
+	}
+	body, err := io.ReadAll(io.LimitReader(r.Body, limit+1))
+	if trace != nil {
+		trace.RequestBytes = int64(len(body))
+	}
+	if int64(len(body)) > limit {
+		return tooLarge()
+	}
+	if err != nil {
+		if trace != nil {
+			trace.Result = "request_read_failed"
+			if r.Context().Err() != nil {
+				trace.Result = "request_cancelled"
+			}
+		}
+		http.Error(w, "could not read request", http.StatusBadRequest)
+		return nil, false
+	}
+	return body, true
+}
 
 func (h *easHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("MS-Server-ActiveSync", "18.0")
@@ -81,9 +130,8 @@ func (h *easHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(449)
 		return
 	}
-	body, readErr := io.ReadAll(io.LimitReader(r.Body, (8<<20)+1))
-	if readErr != nil || len(body) > 8<<20 {
-		http.Error(w, "invalid or oversized request", http.StatusBadRequest)
+	body, readOK := readEASRequest(w, r, cmd)
+	if !readOK {
 		return
 	}
 	useWBXML := requestWantsWBXML(r.Header.Get("Content-Type"), r.Header.Get("Accept"), body)
@@ -95,12 +143,18 @@ func (h *easHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if len(body) > 0 && body[0] == wbxmlVersion {
 		body, err = decodeWire(body)
 		if err != nil {
+			if trace := traceRequest(r); trace != nil {
+				trace.Result = "request_invalid_wbxml"
+			}
 			http.Error(w, "invalid WBXML request", 400)
 			return
 		}
 	}
 	if len(body) > 0 {
 		if err = validateCommandXML(body, cmd); err != nil {
+			if trace := traceRequest(r); trace != nil {
+				trace.Result = "request_invalid_document"
+			}
 			http.Error(w, "invalid command document", 400)
 			return
 		}
