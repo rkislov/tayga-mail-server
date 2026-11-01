@@ -31,6 +31,7 @@ import (
 
 // Server exposes health, metrics, auth API, and the embedded Web UI.
 type Server struct {
+	mailMutationLocks       [128]sync.Mutex
 	fileMu                  sync.Mutex
 	uploadLocks             [64]sync.Mutex
 	fileDAVLocks            map[string]*fileLockSystem

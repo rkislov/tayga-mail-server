@@ -60,6 +60,8 @@ func (s *Server) handleMail(w http.ResponseWriter, r *http.Request) {
 		s.mailPrepareForwardAttachment(w, r, au, parts[1], parts[3])
 	case (r.Method == http.MethodGet || r.Method == http.MethodPost) && len(parts) == 3 && parts[0] == "messages" && parts[2] == "travel":
 		s.mailTravelDrafts(w, r, au, parts[1])
+	case r.Method == http.MethodPost && path == "messages/batch":
+		s.mailBatch(w, r, au)
 	case r.Method == http.MethodGet && len(parts) == 2 && parts[0] == "messages":
 		s.mailGetMessage(w, r, au, parts[1])
 	case r.Method == http.MethodPatch && len(parts) == 2 && parts[0] == "messages":
@@ -366,6 +368,8 @@ func (s *Server) mailGetMessage(w http.ResponseWriter, r *http.Request, au *auth
 }
 
 func (s *Server) mailPatchMessage(w http.ResponseWriter, r *http.Request, au *authUser, messageID string) {
+	unlock := s.lockMailMessage(messageID)
+	defer unlock()
 	msg, _, code := s.messageOwned(r, au, messageID)
 	if code != 0 {
 		writeJSON(w, code, map[string]string{"error": http.StatusText(code)})
@@ -432,6 +436,8 @@ func removeFlag(flags []string, want string) []string {
 }
 
 func (s *Server) mailMoveMessage(w http.ResponseWriter, r *http.Request, au *authUser, messageID string) {
+	unlock := s.lockMailMessage(messageID)
+	defer unlock()
 	msg, _, code := s.messageOwned(r, au, messageID)
 	if code != 0 {
 		writeJSON(w, code, map[string]string{"error": http.StatusText(code)})
@@ -449,80 +455,33 @@ func (s *Server) mailMoveMessage(w http.ResponseWriter, r *http.Request, au *aut
 		writeJSON(w, code, map[string]string{"error": http.StatusText(code)})
 		return
 	}
-	if strings.EqualFold(dst.Name, "Archive") {
-		if err := s.doArchiveMessage(r.Context(), au, msg, dst); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-			return
-		}
-		moved, _ := s.store.GetMessageByID(r.Context(), msg.ID)
-		writeJSON(w, http.StatusOK, map[string]any{"id": moved.ID, "mailbox_id": moved.MailboxID, "uid": moved.UID, "archived": true})
-		return
-	}
-	if msg.Archived {
-		raw, err := s.ms.Read(msg.FilePath)
-		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "read failed"})
-			return
-		}
-		newRel, size, _, err := s.ms.UnarchiveToFolder(au.Email, msg.FilePath, dst.Name)
-		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-			return
-		}
-		doc := mailsearch.ParseDocument(raw)
-		_ = s.store.UpdateMessageArchiveMeta(r.Context(), msg.ID, newRel, size, false, doc.Subject, doc.From, doc.To, doc.Date)
-		moved, err := s.store.MoveMessage(r.Context(), msg.ID, dst.ID)
-		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-			return
-		}
-		_ = mailsearch.Index(r.Context(), s.store, msg.ID, raw)
-		writeJSON(w, http.StatusOK, map[string]any{"id": moved.ID, "mailbox_id": moved.MailboxID, "uid": moved.UID, "archived": false})
-		return
-	}
-	moved, err := s.store.MoveMessage(r.Context(), msg.ID, dst.ID)
+	moved, err := s.moveWebMessage(r.Context(), au, msg, dst)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		s.mailMutationError(w, msg.ID, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"id": moved.ID, "mailbox_id": moved.MailboxID, "uid": moved.UID})
+	writeJSON(w, 200, map[string]any{"id": moved.ID, "mailbox_id": moved.MailboxID, "uid": moved.UID, "archived": moved.Archived, "size": moved.Size})
 }
 
 func (s *Server) mailArchiveMessage(w http.ResponseWriter, r *http.Request, au *authUser, messageID string) {
+	unlock := s.lockMailMessage(messageID)
+	defer unlock()
 	msg, _, code := s.messageOwned(r, au, messageID)
 	if code != 0 {
 		writeJSON(w, code, map[string]string{"error": http.StatusText(code)})
 		return
 	}
-	archPath, _ := s.ms.EnsureFolder(au.Email, "Archive")
-	archMB, err := s.store.EnsureMailbox(r.Context(), au.ID, "Archive", archPath)
+	archive, err := s.ensureMailFolder(r.Context(), au, "Archive")
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		s.mailMutationError(w, msg.ID, err)
 		return
 	}
-	if err := s.doArchiveMessage(r.Context(), au, msg, archMB); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	moved, err := s.moveWebMessage(r.Context(), au, msg, archive)
+	if err != nil {
+		s.mailMutationError(w, msg.ID, err)
 		return
 	}
-	moved, _ := s.store.GetMessageByID(r.Context(), msg.ID)
-	writeJSON(w, http.StatusOK, map[string]any{
-		"id": moved.ID, "mailbox_id": moved.MailboxID, "uid": moved.UID, "archived": true, "size": moved.Size,
-	})
-}
-
-func (s *Server) doArchiveMessage(ctx context.Context, au *authUser, msg *storage.Message, archMB *storage.Mailbox) error {
-	newRel, size, raw, err := s.ms.MoveToArchive(au.Email, msg.FilePath)
-	if err != nil {
-		return err
-	}
-	doc := mailsearch.ParseDocument(raw)
-	if _, err := s.store.MoveMessage(ctx, msg.ID, archMB.ID); err != nil {
-		return err
-	}
-	if err := s.store.UpdateMessageArchiveMeta(ctx, msg.ID, newRel, size, true, doc.Subject, doc.From, doc.To, doc.Date); err != nil {
-		return err
-	}
-	return mailsearch.Index(ctx, s.store, msg.ID, raw)
+	writeJSON(w, 200, map[string]any{"id": moved.ID, "mailbox_id": moved.MailboxID, "uid": moved.UID, "archived": moved.Archived, "size": moved.Size})
 }
 
 func (s *Server) mailSearch(w http.ResponseWriter, r *http.Request, au *authUser) {
@@ -582,32 +541,19 @@ func (s *Server) mailSearch(w http.ResponseWriter, r *http.Request, au *authUser
 }
 
 func (s *Server) mailDeleteMessage(w http.ResponseWriter, r *http.Request, au *authUser, messageID string) {
+	unlock := s.lockMailMessage(messageID)
+	defer unlock()
 	msg, mb, code := s.messageOwned(r, au, messageID)
 	if code != 0 {
 		writeJSON(w, code, map[string]string{"error": http.StatusText(code)})
 		return
 	}
-	// Prefer move to Trash unless already there.
-	if !strings.EqualFold(mb.Name, "Trash") {
-		root := s.ms.UserRoot(au.Email)
-		trashPath, _ := s.ms.EnsureFolder(au.Email, "Trash")
-		trash, err := s.store.EnsureMailbox(r.Context(), au.ID, "Trash", trashPath)
-		if err == nil && trash.ID != mb.ID {
-			if _, err := s.store.MoveMessage(r.Context(), msg.ID, trash.ID); err == nil {
-				writeJSON(w, http.StatusOK, map[string]string{"status": "trashed"})
-				return
-			}
-		}
-		_ = root
-	}
-	if err := s.store.DeleteMessage(r.Context(), msg.ID); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	status, err := s.deleteWebMessage(r.Context(), au, msg, mb)
+	if err != nil {
+		s.mailMutationError(w, msg.ID, err)
 		return
 	}
-	if msg.FilePath != "" {
-		_ = s.ms.Delete(msg.FilePath)
-	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+	writeJSON(w, 200, map[string]string{"status": status})
 }
 
 func (s *Server) mailSend(w http.ResponseWriter, r *http.Request, au *authUser) {

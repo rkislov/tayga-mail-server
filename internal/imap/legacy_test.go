@@ -177,6 +177,18 @@ func TestLegacyAPPENDRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err = c.Select(folder, false); err != nil {
+		t.Fatal(err)
+	}
+	if err = c.Store(seq, imap.AddFlags, []interface{}{imap.AnsweredFlag}, nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, original := range msgs {
+		current, err := st.GetMessageByID(ctx, original.ID)
+		if err != nil || current.FilePath != original.FilePath || !storage.HasFlag(current.Flags, imap.AnsweredFlag) {
+			t.Fatal("STORE changed content path or lost flags", err)
+		}
+	}
 	for _, msg := range msgs {
 		data, err := ms.Read(msg.FilePath)
 		if err != nil || !slices.ContainsFunc(originals, func(raw []byte) bool { return bytes.Equal(raw, data) }) {
