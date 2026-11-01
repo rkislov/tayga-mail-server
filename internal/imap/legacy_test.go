@@ -17,13 +17,12 @@ import (
 	"time"
 
 	"github.com/emersion/go-imap"
-	"github.com/emersion/go-imap/backend"
 	"github.com/emersion/go-imap/client"
 	"github.com/emersion/go-imap/commands"
 	"github.com/emersion/go-imap/responses"
-	imapserv "github.com/emersion/go-imap/server"
 	"github.com/tayga/tms/internal/auth"
 	"github.com/tayga/tms/internal/config"
+	imapserv "github.com/tayga/tms/internal/imapwire"
 	"github.com/tayga/tms/internal/mailstore"
 	"github.com/tayga/tms/internal/storage"
 	"github.com/tayga/tms/internal/testutil/mailfixture"
@@ -83,10 +82,7 @@ func TestLegacyAPPENDRoundTrip(t *testing.T) {
 	cfg := config.Default()
 	ms := mailstore.New(filepath.Join(dir, "mail"))
 	be := &Backend{store: st, ms: ms, hub: NewHub(st), log: slog.New(slog.NewTextHandler(io.Discard, nil)), authn: auth.NewLayer(st, cfg.LDAP, cfg.MFA, cfg.OIDC)}
-	// This round-trip does not test IDLE. go-imap v1's update dispatcher reads
-	// the selected mailbox concurrently with SELECT; keep that unrelated
-	// upstream race out of the charset fixture.
-	srv := imapserv.New(struct{ backend.Backend }{be})
+	srv := imapserv.New(be)
 	srv.Enable(charsetSearchExtension{})
 	srv.AllowInsecureAuth = true
 	listener, err := net.Listen("tcp", "127.0.0.1:0")

@@ -42,6 +42,12 @@ import (
 func main() {
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
+		case "backup-full", "restore-full", "verify-full", "backup-keygen":
+			if err := runFullBackup(os.Args[1], os.Args[2:]); err != nil {
+				fmt.Fprintf(os.Stderr, "tayga %s: %v\n", os.Args[1], err)
+				os.Exit(1)
+			}
+			return
 		case "version", "-version", "--version":
 			fmt.Println(version.String())
 			return
