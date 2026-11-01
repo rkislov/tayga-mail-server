@@ -352,7 +352,7 @@ func (c *conn) serve(conn Conn) (err error) {
 		var res *imap.StatusResp
 
 		fields, err := c.ReadLine()
-		if err == io.EOF || c.ctx.State == imap.LogoutState {
+		if errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed) || c.ctx.State == imap.LogoutState {
 			return nil
 		}
 		c.setDeadline()
