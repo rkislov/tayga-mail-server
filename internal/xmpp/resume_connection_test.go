@@ -165,6 +165,11 @@ func TestResumeReplacesUndetectedConnectionAndKeepsSecondDevice(t *testing.T) {
 	case <-time.After(4 * time.Second):
 		t.Fatal("superseded connection still running")
 	}
+	// Receiving replay bytes does not guarantee the resume handler has
+	// registered the replacement in the hub yet. A barrier on another socket
+	// cannot establish that ordering; wait for this connection's next command.
+	reconnected.send(`<r xmlns='urn:xmpp:sm:3'/>`)
+	reconnected.want("a", "")
 	// Ping acts as a barrier on the other device. Replaying for the phone must
 	// not fan out a second carbon for an already delivered message.
 	desktop.send(`<iq type='get' id='barrier'><ping xmlns='urn:xmpp:ping'/></iq>`)
