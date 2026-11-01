@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/emersion/go-imap"
-	imapserv "github.com/emersion/go-imap/server"
+	imapserv "github.com/tayga/tms/internal/imapwire"
 	"github.com/tayga/tms/internal/mailcharset"
 )
 

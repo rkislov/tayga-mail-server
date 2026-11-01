@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 )
@@ -23,6 +24,7 @@ type Store struct {
 	learningPolicy   func() (bool, string) // configured once before serving; callback reads live settings
 	calendarLinkKey  []byte
 	calendarLinkBase string
+	lifeLock         io.Closer
 }
 
 var _ Driver = (*Store)(nil)
@@ -34,7 +36,13 @@ func NewSQLStore(db *sql.DB, dialect Dialect) *Store {
 
 func (s *Store) DB() *sql.DB { return s.db }
 
-func (s *Store) Close() error { return s.db.Close() }
+func (s *Store) Close() error {
+	err := s.db.Close()
+	if s.lifeLock != nil {
+		err = errors.Join(err, s.lifeLock.Close())
+	}
+	return err
+}
 
 func (s *Store) Ping(ctx context.Context) error { return s.db.PingContext(ctx) }
 

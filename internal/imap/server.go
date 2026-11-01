@@ -13,11 +13,11 @@ import (
 
 	"github.com/emersion/go-imap"
 	"github.com/emersion/go-imap/backend"
-	imapserv "github.com/emersion/go-imap/server"
 	"github.com/emersion/go-sasl"
 	"github.com/tayga/tms/internal/auth"
 	"github.com/tayga/tms/internal/config"
 	"github.com/tayga/tms/internal/ha"
+	imapserv "github.com/tayga/tms/internal/imapwire"
 	"github.com/tayga/tms/internal/mailsearch"
 	"github.com/tayga/tms/internal/mailstore"
 	"github.com/tayga/tms/internal/storage"

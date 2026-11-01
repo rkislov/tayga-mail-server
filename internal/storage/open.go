@@ -4,9 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/tayga/tms/internal/config"
+	"github.com/tayga/tms/internal/maintenance"
 	"github.com/tayga/tms/internal/storage/migrations"
 
 	_ "github.com/lib/pq"
@@ -16,13 +18,24 @@ import (
 // Open creates a Driver for the configured backend and runs migrations.
 func Open(ctx context.Context, cfg config.StorageConfig) (Driver, error) {
 	var (
-		db      *sql.DB
-		dialect Dialect
-		err     error
+		db       *sql.DB
+		dialect  Dialect
+		err      error
+		lifeLock io.Closer
 	)
+	success := false
+	defer func() {
+		if !success && lifeLock != nil {
+			lifeLock.Close()
+		}
+	}()
 
 	switch cfg.Driver {
 	case "sqlite":
+		lifeLock, err = maintenance.SQLite(cfg.SQLite.Path, false)
+		if err != nil {
+			return nil, err
+		}
 		db, err = sql.Open("sqlite", cfg.SQLite.Path)
 		if err != nil {
 			return nil, fmt.Errorf("open sqlite: %w", err)
@@ -61,7 +74,10 @@ func Open(ctx context.Context, cfg config.StorageConfig) (Driver, error) {
 		_ = db.Close()
 		return nil, err
 	}
-	return NewSQLStore(db, dialect), nil
+	store := NewSQLStore(db, dialect)
+	store.lifeLock = lifeLock
+	success = true
+	return store, nil
 }
 
 func migrate(ctx context.Context, db *sql.DB, dialect Dialect) error {
