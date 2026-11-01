@@ -575,9 +575,9 @@ func (m *Mailbox) UpdateMessagesFlags(uid bool, seqset *imap.SeqSet, op imap.Fla
 		if err := m.user.backend.store.UpdateMessageFlags(ctx, msg.ID, flagStr); err != nil {
 			return err
 		}
-		if newRel, err := m.user.backend.ms.MoveToCur(msg.FilePath, newFlags); err == nil && newRel != msg.FilePath {
-			_ = m.user.backend.store.UpdateMessagePath(ctx, msg.ID, newRel)
-		}
+		// Flags are authoritative in the database, as for web/EWS/FlowSync.
+		// Renaming here races readers holding the old path and archive commits.
+		// Keep the immutable content location when only flags change.
 	}
 	m.notify()
 	return nil

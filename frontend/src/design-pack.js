@@ -49,20 +49,42 @@ function mountComposeDesign() {
 }
 mountComposeDesign();
 const selectedMailIDs=new Set();
+let mailBatchBusy=false;
 function renderMailSelection(messages) {
  selectedMailIDs.clear();let bar=$('mail-selection');if(!bar){bar=document.createElement('div');bar.id='mail-selection';bar.className='mail-selection';$('mail-msg-list').before(bar)}bar.replaceChildren();bar.hidden=!messages.length;
  const all=document.createElement('input');all.type='checkbox';all.setAttribute('aria-label',mailImageText('Выбрать письма на этой странице','Select messages on this page'));bar.append(all);
  const count=document.createElement('span');count.className='meta';bar.append(count);const buttons=[];
- const update=()=>{count.textContent=mailImageText('Выбрано: ','Selected: ')+selectedMailIDs.size;all.checked=messages.length>0&&selectedMailIDs.size===messages.length;all.indeterminate=selectedMailIDs.size>0&&!all.checked;buttons.forEach(b=>b.disabled=!selectedMailIDs.size);};
+ const update=()=>{count.textContent=mailImageText('Выбрано: ','Selected: ')+selectedMailIDs.size;all.checked=messages.length>0&&selectedMailIDs.size===messages.length;all.indeterminate=selectedMailIDs.size>0&&!all.checked;buttons.forEach(b=>b.disabled=mailBatchBusy||!selectedMailIDs.size);};
  all.onchange=()=>{$('mail-msg-list').querySelectorAll('.mail-select').forEach(input=>{input.checked=all.checked;if(all.checked)selectedMailIDs.add(input.value);else selectedMailIDs.delete(input.value)});update()};
  for(const message of messages){const row=$('mail-msg-list').querySelector('[data-msg="'+CSS.escape(message.id)+'"]')?.parentElement;if(!row)continue;row.classList.add('selectable-mail');const input=document.createElement('input');input.className='mail-select';input.type='checkbox';input.value=message.id;input.setAttribute('aria-label',mailImageText('Выбрать письмо: ','Select message: ')+(message.subject||''));input.onchange=()=>{if(input.checked)selectedMailIDs.add(message.id);else selectedMailIDs.delete(message.id);update()};row.prepend(input);}
  for(const [action,label] of [['read',mailImageText('Прочитано','Mark read')],['unread',mailImageText('Не прочитано','Mark unread')],['archive',mailImageText('В архив','Archive')],['spam',mailImageText('В спам','Spam')],['delete',t('delete')]]) {const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.textContent=label;buttons.push(button);bar.append(button);button.onclick=async()=>{
-  const ids=[...selectedMailIDs];if(action==='delete'&&!await askConfirm(mailImageText('Удалить выбранные письма: ','Delete selected messages: ')+ids.length+'?',{danger:true}))return;
-  bar.querySelectorAll('button,input').forEach(e=>e.disabled=true);let completed=0;
-  try{let spam;if(action==='spam'){spam=(mailState.mailboxes||[]).find(m=>m.name==='Junk');if(!spam)throw Error(mailImageText('Папка спама недоступна','Spam folder unavailable'));}
-   for(const id of ids){const path='/api/v1/mail/messages/'+encodeURIComponent(id);if(action==='read'||action==='unread')await api(path,{method:'PATCH',body:JSON.stringify({seen:action==='read'})});else if(action==='spam')await api(path+'/move',{method:'POST',body:JSON.stringify({mailbox_id:spam.id})});else await api(path+(action==='archive'?'/archive':''),{method:action==='archive'?'POST':'DELETE'});completed++;selectedMailIDs.delete(id);}
-   mailState.messageID='';await refreshMail();
-  }catch(error){await askAlert(mailImageText('Обработано ','Processed ')+completed+'/'+ids.length+'. '+error.message);await refreshMailMessages();}
+  if(mailBatchBusy)return;const ids=[...selectedMailIDs];if(action==='delete'&&!await askConfirm(mailImageText('Удалить выбранные письма: ','Delete selected messages: ')+ids.length+'?',{danger:true}))return;
+  if(mailBatchBusy)return;mailBatchBusy=true;
+  const progress=document.createElement('progress');progress.max=ids.length;progress.value=0;progress.setAttribute('aria-label',mailImageText('Обработка писем','Processing messages'));bar.append(progress);
+  const status=document.createElement('span');status.className='mail-batch-status';status.setAttribute('role','status');status.setAttribute('aria-live','polite');bar.append(status);
+  let processed=0,completed=0;const failed=[];const pendingIDs=new Set(ids);let interrupted=false;
+  const describe=()=>{progress.value=processed;status.textContent=mailImageText('Обработано: ','Processed: ')+processed+'/'+ids.length+mailImageText(' · Успешно: ',' · Succeeded: ')+completed;};
+  const disabled=[...bar.querySelectorAll('button,input'),...$('mail-msg-list').querySelectorAll('.mail-select')];disabled.forEach(e=>e.disabled=true);bar.setAttribute('aria-busy','true');describe();
+  try {
+   for(let offset=0;offset<ids.length;offset+=10){
+    const batch=ids.slice(offset,offset+10).map(id=>({id,mailbox_id:messages.find(m=>m.id===id)?.mailbox_id||mailState.mailboxID}));
+    const response=await api('/api/v1/mail/messages/batch',{method:'POST',body:JSON.stringify({action,items:batch})});
+    for(const item of batch){const result=response.results?.find(result=>result.id===item.id);processed++;if(result?.ok){completed++;pendingIDs.delete(item.id);selectedMailIDs.delete(item.id);const checkbox=$('mail-msg-list').querySelector('.mail-select[value="'+CSS.escape(item.id)+'"]');if(checkbox)checkbox.checked=false;}else failed.push(result?.error||'mail_operation_failed');}
+    describe();
+   }
+  }catch(error){interrupted=true;}
+  finally{mailBatchBusy=false;bar.removeAttribute('aria-busy');disabled.forEach(e=>e.disabled=false);}
+  const retryIDs=[...pendingIDs];mailState.messageID='';
+  await refreshMail();
+  for(const input of $('mail-msg-list').querySelectorAll('.mail-select')){if(retryIDs.includes(input.value)){input.checked=true;input.dispatchEvent(new Event('change'));}}
+  if(failed.length||interrupted){
+   const explanation=interrupted?mailImageText('Соединение прервалось. Обновите список перед повторной попыткой.','Connection interrupted. Refresh the list before retrying.'):
+    failed.includes('message_content_unavailable')?mailImageText('Часть файлов временно недоступна. Остальные письма обработаны.','Some message files are unavailable. Other messages were processed.'):
+    failed.includes('message_changed')?mailImageText('Часть писем уже перемещена другим устройством. Список обновлён.','Some messages were moved by another device. The list has been refreshed.'):
+    mailImageText('Не удалось обработать часть писем. Они остались выделены, если доступны в текущем списке.','Some messages could not be processed. Available messages remain selected.');
+   await askAlert(mailImageText('Успешно обработано: ','Successfully processed: ')+completed+'/'+ids.length+'. '+explanation,{title:mailImageText('Обработка писем','Mail operations')});
+  }
+
  };}
  update();
 }

@@ -11,11 +11,12 @@ import (
 )
 
 var (
-	ErrNoteConflict  = errors.New("note revision conflict")
-	ErrNotFound      = errors.New("not found")
-	ErrAlreadyExists = errors.New("already exists")
-	ErrUnauthorized  = errors.New("unauthorized")
-	ErrQuotaExceeded = errors.New("mailbox quota exceeded")
+	ErrMessageChanged = errors.New("message changed during operation")
+	ErrNoteConflict   = errors.New("note revision conflict")
+	ErrNotFound       = errors.New("not found")
+	ErrAlreadyExists  = errors.New("already exists")
+	ErrUnauthorized   = errors.New("unauthorized")
+	ErrQuotaExceeded  = errors.New("mailbox quota exceeded")
 )
 
 // Driver is the storage abstraction shared by protocol handlers.
@@ -199,6 +200,7 @@ type Driver interface {
 	DeleteMessageSearch(ctx context.Context, messageID string) error
 	SearchMessages(ctx context.Context, userID, mailboxID, fromFilter, toFilter, subjectFilter, ftsQuery string, limit int, options ...MessageSearchOptions) ([]SearchHit, error)
 	MoveMessage(ctx context.Context, messageID, dstMailboxID string) (*Message, error)
+	MoveMessageContent(ctx context.Context, before *Message, dstMailboxID, filePath string, size int64, archived bool) (*Message, error)
 	DeleteMessage(ctx context.Context, messageID string) error
 	ExpungeMailbox(ctx context.Context, mailboxID string) ([]*Message, error)
 

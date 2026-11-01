@@ -218,44 +218,66 @@ func (s *Store) UpdateMessageHeaders(ctx context.Context, messageID, subject, fr
 
 // MoveMessage assigns a new UID in dstMailboxID and updates mailbox_id (FlowSync MoveItems).
 func (s *Store) MoveMessage(ctx context.Context, messageID, dstMailboxID string) (*Message, error) {
+	return s.moveMessage(ctx, messageID, dstMailboxID, nil, "", 0, false)
+}
+
+// MoveMessageContent commits the folder, UID and newly written content together.
+// The caller keeps the original file until commit and discards the new file on
+// failure. A concurrent move/path change must not be overwritten by stale data.
+func (s *Store) MoveMessageContent(ctx context.Context, before *Message, dstMailboxID, filePath string, size int64, archived bool) (*Message, error) {
+	return s.moveMessage(ctx, before.ID, dstMailboxID, before, filePath, size, archived)
+}
+
+func (s *Store) moveMessage(ctx context.Context, messageID, dstMailboxID string, before *Message, filePath string, size int64, archived bool) (*Message, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = tx.Rollback() }()
-
-	msg, err := s.scanMessage(tx.QueryRowContext(ctx, s.rebind(`SELECT `+msgCols+` FROM messages WHERE id = ?`), messageID))
+	defer tx.Rollback()
+	query := `SELECT ` + msgCols + ` FROM messages WHERE id = ?`
+	if s.dialect == DialectPostgres {
+		query += ` FOR UPDATE`
+	}
+	msg, err := s.scanMessage(tx.QueryRowContext(ctx, s.rebind(query), messageID))
 	if err != nil {
 		return nil, err
 	}
-	if msg.MailboxID == dstMailboxID {
-		return msg, nil
+	if before != nil && (msg.FilePath != before.FilePath || msg.MailboxID != before.MailboxID) {
+		return nil, ErrMessageChanged
 	}
-
-	var uid int64
-	lockQ := s.rebind(`SELECT uidnext from mailboxes WHERE id = ?`)
-	if s.dialect == DialectPostgres {
-		lockQ = `SELECT uidnext FROM mailboxes WHERE id = $1 FOR UPDATE`
+	if msg.MailboxID != dstMailboxID {
+		var uid int64
+		lockQ := `SELECT uidnext FROM mailboxes WHERE id = ?`
+		if s.dialect == DialectPostgres {
+			lockQ += ` FOR UPDATE`
+		}
+		if err := tx.QueryRowContext(ctx, s.rebind(lockQ), dstMailboxID).Scan(&uid); err != nil {
+			return nil, mapErr(err)
+		}
+		if _, err := tx.ExecContext(ctx, s.rebind(`UPDATE mailboxes SET uidnext = ? WHERE id = ?`), uid+1, dstMailboxID); err != nil {
+			return nil, err
+		}
+		if _, err := tx.ExecContext(ctx, s.rebind(`UPDATE messages SET mailbox_id = ?, uid = ? WHERE id = ?`), dstMailboxID, uid, messageID); err != nil {
+			return nil, err
+		}
+		if err := s.queueSpamLearning(ctx, tx, messageID, msg.MailboxID, dstMailboxID); err != nil {
+			return nil, err
+		}
+		msg.MailboxID, msg.UID = dstMailboxID, uid
 	}
-	if err := tx.QueryRowContext(ctx, lockQ, dstMailboxID).Scan(&uid); err != nil {
-		return nil, mapErr(err)
-	}
-	updMB := s.rebind(`UPDATE mailboxes SET uidnext = ? WHERE id = ?`)
-	if _, err := tx.ExecContext(ctx, updMB, uid+1, dstMailboxID); err != nil {
-		return nil, err
-	}
-	updMsg := s.rebind(`UPDATE messages SET mailbox_id = ?, uid = ? WHERE id = ?`)
-	if _, err := tx.ExecContext(ctx, updMsg, dstMailboxID, uid, messageID); err != nil {
-		return nil, err
-	}
-	if err := s.queueSpamLearning(ctx, tx, messageID, msg.MailboxID, dstMailboxID); err != nil {
-		return nil, err
+	if before != nil {
+		arch := 0
+		if archived {
+			arch = 1
+		}
+		if _, err := tx.ExecContext(ctx, s.rebind(`UPDATE messages SET file_path = ?, size = ?, archived = ? WHERE id = ?`), filePath, size, arch, messageID); err != nil {
+			return nil, err
+		}
+		msg.FilePath, msg.Size, msg.Archived = filePath, size, archived
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-	msg.MailboxID = dstMailboxID
-	msg.UID = uid
 	return msg, nil
 }
 
