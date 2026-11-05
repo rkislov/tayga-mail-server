@@ -70,7 +70,8 @@ func TestCalendarReplayRepairsDatesWithoutRepeatingClientAdd(t *testing.T) {
 		t.Fatal(err)
 	}
 	beforeKey := state.Key
-	state.Response = strings.ReplaceAll(state.Response, "20261110T060000Z", "2026-11-10T06:00:00.000Z")
+	// Replay a legacy response with both the old date representation and an inverted range.
+	state.Response = strings.ReplaceAll(state.Response, "20261110T060000Z", "2026-11-06T00:00:00.000Z")
 	if err = saveCollectionState(ctx, st, u.ID, dev.ID, cal.ID, state); err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +79,7 @@ func TestCalendarReplayRepairsDatesWithoutRepeatingClientAdd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(repaired, "2026-11-10T06:00:00.000Z") || extractTag(repaired, "SyncKey") != beforeKey {
+	if strings.Contains(repaired, "2026-11-06T00:00:00.000Z") || extractTag(repaired, "Until") != "20261106T060000Z" || extractTag(repaired, "SyncKey") != beforeKey {
 		t.Fatalf("invalid repaired replay: %s", repaired)
 	}
 	again, err := h.syncCollections(ctx, u, dev, []byte(body))
