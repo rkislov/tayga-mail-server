@@ -532,6 +532,14 @@ func normalizeICSDate(v string, dateOnly bool) (string, bool) {
 	return v, dateOnly
 }
 
+// Calendar namespace dates use Compact DateTime, unlike AirSyncBase.InstanceId.
+func formatCalendarTime(t *time.Time) string {
+	if t == nil {
+		return ""
+	}
+	return t.UTC().Format("20060102T150405Z")
+}
+
 func formatASTime(t *time.Time) string {
 	if t == nil {
 		return ""

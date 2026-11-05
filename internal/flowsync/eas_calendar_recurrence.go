@@ -162,7 +162,7 @@ func calendarRecurrenceXML(ctx context.Context, data, viewer string) (string, er
 		field("Occurrences", strconv.Itoa(p.Count))
 	}
 	if p.Until != nil {
-		field("Until", formatASTime(p.Until))
+		field("Until", formatCalendarTime(p.Until))
 	}
 	if len(days) > 0 {
 		mask := 0
@@ -206,15 +206,15 @@ func calendarRecurrenceXML(ctx context.Context, data, viewer string) (string, er
 		if version == "16.0" || version == "16.1" {
 			fmt.Fprintf(&b, `<InstanceId xmlns="AirSyncBase:">%s</InstanceId>`, e.Original.UTC().Format(time.RFC3339))
 		} else {
-			field("ExceptionStartTime", formatASTime(&e.Original))
+			field("ExceptionStartTime", formatCalendarTime(&e.Original))
 		}
 		if e.Cancelled {
 			field("Deleted", "1")
 		} else {
 			field("Deleted", "0")
 			field("Subject", e.Occurrence.Summary)
-			field("StartTime", formatASTime(e.Occurrence.Start))
-			field("EndTime", formatASTime(e.Occurrence.End))
+			field("StartTime", formatCalendarTime(e.Occurrence.Start))
+			field("EndTime", formatCalendarTime(e.Occurrence.End))
 			day := "0"
 			if e.Occurrence.AllDay {
 				day = "1"

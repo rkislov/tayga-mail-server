@@ -12,7 +12,6 @@ import (
 	"github.com/tayga/tms/internal/storage/migrations"
 
 	_ "github.com/lib/pq"
-	_ "modernc.org/sqlite"
 )
 
 // Open creates a Driver for the configured backend and runs migrations.
@@ -36,17 +35,13 @@ func Open(ctx context.Context, cfg config.StorageConfig) (Driver, error) {
 		if err != nil {
 			return nil, err
 		}
-		db, err = sql.Open("sqlite", cfg.SQLite.Path)
+		db, err = sql.Open(sqliteDriverName, cfg.SQLite.Path)
 		if err != nil {
 			return nil, fmt.Errorf("open sqlite: %w", err)
 		}
-		if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys = ON`); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("enable foreign_keys: %w", err)
-		}
 		db.SetMaxOpenConns(1)
 		// Readers (including online backups) must not block writer commits.
-		for _, pragma := range []string{"PRAGMA busy_timeout = 5000", "PRAGMA journal_mode = WAL"} {
+		for _, pragma := range []string{"PRAGMA journal_mode = WAL"} {
 			if _, err := db.ExecContext(ctx, pragma); err != nil {
 				_ = db.Close()
 				return nil, fmt.Errorf("configure sqlite: %w", err)
@@ -149,6 +144,7 @@ func migrate(ctx context.Context, db *sql.DB, dialect Dialect) error {
 			"062_calendar_occurrence_proposals.sqlite.sql",
 			"063_calendar_sent_copy.sqlite.sql",
 			"064_caldav_scheduling.sqlite.sql",
+			"065_message_metadata_quarantine.sqlite.sql",
 		}
 	case DialectPostgres:
 		files = []string{
@@ -216,6 +212,7 @@ func migrate(ctx context.Context, db *sql.DB, dialect Dialect) error {
 			"062_calendar_occurrence_proposals.postgres.sql",
 			"063_calendar_sent_copy.postgres.sql",
 			"064_caldav_scheduling.postgres.sql",
+			"065_message_metadata_quarantine.postgres.sql",
 		}
 	default:
 		return fmt.Errorf("unsupported dialect")

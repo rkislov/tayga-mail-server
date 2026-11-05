@@ -131,7 +131,12 @@ func (h *ewsHandler) syncEWSHierarchy(ctx context.Context, u *storage.User, body
 		for _, item := range items.Children {
 			id := extractAttr(item.render(), "FolderId", "Id")
 			nodes[id] = item
-			hashes[id] = digest(item.render())
+			hashes[id] = ewsHierarchyHash(item)
+			// Upgrade an unchanged legacy full-XML snapshot without emitting a
+			// synthetic folder update. Changed legacy snapshots converge once.
+			if state.Items[id] == digest(item.render()) {
+				state.Items[id] = hashes[id]
+			}
 		}
 	}
 	limit := 100
@@ -161,6 +166,17 @@ func (h *ewsHandler) syncEWSHierarchy(ctx context.Context, u *storage.User, body
 	result := out.String()
 	err = saveCollectionState(ctx, h.store, u.ID, client, folder, collectionState{Key: next, Items: nextItems, PreviousKey: key, RequestHash: fingerprint, Response: result})
 	return result, err
+}
+
+// EWS excludes message/unread count changes from SyncFolderHierarchy. They
+// belong to item synchronization; treating them as folder renames can prevent
+// native clients from advancing their hierarchy cursor.
+func ewsHierarchyHash(folder *protocolNode) string {
+	return "hierarchy-v2:" + digest(strings.Join([]string{
+		folder.Name.Local, extractAttr(folder.render(), "FolderId", "Id"),
+		extractAttr(folder.render(), "ParentFolderId", "Id"),
+		folder.value("DisplayName"), folder.value("FolderClass"),
+	}, "\x00"))
 }
 
 // A client creates folders in response order. Order the complete change set
