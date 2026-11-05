@@ -218,7 +218,9 @@ func encodeWire(body string) ([]byte, error) {
 				mimeBody := len(names) > 1 && names[len(names)-1] == (xml.Name{Space: "AirSyncBase:", Local: "Data"}) && bodyTypes[len(bodyTypes)-2] == "4"
 				// MS-ASCMD 2.2.3.39.2: ItemOperations/Data is already a
 				// base64 string. Keep STR_I; binary OPAQUE breaks Gmail's parser.
-				if len(names) > 0 && (mimeBody || names[len(names)-1] == (xml.Name{Space: "Calendar:", Local: "Timezone"}) || (names[len(names)-1].Space == "ComposeMail:" && names[len(names)-1].Local == "Mime")) {
+				// MS-ASDTYPE 2.7.6 likewise requires Calendar/Timezone as an
+				// inline base64 string, not the decoded binary structure.
+				if len(names) > 0 && (mimeBody || (names[len(names)-1].Space == "ComposeMail:" && names[len(names)-1].Local == "Mime")) {
 					raw, e := base64.StdEncoding.DecodeString(string(t))
 					if e != nil {
 						return nil, e
