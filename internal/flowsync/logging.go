@@ -14,6 +14,8 @@ import (
 type traceKey struct{}
 type requestTrace struct {
 	User, Command, Result, Folders string
+	ItemCount                      int
+	DeleteMode                     string
 	RequestBytes, RequestLimit     int64
 }
 type loggedResponse struct {
@@ -83,7 +85,7 @@ func logRequests(log *slog.Logger, protocol string, next http.Handler, debug ...
 			if status >= 400 || t.Result != "" {
 				level = slog.LevelWarn
 			}
-			log.Log(r.Context(), level, "flowsync request", "request_id", requestID, "protocol", protocol, "method", r.Method, "command", t.Command, "user_id", t.User, "device_id", boundedLog(r.URL.Query().Get("DeviceId")), "client", boundedLog(r.UserAgent()), "peer", r.RemoteAddr, "version", boundedLog(r.Header.Get("MS-ASProtocolVersion")), "status", status, "result", t.Result, "folders", t.Folders, "request_content_length", r.ContentLength, "request_bytes", t.RequestBytes, "request_limit_bytes", t.RequestLimit, "response_bytes", rw.bytes, "duration_ms", time.Since(start).Milliseconds())
+			log.Log(r.Context(), level, "flowsync request", "request_id", requestID, "protocol", protocol, "method", r.Method, "command", t.Command, "user_id", t.User, "device_id", boundedLog(r.URL.Query().Get("DeviceId")), "client", boundedLog(r.UserAgent()), "peer", r.RemoteAddr, "version", boundedLog(r.Header.Get("MS-ASProtocolVersion")), "status", status, "result", t.Result, "folders", t.Folders, "item_count", t.ItemCount, "delete_mode", t.DeleteMode, "request_content_length", r.ContentLength, "request_bytes", t.RequestBytes, "request_limit_bytes", t.RequestLimit, "response_bytes", rw.bytes, "duration_ms", time.Since(start).Milliseconds())
 			if debugEnabled {
 				log.Info("flowsync protocol trace", "request_id", requestID, "protocol", protocol, "command", t.Command, "http_version", r.Proto, "request_content_type", boundedLog(r.Header.Get("Content-Type")), "accept_multipart", boundedLog(r.Header.Get("MS-ASAcceptMultiPart")), "response_content_type", boundedLog(w.Header().Get("Content-Type")), "response_content_length", boundedLog(w.Header().Get("Content-Length")), "request_structure", protocolStructure(requestData.data), "response_structure", protocolStructure(responseData.data), "request_truncated", requestData.truncated, "response_truncated", responseData.truncated)
 			}

@@ -202,6 +202,7 @@ type Driver interface {
 	MoveMessage(ctx context.Context, messageID, dstMailboxID string) (*Message, error)
 	MoveMessageContent(ctx context.Context, before *Message, dstMailboxID, filePath string, size int64, archived bool) (*Message, error)
 	DeleteMessage(ctx context.Context, messageID string) error
+	DisposeMessages(ctx context.Context, userID string, ids []string, destinationID string) ([]*Message, error)
 	ExpungeMailbox(ctx context.Context, mailboxID string) ([]*Message, error)
 
 	GetInboxRules(ctx context.Context, userID string) (InboxRuleSet, error)

@@ -109,6 +109,16 @@ func (h *ewsHandler) getFolder(ctx context.Context, u *storage.User, body string
 				f.Kind.Local = "Folder"
 				f.Inner = fmt.Sprintf(`<t:FolderId Id="%s" ChangeKey="0"/><t:DisplayName>Mailbox</t:DisplayName><t:TotalCount>0</t:TotalCount><t:ChildFolderCount>%d</t:ChildFolderCount>`, xmlEscape("root:"+u.ID), len(folders))
 				found = true
+			} else if id == "recoverableitemsroot" || id == "recoverableitemsdeletions" {
+				resolved, err := h.resolveEWSFolder(ctx, u, fmt.Sprintf(`<DistinguishedFolderId Id="%s"/>`, id))
+				if err == nil {
+					mb, e := (&easHandler{store: h.store}).mailboxByID(ctx, u.ID, resolved)
+					if e == nil {
+						f.Kind.Local = "Folder"
+						f.Inner = fmt.Sprintf(`<t:FolderId Id="%s" ChangeKey="0"/><t:DisplayName>%s</t:DisplayName>`, xmlEscape(mb.ID), xmlEscape(mb.Name))
+						found = true
+					}
+				}
 			} else if name, ok := aliases[id]; ok {
 				if mailbox, err := h.store.GetMailbox(ctx, u.ID, name); err == nil {
 					f, found = folders[mailbox.ID]

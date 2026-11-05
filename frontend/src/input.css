@@ -4035,3 +4035,38 @@ dialog.omemo-dialog[open]{display:flex;flex-direction:column}
 
 .mail-selection progress{width:8rem;max-width:100%;height:.65rem;accent-color:var(--accent);}
 .mail-batch-status{font-size:.8rem;overflow-wrap:anywhere;}
+
+/* Version comparison is read-only; signs accompany color for accessibility. */
+.file-comparison-form { display:grid; grid-template-columns:1fr 1fr; gap:.75rem; align-items:end; }
+.file-comparison-form label { min-width:0; font-size:.85rem; }
+.file-comparison-output { margin-top:1rem; border:1px solid var(--md-outline-variant); border-radius:.5rem; overflow:hidden; }
+.file-comparison-output:empty { display:none; }
+.file-comparison-line { display:grid; grid-template-columns:2.5rem 2.5rem minmax(0,1fr); font: .85rem/1.5 ui-monospace,monospace; }
+.file-comparison-number { color:var(--md-text-secondary); text-align:right; padding:.25rem .35rem; border-right:1px solid var(--md-outline-variant); }
+.file-comparison-text { white-space:pre-wrap; overflow-wrap:anywhere; padding:.25rem .5rem; }
+.file-comparison-insert { background:color-mix(in srgb,#16a34a 15%,var(--md-surface)); }
+.file-comparison-delete { background:color-mix(in srgb,#dc2626 15%,var(--md-surface)); }
+@media(max-width:640px){ .file-comparison-form { grid-template-columns:minmax(0,1fr); } .file-comparison-line { grid-template-columns:2rem 2rem minmax(0,1fr); } }
+.file-structured-change { padding:.75rem; border-bottom:1px solid var(--md-outline-variant); }
+.file-structured-change:last-child { border-bottom:0; }
+.file-structured-change>strong { display:block; overflow-wrap:anywhere; }
+.file-structured-sides { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:.5rem; margin-top:.5rem; }
+.file-structured-side { min-width:0; padding:.5rem; border-radius:.4rem; }
+.file-structured-side pre { white-space:pre-wrap; overflow-wrap:anywhere; margin:.25rem 0 0; font:.85rem/1.5 ui-monospace,monospace; }
+@media(max-width:640px){ .file-structured-sides { grid-template-columns:minmax(0,1fr); } }
+
+/* Rendered revision comparison keeps a common raster scale and remains scrollable on mobile. */
+.file-render-dialog .file-library-body{display:block;overflow:auto;min-height:0}
+.file-render-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;padding:.5rem 0}
+.file-render-toolbar input{width:5rem}.file-render-toolbar select{width:auto;max-width:100%}
+.file-render-content{min-width:0;padding:.5rem;background:var(--surface-muted,#e5e7eb)}
+.file-render-content canvas{display:block;max-width:100%;height:auto;margin:auto;background:white}
+.file-render-sides{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:.75rem;align-items:start}
+.file-render-content figure{min-width:0;margin:0}.file-render-content figcaption{padding:.25rem;color:var(--text-primary,#111827)}
+@media(max-width:640px){.file-render-sides{grid-template-columns:minmax(0,1fr)}}
+.file-motion-dialog .file-motion-scrub{width:auto;min-width:8rem;flex:1;accent-color:var(--accent,#17674b)}
+.file-motion-dialog .file-motion-warning{font-size:.875rem;padding:.5rem;border:1px solid var(--border,#697080);border-radius:.5rem;overflow-wrap:anywhere}
+.file-motion-dialog .file-render-toolbar{padding:.5rem}
+.file-motion-dialog .file-library-body>.meta{padding:0 .5rem}
+
+.file-motion-dialog>header,.file-motion-dialog>.meta{flex-shrink:0}
