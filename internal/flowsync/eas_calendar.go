@@ -303,7 +303,7 @@ func editEASCalendar(data string, u *storage.User, op clientOp) (string, error) 
 		if e != nil {
 			return "", e
 		}
-		if organizer != "" && !strings.EqualFold(requested, organizer) || organizer == "" && !strings.EqualFold(requested, u.Email) {
+		if organizer != "" && !strings.EqualFold(requested, organizer) || organizer == "" && op.Kind != "add" && !strings.EqualFold(requested, u.Email) {
 			return "", storage.ErrUnauthorized
 		}
 		organizer = requested
@@ -312,13 +312,17 @@ func editEASCalendar(data string, u *storage.User, op clientOp) (string, error) 
 		organizer = u.Email
 	}
 	if organizer != "" && parsed.Organizer.Email == "" {
+		name := organizer
+		if strings.EqualFold(organizer, u.Email) {
+			name = u.DisplayName
+		}
 		for _, component := range cal.Children {
 			if component.Name != "VEVENT" {
 				continue
 			}
 			p := ical.NewProp("ORGANIZER")
 			p.Value = "mailto:" + organizer
-			p.Params.Set("CN", fieldOr(fields["OrganizerName"], u.DisplayName))
+			p.Params.Set("CN", fieldOr(fields["OrganizerName"], name))
 			component.Props.Set(p)
 		}
 	}
@@ -357,6 +361,21 @@ func editEASCalendar(data string, u *storage.User, op clientOp) (string, error) 
 			// state until PrepareOrganizerWrite decides whether a new RSVP is due.
 			p.Params.Set("PARTSTAT", "NEEDS-ACTION")
 			p.Params.Set("RSVP", "TRUE")
+			if op.Kind == "add" && organizer != "" && !strings.EqualFold(organizer, u.Email) {
+				// Imported copies retain visible responses, but never schedule
+				// for this external organizer (PrepareOrganizerWrite enforces it).
+				switch n.value("AttendeeStatus") {
+				case "", "0", "5":
+				case "2":
+					p.Params.Set("PARTSTAT", "TENTATIVE")
+				case "3":
+					p.Params.Set("PARTSTAT", "ACCEPTED")
+				case "4":
+					p.Params.Set("PARTSTAT", "DECLINED")
+				default:
+					return "", fmt.Errorf("invalid imported attendee status")
+				}
+			}
 			for _, old := range ev.Props.Values("ATTENDEE") {
 				if strings.EqualFold(strings.TrimPrefix(old.Value, "mailto:"), email) {
 					if old.Params.Get("CN") == "" && (n.value("Name") == "" || n.value("Name") == email) {
@@ -374,7 +393,7 @@ func editEASCalendar(data string, u *storage.User, op clientOp) (string, error) 
 		}
 		// Received meetings may echo their attendee list, but cannot change
 		// it or schedule mail on behalf of the organizer.
-		if organizer != "" && !strings.EqualFold(organizer, u.Email) {
+		if organizer != "" && !strings.EqualFold(organizer, u.Email) && op.Kind != "add" {
 			if len(seen) != len(parsed.Attendees) {
 				return "", storage.ErrUnauthorized
 			}
