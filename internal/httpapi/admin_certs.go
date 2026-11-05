@@ -33,10 +33,10 @@ func (s *Server) handleAdminCerts(w http.ResponseWriter, r *http.Request) {
 
 	case r.Method == http.MethodPost && len(parts) == 1 && parts[0] == "self-signed":
 		var req struct {
-			Name  string   `json:"name"`
-			Hosts []string `json:"hosts"`
-			Days  int      `json:"days"`
-			Activate bool  `json:"activate"`
+			Name     string   `json:"name"`
+			Hosts    []string `json:"hosts"`
+			Days     int      `json:"days"`
+			Activate bool     `json:"activate"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})

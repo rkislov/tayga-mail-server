@@ -30,10 +30,11 @@ const TaygaEWS = (() => {
       tasks: "TaygaVTodo",
     })[kind];
   class Engine {
-    constructor(client, native, storage) {
+    constructor(client, native, storage, diagnostics = null) {
       this.client = client;
       this.native = native;
       this.storage = storage;
+      this.diagnostics = diagnostics;
       this.running = null;
       this.epoch = 0;
       this.status = { running: false, lastSync: null, error: "" };
@@ -221,11 +222,18 @@ const TaygaEWS = (() => {
         },
       };
     }
+    async reconnect() {
+      ++this.epoch;
+      this.controller?.abort();
+      if (this.running) await this.running.catch(() => {});
+      return this.run();
+    }
     async run() {
       if (this.running) return this.running;
       const epoch = this.epoch;
       this.controller = new AbortController();
-      this.running = this.sync(epoch).finally(() => {
+      const sync = () => this.sync(epoch);
+      this.running = (this.diagnostics ? this.diagnostics.observe("sync", sync) : sync()).finally(() => {
         this.running = null;
         this.status.running = false;
       });

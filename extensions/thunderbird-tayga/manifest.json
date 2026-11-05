@@ -2,7 +2,7 @@
   "manifest_version": 2,
   "name": "Tayga Mail",
   "description": "Tayga EWS: автоматическая двусторонняя синхронизация почты, календарей, задач и контактов.",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "browser_specific_settings": {
     "gecko": {
       "id": "tayga@mail.local",
@@ -20,9 +20,11 @@
   ],
   "background": {
     "scripts": [
+      "diagnostics.js",
       "client.js",
       "ews.js",
       "rules.js",
+      "invites.js",
       "background.js"
     ]
   },

@@ -343,5 +343,5 @@ func (s *Store) syncCalendarMeetingTx(ctx context.Context, tx *sql.Tx, actorID s
 		}
 		mails = append(mails, cancellations...)
 	}
-	return mails, nil
+	return filterChangedCalendarMail(ctx, mails, source.Data, previous)
 }

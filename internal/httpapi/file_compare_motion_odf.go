@@ -68,21 +68,16 @@ func motionODPEffects(page *compareNode) ([]motionEffect, error) {
 		targets := map[string]bool{}
 		motionWalk(node, func(n *compareNode) {
 			covered[n] = true
+			if err := motionReadRepeat(n, &item, true); err != nil {
+				failure = err
+			}
 			for _, a := range n.attrs {
 				switch a.Name.Local {
-				case "repeatCount":
-					if a.Value != "1" {
-						failure = fmt.Errorf("repeating timing")
-					}
-				case "autoReverse":
-					if a.Value != "0" && a.Value != "false" {
-						failure = fmt.Errorf("reversing timing")
-					}
 				case "accelerate", "decelerate":
 					if a.Value != "0" {
 						failure = fmt.Errorf("eased timing")
 					}
-				case "repeatDur", "end", "restart", "sub-item":
+				case "end", "restart", "sub-item":
 					failure = fmt.Errorf("unsupported timing or sub-object")
 				}
 			}
@@ -160,9 +155,15 @@ func motionODPEffects(page *compareNode) ([]motionEffect, error) {
 		for id := range targets {
 			item.Target = id
 		}
+		if err := motionRepeatValid(item); err != nil {
+			failure = err
+		}
 		effects = append(effects, item)
 	})
 	motionWalk(page, func(node *compareNode) {
+		if !covered[node] && (node.attr("repeatCount") != "" && node.attr("repeatCount") != "1" || node.attr("autoReverse") == "1" || node.attr("autoReverse") == "true" || node.attr("repeatDur") != "") {
+			failure = fmt.Errorf("unsupported repeating outer container")
+		}
 		switch node.name.Local {
 		case "transitionFilter", "set", "animate", "animateColor", "animateMotion", "animateTransform", "audio", "iterate":
 			if !covered[node] {
@@ -364,6 +365,8 @@ func buildMotionODP(pkg *comparePackage) (motionDeck, []byte, error) {
 				}
 			}
 		}
+		motionMarkStages(&slide)
+		motionPrepareTransformStages(&slide)
 		motionPrepareODPColor(pkg, &slide, page)
 		motionPrepareODPGradient(pkg, &slide, page)
 		motionCheckPathGeometry(&slide)
@@ -416,25 +419,17 @@ func buildMotionODP(pkg *comparePackage) (motionDeck, []byte, error) {
 			if len(plans) > 0 && stateIndex == len(states)-1 {
 				state = motionODPFinal(state, &slide, width, height)
 			}
+			state, assets, err := motionODPFramePaint(pkg, state, &slide, plan, deck.Frames)
+			if err != nil {
+				return deck, nil, err
+			}
+			generatedBytes += len(assets.Styles) + len(assets.Gradients)
+			if generatedBytes > 32<<20 {
+				return deck, nil, fmt.Errorf("storyboard XML exceeds 32 MiB")
+			}
+			colorStyles.WriteString(assets.Styles)
+			gradientStyles.WriteString(assets.Gradients)
 			if plan != nil && plan.matte != "" {
-				if plan.colorPhase > 0 {
-					effect := slide.Effects[plan.colorEffect]
-					var geometry *motionEffect
-					if plan.geometryPhase > 0 {
-						geometry = &slide.Effects[plan.geometryEffect]
-					}
-					modified, assets, e := motionODPPaintBody(pkg, state, effect, plan.colorPhase, fmt.Sprintf("_TaygaColor%d", deck.Frames), geometry, plan.geometryPhase)
-					if e != nil {
-						return deck, nil, e
-					}
-					state = modified
-					generatedBytes += len(assets.Styles) + len(assets.Gradients)
-					if generatedBytes > 32<<20 {
-						return deck, nil, fmt.Errorf("storyboard XML exceeds 32 MiB")
-					}
-					colorStyles.WriteString(assets.Styles)
-					gradientStyles.WriteString(assets.Gradients)
-				}
 				state = motionRootAttr(state, "style-name", "_TaygaMotion"+plan.matte, "tgDraw:style-name", "urn:oasis:names:tc:opendocument:xmlns:drawing:1.0")
 			}
 

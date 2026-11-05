@@ -7,10 +7,41 @@
         "type": "function",
         "async": true,
         "parameters": [
-          { "name": "command", "type": "string" },
-          { "name": "args", "type": "object", "additionalProperties": true }
+          {
+            "name": "command",
+            "type": "string"
+          },
+          {
+            "name": "args",
+            "type": "object",
+            "additionalProperties": true
+          }
         ],
-        "returns": { "type": "any" }
+        "returns": {
+          "type": "any"
+        }
+      }
+    ],
+    "events": [
+      {
+        "name": "onSessionRefresh",
+        "type": "function",
+        "parameters": [
+          {
+            "name": "scope",
+            "type": "string"
+          }
+        ]
+      },
+      {
+        "name": "onConnectionAvailable",
+        "type": "function",
+        "parameters": [
+          {
+            "name": "reason",
+            "type": "string"
+          }
+        ]
       }
     ]
   }

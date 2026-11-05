@@ -3431,11 +3431,11 @@ async function refreshCalInvites() {
         <span class="meta">${escapeHtml(proposal.attendee)}</span>
         <span>${escapeHtml(mailImageText('Сейчас: ', 'Current: ') + fmtCalWhen(proposal.start) + ' — ' + fmtCalWhen(proposal.end))}</span>
         <strong>${escapeHtml(mailImageText('Предложено: ', 'Proposed: ') + fmtCalWhen(proposal.proposed_start) + ' — ' + fmtCalWhen(proposal.proposed_end))}</strong>
-        ${proposal.recurring ? `<span class="meta">${escapeHtml(mailImageText('Повторяющаяся встреча: изменится основное время серии.', 'Recurring meeting: the master series time will change.'))}</span>` : ''}
+        ${proposal.recurrence_id ? `<span class="meta">${escapeHtml(mailImageText('Изменится только это повторение. Остальные даты сохранятся.', 'Only this occurrence will change. Other dates stay unchanged.'))}</span>` : proposal.recurring ? `<span class="meta">${escapeHtml(mailImageText('Повторяющаяся встреча: изменится основное время серии.', 'Recurring meeting: the master series time will change.'))}</span>` : ''}
       </div>
       <div class="cal-invite-actions">
-        <button type="button" class="btn-spray btn-sm" data-proposal-act="accept" data-id="${escapeHtml(proposal.id)}">${escapeHtml(mailImageText('Принять время', 'Accept time'))}</button>
-        <button type="button" class="btn-secondary btn-sm" data-proposal-act="decline" data-id="${escapeHtml(proposal.id)}">${escapeHtml(t('cal_decline'))}</button>
+          <button type="button" class="btn-spray btn-sm" data-proposal-act="accept" data-key="${escapeHtml(proposal.key || proposal.id)}">${escapeHtml(mailImageText('Принять время', 'Accept time'))}</button>
+          <button type="button" class="btn-secondary btn-sm" data-proposal-act="decline" data-key="${escapeHtml(proposal.key || proposal.id)}">${escapeHtml(t('cal_decline'))}</button>
       </div>
     </li>`).join('');
     list.innerHTML = proposals + calState.invites.map((inv) => {
@@ -3459,28 +3459,29 @@ async function refreshCalInvites() {
     list.querySelectorAll("[data-inv-act]").forEach((btn) => {
       btn.addEventListener("click", () => replyCalInvite(btn.dataset.id, btn.dataset.invAct));
     });
-    list.querySelectorAll('[data-proposal-act]').forEach(btn => btn.addEventListener('click', () => decideCalProposal(btn.dataset.id, btn.dataset.proposalAct)));
+    list.querySelectorAll('[data-proposal-act]').forEach(btn => btn.addEventListener('click', () => decideCalProposal(btn.dataset.key, btn.dataset.proposalAct)));
   } catch (err) {
     if (state.me?.id === userID) list.innerHTML = `<li class="meta msg-empty">${escapeHtml(err.message)}</li>`;
   }
 }
 
 let calInviteReplyBusy = false;
-async function decideCalProposal(id, action) {
+async function decideCalProposal(key, action) {
   if (calInviteReplyBusy) return;
-  const proposal = calState.proposals.find(item => item.id === id);
+  const proposal = calState.proposals.find(item => (item.key || item.id) === key);
   if (!proposal) return;
+  const id=proposal.id;
   calInviteReplyBusy = true;
   const userID = state.me?.id;
   const currentUser = () => state.me?.id === userID;
   $('cal-invite-list')?.querySelectorAll('button').forEach(button => button.disabled = true);
   setMsg($('cal-invite-msg'), '', '');
   try {
-    if (action === 'accept' && !await askConfirm(fmtCalWhen(proposal.proposed_start) + ' — ' + fmtCalWhen(proposal.proposed_end) + '\n' + mailImageText('Все участники получат обновлённое приглашение.', 'All attendees will receive an updated invitation.'), {
+    if (action === 'accept' && !await askConfirm(fmtCalWhen(proposal.proposed_start) + ' — ' + fmtCalWhen(proposal.proposed_end) + '\n' + (proposal.recurrence_id ? mailImageText('Изменится только это повторение. Все его участники получат обновлённое приглашение.', 'Only this occurrence will change. Its attendees will receive an updated invitation.') : mailImageText('Все участники получат обновлённое приглашение.', 'All attendees will receive an updated invitation.')), {
       title: mailImageText('Изменить время встречи?', 'Change meeting time?')
     })) return;
     if (!currentUser()) return;
-    await api('/api/v1/calendar/invites/' + encodeURIComponent(id) + '/decision', {method:'POST', body:JSON.stringify({action, event_id:proposal.event_id, revision:proposal.revision, etag:proposal.etag})});
+    await api('/api/v1/calendar/invites/' + encodeURIComponent(id) + '/decision', {method:'POST', body:JSON.stringify({action, event_id:proposal.event_id, revision:proposal.revision, etag:proposal.etag,...(proposal.recurrence_id?{recurrence_id:proposal.recurrence_id}:{})})});
     if (!currentUser()) return;
     await refreshCalInvites();
     if (!currentUser()) return;
@@ -3881,6 +3882,7 @@ async function loadCalEvents() {
 
 function showCalReader(ev) {
   calState.currentEvent = ev;
+  renderCalOccurrenceReply(ev);
   const empty = $("cal-empty");
   const reader = $("cal-reader");
   if (!empty || !reader) return;

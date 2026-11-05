@@ -102,18 +102,21 @@ async function openFileMotionComparison(path,result,identity) {
   }catch(error){stop();status(error.message);for(const load of loads)void load.destroy().catch(()=>{});enabled(false)}
 }
 
+function fileMotionEffectDuration(e){return Math.max(1,e.duration)*(e.repeat||1)*(e.auto_reverse?2:1)}
+function fileMotionEffectProgress(e,time){const elapsed=Math.max(0,time-e.start),duration=Math.max(1,e.duration);if(elapsed>=fileMotionEffectDuration(e))return e.auto_reverse?0:1;const cycle=duration*(e.auto_reverse?2:1),p=(elapsed%cycle)/duration;return e.auto_reverse&&p>1?2-p:p}
+function fileMotionProperty(e){return e.target+'/'+(['cut','fade'].includes(e.kind)?'opacity':e.kind+(['color','gradient'].includes(e.kind)?'/'+e.property:''))}
 function fileMotionLayerSchedule(slide,previous,events){
   const groups=new Map(),segments=[],transition=slide.transition.duration&&slide.transition.kind!=='cut'?slide.transition.duration:0;let duration=transition;
   for(const [effectIndex,effect] of slide.effects.entries()){const key=effect.event||'',base=key?(Object.hasOwn(events,key)?events[key]:undefined):transition;if(base===undefined)continue;const group=groups.get(key)||{start:base,end:base,max:base,count:0};let start;
     if(effect.trigger==='with')start=group.start+effect.delay;else if(effect.trigger==='after')start=group.end+effect.delay;else start=(key&&group.count===0?base:group.max+500)+effect.delay;
-    const end=start+Math.max(1,effect.duration);segments.push({...effect,effectIndex,start,end});group.start=start;group.end=end;group.max=Math.max(group.max,end);group.count++;groups.set(key,group);duration=Math.max(duration,end);
+    const end=start+fileMotionEffectDuration(effect);if(effect.previous!==undefined){const prior=segments.find(s=>s.effectIndex===effect.previous);if(!prior||start<prior.end)throw Error('Overlapping or unordered property stages')}segments.push({...effect,effectIndex,start,end});group.start=start;group.end=end;group.max=Math.max(group.max,end);group.count++;groups.set(key,group);duration=Math.max(duration,end);
   }
   return {segments,duration:duration+500,initial:slide.states[0],layers:slide.layers,background:slide.background,transition:slide.transition,previous:previous?.states.at(-1)||0,hits:slide.hits||[],colors:slide.colors||[]};
 }
 function fileMotionPoint(points,progress){
   let length=0;const lengths=[];for(let i=1;i<points.length;i++){const value=Math.hypot(points[i].x-points[i-1].x,points[i].y-points[i-1].y);lengths.push(value);length+=value}let remaining=length*Math.max(0,Math.min(1,progress));for(let i=0;i<lengths.length;i++){if(remaining<=lengths[i]&&lengths[i]>0){const t=remaining/lengths[i];return [points[i].x+(points[i+1].x-points[i].x)*t,points[i].y+(points[i+1].y-points[i].y)*t]}remaining-=lengths[i]}return [points.at(-1).x,points.at(-1).y];
 }
-function fileMotionTargetOffset(schedule,target,time){let offset=[0,0];for(const e of schedule.segments){if(e.target===target&&e.kind==='path'&&time>=e.start)offset=fileMotionPoint(e.path,(time-e.start)/(e.end-e.start))}return offset}
+function fileMotionTargetOffset(schedule,target,time){let offset=[0,0];for(const e of schedule.segments){if(e.target===target&&e.kind==='path'&&time>=e.start)offset=fileMotionPoint(e.path,fileMotionEffectProgress(e,time))}return offset}
 function fileMotionLayerFrame(ctx,cache,schedule,time){
   const w=ctx.canvas.width,h=ctx.canvas.height;let scratch=cache.motionScratch;if(!scratch){scratch=document.createElement('canvas');scratch.width=w;scratch.height=h;cache.motionScratch=scratch}const target=scratch.getContext('2d');target.globalAlpha=1;target.fillStyle='white';target.fillRect(0,0,w,h);if(cache.has(schedule.background))target.drawImage(cache.get(schedule.background),0,0);
   const size=cache.motionSize||[w,h];schedule.layers.forEach((layer,index)=>{
@@ -124,9 +127,10 @@ function fileMotionLayerFrame(ctx,cache,schedule,time){
   if(time<schedule.transition.duration&&schedule.transition.kind!=='cut'){cache.set('current-scene',scratch);fileMotionFrame(ctx,cache,{initial:schedule.previous,segments:[{start:0,end:schedule.transition.duration,from:schedule.previous,to:'current-scene',kind:schedule.transition.kind,direction:schedule.transition.direction}]},time);return}
   ctx.globalAlpha=1;ctx.clearRect(0,0,w,h);ctx.drawImage(scratch,0,0);
 }
-function fileMotionObjectTransform(schedule,target,time){const result={offset:[0,0],angle:0,scale:[1,1],colors:[]};for(const e of schedule.segments){if(e.target!==target||time<e.start)continue;const p=Math.max(0,Math.min(1,(time-e.start)/(e.end-e.start)));if(e.kind==='path')result.offset=fileMotionPoint(e.path,p);else if(e.kind==='rotate')result.angle=e.from[0]+(e.to[0]-e.from[0])*p;else if(e.kind==='scale')result.scale=e.from.map((v,i)=>v+(e.to[i]-v)*p);else if(e.kind==='color'||e.kind==='gradient')result.colors.push({effect:e,progress:p})}return result}
+function fileMotionObjectTransform(schedule,target,time){const result={offset:[0,0],angle:0,scale:[1,1],colors:[]},latest=new Map();for(const e of schedule.segments){if(e.target===target&&time>=e.start)latest.set(fileMotionProperty(e),e)}for(const e of latest.values()){const p=fileMotionEffectProgress(e,time);if(e.kind==='path')result.offset=fileMotionPoint(e.path,p);else if(e.kind==='rotate')result.angle=e.from[0]+(e.to[0]-e.from[0])*p;else if(e.kind==='scale')result.scale=e.from.map((v,i)=>v+(e.to[i]-v)*p);else if(e.kind==='color'||e.kind==='gradient')result.colors.push({effect:e,progress:p})}return result}
+
 function fileMotionPageIDs(slide){return [...(slide?.layers||[]).flatMap(l=>[l.black,l.white]),...(slide?.probe||[]),slide?.background||0,...(slide?.colors||[]).flatMap(c=>[c.from_black,c.from_white,c.to_black,c.to_white,...(c.samples||[]).flatMap(s=>[s.black,s.white])])]}
-function fileMotionNeedsFinal(slide){return slide?.layers?.length&&slide.effects.some(e=>['rotate','scale','color','gradient'].includes(e.kind))}
+function fileMotionNeedsFinal(slide){return slide?.layers?.length&&slide.effects.length>0}
 function fileMotionPreviousIDs(slide){return fileMotionNeedsFinal(slide)?fileMotionPageIDs(slide):[]}
 
 function fileMotionValidateLayers(slide,frames){
@@ -134,9 +138,14 @@ function fileMotionValidateLayers(slide,frames){
   const validID=id=>Number.isInteger(id)&&id>0&&id<=frames;
   for(const e of slide.effects){if(e.kind==='path'&&(!Array.isArray(e.path)||e.path.length<2||e.path.length>512||e.path.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y)||Math.abs(p.x)>16||Math.abs(p.y)>16)))throw Error('Invalid motion path');if(e.event!==undefined&&(typeof e.event!=='string'||e.event.length>256))throw Error('Invalid interactive target')}
   for(const e of slide.effects){if(['rotate','scale','color','gradient'].includes(e.kind)){const length=e.kind==='gradient'&&e.property==='stops'?e.from?.length:{rotate:1,scale:2,color:3,gradient:1}[e.kind];if(!Array.isArray(e.from)||!Array.isArray(e.to)||e.from.length!==length||e.to.length!==length||[...e.from,...e.to].some(v=>!Number.isFinite(v))||(e.kind==='rotate'&&[...e.from,...e.to].some(v=>Math.abs(v)>3600))||(e.kind==='scale'&&[...e.from,...e.to].some(v=>v<.01||v>8))||(e.kind==='color'&&[...e.from,...e.to].some(v=>v<0||v>255)))throw Error('Invalid transform parameters')}}
+  const lastProperty=new Map();for(const [i,e] of slide.effects.entries()){
+    if(e.repeat!==undefined&&(!Number.isInteger(e.repeat)||e.repeat<1||e.repeat>20)||e.auto_reverse!==undefined&&typeof e.auto_reverse!=='boolean'||fileMotionEffectDuration(e)>600000||(e.repeat>1||e.auto_reverse)&&(!e.duration||e.kind==='cut'))throw Error('Invalid repeat timing');
+    const key=fileMotionProperty(e);if(e.previous!==undefined&&(!Number.isInteger(e.previous)||e.previous<0||e.previous>=i||lastProperty.get(key)!==e.previous||(slide.effects[e.previous].event||'')!==(e.event||'')))throw Error('Invalid property stage');if(lastProperty.has(key)&&e.previous===undefined&&!['fade','cut'].includes(e.kind))throw Error('Missing previous stage');lastProperty.set(key,i);
+  }
   const covered=new Set();
   for(const color of slide.colors||[]){
     if(!Number.isInteger(color.effect)||!['color','gradient'].includes(slide.effects[color.effect]?.kind)||covered.has(color.effect)||[color.from_black,color.from_white,color.to_black,color.to_white].some(id=>!validID(id)))throw Error('Invalid paint layer');covered.add(color.effect);
+    if(color.axes!==undefined){fileMotionValidateAxes(slide,color,covered,validID);continue}
     const joint=color.geometry_effect!==undefined;
     if(joint){const g=slide.effects[color.geometry_effect],c=slide.effects[color.effect];if(!Number.isInteger(color.geometry_effect)||g?.kind!=='gradient'||c.kind!=='color'||c.property!=='fill'||g.target!==c.target||covered.has(color.geometry_effect))throw Error('Invalid joint paint');covered.add(color.geometry_effect)}
     if(!color.samples){if(joint)throw Error('Missing joint samples');continue}
@@ -149,6 +158,29 @@ function fileMotionValidateLayers(slide,frames){
   if(!slide.layers?.length){if(slide.effects.some(e=>['path','rotate','scale','color','gradient'].includes(e.kind)||e.trigger==='with'||e.event))throw Error('Missing animation layers');return}
   if(slide.layers.length>25||!validID(slide.background)||!Array.isArray(slide.probe)||slide.probe.length!==2||slide.probe.some(id=>!validID(id))||slide.layers.some(l=>!validID(l.black)||!validID(l.white)||typeof l.hidden!=='boolean'||typeof l.target!=='string')||!Array.isArray(slide.hits)||slide.hits.length>1000||slide.hits.some(h=>typeof h.target!=='string'||!Array.isArray(h.box)||h.box.length!==4||h.box.some(n=>!Number.isFinite(n)||Math.abs(n)>16)||(h.rotation!==undefined&&(!Number.isFinite(h.rotation)||Math.abs(h.rotation)>360))))throw Error('Invalid layer manifest');
 }
+function fileMotionValidateTracks(slide,color,covered,validID){
+ const {axes,tracks,samples}=color;if(!Array.isArray(axes)||axes.length<1||axes.length>4||!Array.isArray(tracks)||tracks.length!==axes.length||axes[0]!==color.effect||color.geometry_effect!==undefined||!Array.isArray(samples)||samples.length<2||samples.length>45)throw Error('Invalid paint tracks');
+ const properties=new Set(),seen=new Set();let geometry=0;const target=slide.effects[color.effect].target;
+ for(const [axis,ids] of tracks.entries()){if(!Array.isArray(ids)||!ids.length||ids.length>12||ids[0]!==axes[axis])throw Error('Invalid stage track');const head=slide.effects[ids[0]],key=fileMotionProperty(head);if(head.kind==='gradient')geometry++;if(properties.has(key)||!(head.kind==='gradient'||head.kind==='color')||axes.length>1&&head.kind==='color'&&head.property!=='fill')throw Error('Invalid tracked property');properties.add(key);
+  for(const [j,id] of ids.entries()){const e=slide.effects[id];if(!Number.isInteger(id)||!e||e.target!==target||fileMotionProperty(e)!==key||seen.has(id)||id!==color.effect&&covered.has(id)||j===0&&e.previous!==undefined||j>0&&e.previous!==ids[j-1])throw Error('Invalid paint stage');seen.add(id);covered.add(id)}
+ }
+ if(geometry>3||samples.some(s=>!Array.isArray(s.positions)||s.positions.length!==axes.length||s.positions.some(v=>!Number.isFinite(v)||v<0||v>1)||!validID(s.black)||!validID(s.white)))throw Error('Invalid track sample');
+ const values=axes.map((_,i)=>[...new Set(samples.map(s=>s.positions[i]))].sort((a,b)=>a-b));if(values.reduce((n,v)=>n*v.length,1)!==samples.length)throw Error('Incomplete track grid');
+ for(const [axis,ids] of tracks.entries()){const v=values[axis];if(v.length<2||v[0]!==0||v.at(-1)!==1)throw Error('Missing track endpoints');for(let stage=0;stage<ids.length;stage++){const start=2*stage/(2*ids.length-1),end=(2*stage+1)/(2*ids.length-1);if(!v.includes(start)||!v.includes(end)||v.filter(x=>x>=start&&x<=end).length<2)throw Error('Missing stage samples')}if(v.some(x=>!ids.some((_,stage)=>x>=2*stage/(2*ids.length-1)&&x<=(2*stage+1)/(2*ids.length-1))))throw Error('Sample in stage gap')}
+ for(let i=0;i<samples.length;i++){let stride=samples.length;for(let axis=0;axis<axes.length;axis++){stride/=values[axis].length;if(samples[i].positions[axis]!==values[axis][Math.floor(i/stride)%values[axis].length])throw Error('Unordered track grid')}}
+}
+function fileMotionValidateAxes(slide,color,covered,validID){
+ const axes=color.axes,samples=color.samples;
+ if(color.tracks!==undefined){fileMotionValidateTracks(slide,color,covered,validID);return}
+ if(!Array.isArray(axes)||axes.length<2||axes.length>4||axes[0]!==color.effect||new Set(axes).size!==axes.length||color.geometry_effect!==undefined||!Array.isArray(samples)||samples.length<4||samples.length>45)throw Error('Invalid paint axes');
+ const properties=new Set();let geometry=0,fill=0;const target=slide.effects[color.effect].target;
+ for(const axis of axes){const e=slide.effects[axis];if(!Number.isInteger(axis)||!e||e.target!==target||!(e.kind==='gradient'||e.kind==='color'&&e.property==='fill')||axis!==color.effect&&covered.has(axis)||properties.has(e.kind+'/'+e.property))throw Error('Invalid paint axis effect');properties.add(e.kind+'/'+e.property);if(e.kind==='gradient')geometry++;else fill++;covered.add(axis)}
+ if(geometry<2||geometry>3||fill>1)throw Error('Too many geometry axes');
+ if(samples.some(s=>!Array.isArray(s.positions)||s.positions.length!==axes.length||s.positions.some(v=>!Number.isFinite(v)||v<0||v>1)||!validID(s.black)||!validID(s.white)))throw Error('Invalid paint axis sample');
+ const values=axes.map((_,i)=>[...new Set(samples.map(s=>s.positions[i]))].sort((a,b)=>a-b));
+ if(values.some(v=>v.length<2||v.length>9||v[0]!==0||v.at(-1)!==1)||values.reduce((n,v)=>n*v.length,1)!==samples.length)throw Error('Incomplete multidimensional paint grid');
+ for(let i=0;i<samples.length;i++){let stride=samples.length;for(let axis=0;axis<axes.length;axis++){stride/=values[axis].length;if(samples[i].positions[axis]!==values[axis][Math.floor(i/stride)%values[axis].length])throw Error('Unordered paint grid')}}
+}
 function fileMotionDecodeLayers(cache,slide){
   const black=cache.get(slide.probe[0]),white=cache.get(slide.probe[1]);if(!black||!white)throw Error('Missing matte probes');const bx=black.getContext('2d'),wx=white.getContext('2d');for(const [x,y] of [[1,1],[Math.max(1,Math.floor(black.motionSize[0]/2)),Math.max(1,Math.floor(black.motionSize[1]/2))]]){const b=bx.getImageData(x,y,1,1).data,w=wx.getImageData(x,y,1,1).data;if([0,1,2].some(c=>b[c]>12||w[c]<243))throw Error(mailImageText('Офисный сервер не сохранил фоны слоёв. Воспроизведение остановлено.','Office server did not preserve layer mattes. Playback stopped.'))}
   cache.motionSize=black.motionSize;
@@ -156,14 +188,22 @@ function fileMotionDecodeLayers(cache,slide){
   slide.layers.forEach((layer,index)=>decode(layer.black,layer.white,'layer:'+index));for(const color of slide.colors||[]){if(color.samples){color.samples.forEach((s,i)=>decode(s.black,s.white,'color:'+color.effect+':sample:'+i))}else{decode(color.from_black,color.from_white,'color:'+color.effect+':from');decode(color.to_black,color.to_white,'color:'+color.effect+':to')}}cache.delete(slide.probe[0]);cache.delete(slide.probe[1]);
 }
 
-function fileMotionTargetOpacity(schedule,target,time){let opacity=schedule.layers?.find(l=>l.target===target)?.hidden?0:1;for(const e of schedule.segments){if(e.target!==target||!['cut','fade'].includes(e.kind)||time<e.start)continue;const p=Math.min(1,(time-e.start)/(e.end-e.start));opacity=e.kind==='cut'?(e.exit?0:1):e.exit?1-p:p}return opacity}
+function fileMotionTargetOpacity(schedule,target,time){let opacity=schedule.layers?.find(l=>l.target===target)?.hidden?0:1;for(const e of schedule.segments){if(e.target!==target||!['cut','fade'].includes(e.kind)||time<e.start)continue;const p=fileMotionEffectProgress(e,time);opacity=e.kind==='cut'?(e.exit?0:1):e.exit?1-p:p}return opacity}
 
+function fileMotionAxisPaint(cache,color,phase,running){
+ const values=color.axes.map((_,i)=>[...new Set(color.samples.map(s=>s.positions[i]))].sort((a,b)=>a-b));
+ const positions=color.axes.map((axis,i)=>{const ids=color.tracks?.[i];let stage=ids?ids.findIndex(id=>running.has(id)):0;if(stage<0)stage=0;const p=ids?(2*stage+phase(ids[stage]))/(2*ids.length-1):phase(axis),v=values[i];let left=0;while(left<v.length-2&&p>v[left+1])left++;return [left,Math.max(0,Math.min(1,(p-v[left])/(v[left+1]-v[left])))]});
+ let weights=[[0,1]];for(let axis=0;axis<values.length;axis++){const [left,blend]=positions[axis],count=values[axis].length;weights=weights.flatMap(([index,weight])=>[[index*count+left,weight*(1-blend)],[index*count+left+1,weight*blend]])}
+ const get=i=>cache.get('color:'+color.effect+':sample:'+i);
+ return {from:get(0),terms:weights.filter(([,weight])=>weight>0).map(([i,weight])=>({data:get(i),weight}))};
+}
 function fileMotionColorImage(cache,index,base,active,manifest){
   let data=cache.get('base-pixels:'+index);if(!data){data=base.getContext('2d').getImageData(0,0,base.width,base.height).data;cache.set('base-pixels:'+index,data)}
   const running=new Map(active.map(a=>[a.effect.effectIndex,a]));
   const phase=index=>{const a=running.get(index);return a?(a.effect.discrete?(a.progress<.5?0:1):a.progress):0};
   const bracket=(values,p)=>{let left=0;while(left<values.length-2&&p>values[left+1])left++;return [left,Math.max(0,Math.min(1,(p-values[left])/(values[left+1]-values[left])))]};
-  const changes=manifest.filter(c=>running.has(c.effect)||running.has(c.geometry_effect)).map(color=>{
+  const changes=manifest.filter(c=>running.has(c.effect)||running.has(c.geometry_effect)||c.axes?.some(axis=>running.has(axis))||c.tracks?.some(ids=>ids.some(id=>running.has(id)))).map(color=>{
+    if(color.axes)return fileMotionAxisPaint(cache,color,phase,running);
     const samples=color.samples||[{at:0,key:'from'},{at:1,key:'to'}],joint=color.geometry_effect!==undefined,p=phase(color.effect),q=joint?phase(color.geometry_effect):0;
     let columns=samples.length;if(joint){columns=samples.findIndex(s=>(s.geometry_at??0)>0)}
     const [x,u]=bracket(samples.slice(0,columns).map(s=>s.at),p);let row=0,v=0;
@@ -172,6 +212,6 @@ function fileMotionColorImage(cache,index,base,active,manifest){
     return {from:cache.get(key(0)),terms:weights.map(([i,weight])=>({data:cache.get(key(i)),weight}))};
   });
   let canvas=cache.motionColorScratch;if(!canvas){canvas=document.createElement('canvas');canvas.width=base.width;canvas.height=base.height;cache.motionColorScratch=canvas}const ctx=canvas.getContext('2d'),out=ctx.createImageData(base.width,base.height);
-  for(let i=0;i<data.length;i+=4){let alpha=data[i+3];const premul=[data[i]*alpha/255,data[i+1]*alpha/255,data[i+2]*alpha/255];for(const c of changes){const initial=c.from[i+3];alpha-=initial;for(let k=0;k<3;k++)premul[k]-=c.from[i+k]*initial/255;for(const term of c.terms){const a=term.data[i+3]*term.weight;alpha+=a;for(let k=0;k<3;k++)premul[k]+=term.data[i+k]*a/255}}alpha=Math.max(0,Math.min(255,alpha));out.data[i+3]=alpha;if(alpha>1)for(let k=0;k<3;k++)out.data[i+k]=Math.max(0,Math.min(255,premul[k]*255/alpha))}
+  for(let i=0;i<data.length;i+=4){let alpha=data[i+3];const premul=[data[i]*alpha/255,data[i+1]*alpha/255,data[i+2]*alpha/255];for(const c of changes){const initial=data[i+3];alpha-=initial;for(let k=0;k<3;k++)premul[k]-=data[i+k]*initial/255;for(const term of c.terms){const a=term.data[i+3]*term.weight;alpha+=a;for(let k=0;k<3;k++)premul[k]+=term.data[i+k]*a/255}}alpha=Math.max(0,Math.min(255,alpha));out.data[i+3]=alpha;if(alpha>1)for(let k=0;k<3;k++)out.data[i+k]=Math.max(0,Math.min(255,premul[k]*255/alpha))}
   ctx.putImageData(out,0,0);return canvas;
 }

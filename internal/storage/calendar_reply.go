@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"strings"
 	"time"
@@ -14,16 +15,26 @@ var ErrCalendarConflict = errors.New("calendar changed; refresh before retrying"
 // ReplyCalendarInvite commits participation and both local calendar copies
 // together. A COUNTER stores a proposal; only the organizer can move a meeting.
 func (s *Store) ReplyCalendarInvite(ctx context.Context, userID, inviteID, status string, proposedStart, proposedEnd *time.Time, etag string, comment ...string) (*CalendarInvite, error) {
-	return s.replyCalendarInvite(ctx, userID, inviteID, status, proposedStart, proposedEnd, etag, true, false, comment...)
+	return s.replyCalendarInvite(ctx, userID, inviteID, status, proposedStart, proposedEnd, etag, "", true, false, comment...)
 }
 
 // RespondCalendarInvite applies a mobile RSVP without implicitly sending mail.
 // Repeated transport requests are idempotent after validating the current event.
 func (s *Store) RespondCalendarInvite(ctx context.Context, userID, inviteID, status, etag string, sendMail bool, comment string) (*CalendarInvite, error) {
-	return s.replyCalendarInvite(ctx, userID, inviteID, status, nil, nil, etag, sendMail, true, comment)
+	return s.replyCalendarInvite(ctx, userID, inviteID, status, nil, nil, etag, "", sendMail, true, comment)
 }
 
-func (s *Store) replyCalendarInvite(ctx context.Context, userID, inviteID, status string, proposedStart, proposedEnd *time.Time, etag string, sendMail, idempotent bool, comment ...string) (*CalendarInvite, error) {
+// ReplyCalendarOccurrence changes a single recurrence identity, leaving the
+// series RSVP and whole-series time proposal intact. A repeated response is a
+// no-op, but still validates ownership, the occurrence and the current ETag.
+func (s *Store) ReplyCalendarOccurrence(ctx context.Context, userID, inviteID, rid, status, etag string, sendMail bool, comment string) (*CalendarInvite, error) {
+	if rid == "" || etag == "" {
+		return nil, ErrCalendarConflict
+	}
+	return s.replyCalendarInvite(ctx, userID, inviteID, status, nil, nil, etag, rid, sendMail, true, comment)
+}
+
+func (s *Store) replyCalendarInvite(ctx context.Context, userID, inviteID, status string, proposedStart, proposedEnd *time.Time, etag, rid string, sendMail, idempotent bool, comment ...string) (*CalendarInvite, error) {
 	if status != "ACCEPTED" && status != "DECLINED" && status != "TENTATIVE" {
 		return nil, ErrUnauthorized
 	}
@@ -35,6 +46,17 @@ func (s *Store) replyCalendarInvite(ctx context.Context, userID, inviteID, statu
 		return nil, err
 	}
 	defer tx.Rollback()
+	result, err := s.replyCalendarInviteTx(ctx, tx, userID, inviteID, status, proposedStart, proposedEnd, etag, rid, sendMail, idempotent, comment...)
+	if err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+func (s *Store) replyCalendarInviteTx(ctx context.Context, tx *sql.Tx, userID, inviteID, status string, proposedStart, proposedEnd *time.Time, etag, rid string, sendMail, idempotent bool, comment ...string) (*CalendarInvite, error) {
+	var err error
 	q := `SELECT id, organizer_user_id, attendee_email, attendee_user_id, event_uid, calendar_object_id,
 		summary, partstat, proposed_start, proposed_end, created_at, updated_at FROM calendar_invites WHERE id=?`
 	if s.dialect == DialectPostgres {
@@ -86,14 +108,32 @@ func (s *Store) replyCalendarInvite(ctx context.Context, userID, inviteID, statu
 			if err != nil {
 				return nil, err
 			}
+			if strings.EqualFold(parsed.Status, "CANCELLED") {
+				return nil, ErrNotFound
+			}
+			if rid != "" {
+				instance, err := calutil.GetOccurrence(o.Data, rid)
+				if err != nil {
+					return nil, ErrCalendarConflict
+				}
+				parsed = instance.ParseResult
+			}
 			reference = &parsed
 		}
 	}
 	if reference == nil || strings.EqualFold(reference.Status, "CANCELLED") || !strings.EqualFold(reference.Organizer.Email, organizerEmail) {
 		return nil, ErrNotFound
 	}
+	var pending *CalendarOccurrenceProposal
+	if rid != "" {
+		pending, err = scanOccurrenceProposal(tx.QueryRowContext(ctx, s.rebind(`SELECT `+occurrenceProposalColumns+` FROM calendar_occurrence_proposals WHERE invite_id=? AND recurrence_id=?`), inviteID, rid))
+		if err != nil && err != ErrNotFound {
+			return nil, err
+		}
+	}
 	foundOrganizer := false
-	unchanged := idempotent && inv.PartStat == status && inv.ProposedStart == nil && inv.ProposedEnd == nil
+	organizerObjectID := ""
+	unchanged := idempotent && proposedStart == nil && pending == nil && (rid != "" || inv.PartStat == status && inv.ProposedStart == nil && inv.ProposedEnd == nil)
 	now := time.Now().UTC()
 	for _, o := range objects {
 		parsed, err := calutil.ParseICS(o.Data)
@@ -103,25 +143,54 @@ func (s *Store) replyCalendarInvite(ctx context.Context, userID, inviteID, statu
 		if !strings.EqualFold(parsed.Organizer.Email, organizerEmail) {
 			continue
 		}
-		if parsed.Sequence != reference.Sequence || strings.EqualFold(parsed.Status, "CANCELLED") {
+		if strings.EqualFold(parsed.Status, "CANCELLED") {
+			return nil, ErrCalendarConflict
+		}
+		if rid != "" {
+			instance, err := calutil.GetOccurrence(o.Data, rid)
+			if err != nil {
+				return nil, ErrCalendarConflict
+			}
+			parsed = instance.ParseResult
+		}
+		if parsed.Sequence != reference.Sequence || strings.EqualFold(parsed.Status, "CANCELLED") || !strings.EqualFold(parsed.Organizer.Email, organizerEmail) {
 			return nil, ErrCalendarConflict
 		}
 		matchingAttendee := false
+		sameResponse := false
 		for _, a := range parsed.Attendees {
 			if strings.EqualFold(a.Email, inv.AttendeeEmail) {
 				matchingAttendee = true
+				sameResponse = strings.EqualFold(a.PartStat, status)
 				unchanged = unchanged && strings.EqualFold(a.PartStat, status)
 			}
 		}
 		if !matchingAttendee {
 			return nil, ErrCalendarConflict
 		}
-		data, err := calutil.WithAttendeeStatus(o.Data, inv.AttendeeEmail, status)
-		if err != nil {
-			return nil, ErrCalendarConflict
-		}
 		if o.ID != inv.CalendarObjectID {
 			foundOrganizer = true
+			if organizerObjectID == "" {
+				organizerObjectID = o.ID
+			}
+		}
+		if proposedStart != nil {
+			if rid != "" && (parsed.Start == nil || parsed.End == nil || reference.Start == nil || reference.End == nil || !parsed.Start.Equal(*reference.Start) || !parsed.End.Equal(*reference.End)) {
+				return nil, ErrCalendarConflict
+			}
+			continue
+		}
+		if rid != "" && sameResponse {
+			continue
+		}
+		var data string
+		if rid != "" {
+			data, err = calutil.WithOccurrenceAttendeeStatus(o.Data, rid, inv.AttendeeEmail, status)
+		} else {
+			data, err = calutil.WithAttendeeStatus(o.Data, inv.AttendeeEmail, status)
+		}
+		if err != nil {
+			return nil, ErrCalendarConflict
 		}
 		if proposedStart != nil || (idempotent && data == o.Data) {
 			continue
@@ -139,12 +208,20 @@ func (s *Store) replyCalendarInvite(ctx context.Context, userID, inviteID, statu
 		if n != 1 {
 			return nil, ErrCalendarConflict
 		}
+		if o.ID == inv.CalendarObjectID {
+			if _, err = s.bumpCalendarScheduleTagTx(ctx, tx, o.ID); err != nil {
+				return nil, err
+			}
+		}
 		if _, err = tx.ExecContext(ctx, s.rebind(`UPDATE calendars SET ctag=? WHERE id=?`), newCTag(), o.CalendarID); err != nil {
 			return nil, err
 		}
 	}
 	if !foundOrganizer {
 		return nil, ErrNotFound
+	}
+	if rid != "" && proposedStart != nil && pending != nil && pending.ObjectID == organizerObjectID && pending.Sequence == reference.Sequence && pending.OriginalStart.Equal(*reference.Start) && pending.OriginalEnd.Equal(*reference.End) && pending.ProposedStart.Equal(*proposedStart) && pending.ProposedEnd.Equal(*proposedEnd) && (len(comment) == 0 || pending.Comment == comment[0]) {
+		return inv, nil
 	}
 	if unchanged {
 		return inv, nil
@@ -163,6 +240,9 @@ func (s *Store) replyCalendarInvite(ctx context.Context, userID, inviteID, statu
 	if proposedStart != nil {
 		method = "COUNTER"
 		ev.Start, ev.End = proposedStart, proposedEnd
+		if rid != "" && ev.AllDay && (ev.Start.UTC().Format("150405.999999999") != "000000" || ev.End.UTC().Format("150405.999999999") != "000000") {
+			ev.AllDay = false
+		}
 		ics, err = calutil.BuildCounterICS(ev, responder)
 	} else {
 		ics, err = calutil.BuildReplyICS(ev, responder)
@@ -176,15 +256,23 @@ func (s *Store) replyCalendarInvite(ctx context.Context, userID, inviteID, statu
 			return nil, err
 		}
 	}
+	if rid != "" {
+		if proposedStart != nil {
+			_, err = tx.ExecContext(ctx, s.rebind(`INSERT INTO calendar_occurrence_proposals (`+occurrenceProposalColumns+`) VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT (invite_id,recurrence_id) DO UPDATE SET object_id=excluded.object_id,revision=excluded.revision,event_sequence=excluded.event_sequence,original_start=excluded.original_start,original_end=excluded.original_end,proposed_start=excluded.proposed_start,proposed_end=excluded.proposed_end,comment=excluded.comment,updated_at=excluded.updated_at`), inviteID, rid, organizerObjectID, NewID(), reference.Sequence, reference.Start.UTC(), reference.End.UTC(), proposedStart.UTC(), proposedEnd.UTC(), ev.Comment, now)
+		} else {
+			_, err = tx.ExecContext(ctx, s.rebind(`DELETE FROM calendar_occurrence_proposals WHERE invite_id=? AND recurrence_id=?`), inviteID, rid)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return inv, nil
+	}
 	// Proposing a time does not imply accepting or tentatively accepting the
 	// existing time. Keep the previous RSVP until the attendee changes it.
 	if proposedStart != nil {
 		status = inv.PartStat
 	}
 	if _, err = tx.ExecContext(ctx, s.rebind(`UPDATE calendar_invites SET partstat=?, proposed_start=?, proposed_end=?, updated_at=? WHERE id=?`), status, proposedStart, proposedEnd, now, inv.ID); err != nil {
-		return nil, err
-	}
-	if err = tx.Commit(); err != nil {
 		return nil, err
 	}
 	inv.PartStat, inv.ProposedStart, inv.ProposedEnd, inv.UpdatedAt = status, proposedStart, proposedEnd, now

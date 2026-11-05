@@ -49,5 +49,9 @@ func (s *Store) MoveCalendarObject(ctx context.Context, userID, id, source, dest
 			return nil, err
 		}
 	}
+	o.ScheduleTag, err = s.bumpCalendarScheduleTagTx(ctx, tx, o.ID)
+	if err != nil {
+		return nil, err
+	}
 	return o, tx.Commit()
 }

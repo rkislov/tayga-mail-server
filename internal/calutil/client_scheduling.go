@@ -13,7 +13,7 @@ import (
 // PrepareOrganizerWrite separates meaningful organizer edits from client echoes
 // and personal reminder changes. It retains the full iCalendar document,
 // including timezones and detached recurrence instances.
-func PrepareOrganizerWrite(data, previous, actorEmail string) (string, bool, error) {
+func PrepareOrganizerWrite(data, previous, actorEmail string, changedOnly ...bool) (string, bool, error) {
 	cal, err := ical.NewDecoder(strings.NewReader(data)).Decode()
 	if err != nil {
 		return "", false, err
@@ -65,6 +65,7 @@ func PrepareOrganizerWrite(data, previous, actorEmail string) (string, bool, err
 		return data, false, nil
 	}
 	changed := old == nil || schedulingFingerprint(cal.Component) != schedulingFingerprint(old.Component)
+	keepResponses := old != nil && len(changedOnly) > 0 && changedOnly[0] && meetingContentFingerprint(cal.Component) == meetingContentFingerprint(old.Component)
 	version := NextSequence(data) - 1
 	if previous != "" && changed && version < NextSequence(previous) {
 		version = NextSequence(previous)
@@ -102,7 +103,16 @@ func PrepareOrganizerWrite(data, previous, actorEmail string) (string, bool, err
 			if strings.EqualFold(a.Value, "mailto:"+actorEmail) {
 				continue
 			}
-			if changed {
+			keepPrior := false
+			if keepResponses && before != nil {
+				for _, prior := range before.Props.Values("ATTENDEE") {
+					if strings.EqualFold(a.Value, prior.Value) {
+						keepPrior = true
+						break
+					}
+				}
+			}
+			if changed && !keepPrior {
 				a.Params.Set("PARTSTAT", "NEEDS-ACTION")
 				a.Params.Set("RSVP", "TRUE")
 				delete(a.Params, "SCHEDULE-STATUS")
@@ -124,6 +134,23 @@ func PrepareOrganizerWrite(data, previous, actorEmail string) (string, bool, err
 	delete(cal.Props, "METHOD")
 	out, err := encode(cal)
 	return out, changed, err
+}
+
+func meetingContentFingerprint(c *ical.Component) string {
+	var withoutAttendees func(*ical.Component) *ical.Component
+	withoutAttendees = func(c *ical.Component) *ical.Component {
+		copy := ical.NewComponent(c.Name)
+		for name, values := range c.Props {
+			if name != "ATTENDEE" {
+				copy.Props[name] = values
+			}
+		}
+		for _, child := range c.Children {
+			copy.Children = append(copy.Children, withoutAttendees(child))
+		}
+		return copy
+	}
+	return schedulingFingerprint(withoutAttendees(c))
 }
 
 // Canonical comparison ignores wire ordering, client bookkeeping, personal

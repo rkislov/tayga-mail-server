@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>Tayga — приглашения на встречи</title>
+    <link rel="stylesheet" href="styles.css" />
+    <style>
+      #invitations { list-style: none; padding: 0; }
+      .invitation { padding: 20px; margin: 16px 0; border: 1px solid light-dark(#d5dfd6, #3b4a3f); border-radius: 12px; background: light-dark(#fff, #202923); }
+      .invitation h2 { overflow-wrap: anywhere; }
+      .invitation p { margin: 6px 0; }
+      .reply-state { font-weight: 600; }
+      .primary { background: light-dark(#dbe9d5, #334b36); }
+      .controls { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+      .controls label { margin: 0; }
+      .controls select { width: auto; }
+    </style>
+  </head>
+  <body>
+    <header><img src="icon.svg" width="48" height="48" alt="" /><div><h1>Приглашения на встречи</h1><p id="session">Проверка подключения…</p></div></header>
+    <p id="notice" role="status" aria-live="polite"></p>
+    <div class="controls">
+      <label for="filter">Показать<select id="filter"><option value="pending">Ожидают ответа</option><option value="all">Все приглашения</option></select></label>
+      <button id="reload" type="button">Обновить</button>
+      <button id="sign-in" type="button" hidden>Открыть настройки Tayga</button>
+    </div>
+    <p class="hint" id="timezone"></p>
+    <p class="hint">Ответ на повторяющуюся встречу применяется ко всей серии.</p>
+    <ul id="invitations" aria-label="Приглашения на встречи"></ul>
+    <p id="empty" hidden>Приглашений пока нет.</p>
+    <script src="invites-ui.js"></script>
+  </body>
+</html>

@@ -23,3 +23,7 @@ browser.runtime
   });
 
 document.getElementById("open-rules").addEventListener("click",()=>{browser.tabs.create({url:browser.runtime.getURL("rules.html")});window.close();});
+
+document.getElementById("open-invites").addEventListener("click", () => { browser.tabs.create({ url: browser.runtime.getURL("invites.html") }); window.close(); });
+
+document.getElementById("open-diagnostics").addEventListener("click", () => { browser.tabs.create({ url: browser.runtime.getURL("diagnostics.html") }); window.close(); });

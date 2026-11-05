@@ -55,6 +55,18 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+
+      - name: Publish Thunderbird extension
+        if: steps.existing.outputs.published != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python3 extensions/thunderbird-tayga/package.py
+          cd dist
+          sha256sum tayga-thunderbird-v*.xpi >> checksums.txt
+          gh release upload "$RELEASE_TAG" tayga-thunderbird-v*.xpi checksums.txt --clobber
+
   test:
     runs-on: ubuntu-latest
     steps:

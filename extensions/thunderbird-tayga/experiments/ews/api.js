@@ -26,10 +26,34 @@ var { VCardUtils } = ChromeUtils.importESModule(
 );
 
 var taygaEws = class extends ExtensionCommon.ExtensionAPI {
-  getAPI() {
+  getAPI(context) {
     this.ready ||= this.initialize();
     return {
       taygaEws: {
+        onConnectionAvailable: new ExtensionCommon.EventManager({
+          context,
+          name: "taygaEws.onConnectionAvailable",
+          register: (fire) => {
+            const observer = { observe: (subject, topic, data) => {
+              if (topic === "wake_notification" || data === "online")
+                fire.async(topic === "wake_notification" ? "wake" : "online").catch(() => console.error("Tayga connection listener failed"));
+            } };
+            for (const topic of ["wake_notification", "network:offline-status-changed"])
+              Services.obs.addObserver(observer, topic);
+            return () => {
+              for (const topic of ["wake_notification", "network:offline-status-changed"])
+                Services.obs.removeObserver(observer, topic);
+            };
+          },
+        }).api(),
+        onSessionRefresh: new ExtensionCommon.EventManager({
+          context,
+          name: "taygaEws.onSessionRefresh",
+          register: (fire) => {
+            this.refreshSession = (scope) => fire.async(scope);
+            return () => { this.refreshSession = null; };
+          },
+        }).api(),
         invoke: async (command, args) => {
           try {
             await this.ready;
@@ -101,16 +125,67 @@ var taygaEws = class extends ExtensionCommon.ExtensionAPI {
           !channel.loadInfo.triggeringPrincipal.isSystemPrincipal
         )
           return;
-        channel.setRequestHeader(
-          "Authorization",
-          "Bearer " + this.session.token,
-          false,
-        );
+        this.authorizeChannel(channel);
       },
     };
     Services.obs.addObserver(this.httpObserver, "http-on-modify-request");
     for (const collection of Object.values(this.state.collections))
       this.attach(collection);
+  }
+  authorizeChannel(channel) {
+    const session = this.session;
+    const authorize = () => {
+      if (!this.session || this.session.scope !== session.scope ||
+          this.sessionEpoch !== epoch || this.shuttingDown)
+        throw new Error("EWS session stopped.");
+      channel.setRequestHeader("Authorization", "Bearer " + this.session.token, false);
+    };
+    const epoch = this.sessionEpoch;
+    if (session.expiresAt > Date.now() + 120000) {
+      authorize();
+      return;
+    }
+    // Native biff can run before the extension's timer after wake. Never let an
+    // expired bearer reach Thunderbird's password-based authentication retry.
+    channel.suspend();
+    this.pendingAuthorizations ||= new Set();
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      this.pendingAuthorizations.delete(pending);
+      channel.resume();
+    };
+    const pending = { cancel: () => {
+      if (released) return;
+      channel.cancel(Cr.NS_BINDING_ABORTED);
+      release();
+    } };
+    this.pendingAuthorizations.add(pending);
+    Promise.resolve().then(async () => {
+      if (released) return;
+      if (!this.refreshSession) throw new Error("EWS session refresh unavailable.");
+      const cfg = await this.refreshSession(session.scope);
+      if (released) return;
+      if (!this.session || this.session.scope !== session.scope ||
+          this.sessionEpoch !== epoch || this.shuttingDown)
+        throw new Error("EWS session stopped.");
+      if (!cfg || this.scope(cfg.baseUrl, cfg.email) !== session.scope)
+        throw new Error("EWS session changed.");
+      await this.configure(cfg);
+      if (!(this.session?.expiresAt > Date.now()))
+        throw new Error("EWS session refresh failed.");
+      authorize();
+    }).catch((error) => {
+      pending.cancel();
+      console.error("Tayga EWS session refresh failed");
+    }).finally(release);
+  }
+  configureOutgoing(server, endpoint) {
+    if (Ci.IExchangeOutgoingServer)
+      server.QueryInterface(Ci.IExchangeOutgoingServer).exchangeUrl = endpoint;
+    else
+      server.QueryInterface(Ci.nsIEwsServer).initialize(endpoint);
   }
   save() {
     this.queuedSnapshot = JSON.stringify(this.state);
@@ -422,9 +497,7 @@ var taygaEws = class extends ExtensionCommon.ExtensionAPI {
       incoming.setBoolValue("login_at_startup", false);
       incoming.setBoolValue("tayga_ews_managed", true);
       const outgoing = MailServices.outgoingServer.createServer("ews");
-      outgoing
-        .QueryInterface(Ci.nsIEwsServer || Ci.IExchangeOutgoingServer)
-        .initialize(endpoint);
+      this.configureOutgoing(outgoing, endpoint);
       outgoing.username = args.email;
       outgoing.authMethod = Ci.nsMsgAuthMethod.passwordCleartext;
       outgoing.description = incoming.prettyName;
@@ -466,10 +539,10 @@ var taygaEws = class extends ExtensionCommon.ExtensionAPI {
     const incoming = MailServices.accounts.getIncomingServer(record.serverKey);
     if (incoming.getStringValue("ews_url") !== this.session.endpoint) {
       incoming.setStringValue("ews_url", this.session.endpoint);
-      MailServices.outgoingServer
-        .getServerByKey(record.outgoingKey)
-        .QueryInterface(Ci.nsIEwsServer || Ci.IExchangeOutgoingServer)
-        .initialize(this.session.endpoint);
+      this.configureOutgoing(
+        MailServices.outgoingServer.getServerByKey(record.outgoingKey),
+        this.session.endpoint,
+      );
     }
     incoming.password = record.marker;
     incoming.doBiff = true;
@@ -826,6 +899,8 @@ var taygaEws = class extends ExtensionCommon.ExtensionAPI {
         return { ok: true };
       }
       case "stop":
+        for (const pending of this.pendingAuthorizations || []) pending.cancel();
+        this.sessionEpoch = (this.sessionEpoch || 0) + 1;
         this.session = null;
         for (const record of Object.values(this.state.mail)) {
           const server = this.managedIncoming(record);

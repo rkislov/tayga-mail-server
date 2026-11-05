@@ -35,11 +35,11 @@ func TestAutodiscoverRichPOXAndMozilla(t *testing.T) {
 	_, _ = store.CreateDomain(ctx, tenant.ID, "ex.com")
 
 	cfg := &config.Config{
-		Server: config.ServerConfig{Hostname: "mail.ex.com"},
-		HTTP:   config.HTTPConfig{PublicURL: "https://mail.ex.com"},
-		SMTP:   config.SMTPConfig{Submission: ":587", SMTPS: ":465", MX: ":25"},
-		IMAP:   config.IMAPConfig{Listen: ":143", IMAPS: ":993"},
-		POP3:   config.POP3Config{Listen: ":110", POP3S: ":995"},
+		Server:      config.ServerConfig{Hostname: "mail.ex.com"},
+		HTTP:        config.HTTPConfig{PublicURL: "https://mail.ex.com"},
+		SMTP:        config.SMTPConfig{Submission: ":587", SMTPS: ":465", MX: ":25"},
+		IMAP:        config.IMAPConfig{Listen: ":143", IMAPS: ":993"},
+		POP3:        config.POP3Config{Listen: ":110", POP3S: ":995"},
 		ManageSieve: config.ManageSieveConfig{Listen: ":4190"},
 		FlowSync:    config.FlowSyncConfig{Enabled: true},
 	}

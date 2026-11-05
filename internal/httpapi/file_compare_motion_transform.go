@@ -9,6 +9,8 @@ import (
 
 type motionColorLayer struct {
 	Effect         int                 `json:"effect"`
+	Tracks         [][]int             `json:"tracks,omitempty"`
+	Axes           []int               `json:"axes,omitempty"`
 	GeometryEffect *int                `json:"geometry_effect,omitempty"`
 	FromBlack      int                 `json:"from_black"`
 	FromWhite      int                 `json:"from_white"`
@@ -55,15 +57,22 @@ func motionPPTXTransform(node *compareNode, effect *motionEffect) error {
 		effect.From = []float64{0}
 		var angle float64
 		if node.attr("by") != "" {
-			if node.attr("to") != "" || node.attr("from") != "" {
+			if node.attr("to") != "" {
 				return fmt.Errorf("mixed rotation operands")
 			}
 			angle, e = motionNumber(node.attr("by"), -216000000, 216000000)
+			effect.Relative, effect.DeltaSpace, effect.Delta = true, "rotate", []float64{angle / 60000}
 		} else {
-			if node.attr("from") != "" && node.attr("from") != "0" {
-				return fmt.Errorf("nonzero rotation origin")
-			}
+
 			angle, e = motionNumber(node.attr("to"), -216000000, 216000000)
+		}
+		if raw := node.attr("from"); raw != "" {
+			v, err := motionNumber(raw, -216000000, 216000000)
+			if err != nil {
+				return err
+			}
+			effect.From = []float64{v / 60000}
+			effect.fromExplicit = true
 		}
 		effect.To = []float64{angle / 60000}
 		return e
@@ -79,8 +88,17 @@ func motionPPTXTransform(node *compareNode, effect *motionEffect) error {
 		if target == nil {
 			return fmt.Errorf("missing scale operand")
 		}
-		if from := node.child("from"); from != nil && (from.attr("x") != "100000" || from.attr("y") != "100000") {
-			return fmt.Errorf("nonidentity scale origin")
+		if from := node.child("from"); from != nil {
+			x, err := motionNumber(from.attr("x"), 1000, 800000)
+			if err != nil {
+				return err
+			}
+			y, err := motionNumber(from.attr("y"), 1000, 800000)
+			if err != nil {
+				return err
+			}
+			effect.From = []float64{x / 100000, y / 100000}
+			effect.fromExplicit = true
 		}
 		x, e := motionNumber(target.attr("x"), 1000, 800000)
 		if e != nil {
@@ -88,6 +106,9 @@ func motionPPTXTransform(node *compareNode, effect *motionEffect) error {
 		}
 		y, e := motionNumber(target.attr("y"), 1000, 800000)
 		effect.To = []float64{x / 100000, y / 100000}
+		if node.child("to") == nil {
+			effect.Relative, effect.DeltaSpace, effect.Delta = true, "scale-factor", append([]float64{}, effect.To...)
+		}
 		return e
 	case "animClr":
 		effect.Kind = "color"
@@ -165,8 +186,13 @@ func motionODPTransform(node *compareNode, effect *motionEffect) error {
 	case "rotate":
 		effect.Kind = "rotate"
 		effect.From = []float64{0}
-		if node.attr("from") != "" && node.attr("from") != "0" {
-			return fmt.Errorf("nonzero/custom rotation origin")
+		if raw := node.attr("from"); raw != "" {
+			v, err := motionNumber(raw, -3600, 3600)
+			if err != nil {
+				return err
+			}
+			effect.From = []float64{v}
+			effect.fromExplicit = true
 		}
 		value := node.attr("to")
 		if node.attr("by") != "" {
@@ -177,6 +203,9 @@ func motionODPTransform(node *compareNode, effect *motionEffect) error {
 		}
 		to, e := motionNumber(value, -3600, 3600)
 		effect.To = []float64{to}
+		if node.attr("by") != "" {
+			effect.Relative, effect.DeltaSpace, effect.Delta = true, "rotate", []float64{to}
+		}
 		return e
 	case "scale":
 		effect.Kind = "scale"
@@ -198,9 +227,10 @@ func motionODPTransform(node *compareNode, effect *motionEffect) error {
 		}
 		if node.attr("from") != "" {
 			from, e := parse(node.attr("from"))
-			if e != nil || from[0] != 1 || from[1] != 1 {
-				return fmt.Errorf("nonidentity scale origin")
+			if e != nil {
+				return e
 			}
+			effect.From, effect.fromExplicit = from, true
 		}
 		if node.attr("by") != "" {
 			if node.attr("to") != "" {
@@ -222,6 +252,7 @@ func motionODPTransform(node *compareNode, effect *motionEffect) error {
 				}
 			}
 			effect.To = []float64{1 + x, 1 + y}
+			effect.Relative, effect.DeltaSpace, effect.Delta = true, "scale-offset", []float64{x, y}
 			return nil
 		}
 		effect.To, e = parse(node.attr("to"))

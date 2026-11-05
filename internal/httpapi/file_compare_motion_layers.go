@@ -36,6 +36,10 @@ type motionLayerPlan struct {
 	colorPhase     int
 	geometryEffect int
 	geometryPhase  int
+	paintTracks    [][]int
+	paintPoints    [][]motionTrackPoint
+	paintAxes      []int
+	paintPhases    []int
 }
 
 func parseMotionPath(value string) ([]motionPoint, error) {
@@ -164,7 +168,7 @@ func parseMotionPath(value string) ([]motionPoint, error) {
 }
 func motionAdvanced(slide *motionSlide) bool {
 	for _, e := range slide.Effects {
-		if e.Kind == "path" || motionTransformKind(e.Kind) || e.Trigger == "with" || e.Event != "" {
+		if e.Repeat > 1 || e.AutoReverse || e.Previous != nil || e.Kind == "path" || motionTransformKind(e.Kind) || e.Trigger == "with" || e.Event != "" {
 			return true
 		}
 	}
@@ -271,8 +275,53 @@ func motionLayerPlans(slide *motionSlide, ids []string) []motionLayerPlan {
 		}
 	}
 	flush("")
+	multi := motionMultiPaintGroups(slide)
 	pairs := motionJointPaints(slide)
 	consumed := map[int]bool{}
+	for _, tracks := range motionTrackGroups(slide) {
+		points, err := motionTrackPoints(slide, tracks)
+		if err != nil {
+			continue
+		}
+		axes := []int{}
+		indices := [][]int{}
+		for i, track := range tracks {
+			axes = append(axes, track[0])
+			values := []int{}
+			for j := range points[i] {
+				values = append(values, j+1)
+			}
+			indices = append(indices, values)
+			for _, index := range track {
+				consumed[index] = true
+				delete(pairs, index)
+			}
+		}
+		motionWalkPhases(indices, func(values []int) {
+			for _, matte := range []string{"000000", "FFFFFF"} {
+				plans = append(plans, motionLayerPlan{keep: map[string]bool{slide.Effects[axes[0]].Target: true}, target: slide.Effects[axes[0]].Target, matte: matte, paintAxes: axes, paintTracks: tracks, paintPoints: points, paintPhases: append([]int{}, values...)})
+			}
+		})
+	}
+
+	for _, axes := range multi {
+		if consumed[axes[0]] {
+			continue
+		}
+		for _, axis := range axes {
+			consumed[axis] = true
+			delete(pairs, axis)
+		}
+		phases, err := motionMultiPhases(slide, axes)
+		if err != nil {
+			continue
+		} // Validation records this before planning.
+		motionWalkPhases(phases, func(values []int) {
+			for _, matte := range []string{"000000", "FFFFFF"} {
+				plans = append(plans, motionLayerPlan{keep: map[string]bool{slide.Effects[axes[0]].Target: true}, matte: matte, target: slide.Effects[axes[0]].Target, paintAxes: axes, paintPhases: append([]int{}, values...)})
+			}
+		})
+	}
 	for _, geometry := range pairs {
 		consumed[geometry] = true
 	}
@@ -313,6 +362,10 @@ func motionPPTXMatte(body []byte, color string) []byte {
 	}
 }
 func motionRegisterLayer(slide *motionSlide, plan motionLayerPlan, frame int) {
+	if len(plan.paintAxes) > 0 {
+		motionRegisterMultiPaint(slide, plan, frame)
+		return
+	}
 	if plan.colorPhase > 0 {
 		if plan.colorPhase == 1 && plan.geometryPhase <= 1 && plan.matte == "000000" {
 			layer := motionColorLayer{Effect: plan.colorEffect}
@@ -403,21 +456,22 @@ func motionValidateAdvanced(slide *motionSlide, ids map[string]bool) {
 				start = effect.Delay
 			}
 		}
-		end := start + effect.Duration
+		end := start + motionActiveDuration(effect)
 		property := "opacity"
 		if effect.Kind == "path" {
 			property = "position"
 		}
 		if motionTransformKind(effect.Kind) {
 			property = effect.Kind
-			if effect.Kind == "color" {
-				property = "color/" + effect.Property
+			if effect.Kind == "color" || effect.Kind == "gradient" {
+				property = effect.Kind + "/" + effect.Property
 			}
 		}
 		for _, prior := range ranges[effect.Target] {
-			if prior.property == property && (prior.event != effect.Event || (start < prior.end && end > prior.start)) {
-				slide.Warning = "Overlapping effects on the same property unsupported; static slide"
+			if prior.property == property && (prior.event != effect.Event || start < prior.end) {
+				slide.Warning = "Stages of one property require ordered non-overlapping timing on one clock; static slide"
 			}
+
 		}
 		ranges[effect.Target] = append(ranges[effect.Target], rangeItem{start, end, effect.Event, property})
 		group.start = start
@@ -428,7 +482,8 @@ func motionValidateAdvanced(slide *motionSlide, ids map[string]bool) {
 		group.count++
 		groups[effect.Event] = group
 	}
-	pathTargets := map[string]bool{}
+	motionValidateTrackGrids(slide)
+	motionValidateGradientGroups(slide)
 	clicks := map[string]int{}
 	for _, effect := range slide.Effects {
 		if effect.Event != "" && !ids[effect.Event] {
@@ -440,16 +495,7 @@ func motionValidateAdvanced(slide *motionSlide, ids map[string]bool) {
 				slide.Warning = "Multi-click interactive sequence unsupported; static slide"
 			}
 		}
-		if effect.Kind == "path" || motionTransformKind(effect.Kind) {
-			key := effect.Target + "/" + effect.Kind
-			if effect.Kind == "color" {
-				key += "/" + effect.Property
-			}
-			if pathTargets[key] {
-				slide.Warning = "Multiple transforms of one property unsupported; static slide"
-			}
-			pathTargets[key] = true
-		}
+
 	}
 }
 func motionPPTXHits(slide *motionSlide, shapes []*compareNode, width, height float64) {
@@ -529,6 +575,10 @@ func motionPPTXFinal(body []byte, slide *motionSlide, width, height float64) []b
 					continue
 				}
 				point := e.Path[len(e.Path)-1]
+				if e.AutoReverse {
+					point = e.Path[0]
+				}
+
 				changed := motionRootAttr(fragment[off[0].start:off[0].end], "x", strconv.FormatInt(int64(math.Round((hit.Box[0]+point.X)*width)), 10), "x", "")
 				changed = motionRootAttr(changed, "y", strconv.FormatInt(int64(math.Round((hit.Box[1]+point.Y)*height)), 10), "y", "")
 				fragment = motionEdit(fragment, off, [][]byte{changed})
@@ -625,6 +675,10 @@ func motionODPFinal(body []byte, slide *motionSlide, width, height float64) []by
 					continue
 				}
 				point := e.Path[len(e.Path)-1]
+				if e.AutoReverse {
+					point = e.Path[0]
+				}
+
 				fragment = motionRootAttr(fragment, "x", strconv.FormatFloat((hit.Box[0]+point.X)*width, 'f', 6, 64)+"cm", "tgSvg:x", "urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0")
 				fragment = motionRootAttr(fragment, "y", strconv.FormatFloat((hit.Box[1]+point.Y)*height, 'f', 6, 64)+"cm", "tgSvg:y", "urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0")
 			}

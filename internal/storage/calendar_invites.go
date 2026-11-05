@@ -207,9 +207,6 @@ func (s *Store) FreeBusyForUserExceptOccurrence(ctx context.Context, userID stri
 			return nil, err
 		}
 		for _, o := range objs {
-			if calutil.DeclinedBy(o.Data, user.Email) {
-				continue
-			}
 			skipRID := ""
 			if uid != "" && o.UID == uid {
 				p, err := calutil.ParseICS(o.Data)
@@ -222,6 +219,9 @@ func (s *Store) FreeBusyForUserExceptOccurrence(ctx context.Context, userID stri
 			}
 			upper := strings.ToUpper(o.Data)
 			if !strings.Contains(upper, "RRULE") && !strings.Contains(upper, "RDATE") && !strings.Contains(upper, "RECURRENCE-ID") && o.DTStart != nil {
+				if calutil.DeclinedBy(o.Data, user.Email) {
+					continue
+				}
 				if strings.Contains(upper, "STATUS:CANCELLED") || strings.Contains(upper, "TRANSP:TRANSPARENT") {
 					continue
 				}
@@ -235,7 +235,7 @@ func (s *Store) FreeBusyForUserExceptOccurrence(ctx context.Context, userID stri
 				}
 				continue
 			}
-			intervals, err := busyIntervalsExceptOccurrence(o.Data, from, to, skipRID)
+			intervals, err := busyIntervalsForUser(o.Data, from, to, skipRID, user.Email)
 			if err != nil {
 				return nil, err
 			}

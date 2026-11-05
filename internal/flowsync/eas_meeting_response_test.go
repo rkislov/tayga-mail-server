@@ -204,7 +204,7 @@ func TestMeetingResponseRejectsInvalidTargetsWithoutWrites(t *testing.T) {
 		{f.guest, f.received.CalendarID, f.received.ID, "9", "16.1", ""},
 		{f.guest, f.received.CalendarID, f.received.ID, "1", "14.0", ""},
 		{f.guest, f.received.CalendarID, f.received.ID, "1", "14.1", "<SendResponse/>"},
-		{f.guest, f.received.CalendarID, f.received.ID, "1", "16.1", "<InstanceId>20261022T170000Z</InstanceId>"},
+		{f.guest, f.received.CalendarID, f.received.ID, "1", "14.0", "<InstanceId>2026-10-22T17:00:00.000Z</InstanceId>"},
 		{f.guest, f.received.CalendarID, f.received.ID, "1", "16.1", "<UserResponse>3</UserResponse>"},
 		{f.guest, f.received.CalendarID, f.received.ID, "2", "16.1", "<SendResponse><ProposedStartTime>20261022T180000Z</ProposedStartTime></SendResponse>"},
 	}

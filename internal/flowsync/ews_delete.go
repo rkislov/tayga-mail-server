@@ -93,7 +93,7 @@ func (h *ewsHandler) deleteEWSItems(ctx context.Context, u *storage.User, body s
 	}
 	var out strings.Builder
 	for _, item := range children {
-		if item.Name.Local != "ItemId" || nodeAttr(item, "Id") == "" {
+		if item.Name.Local != "OccurrenceItemId" && (item.Name.Local != "ItemId" || nodeAttr(item, "Id") == "") {
 			out.WriteString(folderWriteMessage("DeleteItem", "ErrorInvalidId", "Invalid ItemId", ""))
 			continue
 		}
