@@ -187,6 +187,9 @@ func (h *easHandler) syncOne(ctx context.Context, u *storage.User, dev *storage.
 		// Older builds cached successful responses that silently omitted Fetch.
 		// Repair only the read response; never reapply Add/Change/Delete on retry.
 		repaired, err := h.repairSyncFetchReplay(ctx, u, kind, id, request, state)
+		if err == nil && kind == kindCalendar {
+			repaired, err = repairCalendarDateReplay(repaired)
+		}
 		if err != nil {
 			return "", err
 		}
