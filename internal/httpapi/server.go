@@ -36,6 +36,7 @@ type Server struct {
 	uploadLocks             [64]sync.Mutex
 	fileDAVLocks            map[string]*fileLockSystem
 	officeSessions          map[string]officeSession
+	fileComparisons         map[string]fileCompareSession
 	calendarSubscriptionsMu sync.Mutex
 	flowSubmit              flowsync.SubmitFunc
 	log                     *slog.Logger
@@ -130,12 +131,15 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/files/", s.handleFiles)
 	mux.HandleFunc("/api/v1/files", s.handleFiles)
 	mux.HandleFunc("/dav/files/", s.handleFileDAV)
+	mux.HandleFunc("/dav/shared/", s.handleFileDAV)
 	mux.HandleFunc("/api/v1/files/library/", s.handleFileLibrary)
 	mux.HandleFunc("/api/v1/files/uploads", s.handleFileUploads)
 	mux.HandleFunc("/api/v1/files/uploads/", s.handleFileUploads)
 	mux.HandleFunc("/api/v1/files/office", s.handleOfficeSession)
+	mux.HandleFunc("/api/v1/files/templates", s.handleFileTemplates)
 	mux.HandleFunc("/wopi/files/", s.handleWOPI)
 	mux.HandleFunc("/office/document/", s.handleDocumentServer)
+	mux.HandleFunc("/office/compare/", s.handleOfficeComparison)
 	mux.HandleFunc("/calendar/public/", s.handlePublicCalendar)
 	mux.HandleFunc("/s/", s.handlePublicShare)
 	mux.HandleFunc("/api/v1/sieve/scripts", s.handleSieveScripts)

@@ -45,7 +45,8 @@ func (h *ewsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid or oversized request", 400)
 		return
 	}
-	if _, e := parseProtocolXML(body); e != nil {
+	doc, xmlErr := parseProtocolXML(body)
+	if xmlErr != nil {
 		http.Error(w, "invalid XML", 400)
 		return
 	}
@@ -56,6 +57,15 @@ func (h *ewsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if t := traceRequest(r); t != nil {
 		t.Command = boundedLog(op)
 		t.Folders = ewsFolderReferences(body)
+		if ids := doc.find("ItemIds"); ids != nil {
+			t.ItemCount = len(ids.Children)
+		}
+		if root := doc.find(op); root != nil {
+			switch mode := nodeAttr(root, "DeleteType"); mode {
+			case "HardDelete", "SoftDelete", "MoveToDeletedItems":
+				t.DeleteMode = mode
+			}
+		}
 	}
 
 	var soap string
@@ -88,11 +98,13 @@ func (h *ewsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "MoveItem":
 		soap, err = h.batchItems(r.Context(), u, "MoveItem", string(body), h.moveItem)
 	case "DeleteItem":
-		soap, err = h.batchItems(r.Context(), u, "DeleteItem", string(body), h.deleteItem)
+		soap, err = h.deleteEWSItems(r.Context(), u, string(body))
 	case "SyncFolderHierarchy":
 		soap, err = h.syncEWSHierarchy(r.Context(), u, string(body))
 	case "SyncFolderItems":
 		soap, err = h.syncEWSItems(r.Context(), u, string(body))
+	case "CreateFolder", "UpdateFolder", "DeleteFolder", "EmptyFolder", "MoveFolder":
+		soap, err = h.writeEWSFolders(r.Context(), u, op, string(body))
 	case "GetFolder":
 		soap, err = h.getFolder(r.Context(), u, string(body))
 	case "FindFolder":

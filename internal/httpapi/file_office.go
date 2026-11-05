@@ -47,7 +47,7 @@ func (s *Server) handleOfficeSession(w http.ResponseWriter, r *http.Request) {
 	}
 	base := strings.TrimRight(s.cfgLive().Files.OfficeURL, "/")
 	if r.Method == http.MethodGet {
-		writeJSON(w, 200, map[string]any{"enabled": base != "", "webdav_url": s.publicBase() + "/dav/files/"})
+		writeJSON(w, 200, map[string]any{"enabled": base != "", "webdav_url": s.publicBase() + "/dav/files/", "shared_webdav_url": s.publicBase() + "/dav/shared/"})
 		return
 	}
 	if r.Method != http.MethodPost {
@@ -264,7 +264,7 @@ func (s *Server) handleWOPI(w http.ResponseWriter, r *http.Request) {
 	version := strings.Trim(fileETag(info), `"`)
 	if r.Method == http.MethodGet {
 		if len(parts) == 1 {
-			writeJSON(w, 200, map[string]any{"BaseFileName": info.Name(), "OwnerId": session.Owner, "Size": info.Size(), "Version": version, "UserId": user.ID, "UserFriendlyName": user.DisplayName, "UserCanWrite": writable, "ReadOnly": !writable, "SupportsUpdate": true, "SupportsLocks": true, "SupportsGetLock": true, "UserCanNotWriteRelative": true, "LastModifiedTime": info.ModTime().UTC().Format(time.RFC3339Nano), "PostMessageOrigin": s.publicBase(), "IsAdminUser": false})
+			writeJSON(w, 200, map[string]any{"BaseFileName": info.Name(), "OwnerId": session.Owner, "Size": info.Size(), "Version": version, "UserId": user.ID, "UserFriendlyName": user.DisplayName, "UserCanWrite": writable, "ReadOnly": !writable, "SupportsUpdate": true, "SupportsLocks": true, "SupportsGetLock": true, "UserCanNotWriteRelative": !s.officeCanWriteRelative(r, session), "LastModifiedTime": info.ModTime().UTC().Format(time.RFC3339Nano), "PostMessageOrigin": s.publicBase(), "IsAdminUser": false})
 		} else {
 			f, err := os.Open(abs)
 			if err != nil {
@@ -280,6 +280,10 @@ func (s *Server) handleWOPI(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", 405)
+		return
+	}
+	if len(parts) == 1 && r.Header.Get("X-WOPI-Override") == "PUT_RELATIVE" {
+		s.handleWOPIPutRelative(w, r, token, session)
 		return
 	}
 	if !writable {
