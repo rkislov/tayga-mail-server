@@ -74,6 +74,7 @@ archives:
       - docs/release-*.md
       - internal/flowsync/LICENSE
       - internal/flowsync/NOTICE
+      - internal/flowsync/UNICODE-LICENSE.txt
 
 checksum:
   name_template: checksums.txt

@@ -107,6 +107,8 @@ type Driver interface {
 	ListCalendarResourcesByDomain(ctx context.Context, domainID string, enabledOnly bool) ([]*CalendarResource, error)
 	ListCalendarResourcesByTenant(ctx context.Context, tenantID string, enabledOnly bool) ([]*CalendarResource, error)
 	CreateCalendarAttachment(ctx context.Context, a *CalendarAttachment) (*CalendarAttachment, error)
+	SaveCalendarClientAttachments(ctx context.Context, actorID string, o *CalendarObject, files []*CalendarAttachment) (*CalendarObject, error)
+	DeleteCalendarClientAttachments(ctx context.Context, actorID string, o *CalendarObject, files []*CalendarAttachment) (*CalendarObject, error)
 	GetCalendarAttachment(ctx context.Context, id string) (*CalendarAttachment, error)
 	ListCalendarAttachments(ctx context.Context, calendarObjectID string) ([]*CalendarAttachment, error)
 	ListCalendarEventAttachments(ctx context.Context, calendarObjectID string) ([]*CalendarAttachment, error)
@@ -244,6 +246,8 @@ type Driver interface {
 	SaveCalendarClientObject(ctx context.Context, actorID string, o *CalendarObject) (*CalendarObject, error)
 	DeleteCalendarMeeting(ctx context.Context, actorID string, o *CalendarObject) error
 	DeleteCalendarObjectWithMail(ctx context.Context, o *CalendarObject, mails []CalendarMail) error
+	ListCalendarSchedulingInbox(ctx context.Context, userID string) ([]CalendarSchedulingMessage, error)
+	DeleteCalendarSchedulingMessage(ctx context.Context, userID, id, etag string) error
 	ClaimCalendarDelivery(ctx context.Context) (*CalendarDelivery, error)
 	RetryCalendarDelivery(ctx context.Context, job *CalendarDelivery, cause string) error
 	CommitCalendarDelivery(ctx context.Context, job *CalendarDelivery, message *Message) error
@@ -256,10 +260,16 @@ type Driver interface {
 	UpdateCalendarInvitePartStat(ctx context.Context, id, partstat string, proposedStart, proposedEnd *time.Time) error
 	RespondCalendarInvite(ctx context.Context, userID, inviteID, status, etag string, sendMail bool, comment string) (*CalendarInvite, error)
 	ReplyCalendarInvite(ctx context.Context, userID, inviteID, status string, proposedStart, proposedEnd *time.Time, etag string, comment ...string) (*CalendarInvite, error)
+	ReplyCalendarOccurrence(ctx context.Context, userID, inviteID, rid, status, etag string, sendMail bool, comment string) (*CalendarInvite, error)
+	ProposeCalendarOccurrence(ctx context.Context, userID, inviteID, rid, etag string, start, end time.Time, comment string) (*CalendarInvite, error)
+	GetCalendarOccurrenceProposal(ctx context.Context, inviteID, rid string) (*CalendarOccurrenceProposal, error)
+	ListCalendarOccurrenceProposals(ctx context.Context, userID string) ([]*CalendarOccurrenceProposal, error)
+	DecideCalendarOccurrenceProposal(ctx context.Context, userID, inviteID, objectID, rid, revision, etag string, accept bool) (*CalendarOccurrenceProposal, error)
 	ListCalendarProposals(ctx context.Context, userID string) ([]*CalendarProposal, error)
 	FreeBusyForUserExceptMeeting(ctx context.Context, userID string, from, to time.Time, uid, organizerEmail string) ([]BusyInterval, error)
 	DecideCalendarProposal(ctx context.Context, userID, inviteID, objectID, revision, etag string, accept bool) (*CalendarProposal, error)
 	ChangeCalendarOccurrence(ctx context.Context, userID, objectID, etag, rid string, change calutil.OccurrenceChange) (*CalendarObject, error)
+	ChangeCalendarOccurrences(ctx context.Context, userID, objectID, etag string, edits []CalendarOccurrenceEdit) (*CalendarObject, error)
 	ChangeCalendarRecurrence(ctx context.Context, userID, objectID, etag string, rule calutil.RecurrenceRule) (*CalendarObject, error)
 	FreeBusyForUserExceptOccurrence(ctx context.Context, userID string, from, to time.Time, uid, organizerEmail, rid string) ([]BusyInterval, error)
 	FreeBusyForUser(ctx context.Context, userID string, from, to time.Time) ([]BusyInterval, error)

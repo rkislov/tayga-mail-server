@@ -30,6 +30,9 @@ async function action(work) {
 async function refreshStatus(initial = false) {
   const cfg = await send("status");
   signedIn = cfg.signedIn;
+  el("login-form").hidden = signedIn;
+  el("shared-session").hidden = !signedIn;
+  el("logout").hidden = !signedIn;
   el("session").textContent = signedIn
     ? `Подключено: ${cfg.email} · ${cfg.baseUrl}`
     : "Вход не выполнен";
@@ -279,6 +282,78 @@ setInterval(() => {
   if (!document.hidden) ewsStatus().catch(() => {});
 }, 15000);
 
-el("rules-open").addEventListener("click", () =>
-  browser.tabs.create({ url: browser.runtime.getURL("rules.html") }),
-);
+el("rules-open").addEventListener("click", () => browser.tabs.create({url:browser.runtime.getURL("rules.html")}));
+
+// Filelink management may stay open while the user signs in in another tab.
+browser.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && ["token", "baseUrl", "email"].some((key) => key in changes))
+    refreshStatus().catch((error) => notice(error.message, true));
+});
+
+let renderedUploads = "";
+async function uploadsStatus() {
+  const items = await send("uploads.status");
+  const snapshot = JSON.stringify(items);
+  if (snapshot === renderedUploads) return;
+  renderedUploads = snapshot;
+  const list = el("uploads-list");
+  list.replaceChildren();
+  const labels = {
+    checking: "Проверяется исходный файл", paused: "Загрузка сохранена", expired: "Срок хранения загрузки истёк",
+    uploading: "Загружается", retrying: "Соединение прервано, повторяем",
+    finishing: "Сохраняется на сервере", sharing: "Создаётся ссылка",
+    complete: "Ссылка готова", cancelled: "Загрузка отменена", failed: "Не удалось загрузить",
+  };
+  for (const item of items) {
+    const row = document.createElement("li");
+    const text = document.createElement("div");
+    const loaded = item.loaded || 0, total = item.total || item.size || 0;
+    const percent = total ? Math.floor(loaded * 100 / total) : 0;
+    text.textContent = `${item.name}: ${labels[item.phase] || item.phase}`;
+    row.append(text);
+    if (["checking", "uploading", "retrying", "finishing", "sharing"].includes(item.phase)) {
+      const progress = document.createElement("progress");
+      progress.max = total || 1;
+      progress.value = loaded;
+      progress.setAttribute("aria-label", item.name);
+      row.append(progress, document.createTextNode(` ${percent}% · ${(loaded / 1048576).toFixed(1)} / ${(total / 1048576).toFixed(1)} МБ `));
+      const cancel = document.createElement("button");
+      cancel.type = "button";
+      cancel.textContent = "Отменить";
+      cancel.onclick = () => { cancel.disabled = true; send("uploads.cancel", { key: item.key }).catch((error) => notice(error.message, true)); };
+      row.append(cancel);
+    }
+    if (item.resumable) {
+      const hint = document.createElement("div");
+      hint.textContent = item.phase === "expired"
+        ? "Добавьте исходный файл в письмо снова, чтобы начать новую загрузку."
+        : `Сохранено ${percent}%. Добавьте тот же файл в письмо и выберите Tayga Mail — загрузка продолжится.`;
+      row.append(hint);
+      const discard = document.createElement("button");
+      discard.type = "button";
+      discard.textContent = "Удалить незавершённую загрузку";
+      discard.onclick = () => action(async () => {
+        await send("uploads.discard", { key: item.key });
+        await uploadsStatus();
+        notice("Незавершённая загрузка удалена. Исходный файл сохранён.");
+      });
+      row.append(discard);
+    }
+    if (item.phase === "failed") {
+      const error = document.createElement("div");
+      error.textContent = `${item.error || "Ошибка соединения"}. После восстановления соединения повторите загрузку из окна письма.`;
+      row.append(error);
+    }
+    list.append(row);
+  }
+  if (!items.length) list.textContent = "Загрузок пока нет.";
+}
+uploadsStatus().catch((error) => notice(error.message, true));
+const uploadsTimer = setInterval(() => {
+  if (!document.hidden) uploadsStatus().catch(() => {});
+}, 1000);
+window.addEventListener("pagehide", () => clearInterval(uploadsTimer), { once: true });
+
+el("invites-open").addEventListener("click", () => browser.tabs.create({ url: browser.runtime.getURL("invites.html") }));
+
+el("diagnostics-open").addEventListener("click", () => browser.tabs.create({ url: browser.runtime.getURL("diagnostics.html") }));

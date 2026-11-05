@@ -65,6 +65,12 @@ try {
   await mkdir(extension, { recursive: true });
   for (const name of [
     "manifest.json",
+    "diagnostics.js",
+    "diagnostics-ui.js",
+    "diagnostics.html",
+    "invites.js",
+    "invites-ui.js",
+    "invites.html",
     "client.js",
     "background.js",
     "options.html",

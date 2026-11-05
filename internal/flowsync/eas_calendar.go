@@ -83,6 +83,54 @@ func (h *easHandler) wbCalendar(ctx context.Context, u *storage.User, calendarID
 		}
 		obj.ExpectedETag = obj.ETag
 	}
+
+	if op.InstanceID != "" {
+		version, _ := ctx.Value(easVersionKey{}).(string)
+		if version != "16.0" && version != "16.1" {
+			return op.ServerID, fmt.Errorf("InstanceId requires EAS 16.x")
+		}
+		if op.Kind != "change" && op.Kind != "delete" {
+			return op.ServerID, fmt.Errorf("invalid instance operation")
+		}
+		rid, err := easInstanceRID(obj.Data, op.InstanceID)
+		if err != nil {
+			return op.ServerID, err
+		}
+		current, err := calutil.GetOccurrence(obj.Data, rid)
+		if err != nil {
+			return op.ServerID, err
+		}
+		change := calutil.OccurrenceChange{Cancel: op.Kind == "delete"}
+		if !change.Cancel {
+			if op.ApplicationData.child("Recurrence") != nil || op.ApplicationData.child("Exceptions") != nil {
+				return op.ServerID, fmt.Errorf("instance cannot change recurrence")
+			}
+			wire, err := calutil.OccurrenceMessage(current, false)
+			if err != nil {
+				return op.ServerID, err
+			}
+			edited, err := editEASCalendar(wire, u, op)
+			if err != nil {
+				return op.ServerID, err
+			}
+			after, err := calutil.ParseICS(edited)
+			if err != nil {
+				return op.ServerID, err
+			}
+			if err = validateEASInstanceEdit(wire, edited, op.ApplicationData); err != nil {
+				return op.ServerID, err
+			}
+			change = occurrenceDelta(current.ParseResult, after)
+			if !change.ResetResponses {
+				return obj.ID, nil
+			}
+		}
+		saved, err := h.store.ChangeCalendarOccurrence(ctx, u.ID, obj.ID, obj.ETag, rid, change)
+		if err != nil {
+			return op.ServerID, err
+		}
+		return saved.ID, nil
+	}
 	if op.Kind == "delete" {
 		return obj.ID, h.store.DeleteCalendarMeeting(ctx, u.ID, obj)
 	}
@@ -93,6 +141,28 @@ func (h *easHandler) wbCalendar(ctx context.Context, u *storage.User, calendarID
 	if err != nil {
 		return op.ServerID, err
 	}
+
+	version, _ := ctx.Value(easVersionKey{}).(string)
+	exceptions := op.ApplicationData.child("Exceptions")
+	if exceptions != nil && (version == "16.0" || version == "16.1") {
+		return op.ServerID, fmt.Errorf("EAS 16.x exceptions require InstanceId")
+	}
+	data, err = finishEASRecurrence(data, obj.Data, op)
+	if err != nil {
+		return op.ServerID, err
+	}
+	edits, candidate, err := easExceptionEdits(data, u, exceptions)
+	if err != nil {
+		return op.ServerID, err
+	}
+	if op.Kind == "change" && calutil.CalendarMasterEqual(obj.Data, data) && len(edits) > 0 {
+		saved, err := h.store.ChangeCalendarOccurrences(ctx, u.ID, obj.ID, obj.ETag, edits)
+		if err != nil {
+			return op.ServerID, err
+		}
+		return saved.ID, nil
+	}
+	data = candidate
 	p, err := calutil.ParseICS(data)
 	if err != nil || p.Start == nil || p.End == nil || !p.End.After(*p.Start) {
 		return op.ServerID, fmt.Errorf("invalid calendar dates")
@@ -140,8 +210,10 @@ func editEASCalendar(data string, u *storage.User, op clientOp) (string, error) 
 		ev.Props.SetDateTime("DTSTAMP", time.Now().UTC())
 	}
 	fields := make(map[string]string, len(op.Fields))
-	for k, v := range op.Fields {
-		fields[k] = v
+	if op.ApplicationData == nil {
+		for k, v := range op.Fields {
+			fields[k] = v
+		}
 	}
 	// Direct children preserve empty values and avoid mistaking an attendee's
 	// nested fields for event fields.
@@ -150,6 +222,17 @@ func editEASCalendar(data string, u *storage.User, op clientOp) (string, error) 
 			if len(n.Children) == 0 {
 				fields[n.Name.Local] = n.Text
 			}
+		}
+	}
+
+	if body := op.ApplicationData.child("Body"); body != nil {
+		if body.Name.Space == "AirSyncBase:" {
+			if typ := body.value("Type"); typ != "" && typ != "1" {
+				return "", fmt.Errorf("unsupported calendar body type")
+			}
+			ev.Props.SetText("DESCRIPTION", body.value("Data"))
+		} else {
+			ev.Props.SetText("DESCRIPTION", body.Text)
 		}
 	}
 	if err := editEASLocation(ev, op.ApplicationData, fields); err != nil {
@@ -203,12 +286,15 @@ func editEASCalendar(data string, u *storage.User, op clientOp) (string, error) 
 		if status == "" {
 			return "", fmt.Errorf("invalid busy status")
 		}
-		ev.Props.SetText("X-MICROSOFT-CDO-BUSYSTATUS", status)
-		transp := "OPAQUE"
-		if v == "0" {
-			transp = "TRANSPARENT"
+		meeting, _ := parseProtocolXML([]byte("<Event>" + calendarMeetingXML(data, u.Email) + "</Event>"))
+		if meeting.find("BusyStatus").Text != v {
+			ev.Props.SetText("X-MICROSOFT-CDO-BUSYSTATUS", status)
+			transp := "OPAQUE"
+			if v == "0" {
+				transp = "TRANSPARENT"
+			}
+			ev.Props.SetText("TRANSP", transp)
 		}
-		ev.Props.SetText("TRANSP", transp)
 	}
 	attendees := op.ApplicationData.child("Attendees")
 	organizer := parsed.Organizer.Email
@@ -273,6 +359,10 @@ func editEASCalendar(data string, u *storage.User, op clientOp) (string, error) 
 			p.Params.Set("RSVP", "TRUE")
 			for _, old := range ev.Props.Values("ATTENDEE") {
 				if strings.EqualFold(strings.TrimPrefix(old.Value, "mailto:"), email) {
+					if old.Params.Get("CN") == "" && (n.value("Name") == "" || n.value("Name") == email) {
+						delete(p.Params, "CN")
+					}
+
 					for _, k := range []string{"PARTSTAT", "RSVP", "SCHEDULE-AGENT"} {
 						if v := old.Params.Get(k); v != "" {
 							p.Params.Set(k, v)
@@ -379,7 +469,7 @@ func calendarMeetingXML(data, viewer string) string {
 		fmt.Fprintf(&out, `<Calendar:%s xmlns:Calendar="Calendar:">%s</Calendar:%s>`, k, xmlEscape(v), k)
 	}
 	busy := "2"
-	if strings.EqualFold(davTextProperty(data, "TRANSP"), "TRANSPARENT") {
+	if strings.EqualFold(p.Status, "CANCELLED") || strings.EqualFold(davTextProperty(data, "TRANSP"), "TRANSPARENT") {
 		busy = "0"
 	} else {
 		switch strings.ToUpper(davTextProperty(data, "X-MICROSOFT-CDO-BUSYSTATUS")) {

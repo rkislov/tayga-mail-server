@@ -2,6 +2,7 @@ package storage
 
 import (
 	"github.com/tayga/tms/internal/calutil"
+	"strings"
 	"time"
 )
 
@@ -11,6 +12,10 @@ func CalendarBusyIntervals(data string, from, to time.Time) ([]BusyInterval, err
 }
 
 func busyIntervalsExceptOccurrence(data string, from, to time.Time, rid string) ([]BusyInterval, error) {
+	return busyIntervalsForUser(data, from, to, rid, "")
+}
+
+func busyIntervalsForUser(data string, from, to time.Time, rid, viewer string) ([]BusyInterval, error) {
 	occurrences, err := calutil.ExpandOccurrences(data, from, to)
 	if err != nil {
 		return nil, err
@@ -19,6 +24,19 @@ func busyIntervalsExceptOccurrence(data string, from, to time.Time, rid string) 
 	for _, o := range occurrences {
 		if o.Transparent || rid != "" && o.RecurrenceID == rid {
 			continue
+		}
+		// RSVP exceptions are per attendee; a declined date remains busy for
+		// the organizer and other participants, but not for this viewer.
+		if viewer != "" && !strings.EqualFold(o.Organizer.Email, viewer) {
+			declined := false
+			for _, attendee := range o.Attendees {
+				if strings.EqualFold(attendee.Email, viewer) && strings.EqualFold(attendee.PartStat, "DECLINED") {
+					declined = true
+				}
+			}
+			if declined {
+				continue
+			}
 		}
 		if o.Start != nil && o.End != nil && o.End.After(*o.Start) {
 			out = append(out, BusyInterval{Start: o.Start.UTC(), End: o.End.UTC()})

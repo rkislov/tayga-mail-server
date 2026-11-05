@@ -75,6 +75,7 @@ func (h *ewsHandler) taygaWrite(ctx context.Context, u *storage.User, body strin
 	if response, handled, err := h.taygaTaskWrite(ctx, u, body, create); handled {
 		return response, true, err
 	}
+	ctx = context.WithValue(ctx, rawCalendarContextKey{}, true)
 	props := taygaProperties(body)
 	raw, calendar := props["TaygaICalendar"]
 	if !calendar {

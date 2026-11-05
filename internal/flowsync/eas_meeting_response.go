@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/tayga/tms/internal/calutil"
 	"github.com/tayga/tms/internal/mailsearch"
@@ -39,6 +40,10 @@ func (h *easHandler) meetingResponse(ctx context.Context, u *storage.User, body 
 		if status == 1 && req.value("UserResponse") != "3" {
 			fmt.Fprintf(&out, `<CalendarId>%s</CalendarId>`, xmlEscape(id))
 		}
+		version, _ := ctx.Value(easVersionKey{}).(string)
+		if status == 1 && req.child("InstanceId") != nil && (version == "16.0" || version == "16.1") {
+			fmt.Fprintf(&out, `<InstanceId>%s</InstanceId>`, xmlEscape(req.value("InstanceId")))
+		}
 		out.WriteString(`</Result>`)
 	}
 	out.WriteString(`</MeetingResponse>`)
@@ -62,9 +67,8 @@ func (h *easHandler) respondMeetingRequest(ctx context.Context, u *storage.User,
 	status := map[string]string{"1": "ACCEPTED", "2": "TENTATIVE", "3": "DECLINED"}[req.value("UserResponse")]
 	version, _ := ctx.Value(easVersionKey{}).(string)
 	send := req.child("SendResponse")
-	// Never apply an unsupported occurrence response or time proposal to the
-	// entire meeting. Only the organizer may change the scheduled time.
-	if status == "" || req.value("CollectionId") == "" || req.value("RequestId") == "" || req.child("InstanceId") != nil || req.child("LongId") != nil ||
+	// Unsupported time proposals must never fall through to a series RSVP.
+	if status == "" || req.value("CollectionId") == "" || req.value("RequestId") == "" || req.child("LongId") != nil ||
 		(send != nil && (version != "16.0" && version != "16.1" || send.child("ProposedStartTime") != nil || send.child("ProposedEndTime") != nil)) {
 		return "", 2
 	}
@@ -75,9 +79,20 @@ func (h *easHandler) respondMeetingRequest(ctx context.Context, u *storage.User,
 		}
 		seen[child.Name.Local] = true
 		switch child.Name.Local {
-		case "UserResponse", "CollectionId", "RequestId", "SendResponse":
+		case "UserResponse", "CollectionId", "RequestId", "SendResponse", "InstanceId":
 		default:
 			return "", 2
+		}
+	}
+	var instanceTime time.Time
+	if req.child("InstanceId") != nil {
+		if version != "14.1" && version != "16.0" && version != "16.1" {
+			return "", 2
+		}
+		var err error
+		instanceTime, err = time.Parse(time.RFC3339Nano, req.value("InstanceId"))
+		if err != nil || !strings.HasSuffix(req.value("InstanceId"), "Z") {
+			return "", 104
 		}
 	}
 	comment := ""
@@ -102,7 +117,22 @@ func (h *easHandler) respondMeetingRequest(ctx context.Context, u *storage.User,
 	if err != nil {
 		return "", meetingResponseStatus(err)
 	}
-	_, err = h.store.RespondCalendarInvite(ctx, u.ID, inv.ID, status, obj.ETag, send != nil, comment)
+	if req.child("InstanceId") != nil {
+		p, e := calutil.ParseICS(obj.Data)
+		if e != nil {
+			return "", 2
+		}
+		if calutil.ReadRecurrence(obj.Data).Raw == "" && !strings.Contains(strings.ToUpper(obj.Data), "RDATE") {
+			return "", 146
+		}
+		rid := instanceTime.UTC().Format(time.RFC3339Nano)
+		if p.AllDay {
+			rid = instanceTime.UTC().Format("2006-01-02")
+		}
+		_, err = h.store.ReplyCalendarOccurrence(ctx, u.ID, inv.ID, rid, status, obj.ETag, send != nil, comment)
+	} else {
+		_, err = h.store.RespondCalendarInvite(ctx, u.ID, inv.ID, status, obj.ETag, send != nil, comment)
+	}
 	return obj.ID, meetingResponseStatus(err)
 }
 

@@ -67,7 +67,7 @@ func TestMotionJointGradientPaint(t *testing.T) {
 
 func TestMotionODPGradientGeometry(t *testing.T) {
 	for _, item := range []struct{ property, operands, style, fragment string }{
-		{"tayga:gradient-angle", `smil:from="0" smil:to="90"`, "linear", `draw:angle="900.0000"`},
+		{"tayga:gradient-angle", `smil:from="0" smil:to="90"`, "linear", `draw:angle="90.000000deg"`},
 		{"tayga:gradient-center-x", `smil:from="0.5" smil:by="-0.25"`, "radial", `draw:cx="25.0000%"`},
 		{"tayga:gradient-center-y", `smil:to="0.75" smil:calcMode="discrete"`, "rectangular", `draw:cy="75.0000%"`},
 	} {
@@ -108,7 +108,7 @@ func TestMotionJointGradientRealOffice(t *testing.T) {
 		t.Skip("requires local LibreOffice/Poppler")
 	}
 	dir := t.TempDir()
-	for _, kind := range []string{"joint-pptx", "angle-odp", "focus-odp", "joint-odp", "size-x-pptx", "size-y-pptx", "size-circle-pptx", "joint-size-pptx", "stops-pptx", "stops-odp", "joint-stops-pptx", "joint-stops-odp"} {
+	for _, kind := range []string{"joint-pptx", "angle-odp", "focus-odp", "joint-odp", "size-x-pptx", "size-y-pptx", "size-circle-pptx", "joint-size-pptx", "stops-pptx", "stops-odp", "joint-stops-pptx", "joint-stops-odp", "size-odp", "size-radial-odp", "multi-pptx", "multi-odp", "joint-multi-pptx", "joint-multi-odp", "multi-stops-odp", "combined-angle-pptx", "combined-angle-odp", "joint-multi-stops-pptx", "joint-multi-stops-odp", "stages-color-pptx", "stages-color-odp", "reverse-color-pptx", "reverse-color-odp", "stages-angle-pptx", "stages-angle-odp", "stages-focus-pptx", "stages-focus-odp"} {
 		ext, data := "odp", motionODPGradientFixture(t, "tayga:gradient-angle", `smil:to="90"`, "linear", kind == "joint-odp")
 		if kind == "focus-odp" {
 			data = motionODPGradientFixture(t, "tayga:gradient-center-x", `smil:to="0.25"`, "radial", false)
@@ -139,6 +139,55 @@ func TestMotionJointGradientRealOffice(t *testing.T) {
 			}
 			data = string(motionStopsFixture(t, ext, operands, strings.HasPrefix(kind, "joint-")))
 		}
+		if kind == "size-odp" {
+			ext = "odp"
+			data = string(motionODPMultiFixture(t, "", false))
+		}
+		if kind == "size-radial-odp" {
+			ext = "odp"
+			data = string(motionPatchPart(t, motionODPMultiFixture(t, "", false), "styles.xml", func(body []byte) []byte {
+				return bytes.Replace(body, []byte(`draw:style="rectangular"`), []byte(`draw:style="ellipsoid"`), 1)
+			}))
+		}
+		if strings.Contains(kind, "multi-") || kind == "multi-stops-odp" {
+			joint := strings.HasPrefix(kind, "joint-")
+			if strings.HasSuffix(kind, "pptx") {
+				ext = "pptx"
+				extra := motionPPTXExtraGeometry("fill.focussize.y", `to="0.5"`, "num")
+				if strings.Contains(kind, "multi-stops") {
+					extra += motionPPTXExtraGeometry("tayga:gradient-stops", `to="0.1,0.9"`, "str")
+				}
+				data = string(motionPPTXMultiFixture(t, extra, joint))
+			} else {
+				ext = "odp"
+				extra := motionODPExtraGeometry("tayga:gradient-focus-height", `smil:to="0.5"`)
+				if strings.Contains(kind, "multi-stops") {
+					extra += motionODPExtraGeometry("tayga:gradient-stops", `smil:to="0.1,0.9"`)
+				}
+				data = string(motionODPMultiFixture(t, extra, joint))
+			}
+		}
+		if strings.HasPrefix(kind, "combined-angle-") {
+			ext = "pptx"
+			if strings.HasSuffix(kind, "odp") {
+				ext = "odp"
+			}
+			data = string(motionAngleStopsFixture(t, ext))
+		}
+		if strings.HasPrefix(kind, "stages-") || strings.HasPrefix(kind, "reverse-color-") {
+			ext = "pptx"
+			if strings.HasSuffix(kind, "odp") {
+				ext = "odp"
+			}
+			switch {
+			case strings.Contains(kind, "-color-"):
+				data = string(motionColorStageFixture(t, ext, strings.HasPrefix(kind, "reverse-")))
+			case strings.Contains(kind, "-angle-"):
+				data = string(motionGradientStageFixture(t, ext))
+			case strings.Contains(kind, "-focus-"):
+				data = string(motionFocusStageFixture(t, ext))
+			}
+		}
 		source, _ := os.CreateTemp(dir, "source")
 		source.WriteString(data)
 		deck, prepared, err := buildMotionStoryboard(source, "test."+ext)
@@ -161,6 +210,53 @@ func TestMotionJointGradientRealOffice(t *testing.T) {
 		if palette.GeometryEffect != nil {
 			frames = []int{palette.Samples[0].White, palette.Samples[1].White, palette.Samples[len(palette.Samples)-2].White, palette.ToWhite}
 		}
+		if len(palette.Axes) > 0 && len(palette.Tracks) == 0 {
+			frames = []int{palette.FromWhite}
+			for axis := len(palette.Axes) - 1; axis >= len(palette.Axes)-2; axis-- {
+				for _, sample := range palette.Samples {
+					match := true
+					for i, v := range sample.Positions {
+						expected := 0.0
+						if i == axis {
+							expected = 1
+						}
+						if v != expected {
+							match = false
+						}
+					}
+					if match {
+						frames = append(frames, sample.White)
+						break
+					}
+				}
+			}
+			frames = append(frames, palette.ToWhite)
+		}
+		if len(palette.Tracks) > 0 {
+			frames = []int{palette.FromWhite}
+			for axis, track := range palette.Tracks {
+				if len(track) > 1 {
+					for _, sample := range palette.Samples {
+						match := true
+						for i, v := range sample.Positions {
+							expected := 0.0
+							if i == axis {
+								expected = 1 / float64(2*len(track)-1)
+							}
+							if v != expected {
+								match = false
+							}
+						}
+						if match {
+							frames = append(frames, sample.White)
+							break
+						}
+					}
+					break
+				}
+			}
+			frames = append(frames, palette.ToWhite)
+		}
 		images := [][]byte{}
 		for i, frame := range frames {
 			prefix := filepath.Join(dir, fmt.Sprintf("%s-%d", kind, i))
@@ -176,6 +272,12 @@ func TestMotionJointGradientRealOffice(t *testing.T) {
 			f.Close()
 			if err != nil {
 				t.Fatal(err)
+			}
+			if i == 0 && (kind == "focus-odp" || kind == "size-odp" || kind == "size-radial-odp") {
+				r, _, b, _ := img.At(int(float64(img.Bounds().Dx())*.35), int(float64(img.Bounds().Dy())*.45)).RGBA()
+				if b < 230*257 || r > 25*257 {
+					t.Fatalf("%s: ODF inner end color lost: r=%d b=%d", kind, r/257, b/257)
+				}
 			}
 			var pixels bytes.Buffer
 			for y := 0; y < img.Bounds().Dy(); y++ {

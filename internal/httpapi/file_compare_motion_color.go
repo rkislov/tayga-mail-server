@@ -11,10 +11,11 @@ import (
 )
 
 type motionColorSample struct {
-	At         float64 `json:"at"`
-	GeometryAt float64 `json:"geometry_at,omitempty"`
-	Black      int     `json:"black"`
-	White      int     `json:"white"`
+	At         float64   `json:"at"`
+	Positions  []float64 `json:"positions,omitempty"`
+	GeometryAt float64   `json:"geometry_at,omitempty"`
+	Black      int       `json:"black"`
+	White      int       `json:"white"`
 }
 type motionColorStop struct {
 	Position int
@@ -392,6 +393,9 @@ func motionPreparePPTXColor(pkg *comparePackage, part string, root *compareNode,
 		return
 	}
 	for i := range slide.Effects {
+		if slide.Warning != "" {
+			return
+		}
 		e := &slide.Effects[i]
 		if e.Kind != "color" {
 			continue
@@ -425,6 +429,7 @@ func motionPreparePPTXColor(pkg *comparePackage, part string, root *compareNode,
 				slide.Warning = "Unsupported paint: " + err.Error() + "; static slide"
 				continue
 			}
+			colors = motionStageColors(slide, *e, colors)
 			e.sourceColors = colors
 			found = true
 			for _, c := range colors {
@@ -448,7 +453,7 @@ func motionColorXML(c []float64) []byte {
 	return []byte(`<a:srgbClr xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" val="` + motionHex(c) + `"/>`)
 }
 func motionPPTXPaintBody(body []byte, effect motionEffect, phase int) ([]byte, error) {
-	if phase == 1 {
+	if phase == 1 && effect.Previous == nil {
 		return body, nil
 	}
 	t := float64(phase-1) / float64(motionSamples(effect)-1)

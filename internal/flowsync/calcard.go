@@ -211,7 +211,7 @@ func (h *easHandler) syncCalendar(ctx context.Context, u *storage.User, collecti
 	for _, o := range objs {
 		// Retain the RSVP record for safe retries/reacceptance, but expose a
 		// deletion to ActiveSync as required for a declined meeting.
-		if calutil.DeclinedBy(o.Data, u.Email) {
+		if calutil.DeclinedBy(o.Data, u.Email) && !isRecurringCalendar(o.Data) {
 			continue
 		}
 		if !cutoff.IsZero() && o.DTEnd != nil && o.DTEnd.Before(cutoff) && !strings.Contains(strings.ToUpper(o.Data), "RRULE:") {
@@ -237,6 +237,10 @@ func (h *easHandler) syncCalendar(ctx context.Context, u *storage.User, collecti
 		if err != nil {
 			return "", nil, err
 		}
+		recurrence, err := calendarRecurrenceXML(ctx, o.Data, u.Email)
+		if err != nil {
+			return "", nil, err
+		}
 		adds = append(adds, calendarAdd{
 			ServerID:       o.ID, // calendar object UUID
 			Subject:        subject,
@@ -246,7 +250,7 @@ func (h *easHandler) syncCalendar(ctx context.Context, u *storage.User, collecti
 			EndTime:        end,
 			UID:            o.UID,
 			AllDay:         ev.AllDay,
-			MeetingXML:     calendarMeetingXML(o.Data, u.Email),
+			MeetingXML:     calendarMeetingXML(o.Data, u.Email) + recurrence,
 			AttachmentsXML: attachments,
 			Body:           calendarDownloadDescription(ev.Description, links),
 		})

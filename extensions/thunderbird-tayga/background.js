@@ -1,15 +1,36 @@
 "use strict";
-const client = new Tayga.Client(browser.storage.local);
+const diagnostics = new TaygaDiagnostics.Journal(browser.storage.local);
+const client = new Tayga.Client(browser.storage.local, undefined, diagnostics);
 const ews = new TaygaEWS.Engine(
   client,
   (command, args) => browser.taygaEws.invoke(command, args),
   browser.storage.local,
+  diagnostics,
 );
+// Native EWS requests wait here when their bearer expires, including after sleep.
+browser.taygaEws.onSessionRefresh.addListener(async (scope) => {
+  let cfg = await client.settings();
+  if (!cfg.token || cfg.ewsEnabled === false || ews.scope(cfg) !== scope)
+    throw new Error("Сессия EWS остановлена.");
+  if (!cfg.expiresAt || cfg.expiresAt <= Date.now() + 120000)
+    cfg = await client.refresh(cfg);
+  return cfg;
+});
 const rules = new TaygaRules.Service(client, ews);
+const invitations = new TaygaInvites.Service(client);
 const syncEWS = () =>
-  ews.run().catch((error) => console.error("Tayga EWS:", error.message));
+  ews.run().catch(() => {});
 let pendingMFA = null;
 const uploads = new Map();
+const uploadStatus = new Map();
+let reconnecting = null;
+browser.taygaEws.onConnectionAvailable.addListener((reason) => {
+  diagnostics.record("connection.available", "success", { reason });
+  if (!reconnecting) reconnecting = ews.reconnect()
+    .catch((error) => diagnostics.record("sync", "failure", { error }))
+    .finally(() => { reconnecting = null; });
+  return reconnecting;
+});
 
 async function configureAccounts() {
   const cfg = await client.settings();
@@ -28,6 +49,39 @@ async function configureAccounts() {
 async function applyTheme() {
   const { theme } = await client.settings();
   if (theme === "default") return browser.theme.reset();
+  if (theme === "tayga-light") return browser.theme.update({
+    colors: {
+      frame: "#e4ebe0",
+      frame_inactive: "#eef1eb",
+      toolbar: "#f4f6f2",
+      toolbar_text: "#203b29",
+      tab_background_text: "#40533f",
+      tab_selected: "#ffffff",
+      tab_text: "#203b29",
+      tab_line: "#b38a36",
+      toolbar_field: "#ffffff",
+      toolbar_field_text: "#203b29",
+      toolbar_field_border: "#c6d3bf",
+      toolbar_field_focus: "#ffffff",
+      toolbar_field_border_focus: "#557b47",
+      toolbar_field_highlight: "#dbe9d5",
+      toolbar_field_highlight_text: "#203b29",
+      toolbar_bottom_separator: "#d5dfcf",
+      button_background_hover: "#e3ecdc",
+      button_background_active: "#d2e2c9",
+      sidebar: "#f4f6f2",
+      sidebar_text: "#203b29",
+      sidebar_border: "#d5dfcf",
+      sidebar_highlight: "#dbe9d5",
+      sidebar_highlight_text: "#203b29",
+      popup: "#ffffff",
+      popup_text: "#203b29",
+      popup_border: "#c6d3bf",
+      popup_highlight: "#dbe9d5",
+      popup_highlight_text: "#203b29",
+    },
+    properties: { color_scheme: "light", content_color_scheme: "light" },
+  });
   await browser.theme.update({
     colors: {
       frame: theme === "cosmos" ? "#0b1020" : "#1a2418",
@@ -41,6 +95,7 @@ async function applyTheme() {
   });
 }
 function idleSession() {
+  if (invitations.saving) throw new Error("Дождитесь сохранения ответа на приглашение.");
   if (uploads.size)
     throw new Error(
       "Дождитесь завершения загрузок или отмените их в окне письма.",
@@ -50,8 +105,41 @@ async function message(msg, sender) {
   if (sender.id !== browser.runtime.id || !msg?.type?.startsWith("tayga."))
     return;
   switch (msg.type) {
+    case "tayga.diagnostics.view": return diagnostics.view();
+    case "tayga.diagnostics.clear": return diagnostics.clear();
+    case "tayga.diagnostics.enabled": return diagnostics.setEnabled(msg.enabled);
+    case "tayga.diagnostics.export": {
+      let version;
+      try { version = (await browser.runtime.getBrowserInfo()).version; } catch {}
+      return diagnostics.export(browser.runtime.getManifest().version, version);
+    }
+    case "tayga.invites.load": return invitations.load();
+    case "tayga.invites.reply": {
+      const result = await diagnostics.observe("invite.reply", () => invitations.reply(msg));
+      ews.reconnect().catch((error) => diagnostics.record("sync", "failure", { error }));
+      return result;
+    }
+    case "tayga.uploads.status": {
+      const cfg = await client.settings();
+      if (!cfg.token) return [];
+      const pending = (await client.pendingUploads(cfg)).filter((entry) => !client.uploadClaims.has(entry.key));
+      const keys = new Set(pending.map((entry) => entry.key));
+      return [
+        ...Array.from(uploadStatus.values()).filter((item) =>
+          item.baseUrl === cfg.baseUrl && item.email === cfg.email && !keys.has(item.pendingKey)),
+        ...pending.map((entry) => ({ key: entry.key, name: entry.name, size: entry.size,
+          loaded: entry.offset, total: entry.size, resumable: true,
+          phase: entry.expiresAt > Date.now() ? "paused" : "expired" })),
+      ];
+    }
+    case "tayga.uploads.discard":
+      await client.discardUpload(msg.key);
+      return { ok: true };
+    case "tayga.uploads.cancel":
+      uploads.get(msg.key)?.abort();
+      return { ok: true };
     case "tayga.rules.load": return rules.load();
-    case "tayga.rules.save": return rules.save(msg);
+    case "tayga.rules.save": return diagnostics.observe("rules.save", () => rules.save(msg));
     case "tayga.ews.status":
       return ews.summary();
     case "tayga.ews.sync":
@@ -78,12 +166,13 @@ async function message(msg, sender) {
       idleSession();
       await ews.stop();
       pendingMFA = null;
-      const result = await client.login(
+      const result = await diagnostics.observe("auth.login", () => client.login(
         msg.baseUrl,
         msg.email.trim(),
         msg.password,
-      );
+      ));
       if (result.mfa) {
+        diagnostics.record("auth.login", "mfa_required");
         pendingMFA = result;
         return { mfa: true };
       }
@@ -95,7 +184,7 @@ async function message(msg, sender) {
       idleSession();
       if (!pendingMFA)
         throw new Error("Начните вход заново: запрос MFA истёк.");
-      await client.mfa(pendingMFA, msg.code.trim());
+      await diagnostics.observe("auth.mfa", () => client.mfa(pendingMFA, msg.code.trim()));
       pendingMFA = null;
       await configureAccounts();
       syncEWS();
@@ -105,14 +194,14 @@ async function message(msg, sender) {
       idleSession();
       pendingMFA = null;
       await ews.stop();
-      await client.logout();
+      await diagnostics.observe("auth.logout", () => client.logout());
       await configureAccounts();
       return { ok: true };
     case "tayga.preferences": {
       const ttlHours = Number(msg.ttlHours);
       if (!Number.isInteger(ttlHours) || ttlHours < 1 || ttlHours > 8760)
         throw new Error("Срок ссылки: от 1 до 8760 часов.");
-      if (!["default", "tayga", "cosmos"].includes(msg.theme))
+      if (!["default", "tayga", "tayga-light", "cosmos"].includes(msg.theme))
         throw new Error("Неизвестная тема.");
       await browser.storage.local.set({ theme: msg.theme, ttlHours });
       await applyTheme();
@@ -160,31 +249,66 @@ async function message(msg, sender) {
 browser.runtime.onMessage.addListener((msg, sender) => message(msg, sender));
 
 // Filelink owns insertion/removal of attachment links and reports upload failures in the composer.
-browser.cloudFile.onFileUpload.addListener(async (account, fileInfo) => {
+async function uploadFile(account, fileInfo) {
   const key = `${account.id}:${fileInfo.id}`;
   const controller = new AbortController();
+  if (uploads.has(key)) return { error: "Этот файл уже загружается." };
   uploads.set(key, controller);
+  for (const [oldKey, status] of uploadStatus) {
+    if (!uploads.has(oldKey) && (uploadStatus.size >= 10 || Date.now() - status.updatedAt > 3600000))
+      uploadStatus.delete(oldKey);
+  }
+  let lastPhase = "";
+  const report = (state) => {
+    if (state.phase && state.phase !== lastPhase) {
+      lastPhase = state.phase;
+      diagnostics.record("upload.phase", state.phase === "failed" ? "failure" : state.phase === "cancelled" ? "cancelled" : state.phase === "complete" ? "success" : "start", { phase: state.phase });
+    }
+    uploadStatus.set(key, {
+      ...uploadStatus.get(key), key, name: fileInfo.name, size: fileInfo.data.size, ...state, updatedAt: Date.now(),
+    });
+  };
+  report({ phase: "uploading", loaded: 0, total: fileInfo.data.size });
+  let record;
   try {
-    const record = await client.upload(
+    const cfg = await client.settings();
+    report({ baseUrl: cfg.baseUrl, email: cfg.email });
+    record = await diagnostics.observe("upload", () => client.upload(
       fileInfo.data,
       controller.signal,
-      undefined,
+      cfg,
       fileInfo.name,
-    );
-    await browser.storage.local.set({ [`upload:${key}`]: record });
+      report,
+    ));
+    await browser.storage.local.set({
+      [`upload:${key}`]: record,
+      ...(record.pendingKey ? { [record.pendingKey]: { phase: "delivered" } } : {}),
+    });
+    try { await client.finishUpload(record); }
+    catch (error) { diagnostics.record("upload.cleanup", "failure", { error }); }
+    if (record.pendingKey) {
+      for (const [oldKey, status] of uploadStatus)
+        if (oldKey !== key && status.pendingKey === record.pendingKey && !uploads.has(oldKey))
+          uploadStatus.delete(oldKey);
+    }
+    report({ phase: "complete", loaded: fileInfo.data.size, total: fileInfo.data.size });
     return { url: record.url };
   } catch (error) {
+    if (record?.pendingKey) client.uploadClaims.delete(record.pendingKey);
+    report({ phase: controller.signal.aborted ? "cancelled" : "failed",
+      error: controller.signal.aborted ? "" : error.message });
     return controller.signal.aborted
       ? { aborted: true }
       : { error: error.message };
   } finally {
     uploads.delete(key);
   }
-});
+}
+browser.cloudFile.onFileUpload.addListener(uploadFile);
 browser.cloudFile.onFileUploadAbort.addListener((account, fileId) =>
   uploads.get(`${account.id}:${fileId}`)?.abort(),
 );
-browser.cloudFile.onFileDeleted.addListener(async (account, fileId) => {
+browser.cloudFile.onFileDeleted.addListener((account, fileId) => diagnostics.observe("upload.cleanup", async () => {
   const key = `upload:${account.id}:${fileId}`;
   const record = (await browser.storage.local.get(key))[key];
   if (!record) return;
@@ -208,16 +332,17 @@ browser.cloudFile.onFileDeleted.addListener(async (account, fileId) => {
     cfg,
   );
   await browser.storage.local.remove(key);
+}));
+browser.cloudFile.onAccountAdded.addListener(() => diagnostics.observe("filelink.configure", configureAccounts).catch(() => {}));
+browser.runtime.onInstalled.addListener((details) => {
+  if (details.reason === "install") browser.runtime.openOptionsPage();
 });
-browser.cloudFile.onAccountAdded.addListener(() => configureAccounts());
-browser.runtime.onInstalled.addListener(() =>
-  browser.runtime.openOptionsPage(),
-);
 browser.runtime.onStartup.addListener(() =>
-  configureAccounts().catch(console.error),
+  configureAccounts().catch((error) => diagnostics.record("filelink.configure", "failure", { error })),
 );
-applyTheme().catch(console.error);
-configureAccounts().catch(console.error);
+diagnostics.record("startup", "success");
+applyTheme().catch((error) => diagnostics.record("theme", "failure", { error }));
+configureAccounts().catch((error) => diagnostics.record("filelink.configure", "failure", { error }));
 
 browser.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === "tayga-ews-sync") syncEWS();
@@ -232,11 +357,13 @@ browser.storage.onChanged.addListener(async (changes, area) => {
   )
     return;
   try {
+    await configureAccounts();
     const cfg = await client.settings();
     if (cfg.token && cfg.ewsEnabled !== false)
       await browser.taygaEws.invoke("configure", cfg);
     else await browser.taygaEws.invoke("stop", {});
+    diagnostics.record("session.configure", "success");
   } catch (error) {
-    console.error("Tayga EWS session:", error.message);
+    diagnostics.record("session.configure", "failure", { error });
   }
 });

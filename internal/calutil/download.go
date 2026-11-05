@@ -69,3 +69,33 @@ func DownloadDescription(description string, attachments []Attachment) string {
 	}
 	return strings.TrimSpace(b.String())
 }
+
+// WithoutFileAttachment removes a managed file reference from the master and
+// detached instances, retaining unrelated attachments and component properties.
+func WithoutFileAttachment(data, attachmentID string) (string, error) {
+	cal, err := ical.NewDecoder(strings.NewReader(data)).Decode()
+	if err != nil {
+		return "", err
+	}
+	suffix := "/api/v1/calendar/attachments/" + url.PathEscape(attachmentID)
+	changed := false
+	for _, event := range cal.Children {
+		if event.Name != "VEVENT" {
+			continue
+		}
+		var retained []ical.Prop
+		for _, prop := range event.Props.Values(ical.PropAttach) {
+			u, e := url.Parse(prop.Value)
+			if e == nil && strings.HasSuffix(u.EscapedPath(), suffix) {
+				changed = true
+			} else {
+				retained = append(retained, prop)
+			}
+		}
+		event.Props[ical.PropAttach] = retained
+	}
+	if !changed {
+		return data, nil
+	}
+	return encode(cal)
+}

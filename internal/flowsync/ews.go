@@ -6,12 +6,15 @@ package flowsync
 import (
 	"context"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/tayga/tms/internal/calutil"
 	"github.com/tayga/tms/internal/mailstore"
 	"github.com/tayga/tms/internal/storage"
 )
@@ -40,8 +43,13 @@ func (h *ewsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	body, readErr := io.ReadAll(io.LimitReader(r.Body, (8<<20)+1))
-	if readErr != nil || len(body) > 8<<20 {
+	body, readErr := io.ReadAll(io.LimitReader(r.Body, maxEWSAttachmentRequestBytes+1))
+	if readErr != nil || len(body) > maxEWSAttachmentRequestBytes {
+		http.Error(w, "invalid or oversized request", 400)
+		return
+	}
+	op := detectEWSOp(string(body))
+	if op != "CreateAttachment" && len(body) > 8<<20 {
 		http.Error(w, "invalid or oversized request", 400)
 		return
 	}
@@ -50,7 +58,6 @@ func (h *ewsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid XML", 400)
 		return
 	}
-	op := detectEWSOp(string(body))
 	if culture := strings.TrimSpace(extractTag(string(body), "MailboxCulture")); culture != "" {
 		r = r.WithContext(context.WithValue(r.Context(), protocolLanguageKey{}, culture))
 	}
@@ -68,6 +75,9 @@ func (h *ewsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if taygaRequested(string(body), "TaygaICalendar") {
+		r = r.WithContext(context.WithValue(r.Context(), rawCalendarContextKey{}, true))
+	}
 	var soap string
 	var err error
 	switch op {
@@ -87,6 +97,10 @@ func (h *ewsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		soap, err = h.findItem(r.Context(), u, string(body))
 	case "GetAttachment":
 		soap, err = h.getAttachment(r.Context(), u, string(body))
+	case "CreateAttachment":
+		soap, err = h.createCalendarAttachment(r.Context(), u, string(body))
+	case "DeleteAttachment":
+		soap, err = h.deleteCalendarAttachments(r.Context(), u, string(body))
 	case "GetItem":
 		soap, err = h.batchItems(r.Context(), u, "GetItem", string(body), h.getItem)
 	case "SendItem":
@@ -120,6 +134,9 @@ func (h *ewsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			t.Result = "internal_error"
 		}
 		soap = ewsFault("ErrorInternalServerError", "FlowSync operation failed")
+		if errors.Is(err, errExchangeRecurrence) {
+			soap = ewsFault("ErrorCalendarInvalidRecurrence", "Recurrence requires the full iCalendar contract")
+		}
 	}
 	if strings.Contains(soap, "<m:FaultResponse") && op != "" {
 		if op == "GetUserAvailabilityRequest" {
@@ -263,7 +280,7 @@ func (h *ewsHandler) findItem(ctx context.Context, u *storage.User, body string)
 		return emptyEWSItems(), nil
 	}
 	if cal, err := h.store.GetCalendarByID(ctx, u.ID, folderID); err == nil {
-		return h.findCalendarItems(ctx, u, cal.ID)
+		return h.findCalendarItems(ctx, u, cal.ID, body)
 	}
 	if ab, err := h.store.GetAddressBookByID(ctx, u.ID, folderID); err == nil {
 		return h.findContactItems(ctx, ab.ID)
@@ -300,15 +317,63 @@ func (h *ewsHandler) findMailItems(ctx context.Context, u *storage.User, mailbox
 	return b.String(), nil
 }
 
-func (h *ewsHandler) findCalendarItems(ctx context.Context, u *storage.User, calendarID string) (string, error) {
+func (h *ewsHandler) findCalendarItems(ctx context.Context, u *storage.User, calendarID, body string) (string, error) {
 	objs, err := h.store.ListCalendarObjects(ctx, calendarID)
 	if err != nil {
 		return "", err
 	}
+	doc, err := parseProtocolXML([]byte(body))
+	if err != nil {
+		return "", err
+	}
+	view := doc.find("CalendarView")
+	var from, to *time.Time
+	if view != nil {
+		from = parseASTime(nodeAttr(view, "StartDate"))
+		to = parseASTime(nodeAttr(view, "EndDate"))
+		if from == nil || to == nil || !to.After(*from) || to.Sub(*from) > 366*24*time.Hour {
+			return ewsOperationError("FindItem", "ErrorInvalidCalendarView", "CalendarView must span at most 366 days"), nil
+		}
+	}
 	var b strings.Builder
 	b.WriteString(`<m:FindItemResponse xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types">`)
 	b.WriteString(`<m:ResponseMessages><m:FindItemResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:RootFolder><t:Items>`)
+	count := 0
 	for _, o := range objs {
+		if view != nil {
+			occurrences, err := calutil.ExpandOccurrences(o.Data, *from, *to)
+			if err != nil {
+				return "", err
+			}
+			for _, instance := range occurrences {
+				if len(instance.Attendees) > 0 {
+					declined := false
+					for _, a := range instance.Attendees {
+						if strings.EqualFold(a.Email, u.Email) && a.PartStat == "DECLINED" {
+							declined = true
+						}
+					}
+					if declined {
+						continue
+					}
+				}
+				count++
+				if count > 1000 {
+					return ewsOperationError("FindItem", "ErrorCalendarViewRangeTooBig", "CalendarView exceeds 1000 instances"), nil
+				}
+				var item string
+				if isRecurringCalendar(o.Data) {
+					item, err = h.occurrenceXML(ctx, u, o, instance.RecurrenceID, false)
+				} else {
+					item, err = h.calendarItemXML(ctx, u, o, false)
+				}
+				if err != nil {
+					return "", err
+				}
+				b.WriteString(item)
+			}
+			continue
+		}
 		item, err := h.calendarItemXML(ctx, u, o, false)
 		if err != nil {
 			return "", err
@@ -335,6 +400,9 @@ func (h *ewsHandler) findContactItems(ctx context.Context, addressBookID string)
 }
 
 func (h *ewsHandler) getItem(ctx context.Context, u *storage.User, body string) (string, error) {
+	if out, handled, err := h.ewsOccurrence(ctx, u, body, "GetItem"); handled {
+		return out, err
+	}
 	id := extractAttr(body, "ItemId", "Id")
 	if id == "" {
 		return ewsFault("ErrorInvalidId", "missing ItemId"), nil

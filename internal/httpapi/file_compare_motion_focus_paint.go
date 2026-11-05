@@ -14,6 +14,10 @@ type motionFocusAsset struct {
 	PNG      []byte
 }
 
+func motionNeedsFocusRaster(e motionEffect) bool {
+	return e.Kind == "gradient" && (e.Property == "focus-width" || e.Property == "focus-height" || e.focusPath != "" && (1-e.focusRect[0]-e.focusRect[2] > 1e-9 || 1-e.focusRect[1]-e.focusRect[3] > 1e-9))
+}
+
 // LibreOffice's DrawingML importer keeps only fillToRect's center, discarding
 // its extent. Materialize only this fill as a bounded PNG. Shape clipping,
 // contour, text, rotation and mattes still belong to the office renderer.
@@ -47,7 +51,7 @@ func motionPPTXFocusPaint(body []byte, e motionEffect, phase int, paint *motionE
 		if paint != nil {
 			palette = nil
 			t := float64(paintPhase-1) / float64(motionSamples(*paint)-1)
-			for _, source := range e.sourceColors {
+			for _, source := range paint.sourceColors {
 				palette = append(palette, motionPaintTween(source, *paint, t))
 			}
 		}

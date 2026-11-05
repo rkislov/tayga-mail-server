@@ -88,9 +88,45 @@ func (h *ewsHandler) calendarItemXML(ctx context.Context, u *storage.User, o *st
 		busy = "Tentative"
 	}
 	fmt.Fprintf(&b, `<t:LegacyFreeBusyStatus>%s</t:LegacyFreeBusyStatus><t:Location>%s</t:Location><t:IsMeeting>%t</t:IsMeeting><t:IsCancelled>%t</t:IsCancelled>`, busy, xmlEscape(ev.Location), len(ev.Attendees) > 0, strings.EqualFold(ev.Status, "CANCELLED"))
-	if davTextProperty(o.Data, "RRULE") == "" {
+	if !isRecurringCalendar(o.Data) {
 		b.WriteString(`<t:CalendarItemType>Single</t:CalendarItemType>`)
 	}
+
+	if isRecurringCalendar(o.Data) {
+		recurrence, err := ewsRecurrenceXML(o.Data)
+		if err != nil {
+			if raw, _ := ctx.Value(rawCalendarContextKey{}).(bool); !raw {
+				return "", fmt.Errorf("%w: %v", errExchangeRecurrence, err)
+			}
+			recurrence = ""
+		}
+		b.WriteString("<t:CalendarItemType>RecurringMaster</t:CalendarItemType>" + recurrence)
+		exceptions, err := calutil.RecurrenceExceptions(o.Data)
+		if err != nil {
+			return "", err
+		}
+		b.WriteString("<t:ModifiedOccurrences>")
+		for _, e := range exceptions {
+			if !e.Cancelled {
+				fmt.Fprintf(&b, `<t:Occurrence><t:ItemId Id="%s" ChangeKey="%s"/><t:Start>%s</t:Start><t:End>%s</t:End><t:OriginalStart>%s</t:OriginalStart></t:Occurrence>`, xmlEscape(occurrenceItemID(o.ID, e.ID)), xmlEscape(ewsCalendarChangeKey(o, files)), ewsDate(e.Occurrence.Start), ewsDate(e.Occurrence.End), ewsDate(&e.Original))
+			}
+		}
+		b.WriteString("</t:ModifiedOccurrences><t:DeletedOccurrences>")
+		for _, e := range exceptions {
+			if e.Cancelled {
+				fmt.Fprintf(&b, `<t:DeletedOccurrence><t:Start>%s</t:Start></t:DeletedOccurrence>`, ewsDate(&e.Original))
+			}
+		}
+		b.WriteString("</t:DeletedOccurrences>")
+	}
+	zone := calutil.ReadRecurrence(o.Data).Timezone
+	if zone == "" || zone == "floating" {
+		zone = "UTC"
+	}
+	if windows := ianaWindowsZones[zone]; windows != "" {
+		zone = windows
+	}
+	fmt.Fprintf(&b, `<t:StartTimeZone Id="%s"/><t:EndTimeZone Id="%s"/>`, xmlEscape(zone), xmlEscape(zone))
 	response := "Unknown"
 	for _, a := range ev.Attendees {
 		if strings.EqualFold(a.Email, u.Email) {

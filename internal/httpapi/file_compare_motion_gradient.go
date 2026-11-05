@@ -33,6 +33,9 @@ func motionPrepareGradient(pkg *comparePackage, part string, root *compareNode, 
 		return
 	}
 	for i := range slide.Effects {
+		if slide.Warning != "" {
+			return
+		}
 		e := &slide.Effects[i]
 		if e.Kind != "gradient" {
 			continue
@@ -62,6 +65,7 @@ func motionPrepareGradient(pkg *comparePackage, part string, root *compareNode, 
 					}
 					positions[i] = v / 100000
 				}
+				positions = motionStageSource(slide, *e, positions)
 				if !valid || !motionResolveGradientStops(e, positions) {
 					continue
 				}
@@ -117,6 +121,7 @@ func motionPrepareGradient(pkg *comparePackage, part string, root *compareNode, 
 					source = (values[1] + 1 - values[3]) / 2
 				}
 			}
+			source = motionStageSource(slide, *e, []float64{source})[0]
 			if len(e.From) > 0 && math.Abs(e.From[0]-source) > 0.00001 {
 				continue
 			}
@@ -178,7 +183,7 @@ func motionPrepareGradient(pkg *comparePackage, part string, root *compareNode, 
 	}
 }
 func motionPPTXGradientBody(body []byte, e motionEffect, phase int) ([]byte, error) {
-	if phase == 1 {
+	if phase == 1 && e.Previous == nil {
 		return body, nil
 	}
 	t := float64(phase-1) / float64(motionSamples(e)-1)

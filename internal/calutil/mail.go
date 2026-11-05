@@ -11,9 +11,18 @@ import (
 
 // IMIPMessage builds a snapshot once; retries reuse the same bytes and ID.
 func IMIPMessage(from, name, to, subject, text, ics, method, id string, date time.Time) []byte {
+	return IMIPMessageToMany(from, name, []string{to}, subject, text, ics, method, id, date)
+}
+
+// IMIPMessageToMany records the actual recipient set on one organizer snapshot.
+func IMIPMessageToMany(from, name string, recipients []string, subject, text, ics, method, id string, date time.Time) []byte {
 	clean := func(s string) string { return strings.NewReplacer("\r", "", "\n", "").Replace(s) }
 	fromAddress := (&mail.Address{Name: clean(name), Address: clean(from)}).String()
-	toAddress := (&mail.Address{Address: clean(to)}).String()
+	var to []string
+	for _, recipient := range recipients {
+		to = append(to, (&mail.Address{Address: clean(recipient)}).String())
+	}
+	toAddress := strings.Join(to, ", ")
 	boundary := "tayga-cal-" + clean(id)
 	var b strings.Builder
 	fmt.Fprintf(&b, "From: %s\r\nTo: %s\r\nSubject: %s\r\nDate: %s\r\nMessage-ID: <%s@tayga>\r\nMIME-Version: 1.0\r\n", fromAddress, toAddress, mime.QEncoding.Encode("UTF-8", clean(subject)), date.UTC().Format(time.RFC1123Z), clean(id))

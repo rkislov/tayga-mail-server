@@ -17,11 +17,13 @@ type clientOp struct {
 	Kind            string // add | change | delete
 	ClientID        string
 	ServerID        string
+	InstanceID      string
 	Fields          map[string]string
 	ApplicationData *protocolNode
 }
 
 type writebackResult struct {
+	InstanceID      string
 	ClientID        string
 	ServerID        string
 	Status          int
@@ -36,7 +38,11 @@ func parseSyncClientOps(body []byte) []clientOp {
 	}
 	src := string(body)
 	if body[0] == wbxmlVersion {
-		return parseWBXMLClientOps(body)
+		decoded, err := decodeWire(body)
+		if err != nil {
+			return nil
+		}
+		return parseXMLClientOps(string(decoded))
 	}
 	return parseXMLClientOps(src)
 }
@@ -56,7 +62,7 @@ func parseXMLClientOps(src string) []clientOp {
 		if kind != "add" && kind != "change" && kind != "delete" {
 			continue
 		}
-		ops = append(ops, clientOp{Kind: kind, ClientID: n.value("ClientId"), ServerID: n.value("ServerId"), Fields: extractAppDataFields(n.render()), ApplicationData: n.child("ApplicationData")})
+		ops = append(ops, clientOp{Kind: kind, InstanceID: n.value("InstanceId"), ClientID: n.value("ClientId"), ServerID: n.value("ServerId"), Fields: extractAppDataFields(n.render()), ApplicationData: n.child("ApplicationData")})
 	}
 	return ops
 }
@@ -90,6 +96,7 @@ func (h *easHandler) applyWritebacks(ctx context.Context, u *storage.User, kind 
 		case kindTasks:
 			res.ServerID, err = h.wbTask(ctx, u, collectionID, op)
 		case kindCalendar:
+			res.InstanceID = op.InstanceID
 			res.ServerID, err = h.wbCalendar(ctx, u, collectionID, op)
 			version, _ := ctx.Value(easVersionKey{}).(string)
 			if err == nil && op.Kind == "add" && (version == "16.0" || version == "16.1") {
@@ -432,6 +439,9 @@ func renderWritebackResponses(results []writebackResult) string {
 		}
 		if r.ServerID != "" {
 			fmt.Fprintf(&b, `<ServerId>%s</ServerId>`, xmlEscape(r.ServerID))
+		}
+		if r.InstanceID != "" {
+			fmt.Fprintf(&b, `<InstanceId xmlns="AirSyncBase:">%s</InstanceId>`, xmlEscape(r.InstanceID))
 		}
 		fmt.Fprintf(&b, `<Status>%d</Status>`, r.Status)
 		b.WriteString(r.ApplicationData)

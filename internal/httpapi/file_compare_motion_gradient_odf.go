@@ -12,7 +12,7 @@ import (
 // native Impress animation names. Unknown properties always remain unsupported.
 func motionODPGradientAnimation(node *compareNode, e *motionEffect) error {
 	e.Kind = "gradient"
-	e.Property = map[string]string{"tayga:gradient-angle": "angle", "tayga:gradient-center-x": "focus-x", "tayga:gradient-center-y": "focus-y", "tayga:gradient-stops": "stops"}[node.attr("attributeName")]
+	e.Property = map[string]string{"tayga:gradient-angle": "angle", "tayga:gradient-center-x": "focus-x", "tayga:gradient-center-y": "focus-y", "tayga:gradient-stops": "stops", "tayga:gradient-focus-width": "focus-width", "tayga:gradient-focus-height": "focus-height"}[node.attr("attributeName")]
 	if e.Property == "" {
 		return fmt.Errorf("unsupported ODP gradient property")
 	}
@@ -43,8 +43,23 @@ func motionODPGradientValue(gradient *compareNode, property string) (float64, er
 		if strings.HasSuffix(raw, "deg") {
 			return motionNumber(strings.TrimSuffix(raw, "deg"), 0, 360)
 		}
+		if strings.ContainsAny(raw, ".eE") {
+			return 0, fmt.Errorf("fractional gradient angle requires explicit deg units")
+		}
 		v, err := motionNumber(raw, 0, 3600)
 		return v / 10, err
+	}
+	if property == "focus-width" || property == "focus-height" {
+		key := "focus-width"
+		if property == "focus-height" {
+			key = "focus-height"
+		}
+		for _, a := range gradient.attrs {
+			if a.Name.Space == motionODPFocusNamespace && a.Name.Local == key {
+				return motionNumber(a.Value, 0, 1)
+			}
+		}
+		return 0, nil
 	}
 	key := "cx"
 	if property == "focus-y" {
@@ -67,6 +82,9 @@ func motionPrepareODPGradient(pkg *comparePackage, slide *motionSlide, page *com
 	}
 	styles := motionODPStylesMap(pkg)
 	for i := range slide.Effects {
+		if slide.Warning != "" {
+			return
+		}
 		e := &slide.Effects[i]
 		if e.Kind != "gradient" {
 			continue
@@ -106,11 +124,15 @@ func motionPrepareODPGradient(pkg *comparePackage, slide *motionSlide, page *com
 						positions = append(positions, v)
 					}
 				}
+				positions = motionStageSource(slide, *e, positions)
 				if !motionResolveGradientStops(e, positions) {
 					continue
 				}
 				e.sourceColors, err = motionODPGradientColors(gradient)
 				if err != nil {
+					continue
+				}
+				if err := motionODPSetupFocus(e, gradient); err != nil {
 					continue
 				}
 				e.gradient, found = true, true
@@ -122,7 +144,14 @@ func motionPrepareODPGradient(pkg *comparePackage, slide *motionSlide, page *com
 			} else if style != "radial" && style != "ellipsoid" && style != "square" && style != "rectangular" {
 				continue
 			}
+			if err := motionODPSetupFocus(e, gradient); err != nil {
+				continue
+			}
+
 			source, err := motionODPGradientValue(gradient, e.Property)
+			if err == nil {
+				source = motionStageSource(slide, *e, []float64{source})[0]
+			}
 			if err != nil || (len(e.From) > 0 && math.Abs(e.From[0]-source) > 0.00001) {
 				continue
 			}
@@ -135,6 +164,25 @@ func motionPrepareODPGradient(pkg *comparePackage, slide *motionSlide, page *com
 					continue
 				}
 			} else if e.To[0] < 0 || e.To[0] > 1 {
+				continue
+			}
+			if e.Property != "angle" {
+				index := 0
+				if e.Property == "focus-y" || e.Property == "focus-height" {
+					index = 1
+				}
+				center := (e.focusRect[index] + 1 - e.focusRect[index+2]) / 2
+				half := (1 - e.focusRect[index] - e.focusRect[index+2]) / 2
+				if e.Property == "focus-width" || e.Property == "focus-height" {
+					half = e.To[0] / 2
+				} else {
+					center = e.To[0]
+				}
+				if center-half < -1e-9 || center+half > 1+1e-9 {
+					continue
+				}
+			}
+			if motionNeedsFocusRaster(*e) && e.focusPath == "circle" && (e.Property == "focus-x" || e.Property == "focus-y") && math.Abs(e.To[0]-.5) > 0.00001 {
 				continue
 			}
 			e.sourceColors, err = motionODPGradientColors(gradient)
@@ -201,7 +249,7 @@ func motionODPGradientGeometry(body []byte, e motionEffect, phase int) ([]byte, 
 		if v < 0 {
 			v += 360
 		}
-		value = strconv.FormatFloat(v*10, 'f', 4, 64)
+		value = strconv.FormatFloat(v, 'f', 6, 64) + "deg"
 	} else {
 		key = "cx"
 		if e.Property == "focus-y" {

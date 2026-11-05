@@ -22,34 +22,40 @@ const motionMaxFrames = 120
 const motionMaxEffects = 12
 
 type motionEffect struct {
-	Kind           string        `json:"kind"`
-	Target         string        `json:"target"`
-	Exit           bool          `json:"exit"`
-	Duration       int           `json:"duration"`
-	Trigger        string        `json:"trigger"`
-	Delay          int           `json:"delay"`
-	Event          string        `json:"event,omitempty"`
-	Path           []motionPoint `json:"path,omitempty"`
-	From           []float64     `json:"from,omitempty"`
-	To             []float64     `json:"to,omitempty"`
-	Discrete       bool          `json:"discrete,omitempty"`
-	Property       string        `json:"property,omitempty"`
-	Space          string        `json:"space,omitempty"`
-	Direction      string        `json:"direction,omitempty"`
-	Relative       bool          `json:"relative,omitempty"`
-	Delta          []float64     `json:"delta,omitempty"`
-	DeltaSpace     string        `json:"delta_space,omitempty"`
-	byRef          *compareNode
-	focusRect      [4]float64
-	focusPath      string
-	focusStops     []float64
-	fromRef        *compareNode
-	toRef          *compareNode
-	gradient       bool
-	sourceColors   [][]float64
-	sourceStyles   map[string][]float64
-	wholeTextRange bool
-	textRangeEnd   int
+	Repeat             int  `json:"repeat,omitempty"`
+	AutoReverse        bool `json:"auto_reverse,omitempty"`
+	Previous           *int `json:"previous,omitempty"`
+	wrapperDurations   []int
+	wrapperTimingIssue bool
+	fromExplicit       bool
+	Kind               string        `json:"kind"`
+	Target             string        `json:"target"`
+	Exit               bool          `json:"exit"`
+	Duration           int           `json:"duration"`
+	Trigger            string        `json:"trigger"`
+	Delay              int           `json:"delay"`
+	Event              string        `json:"event,omitempty"`
+	Path               []motionPoint `json:"path,omitempty"`
+	From               []float64     `json:"from,omitempty"`
+	To                 []float64     `json:"to,omitempty"`
+	Discrete           bool          `json:"discrete,omitempty"`
+	Property           string        `json:"property,omitempty"`
+	Space              string        `json:"space,omitempty"`
+	Direction          string        `json:"direction,omitempty"`
+	Relative           bool          `json:"relative,omitempty"`
+	Delta              []float64     `json:"delta,omitempty"`
+	DeltaSpace         string        `json:"delta_space,omitempty"`
+	byRef              *compareNode
+	focusRect          [4]float64
+	focusPath          string
+	focusStops         []float64
+	fromRef            *compareNode
+	toRef              *compareNode
+	gradient           bool
+	sourceColors       [][]float64
+	sourceStyles       map[string][]float64
+	wholeTextRange     bool
+	textRangeEnd       int
 }
 type motionTransition struct {
 	Kind      string `json:"kind"`
@@ -232,12 +238,11 @@ func motionPPTXEffects(slide *compareNode) ([]motionEffect, error) {
 		behaviors := 0
 		motionWalk(node, func(n *compareNode) {
 			covered[n] = true
+			if err := motionReadRepeat(n, &item, false); err != nil {
+				failure = err
+			}
 			for _, a := range n.attrs {
 				switch a.Name.Local {
-				case "autoRev":
-					if a.Value != "0" && a.Value != "false" {
-						failure = fmt.Errorf("reversing timing")
-					}
 				case "accel", "decel":
 					if a.Value != "0" {
 						failure = fmt.Errorf("eased timing")
@@ -246,12 +251,7 @@ func motionPPTXEffects(slide *compareNode) ([]motionEffect, error) {
 					if a.Value != "100000" {
 						failure = fmt.Errorf("nonlinear speed")
 					}
-				case "repeatCount":
-					if a.Value != "1000" {
-						failure = fmt.Errorf("repeating timing")
-					}
-				case "repeatDur":
-					failure = fmt.Errorf("repeating timing")
+
 				}
 			}
 			switch n.name.Local {
@@ -333,9 +333,15 @@ func motionPPTXEffects(slide *compareNode) ([]motionEffect, error) {
 		for target := range targets {
 			item.Target = target
 		}
+		if err := motionRepeatValid(item); err != nil {
+			failure = err
+		}
 		effects = append(effects, item)
 	})
 	motionWalk(timing, func(n *compareNode) {
+		if !covered[n] && (n.attr("repeatCount") != "" && n.attr("repeatCount") != "1000" || n.attr("autoRev") == "1" || n.attr("autoRev") == "true" || n.attr("repeatDur") != "") {
+			failure = fmt.Errorf("unsupported repeating outer container")
+		}
 		if !covered[n] && n.name.Local == "cTn" && n.attr("nodeType") != "interactiveSeq" {
 			for _, cond := range n.child("stCondLst").all("cond") {
 				delay := cond.attr("delay")
@@ -454,6 +460,9 @@ func motionStates(slide *motionSlide, ids map[string]bool) []map[string]bool {
 			return []map[string]bool{{}}
 		}
 		hidden[effect.Target] = effect.Exit
+		if effect.AutoReverse {
+			hidden[effect.Target] = !effect.Exit
+		}
 		states = append(states, clone())
 	}
 	return states
@@ -608,6 +617,8 @@ func buildMotionPPTX(pkg *comparePackage) (motionDeck, []byte, error) {
 			}
 		})
 		motionPPTXHits(&slide, shapes, motionFloat(presentation.child("sldSz").attr("cx")), motionFloat(presentation.child("sldSz").attr("cy")))
+		motionMarkStages(&slide)
+		motionPrepareTransformStages(&slide)
 		motionPreparePPTXColor(pkg, rel.target, node, &slide, shapes)
 		motionPrepareGradient(pkg, rel.target, node, &slide, shapes)
 		motionCheckPathGeometry(&slide)
@@ -665,7 +676,25 @@ func buildMotionPPTX(pkg *comparePackage) (motionDeck, []byte, error) {
 				changes[part] = motionPPTXFinal(changes[part], &slide, motionFloat(presentation.child("sldSz").attr("cx")), motionFloat(presentation.child("sldSz").attr("cy")))
 			}
 			if plan != nil && plan.matte != "" {
-				if plan.colorPhase > 0 {
+				if len(plan.paintAxes) > 0 {
+					phases := motionPlanPhases(plan)
+					for _, axis := range motionTrackAxes(plan) {
+						e := slide.Effects[axis]
+						if e.Kind != "color" {
+							continue
+						}
+						var err error
+						changes[part], err = motionPPTXPaintBody(changes[part], e, phases[axis])
+						if err != nil {
+							return deck, nil, err
+						}
+					}
+					var err error
+					changes[part], err = motionPPTXMultiGeometry(changes[part], &slide, motionTrackAxes(plan), phases)
+					if err != nil {
+						return deck, nil, err
+					}
+				} else if plan.colorPhase > 0 {
 					effect := slide.Effects[plan.colorEffect]
 					var modified []byte
 					var e error
@@ -689,30 +718,29 @@ func buildMotionPPTX(pkg *comparePackage) (motionDeck, []byte, error) {
 			}
 
 			focusAssets := []motionFocusAsset{}
+			focusTargets := map[string]bool{}
+			phases := motionPlanPhases(plan)
 			for effectIndex, effect := range slide.Effects {
-				if effect.Property != "focus-width" && effect.Property != "focus-height" {
+				if (effect.Property != "focus-width" && effect.Property != "focus-height") || focusTargets[effect.Target] {
 					continue
 				}
-				phase := 1
+				focusTargets[effect.Target] = true
+				effect = motionCombinedFocus(&slide, effect.Target, phases, effect)
 				var paint *motionEffect
 				paintPhase := 1
-				if plan != nil {
-					if plan.geometryPhase > 0 && plan.geometryEffect == effectIndex {
-						phase = plan.geometryPhase
-					}
-					if plan.colorPhase > 0 {
-						current := &slide.Effects[plan.colorEffect]
-						if current.Kind == "gradient" && plan.colorEffect == effectIndex {
-							phase = plan.colorPhase
-						}
-						if current.Kind == "color" && current.Property == "fill" && current.Target == effect.Target {
-							paint, paintPhase = current, plan.colorPhase
+				for i, e := range slide.Effects {
+					if e.Kind == "color" && e.Property == "fill" && e.Target == effect.Target && motionSnapshotSelected(&slide, i, phases) {
+						copy := e
+						paint = &copy
+						paintPhase = phases[i]
+						if paintPhase == 0 {
+							paintPhase = 1
 						}
 					}
 				}
 				asset := motionFocusAsset{Name: fmt.Sprintf("ppt/media/taygaMotionFocus%d_%d.png", deck.Frames, effectIndex), ID: fmt.Sprintf("taygaFocusPaint%d", effectIndex)}
 				var err error
-				changes[part], asset.PNG, err = motionPPTXFocusPaint(changes[part], effect, phase, paint, paintPhase, asset.ID)
+				changes[part], asset.PNG, err = motionPPTXFocusPaint(changes[part], effect, 1, paint, paintPhase, asset.ID)
 				if err != nil {
 					return deck, nil, err
 				}

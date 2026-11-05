@@ -18,7 +18,7 @@
     <section>
       <h2>Подключение</h2>
       <p id="session">Проверка сессии…</p>
-      <form id="login-form">
+      <form id="login-form" hidden>
         <label for="baseUrl">Адрес сервера</label
         ><input
           id="baseUrl"
@@ -35,9 +35,10 @@
           autocomplete="current-password"
           required
         />
-        <button type="submit">Войти</button
-        ><button id="logout" type="button">Выйти из плагина</button>
+        <button type="submit">Войти</button>
       </form>
+      <p id="shared-session" hidden>Вы уже вошли. Почта, календари, контакты и большие вложения используют это подключение. Повторный ввод логина и пароля не нужен.</p>
+      <button id="logout" type="button" hidden>Выйти из плагина</button>
       <form id="mfa-form" hidden>
         <label for="mfa-code"
           >Код приложения-аутентификатора или резервный код</label
@@ -68,13 +69,15 @@
       </p>
       <label class="check"
         ><input id="ews-enabled" type="checkbox" checked /> Автоматически
-        синхронизировать почту, календари, задачи и контакты</label
+        синхронизировать почту, календари и контакты</label
       ><button id="ews-save" type="button" data-auth>Применить</button
       ><button id="ews-sync" type="button" data-auth>
         Синхронизировать сейчас</button
       ><button id="ews-status-load" type="button">Обновить состояние</button>
       <p id="ews-status" role="status"></p>
       <ul id="ews-pending"></ul>
+      <button id="diagnostics-open" type="button">Диагностический журнал</button>
+      <button id="invites-open" type="button">Приглашения на встречи</button>
       <button id="web" type="button">Открыть Tayga в новой вкладке</button>
       <details>
         <summary>Альтернативное подключение IMAP/SMTP и DAV</summary>
@@ -99,6 +102,9 @@
         получатель ссылки может скачать файл до её истечения или отзыва. Файл
         занимает квоту Tayga.
       </p>
+      <h3>Загрузки</h3>
+      <p class="hint">Прогресс показывает объём, сохранённый на сервере. После перезапуска добавьте тот же файл в письмо и выберите Tayga Mail — загрузка продолжится после проверки содержимого.</p>
+      <ul id="uploads-list" aria-label="Состояние загрузок"><li>Загрузок пока нет.</li></ul>
       <form id="preferences-form">
         <label for="ttl">Срок новых ссылок (часы, максимум 8760)</label
         ><input
@@ -111,7 +117,8 @@
         /><label for="theme">Тема Thunderbird</label
         ><select id="theme">
           <option value="default">Текущая тема Thunderbird</option>
-          <option value="tayga">Tayga</option>
+          <option value="tayga-light">Tayga — светлая</option>
+          <option value="tayga">Tayga — тёмная</option>
           <option value="cosmos">Cosmos</option></select
         ><button type="submit">Сохранить настройки</button>
       </form>

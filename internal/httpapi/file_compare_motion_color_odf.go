@@ -74,6 +74,9 @@ func motionPrepareODPColor(pkg *comparePackage, slide *motionSlide, page *compar
 	}
 	styles := motionODPStylesMap(pkg)
 	for i := range slide.Effects {
+		if slide.Warning != "" {
+			return
+		}
 		e := &slide.Effects[i]
 		if e.Kind != "color" {
 			continue
@@ -149,6 +152,13 @@ func motionPrepareODPColor(pkg *comparePackage, slide *motionSlide, page *compar
 			if len(colors) == 0 {
 				continue
 			}
+			colors = motionStageColors(slide, *e, colors)
+			if e.Previous != nil && e.Property == "text" {
+				previous := slide.Effects[*e.Previous]
+				for key, source := range previous.sourceStyles {
+					e.sourceStyles[key] = motionPaintTween(source, previous, motionFinalPhase(previous))
+				}
+			}
 			found = true
 			if len(e.From) > 0 {
 				for _, c := range colors {
@@ -176,7 +186,11 @@ var motionODPStyleReference = regexp.MustCompile(`((?:[A-Za-z_][A-Za-z0-9_.-]*:)
 func motionODPColorPaintBody(pkg *comparePackage, body []byte, effect motionEffect, phase int, name string) ([]byte, motionColorAssets, error) {
 	return motionODPPaintBody(pkg, body, effect, phase, name, nil, 0)
 }
-func motionODPPaintBody(pkg *comparePackage, body []byte, effect motionEffect, phase int, name string, geometry *motionEffect, geometryPhase int) ([]byte, motionColorAssets, error) {
+func motionODPPaintBody(pkg *comparePackage, body []byte, effect motionEffect, phase int, name string, geometry *motionEffect, geometryPhase int, rasters ...*motionEffect) ([]byte, motionColorAssets, error) {
+	var raster *motionEffect
+	if len(rasters) > 0 {
+		raster = rasters[0]
+	}
 	t := float64(phase-1) / float64(motionSamples(effect)-1)
 	geometryOnly := effect.Kind == "gradient"
 	if geometryOnly {
@@ -187,7 +201,7 @@ func motionODPPaintBody(pkg *comparePackage, body []byte, effect motionEffect, p
 	}
 
 	assets := motionColorAssets{}
-	if phase == 1 && (geometry == nil || geometryPhase == 1) {
+	if raster == nil && effect.Previous == nil && phase == 1 && (geometry == nil || geometryPhase == 1 && geometry.Previous == nil) {
 		return body, assets, nil
 	}
 	color := motionPaintTween(effect.sourceColors[0], effect, t)
@@ -199,7 +213,7 @@ func motionODPPaintBody(pkg *comparePackage, body []byte, effect motionEffect, p
 	shape := body[span.start:span.end]
 	styles := motionODPStylesMap(pkg)
 	gradientName := ""
-	if effect.gradient {
+	if effect.gradient && raster == nil {
 		parent := ""
 		for _, a := range span.attrs {
 			if a.Name.Local == "style-name" {
@@ -228,6 +242,15 @@ func motionODPPaintBody(pkg *comparePackage, body []byte, effect motionEffect, p
 			}
 			assets.Gradients = string(modified)
 		}
+	}
+	bitmapName := ""
+	if raster != nil {
+		bitmapName = name + "Image"
+		definition, err := motionODPFocusImage(*raster, bitmapName)
+		if err != nil {
+			return nil, assets, err
+		}
+		assets.Gradients = definition
 	}
 	mapping := map[string]string{}
 	references := motionODPStyleReference.FindAllSubmatch(shape, -1)
@@ -259,6 +282,12 @@ func motionODPPaintBody(pkg *comparePackage, body []byte, effect motionEffect, p
 		cloned, err := motionCloneODPColorStyle(pkg, old, newName, family, value, effect.Property, gradientName)
 		if err != nil {
 			return nil, assets, err
+		}
+		if bitmapName != "" && len(cloned) > 0 {
+			cloned, err = motionODPBitmapStyle(cloned, family, bitmapName)
+			if err != nil {
+				return nil, assets, err
+			}
 		}
 		if len(cloned) == 0 {
 			continue
