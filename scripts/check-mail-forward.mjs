@@ -26,6 +26,7 @@ try {
  let hold=null,fail=false,sends=[],shares=0;
  async function api(path,options){
    if(path.endsWith('/prepare')) {if(hold)await hold;if(fail)throw Error('Preparation failed');return {name:'report.pdf',path:'mail-out/copy/report.pdf',etag:'v1',size:100};}
+   if(path.endsWith('/senders'))return {addresses:['owner@example.com'],default:'owner@example.com'};
    if(path.endsWith('/limits'))return {message_bytes:1000000,large_attachment_bytes:500,attachment_bytes:10000,share_ttl_hours:24};
    if(path.endsWith('/shares')){shares++;return {url:'https://test.local/s/file',expires_at:'2026-10-20T00:00:00Z'};}
    if(path.endsWith('/send')){sends.push(JSON.parse(options.body));return {ok:true};}

@@ -62,11 +62,19 @@ func (s *Server) deliverCalendarJob(ctx context.Context, job *storage.CalendarDe
 			if !user.Enabled {
 				return fmt.Errorf("calendar recipient disabled")
 			}
-			mb, err := s.store.EnsureMailbox(ctx, user.ID, "INBOX", s.ms.UserRoot(user.Email))
+			folder, path := "INBOX", s.ms.UserRoot(user.Email)
+			if job.TargetMailbox == "Sent" {
+				folder = "Sent"
+				path, err = s.ms.EnsureFolder(user.Email, folder)
+				if err != nil {
+					return err
+				}
+			}
+			mb, err := s.store.EnsureMailbox(ctx, user.ID, folder, path)
 			if err != nil {
 				return err
 			}
-			rel, size, err := s.ms.Deliver(user.Email, "INBOX", job.Data)
+			rel, size, err := s.ms.Deliver(user.Email, folder, job.Data)
 			if err != nil {
 				return err
 			}
@@ -89,7 +97,7 @@ func (s *Server) deliverCalendarJob(ctx context.Context, job *storage.CalendarDe
 		} else if err != storage.ErrNotFound {
 			return err
 		}
-		if s.notify != nil {
+		if s.notify != nil && job.TargetMailbox != "Sent" {
 			ev := notify.Event{ID: job.ID, Kind: notify.KindCalendar, Title: job.Subject, Body: job.Sender, Href: "calendar", Mailbox: "INBOX", CreatedAt: time.Unix(0, job.CreatedAt).UTC()}
 			if err := s.notify.Publish(job.RecipientUserID, ev); err != nil {
 				return err

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/tayga/tms/internal/storage"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -134,7 +135,7 @@ func (h *ewsHandler) syncEWSHierarchy(ctx context.Context, u *storage.User, body
 	if limit > 512 {
 		limit = 512
 	}
-	ids, nextItems, more := diffItems(state.Items, hashes, limit)
+	ids, nextItems, more := diffEWSFolders(state.Items, hashes, nodes, limit)
 	next := storage.NewID()
 	var out strings.Builder
 	fmt.Fprintf(&out, `<m:SyncFolderHierarchyResponse xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"><m:ResponseMessages><m:SyncFolderHierarchyResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:SyncState>%s/%s</m:SyncState><m:IncludesLastFolderInRange>%t</m:IncludesLastFolderInRange><m:Changes>`, client, next, !more)
@@ -154,4 +155,50 @@ func (h *ewsHandler) syncEWSHierarchy(ctx context.Context, u *storage.User, body
 	result := out.String()
 	err = saveCollectionState(ctx, h.store, u.ID, client, folder, collectionState{Key: next, Items: nextItems, PreviousKey: key, RequestHash: fingerprint, Response: result})
 	return result, err
+}
+
+// A client creates folders in response order. Order the complete change set
+// before paging so a new parent always arrives before any of its descendants.
+func diffEWSFolders(previous, current map[string]string, nodes map[string]*protocolNode, limit int) ([]string, map[string]string, bool) {
+	ids, _, _ := diffItems(previous, current, len(previous)+len(current))
+	sort.Strings(ids)
+	changed := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		changed[id] = true
+	}
+	ordered := make([]string, 0, len(ids))
+	visited := map[string]bool{}
+	var visit func(string)
+	visit = func(id string) {
+		if visited[id] {
+			return
+		}
+		visited[id] = true
+		if node := nodes[id]; node != nil {
+			parent := extractAttr(node.render(), "ParentFolderId", "Id")
+			if changed[parent] {
+				visit(parent)
+			}
+		}
+		ordered = append(ordered, id)
+	}
+	for _, id := range ids {
+		visit(id)
+	}
+	more := len(ordered) > limit
+	if more {
+		ordered = ordered[:limit]
+	}
+	next := make(map[string]string, len(previous)+len(ordered))
+	for id, hash := range previous {
+		next[id] = hash
+	}
+	for _, id := range ordered {
+		if hash, ok := current[id]; ok {
+			next[id] = hash
+		} else {
+			delete(next, id)
+		}
+	}
+	return ordered, next, more
 }

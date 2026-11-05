@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"os"
@@ -8,7 +9,11 @@ import (
 )
 
 func (s *Server) fileAccessAllowed(r *http.Request, owner, grantee, path string, write bool) bool {
-	grants, err := s.store.ListFileAccess(r.Context(), owner, grantee)
+	return s.fileAccessAllowedContext(r.Context(), owner, grantee, path, write)
+}
+
+func (s *Server) fileAccessAllowedContext(ctx context.Context, owner, grantee, path string, write bool) bool {
+	grants, err := s.store.ListFileAccess(ctx, owner, grantee)
 	if err != nil {
 		return false
 	}
@@ -108,13 +113,18 @@ func (s *Server) handleFileAccess(w http.ResponseWriter, r *http.Request, au *au
 			writeJSON(w, 400, map[string]string{"error": "owner already has access"})
 			return
 		}
+		s.fileMu.Lock()
 		err = s.store.SetFileAccess(r.Context(), au.ID, path, user.ID, req.Rights)
+		s.fileMu.Unlock()
 		if err != nil {
 			writeJSON(w, 500, map[string]string{"error": "cannot save access"})
 			return
 		}
 	case http.MethodDelete:
-		if err = s.store.DeleteFileAccess(r.Context(), au.ID, path, req.GranteeID); err != nil {
+		s.fileMu.Lock()
+		err = s.store.DeleteFileAccess(r.Context(), au.ID, path, req.GranteeID)
+		s.fileMu.Unlock()
+		if err != nil {
 			writeJSON(w, 500, map[string]string{"error": "cannot revoke access"})
 			return
 		}

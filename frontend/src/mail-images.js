@@ -183,7 +183,7 @@ function replyToMessage(message, all=false, dialog=null) {
   let quoted=message.text || '';
   if (!quoted && message.html) {const doc=new DOMParser().parseFromString(message.html,'text/html');doc.querySelectorAll('script,style').forEach(node=>node.remove());quoted=doc.body.textContent || '';}
   ensureComposeCC();
-  openCompose({to,cc:all?(message.reply_all_cc || []).join(', '):'',subject:/^re\s*:/i.test(message.subject || '')?message.subject:'Re: '+(message.subject || ''),body:'\n\n---\n'+quoted.slice(0,10000)});
+  openCompose({to,from:message.reply_from||'',cc:all?(message.reply_all_cc || []).join(', '):'',subject:/^re\s*:/i.test(message.subject || '')?message.subject:'Re: '+(message.subject || ''),body:'\n\n---\n'+quoted.slice(0,10000)});
 }
 function forwardMailMessage(message, dialog=null) {
   if (composeAttachments.sending) return;

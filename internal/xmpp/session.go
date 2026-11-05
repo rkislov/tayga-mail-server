@@ -25,6 +25,7 @@ type Session struct {
 	srv       *Server
 	log       *slog.Logger
 	conn      net.Conn
+	done      chan struct{} // closed after serve has finished cleanup and retained SM state
 	br        *bufio.Reader
 	bw        *bufio.Writer
 	dec       *xml.Decoder
@@ -56,6 +57,7 @@ func newSession(srv *Server, c net.Conn, alreadyTLS bool) *Session {
 		srv:      srv,
 		log:      srv.log,
 		conn:     c,
+		done:     make(chan struct{}),
 		br:       br,
 		bw:       bw,
 		dec:      xml.NewDecoder(br),
@@ -125,13 +127,18 @@ func (s *Session) writeString(str string) error {
 }
 
 func (s *Session) serve() {
+	defer close(s.done)
 	defer s.Close()
 	_ = s.conn.SetDeadline(time.Now().Add(5 * time.Minute))
 	err := s.handleStream()
 	var netErr net.Error
-	if errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed) || errors.As(err, &netErr) {
-		s.Close()
-		s.retainStream()
+	var xmlErr *xml.SyntaxError
+	// encoding/xml wraps EOF inside an open <stream:stream> as a SyntaxError.
+	// A mobile transport loss is resumable; malformed XML and a clean stream
+	// close are not (the latter explicitly disables resumption in stanzaLoop).
+	disconnected := errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, net.ErrClosed) || errors.As(err, &netErr) || (errors.As(err, &xmlErr) && xmlErr.Msg == "unexpected EOF")
+	if disconnected {
+		s.retainDisconnectedStream()
 	}
 	if err != nil && err != io.EOF {
 		s.log.Info("xmpp session ended", "err", err, "jid", s.JID.Full(), "authenticated", s.authed, "bound", s.bound,

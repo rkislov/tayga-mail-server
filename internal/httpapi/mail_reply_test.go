@@ -12,3 +12,11 @@ func TestReplyAllRecipients(t *testing.T) {
 		t.Fatalf("wrong recipients: %v %v", to, cc)
 	}
 }
+
+func TestReplyAllExcludesOwnAliases(t *testing.T) {
+	m := parsedMsg{From: "sender@outside.example", To: "support@alias.example, other@outside.example", Cc: "owner@alias.example, owner@example.com"}
+	to, cc := replyRecipients(m, "owner@example.com", "support@alias.example", "owner@alias.example")
+	if !reflect.DeepEqual(to, []string{"sender@outside.example", "other@outside.example"}) || len(cc) != 0 {
+		t.Fatal(to, cc)
+	}
+}

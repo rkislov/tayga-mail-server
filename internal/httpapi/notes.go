@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"mime"
 	"net/http"
@@ -103,6 +104,10 @@ func (s *Server) handleNotes(w http.ResponseWriter, r *http.Request) {
 	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/v1/notes"), "/")
 	parts := splitPath(path)
 
+	if len(parts) >= 2 && parts[1] == "versions" {
+		s.handleNoteVersions(w, r, au.ID, parts)
+		return
+	}
 	switch {
 	case r.Method == http.MethodGet && len(parts) == 1 && parts[0] == "folders":
 		list, err := s.store.ListNoteFoldersForUser(r.Context(), au.ID)
@@ -347,6 +352,15 @@ func (s *Server) handleNotes(w http.ResponseWriter, r *http.Request) {
 			n.Color = strings.TrimSpace(*req.Color)
 		}
 		if err := s.store.UpdateNoteItem(r.Context(), n); err != nil {
+			if errors.Is(err, storage.ErrNoteConflict) {
+				current, loadErr := s.store.GetNoteItemByID(r.Context(), n.ID)
+				if loadErr != nil {
+					writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+					return
+				}
+				writeJSON(w, http.StatusConflict, map[string]any{"error": "etag mismatch", "etag": current.ETag, "note": noteItemJSON(current, s.noteAttachmentsJSON(r, current.ID), rights)})
+				return
+			}
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
@@ -740,7 +754,14 @@ func (s *Server) handleNoteDrawing(w http.ResponseWriter, r *http.Request, au *a
 	doc.Content = append(doc.Content, noteutil.Node{Type: "drawing", Attrs: attrs})
 	n.DocumentJSON = noteutil.MarshalDocumentJSON(doc)
 	n.BodyHTML, n.BodyText = noteutil.DeriveBodies(n.DocumentJSON)
-	_ = s.store.UpdateNoteItem(r.Context(), n)
+	if err := s.store.UpdateNoteItem(r.Context(), n); err != nil {
+		status := http.StatusInternalServerError
+		if errors.Is(err, storage.ErrNoteConflict) {
+			status = http.StatusConflict
+		}
+		writeJSON(w, status, map[string]string{"error": err.Error()})
+		return
+	}
 
 	out := map[string]any{"drawing": noteAttachJSON(drawAtt), "note": noteItemJSON(n, s.noteAttachmentsJSON(r, n.ID), rights)}
 	if previewJSON != nil {

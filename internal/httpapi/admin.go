@@ -41,6 +41,12 @@ func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/admin/users")
 	path = strings.Trim(path, "/")
 
+	parts := strings.Split(path, "/")
+	if len(parts) >= 2 && parts[1] == "aliases" {
+		s.handleMailboxAliases(w, r, admin, parts)
+		return
+	}
+
 	switch {
 	case r.Method == http.MethodDelete && path != "" && !strings.Contains(path, "/"):
 		target := s.adminTenantUser(w, r, admin, path)

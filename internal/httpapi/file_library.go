@@ -354,6 +354,10 @@ func (s *Server) handleFileLibrary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	op := strings.TrimPrefix(r.URL.Path, "/api/v1/files/library/")
+	if op == "compare" {
+		s.handleFileComparison(w, r, au.ID)
+		return
+	}
 	if op == "usage" && r.Method == http.MethodGet {
 		s.fileMu.Lock()
 		usage, err := s.fileUsage(au.ID)
@@ -377,7 +381,8 @@ func (s *Server) handleFileLibrary(w http.ResponseWriter, r *http.Request) {
 			fileError(w, err)
 			return
 		}
-		writeJSON(w, 200, map[string]any{"entries": items})
+		provider := s.cfgLive().Files.OfficeProvider
+		writeJSON(w, 200, map[string]any{"entries": items, "office_compare_enabled": (provider == "onlyoffice" || provider == "r7") && s.cfgLive().Files.OfficeURL != "", "visual_compare_enabled": s.cfgLive().Files.OfficeURL != ""})
 		return
 	}
 	if (op == "restore" && r.Method == http.MethodPost) || ((op == "trash" || op == "versions") && r.Method == http.MethodDelete) {

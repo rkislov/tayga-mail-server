@@ -1,10 +1,12 @@
 package smtp
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/mail"
 	"net/textproto"
 	"strings"
 	"time"
@@ -155,7 +157,19 @@ func (q *OutboundQueue) process(ctx context.Context, it *storage.OutboundItem) {
 	data := it.Data
 	trace := &deliveryTrace{log: q.log, queueID: it.ID, messageID: it.MessageID, attempt: it.Attempts + 1}
 	start := time.Now()
-	err := sendTraced(q.sender, it.EnvelopeFrom, []string{it.EnvelopeTo}, data, trace)
+	signingFrom := it.EnvelopeFrom
+	if message, e := mail.ReadMessage(bytes.NewReader(data)); e == nil {
+		if from, e := message.Header.AddressList("From"); e == nil && len(from) == 1 {
+			signingFrom = from[0].Address
+		}
+	}
+	signer, err := domainDKIMSigner(ctx, q.store, q.dkim, signingFrom)
+	if err == nil && signer != nil {
+		data, err = signer.Sign(data)
+	}
+	if err == nil {
+		err = sendTraced(q.sender, it.EnvelopeFrom, []string{it.EnvelopeTo}, data, trace)
+	}
 	if len(trace.lines) > 0 {
 		q.writeMailLog(it, "smtp_dialogue", trace.summary())
 	}
@@ -203,7 +217,7 @@ func (q *OutboundQueue) writeMailLog(it *storage.OutboundItem, event, detail str
 	domain := storage.DomainOfEmail(from)
 	tenantID := ""
 	if domain != "" {
-		if d, err := q.store.GetDomainByName(context.Background(), domain); err == nil && d != nil {
+		if d, err := q.store.ResolveMailDomain(context.Background(), domain); err == nil && d != nil {
 			tenantID = d.TenantID
 		}
 	}

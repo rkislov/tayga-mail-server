@@ -17,16 +17,18 @@ type clientOp struct {
 	Kind            string // add | change | delete
 	ClientID        string
 	ServerID        string
+	InstanceID      string
 	Fields          map[string]string
 	ApplicationData *protocolNode
 }
 
 type writebackResult struct {
+	InstanceID      string
 	ClientID        string
 	ServerID        string
 	Status          int
 	Kind            string // add | change | delete
-	ApplicationData string // server-rendered payload for a successful Sync/Fetch
+	ApplicationData string // server-rendered payload for Sync/Fetch or Calendar 16.x Add
 }
 
 // parseSyncClientOps extracts Add/Change/Delete from Sync request XML (or WBXML-decoded text fields).
@@ -36,7 +38,11 @@ func parseSyncClientOps(body []byte) []clientOp {
 	}
 	src := string(body)
 	if body[0] == wbxmlVersion {
-		return parseWBXMLClientOps(body)
+		decoded, err := decodeWire(body)
+		if err != nil {
+			return nil
+		}
+		return parseXMLClientOps(string(decoded))
 	}
 	return parseXMLClientOps(src)
 }
@@ -56,7 +62,7 @@ func parseXMLClientOps(src string) []clientOp {
 		if kind != "add" && kind != "change" && kind != "delete" {
 			continue
 		}
-		ops = append(ops, clientOp{Kind: kind, ClientID: n.value("ClientId"), ServerID: n.value("ServerId"), Fields: extractAppDataFields(n.render()), ApplicationData: n.child("ApplicationData")})
+		ops = append(ops, clientOp{Kind: kind, InstanceID: n.value("InstanceId"), ClientID: n.value("ClientId"), ServerID: n.value("ServerId"), Fields: extractAppDataFields(n.render()), ApplicationData: n.child("ApplicationData")})
 	}
 	return ops
 }
@@ -64,7 +70,7 @@ func parseXMLClientOps(src string) []clientOp {
 func extractAppDataFields(block string) map[string]string {
 	fields := map[string]string{}
 	keys := []string{
-		"Subject", "Location", "StartTime", "EndTime", "UID", "AllDayEvent",
+		"Subject", "Location", "StartTime", "EndTime", "UID", "ClientUid", "AllDayEvent",
 		"BusyStatus", "OrganizerEmail", "OrganizerName", "Sensitivity", "Timezone",
 		"FileAs", "FirstName", "LastName", "MiddleName", "NickName",
 		"Email1Address", "Email2Address", "Email3Address",
@@ -90,7 +96,18 @@ func (h *easHandler) applyWritebacks(ctx context.Context, u *storage.User, kind 
 		case kindTasks:
 			res.ServerID, err = h.wbTask(ctx, u, collectionID, op)
 		case kindCalendar:
+			res.InstanceID = op.InstanceID
 			res.ServerID, err = h.wbCalendar(ctx, u, collectionID, op)
+			version, _ := ctx.Value(easVersionKey{}).(string)
+			if err == nil && op.Kind == "add" && (version == "16.0" || version == "16.1") {
+				// MS-ASCAL 2.2.2.46: the client learns the server-generated UID
+				// from Responses/Add, even when GetChanges is disabled.
+				var saved *storage.CalendarObject
+				saved, err = h.store.GetCalendarObjectByID(ctx, res.ServerID)
+				if err == nil {
+					res.ApplicationData = `<ApplicationData><UID xmlns="Calendar:">` + xmlEscape(saved.UID) + `</UID></ApplicationData>`
+				}
+			}
 		case kindContacts:
 			res.ServerID, err = h.wbContacts(ctx, collectionID, op)
 		case kindNotes:
@@ -100,6 +117,18 @@ func (h *easHandler) applyWritebacks(ctx context.Context, u *storage.User, kind 
 		}
 		if err != nil {
 			res.Status = 6 // error
+			if kind == kindNotes {
+				switch {
+				case errors.Is(err, storage.ErrNoteConflict):
+					res.Status = 7
+				case errors.Is(err, storage.ErrNotFound):
+					res.Status = 8
+				case errors.Is(err, errInvalidNote), errors.Is(err, storage.ErrUnauthorized):
+					res.Status = 6
+				default:
+					res.Status = 5
+				}
+			}
 			if kind == kindTasks {
 				switch {
 				case errors.Is(err, storage.ErrNotFound):
@@ -410,6 +439,9 @@ func renderWritebackResponses(results []writebackResult) string {
 		}
 		if r.ServerID != "" {
 			fmt.Fprintf(&b, `<ServerId>%s</ServerId>`, xmlEscape(r.ServerID))
+		}
+		if r.InstanceID != "" {
+			fmt.Fprintf(&b, `<InstanceId xmlns="AirSyncBase:">%s</InstanceId>`, xmlEscape(r.InstanceID))
 		}
 		fmt.Fprintf(&b, `<Status>%d</Status>`, r.Status)
 		b.WriteString(r.ApplicationData)

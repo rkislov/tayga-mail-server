@@ -1,0 +1,121 @@
+:root {
+  color-scheme: light dark;
+  font:
+    15px/1.55 system-ui,
+    sans-serif;
+  background: light-dark(#f4f6f2, #151b18);
+  color: light-dark(#202c25, #e4ebe5);
+}
+body {
+  max-width: 760px;
+  margin: 32px auto;
+  padding: 0 20px 40px;
+}
+header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+h1 {
+  margin: 0;
+  font-size: 28px;
+}
+header p {
+  margin: 3px 0;
+  opacity: 0.75;
+}
+section {
+  margin-top: 20px;
+  padding: 24px;
+  border: 1px solid light-dark(#d5dfd6, #3b4a3f);
+  border-radius: 12px;
+  background: light-dark(#fff, #202923);
+}
+h2 {
+  margin: 0 0 12px;
+  font-size: 20px;
+}
+label {
+  display: block;
+  margin-top: 12px;
+  font-weight: 600;
+}
+input,
+textarea,
+select {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 10px;
+  margin-top: 5px;
+  border: 1px solid light-dark(#a6b7a9, #6a7d6e);
+  border-radius: 6px;
+  font: inherit;
+  background: light-dark(#fff, #17201a);
+  color: inherit;
+}
+textarea {
+  font-family: ui-monospace, monospace;
+}
+button {
+  padding: 9px 14px;
+  margin: 12px 8px 0 0;
+  border: 1px solid #718d75;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+  background: light-dark(#e8efe4, #334b36);
+  color: inherit;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid #bc8c32;
+  outline-offset: 2px;
+}
+.check {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.check input {
+  width: auto;
+  margin: 0;
+}
+.hint {
+  font-size: 13px;
+  opacity: 0.8;
+}
+#msg {
+  position: sticky;
+  top: 8px;
+  z-index: 1;
+  white-space: pre-wrap;
+  padding: 10px 14px;
+  border-radius: 6px;
+  background: light-dark(#e7eee1, #2d4030);
+}
+#msg:empty {
+  display: none;
+}
+#msg.error {
+  background: light-dark(#ffe5e1, #542d28);
+}
+dd {
+  margin: 4px 0 12px;
+  overflow-wrap: anywhere;
+}
+li {
+  overflow-wrap: anywhere;
+  margin: 10px 0;
+}
+a {
+  color: light-dark(#245c35, #a0d6a7);
+}
+[hidden] {
+  display: none !important;
+}
