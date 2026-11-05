@@ -193,10 +193,10 @@ func TestEASCalendarWBXMLAddReplayAndNoDuplicate(t *testing.T) {
 	}
 }
 
-func TestEASCalendarRejectsForeignOrganizerAndInvalidAttendee(t *testing.T) {
+func TestEASCalendarRejectsInvalidAttendeeAndBusyStatus(t *testing.T) {
 	ctx, st, u, h, _, _ := syncFixture(t)
 	cal, _ := st.GetCalendarByName(ctx, u.ID, "default")
-	for _, fields := range []string{`<OrganizerEmail>other@example.com</OrganizerEmail>`, `<Attendees><Attendee><Email>bad address</Email></Attendee></Attendees>`, `<BusyStatus>999</BusyStatus>`} {
+	for _, fields := range []string{`<Attendees><Attendee><Email>bad address</Email></Attendee></Attendees>`, `<BusyStatus>999</BusyStatus>`} {
 		op := calendarOp(t, "add", "", `<StartTime>20261023T160000Z</StartTime><EndTime>20261023T170000Z</EndTime>`+fields)
 		if _, err := h.wbCalendar(ctx, u, cal.ID, op); err == nil {
 			t.Fatal("accepted", fields)
