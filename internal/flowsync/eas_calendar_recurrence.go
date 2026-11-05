@@ -162,7 +162,13 @@ func calendarRecurrenceXML(ctx context.Context, data, viewer string) (string, er
 		field("Occurrences", strconv.Itoa(p.Count))
 	}
 	if p.Until != nil {
-		field("Until", formatCalendarTime(p.Until))
+		// Legacy imports can bound RRULE before DTSTART. DTSTART still defines
+		// the first iCalendar instance; do not send an inverted EAS range.
+		until := *p.Until
+		if until.Before(start) {
+			until = start
+		}
+		field("Until", formatCalendarTime(&until))
 	}
 	if len(days) > 0 {
 		mask := 0
