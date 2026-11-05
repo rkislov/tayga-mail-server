@@ -26,3 +26,7 @@ Calendar:Until — начало первого экземпляра. DTSTART о�
 
 Источники: [RFC 5545, recurrence set](https://www.rfc-editor.org/rfc/rfc5545.html#section-3.8.5.3),
 [MS-ASCAL, Until](https://learn.microsoft.com/en-us/openspecs/exchange_server_protocols/ms-ascal/6c21532b-f302-4f98-9eaf-05e1ff723f4a).
+
+## Установка
+
+5 ноября 2026 установлен официальный пакет 0.10.3. [Отчёт установки и незакрытая клиентская приёмка](deployment-0.10.3.md).
