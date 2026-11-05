@@ -5,14 +5,19 @@ package flowsync
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/tayga/tms/internal/calutil"
 	"github.com/tayga/tms/internal/noteutil"
 	"github.com/tayga/tms/internal/storage"
 )
 
 func (h *ewsHandler) createItem(ctx context.Context, u *storage.User, body string) (string, error) {
+	if response, handled, err := h.taygaWrite(ctx, u, body, true); handled {
+		return response, err
+	}
 	if strings.HasPrefix(extractAttr(body, "FolderId", "Id"), "ews-gal:") || strings.HasPrefix(extractAttr(body, "ParentFolderId", "Id"), "ews-gal:") {
 		return ewsFault("ErrorAccessDenied", "Directory is read-only"), nil
 	}
@@ -32,7 +37,7 @@ func (h *ewsHandler) createItem(ctx context.Context, u *storage.User, body strin
 		folderID = extractAttr(body, "FolderId", "Id")
 	}
 
-	if strings.Contains(body, "CalendarItem") || strings.Contains(body, "t:CalendarItem") {
+	if doc.find("CalendarItem") != nil {
 		if folderID == "" {
 			cal, err := h.store.GetCalendarByName(ctx, u.ID, "default")
 			if err != nil {
@@ -43,24 +48,7 @@ func (h *ewsHandler) createItem(ctx context.Context, u *storage.User, body strin
 		if _, err := h.store.GetCalendarByID(ctx, u.ID, folderID); err != nil {
 			return ewsFault("ErrorInvalidFolderId", err.Error()), nil
 		}
-		subject := extractTag(body, "Subject")
-		location := extractTag(body, "Location")
-		start := parseASTime(extractTag(body, "Start"))
-		end := parseASTime(extractTag(body, "End"))
-		uid := storage.NewID()
-		o, err := h.store.UpsertCalendarObject(ctx, &storage.CalendarObject{
-			CalendarID: folderID,
-			UID:        uid,
-			HrefName:   uid + ".ics",
-			Component:  "VEVENT",
-			DTStart:    start,
-			DTEnd:      end,
-			Data:       buildVEVENT(uid, subject, location, start, end, false),
-		})
-		if err != nil {
-			return "", err
-		}
-		return ewsCreateResponse("CalendarItem", o.ID), nil
+		return h.createCalendarItem(ctx, u, body, folderID)
 	}
 
 	if strings.Contains(body, "Contact") || strings.Contains(body, "t:Contact") {
@@ -104,15 +92,47 @@ func (h *ewsHandler) createItem(ctx context.Context, u *storage.User, body strin
 		}
 	}
 	if isSticky {
-		subject := extractTag(body, "Subject")
-		bodyHTML := extractTag(body, "Body")
-		return h.createStickyNote(ctx, u, folderID, subject, bodyHTML)
+		message := doc.find("Message")
+		if message == nil {
+			return ewsFault("ErrorInvalidRequest", "missing note message"), nil
+		}
+		content := noteutil.EmptyDoc()
+		if value := message.child("Body"); value != nil {
+			format := ""
+			for _, attr := range value.Attr {
+				if attr.Name.Local == "BodyType" {
+					format = attr.Value
+				}
+			}
+			switch format {
+			case "Text":
+				content = noteutil.DocumentFromText(value.Text)
+			case "HTML":
+				var err error
+				content, err = noteutil.DocumentFromSyncHTML(value.Text)
+				if err != nil {
+					return ewsFault("ErrorInvalidPropertySet", err.Error()), nil
+				}
+			default:
+				return ewsFault("ErrorInvalidPropertySet", "unsupported body type"), nil
+			}
+		}
+		if err := noteutil.ValidateSyncReplacement(noteutil.EmptyDoc(), content); err != nil {
+			return ewsFault("ErrorInvalidPropertySet", err.Error()), nil
+		}
+		return h.createStickyNote(ctx, u, folderID, message.value("Subject"), content)
 	}
 
 	return ewsFault("ErrorInvalidRequest", "FlowSync: CreateItem supports CalendarItem, Contact, StickyNote"), nil
 }
 
 func (h *ewsHandler) updateItem(ctx context.Context, u *storage.User, body string) (string, error) {
+	if out, handled, err := h.ewsOccurrence(ctx, u, body, "UpdateItem"); handled {
+		return out, err
+	}
+	if response, handled, err := h.taygaWrite(ctx, u, body, false); handled {
+		return response, err
+	}
 	id := extractAttr(body, "ItemId", "Id")
 	if id == "" {
 		return ewsFault("ErrorInvalidId", "missing ItemId"), nil
@@ -129,25 +149,60 @@ func (h *ewsHandler) updateItem(ctx context.Context, u *storage.User, body strin
 		if err := h.ensureCalendarOwned(ctx, u.ID, o.CalendarID); err != nil {
 			return ewsFault("ErrorAccessDenied", "forbidden"), nil
 		}
-		ev := parseICalEvent(o.Data)
-		subject := fieldOr(extractTag(body, "Subject"), ev.Summary)
-		location := fieldOr(extractTag(body, "Location"), ev.Location)
-		start, end := o.DTStart, o.DTEnd
-		if t := parseASTime(extractTag(body, "Start")); t != nil {
-			start = t
-		}
-		if t := parseASTime(extractTag(body, "End")); t != nil {
-			end = t
-		}
-		_, err = h.store.UpsertCalendarObject(ctx, &storage.CalendarObject{
-			ID: o.ID, CalendarID: o.CalendarID, UID: o.UID, HrefName: o.HrefName,
-			Component: "VEVENT", DTStart: start, DTEnd: end,
-			Data: mergeDAVProperties(o.Data, buildVEVENT(o.UID, subject, location, start, end, ev.AllDay), "VEVENT", changedDAVProperties(body, map[string]string{"Subject": "SUMMARY", "Location": "LOCATION", "Start": "DTSTART", "End": "DTEND"})),
-		})
+		files, err := h.store.ListCalendarEventAttachments(ctx, o.ID)
 		if err != nil {
 			return "", err
 		}
-		return ewsUpdateResponse("CalendarItem", o.ID), nil
+		if key := extractAttr(body, "ItemId", "ChangeKey"); key != "" && key != ewsCalendarChangeKey(o, files) {
+			return ewsOperationError("UpdateItem", "ErrorIrresolvableConflict", "Calendar changed"), nil
+		}
+		writeCtx, err := ewsCalendarDeliveryContext(ctx, body, "UpdateItem")
+		if err != nil {
+			return ewsOperationError("UpdateItem", "ErrorInvalidRequest", err.Error()), nil
+		}
+		parsed, err := calutil.ParseICS(o.Data)
+		if err != nil {
+			return "", err
+		}
+		ev := parsed.Event
+		doc, err := parseProtocolXML([]byte(body))
+		if err != nil {
+			return "", err
+		}
+		edits, err := ewsCalendarEdits(doc, false)
+		if err != nil {
+			return ewsOperationError("UpdateItem", "ErrorInvalidPropertySet", err.Error()), nil
+		}
+		zone, err := ewsCalendarZone(edits, o.Data)
+		if err != nil {
+			return ewsOperationError("UpdateItem", "ErrorInvalidPropertySet", err.Error()), nil
+		}
+		ev, err = applyEWSCalendarEdits(ev, edits, u, false)
+		if errors.Is(err, storage.ErrUnauthorized) {
+			return ewsOperationError("UpdateItem", "ErrorAccessDenied", "Only the organizer may change attendees"), nil
+		}
+		if err != nil {
+			return ewsOperationError("UpdateItem", "ErrorInvalidPropertySet", err.Error()), nil
+		}
+		data, err := calutil.BuildSimpleVEVENT(ev)
+		if err != nil {
+			return ewsOperationError("UpdateItem", "ErrorInvalidPropertySet", "Invalid calendar edit"), nil
+		}
+		data, err = finishEWSRecurrence(data, zone, edits)
+		if err != nil {
+			return ewsOperationError("UpdateItem", "ErrorInvalidPropertySet", err.Error()), nil
+		}
+		edit := *o
+		edit.ExpectedETag, edit.Data, edit.DTStart, edit.DTEnd = o.ETag, data, ev.Start, ev.End
+		saved, err := h.store.SaveCalendarClientObject(writeCtx, u.ID, &edit)
+		if err != nil {
+			return calendarWriteError("UpdateItem", err)
+		}
+		files, err = h.store.ListCalendarEventAttachments(ctx, saved.ID)
+		if err != nil {
+			return "", err
+		}
+		return ewsNotificationSuccess("UpdateItem", fmt.Sprintf(`<m:Items><t:CalendarItem><t:ItemId Id="%s" ChangeKey="%s"/></t:CalendarItem></m:Items>`, xmlEscape(saved.ID), xmlEscape(ewsCalendarChangeKey(saved, files)))), nil
 	}
 
 	if o, err := h.store.GetAddressObjectByID(ctx, id); err == nil {
@@ -184,24 +239,16 @@ func (h *ewsHandler) updateItem(ctx context.Context, u *storage.User, body strin
 		if err != nil || rights != "write" {
 			return ewsFault("ErrorAccessDenied", "forbidden"), nil
 		}
-		if v := extractTag(body, "Subject"); v != "" {
-			n.Title = v
-		}
-		if v := extractTag(body, "Body"); v != "" {
-			doc := noteutil.DocumentFromHTMLOrText(v)
-			n.DocumentJSON = noteutil.MarshalDocumentJSON(doc)
-			n.BodyHTML, n.BodyText = noteutil.DeriveBodies(n.DocumentJSON)
-		}
-		if err := h.store.UpdateNoteItem(ctx, n); err != nil {
-			return "", err
-		}
-		return ewsUpdateResponse("Message", n.ID), nil
+		return h.updateStickyNote(ctx, n, body)
 	}
 
 	return ewsFault("ErrorItemNotFound", "not found"), nil
 }
 
 func (h *ewsHandler) deleteItem(ctx context.Context, u *storage.User, body string) (string, error) {
+	if out, handled, err := h.ewsOccurrence(ctx, u, body, "DeleteItem"); handled {
+		return out, err
+	}
 	id := extractAttr(body, "ItemId", "Id")
 	if id == "" {
 		return ewsFault("ErrorInvalidId", "missing ItemId"), nil
@@ -223,7 +270,24 @@ func (h *ewsHandler) deleteItem(ctx context.Context, u *storage.User, body strin
 		if err := h.ensureCalendarOwned(ctx, u.ID, o.CalendarID); err != nil {
 			return ewsFault("ErrorAccessDenied", "forbidden"), nil
 		}
-		if err := h.store.DeleteCalendarObject(ctx, o.CalendarID, o.HrefName); err != nil {
+		files, err := h.store.ListCalendarEventAttachments(ctx, o.ID)
+		if err != nil {
+			return "", err
+		}
+		if key := extractAttr(body, "ItemId", "ChangeKey"); key != "" && key != ewsCalendarChangeKey(o, files) {
+			return ewsOperationError("DeleteItem", "ErrorIrresolvableConflict", "Calendar changed"), nil
+		}
+		writeCtx, err := ewsCalendarDeliveryContext(ctx, body, "DeleteItem")
+		if err != nil {
+			return ewsOperationError("DeleteItem", "ErrorInvalidRequest", err.Error()), nil
+		}
+		if err = h.store.DeleteCalendarMeeting(writeCtx, u.ID, o); err != nil {
+			if errors.Is(err, storage.ErrCalendarConflict) {
+				return ewsOperationError("DeleteItem", "ErrorIrresolvableConflict", "Calendar changed"), nil
+			}
+			if errors.Is(err, storage.ErrUnauthorized) {
+				return ewsOperationError("DeleteItem", "ErrorAccessDenied", "Calendar write denied"), nil
+			}
 			return "", err
 		}
 		return ewsDeleteResponse(), nil

@@ -9,6 +9,7 @@ import (
 )
 
 const smNamespace = "urn:xmpp:sm:3"
+const stanzaWriteTimeout = 10 * time.Second
 
 // Counters wrap modulo 2^32 as specified by XEP-0198. All access is under mu.
 type streamManagement struct {
@@ -40,7 +41,7 @@ func isCountedStanza(raw string) bool {
 func (s *Session) writeLocked(raw string) error {
 	// A stalled mobile client must not hold routing or group locks indefinitely.
 	if s.conn != nil {
-		_ = s.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+		_ = s.conn.SetWriteDeadline(time.Now().Add(stanzaWriteTimeout))
 		defer s.conn.SetWriteDeadline(time.Time{})
 	}
 	counted := s.sm.enabled && isCountedStanza(raw)

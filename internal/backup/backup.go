@@ -25,11 +25,11 @@ type Options struct {
 
 // Manifest describes a Tayga backup archive.
 type Manifest struct {
-	Version    string    `json:"version"`
-	CreatedAt  time.Time `json:"created_at"`
-	TenantID   string    `json:"tenant_id,omitempty"`
-	IncludeMail bool     `json:"include_mail"`
-	Hostname   string    `json:"hostname,omitempty"`
+	Version     string    `json:"version"`
+	CreatedAt   time.Time `json:"created_at"`
+	TenantID    string    `json:"tenant_id,omitempty"`
+	IncludeMail bool      `json:"include_mail"`
+	Hostname    string    `json:"hostname,omitempty"`
 }
 
 // WriteTarGz writes a gzip-compressed tar backup to w.
@@ -82,6 +82,29 @@ func WriteTarGz(ctx context.Context, store storage.Driver, opts Options, w io.Wr
 		allUsers = append(allUsers, users...)
 	}
 	if err := writeJSON(tw, "meta/domains.json", allDomains); err != nil {
+		return err
+	}
+
+	var domainAliases []*storage.DomainAlias
+	for _, d := range allDomains {
+		aliases, err := store.ListDomainAliases(ctx, d.ID)
+		if err != nil {
+			return err
+		}
+		domainAliases = append(domainAliases, aliases...)
+	}
+	if err := writeJSON(tw, "meta/domain_aliases.json", domainAliases); err != nil {
+		return err
+	}
+	var mailboxAliases []*storage.Alias
+	for _, u := range allUsers {
+		aliases, err := store.ListAliases(ctx, u.ID)
+		if err != nil {
+			return err
+		}
+		mailboxAliases = append(mailboxAliases, aliases...)
+	}
+	if err := writeJSON(tw, "meta/aliases.json", mailboxAliases); err != nil {
 		return err
 	}
 	// Export users without stripping password hashes (needed for restore).

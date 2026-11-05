@@ -36,8 +36,15 @@ func (s *mailSubmission) send(ctx context.Context, u *storage.User, clientID str
 		return err
 	}
 	from, err := message.Header.AddressList("From")
-	if err != nil || len(from) != 1 || !strings.EqualFold(from[0].Address, u.Email) {
-		return fmt.Errorf("sender must match authenticated account")
+	if err != nil || len(from) != 1 || len(message.Header["From"]) != 1 {
+		return fmt.Errorf("invalid sender")
+	}
+	allowed, err := s.store.CanSendFrom(ctx, u.ID, from[0].Address)
+	if err != nil {
+		return err
+	}
+	if !allowed {
+		return fmt.Errorf("sender address is not authorized")
 	}
 	recipients := []string{}
 	seen := map[string]bool{}

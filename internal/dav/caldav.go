@@ -120,6 +120,7 @@ func (b *calBackend) GetCalendarObject(ctx context.Context, p string, _ *caldav.
 	if err != nil {
 		return nil, webdav.NewHTTPError(http.StatusNotFound, err)
 	}
+	recordScheduleMetadata(ctx, p, obj)
 	return toCalDAVObject(u.Email, calName, obj)
 }
 
@@ -145,6 +146,7 @@ func (b *calBackend) ListCalendarObjects(ctx context.Context, p string, _ *calda
 	}
 	out := make([]caldav.CalendarObject, 0, len(rows))
 	for _, row := range rows {
+		recordScheduleMetadata(ctx, calObjectPath(u.Email, calName, row.HrefName), row)
 		co, err := toCalDAVObject(u.Email, calName, row)
 		if err != nil {
 			return nil, err
@@ -225,10 +227,13 @@ func (b *calBackend) PutCalendarObject(ctx context.Context, p string, cal *ical.
 	if existing != nil {
 		obj.ExpectedETag = existing.ETag
 	}
+	obj.ExpectedScheduleTag, _ = ctx.Value(calScheduleMatchKey{}).(string)
+	obj.StrictETag = opts != nil && opts.IfMatch.IsSet() && !opts.IfMatch.IsWildcard()
 	saved, err := b.store.SaveCalendarClientObject(ctx, u.ID, obj)
 	if err != nil {
 		return nil, calendarWriteError(err)
 	}
+	recordScheduleMetadata(ctx, p, saved)
 	result, err := toCalDAVObject(u.Email, calName, saved)
 	if err == nil && saved.Data != buf.String() {
 		// RFC 4791 §5.3.4: the client must GET server-modified data before
@@ -259,7 +264,10 @@ func (b *calBackend) DeleteCalendarObject(ctx context.Context, p string) error {
 	if err != nil {
 		return calendarWriteError(err)
 	}
+	obj.ExpectedScheduleTag, _ = ctx.Value(calScheduleMatchKey{}).(string)
 	if opts, ok := ctx.Value(calConditionsKey{}).(*caldav.PutCalendarObjectOptions); ok {
+		obj.ExpectedETag = obj.ETag
+		obj.StrictETag = opts.IfMatch.IsSet() && !opts.IfMatch.IsWildcard()
 		if err := checkCalConditions(opts, obj); err != nil {
 			return err
 		}

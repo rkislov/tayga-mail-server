@@ -94,7 +94,7 @@ func TestEWSHierarchyParentsAndMessageCounts(t *testing.T) {
 		t.Fatal(err)
 	}
 	response, err := h.getFolder(ctx, u, `<GetFolder><FolderIds><FolderId Id="`+child.ID+`"/></FolderIds></GetFolder>`)
-	if err != nil || !strings.Contains(response, `ParentFolderId Id="`+parent.ID+`"`) || !strings.Contains(response, `<t:TotalCount>1</t:TotalCount>`) || !strings.Contains(response, `<t:UnreadCount>1</t:UnreadCount>`) {
+	if err != nil || !strings.Contains(response, `ParentFolderId Id="`+parent.ID+`"`) || !strings.Contains(response, `<t:DisplayName>2026</t:DisplayName>`) || !strings.Contains(response, `<t:TotalCount>1</t:TotalCount>`) || !strings.Contains(response, `<t:UnreadCount>1</t:UnreadCount>`) {
 		t.Fatalf("invalid hierarchy: %s %v", response, err)
 	}
 }

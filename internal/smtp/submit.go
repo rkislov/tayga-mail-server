@@ -6,6 +6,7 @@ import (
 	"fmt"
 	gosmtp "github.com/emersion/go-smtp"
 	"github.com/tayga/tms/internal/storage"
+	"net/mail"
 )
 
 // SubmitAuthenticated reuses SMTP submission policy, quotas, scanning, routing,
@@ -20,8 +21,16 @@ func (s *Server) SubmitAuthenticated(ctx context.Context, u *storage.User, recip
 	if len(recipients) == 0 || len(recipients) > 100 {
 		return fmt.Errorf("invalid recipient count")
 	}
+	message, err := mail.ReadMessage(bytes.NewReader(raw))
+	if err != nil {
+		return err
+	}
+	from, err := message.Header.AddressList("From")
+	if err != nil || len(from) != 1 || len(message.Header["From"]) != 1 {
+		return fmt.Errorf("invalid sender")
+	}
 	session := &session{backend: s.submission, user: u, remote: "127.0.0.1:0", helo: s.cfg.Server.Hostname}
-	if err := session.Mail(u.Email, &gosmtp.MailOptions{}); err != nil {
+	if err := session.Mail(from[0].Address, &gosmtp.MailOptions{}); err != nil {
 		return err
 	}
 	for _, recipient := range recipients {

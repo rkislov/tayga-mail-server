@@ -10,7 +10,7 @@ function resetComposeAttachments() {
 }
 function renderComposeAttachments() {
   const items=composeAttachments.entries, busy=composeAttachments.sending||!!composeAttachments.preparing;
-  const send=$('btn-compose-send');if(send)send.disabled=busy||items.some(item=>item.status!=='ready');
+  const send=$('btn-compose-send');if(send)send.disabled=busy||!!$('compose-from')?.disabled||items.some(item=>item.status!=='ready');
   if($('compose-attach'))$('compose-attach').disabled=composeAttachments.sending;
   const list=$('compose-uploads');if(!list)return;list.replaceChildren();list.hidden=!items.length;
   for(const item of items){

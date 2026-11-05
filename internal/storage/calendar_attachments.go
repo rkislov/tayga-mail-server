@@ -20,6 +20,34 @@ type CalendarAttachment struct {
 	CreatedAt        time.Time
 }
 
+type calendarAttachmentChanges struct {
+	add, remove []*CalendarAttachment
+}
+
+// SaveCalendarClientAttachments commits staged file records with the event,
+// recipient copies and scheduling state. The caller owns blob staging/cleanup.
+func (s *Store) SaveCalendarClientAttachments(ctx context.Context, actorID string, o *CalendarObject, files []*CalendarAttachment) (*CalendarObject, error) {
+	if actorID == "" {
+		return nil, ErrUnauthorized
+	}
+	if o.CreateOnly || o.ExpectedETag == "" || len(files) == 0 {
+		return nil, ErrCalendarConflict
+	}
+	return s.saveCalendarObject(ctx, o, nil, actorID, true, calendarAttachmentChanges{add: files})
+}
+
+// DeleteCalendarClientAttachments revokes records in the same transaction as
+// the updated event and recipient copies. Blobs may be removed after commit.
+func (s *Store) DeleteCalendarClientAttachments(ctx context.Context, actorID string, o *CalendarObject, files []*CalendarAttachment) (*CalendarObject, error) {
+	if actorID == "" {
+		return nil, ErrUnauthorized
+	}
+	if o.CreateOnly || o.ExpectedETag == "" || len(files) == 0 {
+		return nil, ErrCalendarConflict
+	}
+	return s.saveCalendarObject(ctx, o, nil, actorID, true, calendarAttachmentChanges{remove: files})
+}
+
 func (s *Store) CreateCalendarAttachment(ctx context.Context, a *CalendarAttachment) (*CalendarAttachment, error) {
 	now := time.Now().UTC()
 	if a.ID == "" {

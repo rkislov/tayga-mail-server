@@ -26,6 +26,19 @@ func (h *ewsHandler) resolveEWSFolder(ctx context.Context, u *storage.User, body
 	switch distinguished {
 	case "root", "msgfolderroot":
 		return "root:" + u.ID, nil
+	case "recoverableitemsroot", "recoverableitemsdeletions":
+		if _, e := h.recoveryMailbox(ctx, u); e != nil {
+			return "", e
+		}
+		name := "Recoverable Items"
+		if distinguished == "recoverableitemsdeletions" {
+			name = ewsRecoveryFolder
+		}
+		mb, e := h.store.GetMailbox(ctx, u.ID, name)
+		if e != nil {
+			return "", e
+		}
+		return mb.ID, nil
 	case "calendar":
 		c, e := h.store.GetCalendarByName(ctx, u.ID, "default")
 		if e != nil {

@@ -1,5 +1,18 @@
 const I18N = {
   ru: {
+ branding_enabled: "Свой брендинг", branding_tenant: "Брендинг тенанта", branding_domain: "Брендинг домена",
+    branding_title: "Брендинг шапки",
+    branding_hint: "Брендинг домена заменяет брендинг тенанта. Если свой брендинг выключен, используется оформление тенанта или Тайга Майл. Подпись платформы всегда видна.",
+    branding_name: "Название",
+    branding_image: "Картинка для шапки",
+    branding_file_hint: "PNG или JPEG до 1 МБ, до 4096 × 4096 пикселей. Картинка вписывается целиком.",
+    branding_attribution: "Работает на платформе Тайга Майл",
+    branding_remove_image: "Убрать картинку",
+    branding_reset: "Сбросить брендинг",
+    branding_invalid: "Выберите PNG или JPEG до 1 МБ, до 4096 × 4096 пикселей.",
+    branding_save_error: "Не удалось сохранить брендинг. Попробуйте ещё раз.",
+
+    edit: "Редактировать",
 "presence_label":"Мой статус","presence_online":"В сети","presence_away":"Отошёл","presence_dnd":"Не беспокоить","presence_offline":"Не в сети","presence_unknown":"Статус недоступен","presence_request":"Запрашивает ваш статус","presence_accept":"Разрешить","presence_reject":"Отклонить","presence_request_action":"Запросить статус",
 
 "task_owner":"Автор","task_assignee":"Исполнитель","task_unassigned":"Не назначен","task_assignment_pending":"Ожидает принятия","task_assignment_accepted":"Принята исполнителем","task_assignment_declined":"Отклонена исполнителем","task_accept":"Принять","task_decline":"Отклонить","task_assign":"Назначить","task_revoke":"Отозвать назначение","task_revoke_confirm":"Отозвать назначение? Исполнитель потеряет доступ к задаче.","task_assignment_hint":"Выберите сотрудника вашей организации. Он получит запрос на принятие задачи.","task_assignee_search":"Поиск по имени или email","task_assignee_choose":"Без нового назначения","task_progress_only":"Вы можете менять состояние и прогресс. Описание, срок и назначение изменяет автор.","task_pending_hint":"Примите задачу, чтобы обновлять её состояние и прогресс.","task_notifications":"Уведомления о задачах","task_unread":"непрочитано","task_history":"История изменений","task_prev":"Назад","task_next":"Далее","task_action_create":"Задача создана","task_action_assign":"Назначена задача","task_action_accept":"Исполнитель принял задачу","task_action_decline":"Исполнитель отклонил задачу","task_action_revoke":"Назначение отозвано","task_action_delete":"Задача удалена","task_action_update":"Задача изменена","task_action_complete":"Задача завершена","task_action_reopen":"Задача открыта повторно","task_history_empty":"Изменений пока нет","task_notifications_empty":"Уведомлений пока нет","task_unavailable":"Задача удалена или доступ к ней отозван.","task_change_title":"название","task_change_body":"описание","task_change_due":"срок","task_change_progress":"прогресс","task_change_properties":"параметры синхронизации","task_change_assignment":"назначение","task_change_task":"создание",
@@ -10,6 +23,7 @@ const I18N = {
  mig_skip_tls: "Не проверять сертификат старого сервера", mig_skip_tls_hint: "Только для этой задачи. Для доверенного сервера с самоподписанным сертификатом.",
  nav_antispam: "Антиспам",
 "saved":"Сохранено","ca_self_hint":"Временный сертификат для тестовой установки. Браузер не доверяет ему автоматически.","ca_pem_hint":"Импорт готового сертификата и закрытого ключа. Ключ должен соответствовать сертификату.","ca_acme_hint":"Домен должен указывать на этот сервер в публичном DNS. Порт 80 должен быть доступен снаружи.","ca_configure":"Открыть настройки →","users_status":"Состояние","users_active":"Активен","users_disabled":"Отключён","users_storage":"Использовано / квота","users_actions":"Действия","users_quota_action":"Квота","language_topbar_hint":"Выберите язык с помощью значка глобуса справа сверху.","profile_admin":"Администратор","profile_user":"Пользователь","profile_auth":"Способ входа","profile_unlimited":"Без ограничения объёма","signature_title":"Подпись к письму","signature_hint":"Подпись сохраняется в учётной записи и доступна на других устройствах. Переносы строк сохраняются.","signature_new":"Добавлять в новые письма","signature_reply":"Добавлять в ответы","signature_preview":"Предпросмотр","signature_empty":"Подпись пока не задана","nav_mailsecurity":"Защита почты","security_filters_hint":"Антиспам, антивирус и письма, помещённые в карантин.","security_antivirus":"Антивирус ClamAV","security_antispam":"Антиспам Rspamd","monitor_messages":"Количество писем","monitor_bytes":"Объём писем","monitor_queue":"Исходящая очередь","monitor_history_hint":"Наблюдения каждые 5 секунд, пока открыта страница. Это количество сохранённых писем, а не счётчик всего принятого трафика.",
+    note_history: "История версий", note_history_empty: "Предыдущих версий пока нет.", note_restore: "Восстановить",
     note_copy_local: "Копировать мой текст", note_load_server: "Загрузить серверную версию", note_keep_local: "Сохранить мою версию", note_reload_confirm: "Заменить текст в редакторе версией с сервера? Локальные изменения будут потеряны.",
     note_bullets: "Маркированный список",
     note_numbers: "Нумерованный список",
@@ -516,6 +530,19 @@ contacts_search: "Поиск контактов…",
     save: "Сохранить",
   },
   en: {
+ branding_enabled: "Custom branding", branding_tenant: "Tenant branding", branding_domain: "Domain branding",
+    branding_title: "Header branding",
+    branding_hint: "Domain branding overrides tenant branding. When disabled, tenant branding or Tayga Mail is used. Platform attribution always stays visible.",
+    branding_name: "Name",
+    branding_image: "Header image",
+    branding_file_hint: "PNG or JPEG up to 1 MB, at most 4096 × 4096 pixels. The entire image is displayed.",
+    branding_attribution: "Powered by Tayga Mail",
+    branding_remove_image: "Remove image",
+    branding_reset: "Reset branding",
+    branding_invalid: "Choose a PNG or JPEG up to 1 MB, at most 4096 × 4096 pixels.",
+    branding_save_error: "Could not save branding. Please try again.",
+
+    edit: "Edit",
 "presence_label":"My status","presence_online":"Online","presence_away":"Away","presence_dnd":"Do not disturb","presence_offline":"Offline","presence_unknown":"Status unavailable","presence_request":"Requests your presence","presence_accept":"Allow","presence_reject":"Decline","presence_request_action":"Request presence",
 
 "task_owner":"Author","task_assignee":"Assignee","task_unassigned":"Unassigned","task_assignment_pending":"Awaiting acceptance","task_assignment_accepted":"Accepted","task_assignment_declined":"Declined","task_accept":"Accept","task_decline":"Decline","task_assign":"Assign","task_revoke":"Revoke assignment","task_revoke_confirm":"Revoke this assignment? The assignee will lose access to the task.","task_assignment_hint":"Choose a colleague in your organization. They will receive an invitation to accept the task.","task_assignee_search":"Search by name or email","task_assignee_choose":"No new assignment","task_progress_only":"You can update status and progress. The author manages details, dates and assignment.","task_pending_hint":"Accept this task to update its status and progress.","task_notifications":"Task notifications","task_unread":"unread","task_history":"Change history","task_prev":"Previous","task_next":"Next","task_action_create":"Task created","task_action_assign":"Task assigned","task_action_accept":"Assignee accepted the task","task_action_decline":"Assignee declined the task","task_action_revoke":"Assignment revoked","task_action_delete":"Task deleted","task_action_update":"Task updated","task_action_complete":"Task completed","task_action_reopen":"Task reopened","task_history_empty":"No changes yet","task_notifications_empty":"No notifications yet","task_unavailable":"Task deleted or access revoked.","task_change_title":"title","task_change_body":"description","task_change_due":"due date","task_change_progress":"progress","task_change_properties":"sync properties","task_change_assignment":"assignment","task_change_task":"creation",
@@ -526,6 +553,7 @@ contacts_search: "Поиск контактов…",
  mig_skip_tls: "Skip source server certificate verification", mig_skip_tls_hint: "This migration only. Use for a trusted server with a self-signed certificate.",
  nav_antispam: "Antispam",
 "saved":"Saved","ca_self_hint":"Temporary certificate for a test installation. Browsers do not trust it automatically.","ca_pem_hint":"Import a certificate and its matching private key.","ca_acme_hint":"Public DNS must point to this server, with port 80 accessible from outside.","ca_configure":"Open settings →","users_status":"Status","users_active":"Active","users_disabled":"Disabled","users_storage":"Used / quota","users_actions":"Actions","users_quota_action":"Quota","language_topbar_hint":"Choose your language using the globe in the upper right.","profile_admin":"Administrator","profile_user":"User","profile_auth":"Authentication","profile_unlimited":"Unlimited storage","signature_title":"Mail signature","signature_hint":"Saved to your account and available on other devices. Line breaks are preserved.","signature_new":"Add to new messages","signature_reply":"Add to replies","signature_preview":"Preview","signature_empty":"No signature yet","nav_mailsecurity":"Mail protection","security_filters_hint":"Spam and antivirus settings, and quarantined messages.","security_antivirus":"ClamAV antivirus","security_antispam":"Rspamd antispam","monitor_messages":"Message count","monitor_bytes":"Mail storage","monitor_queue":"Outbound queue","monitor_history_hint":"Samples every 5 seconds while this page is open. These are stored message counts, not total inbound traffic.",
+    note_history: "Version history", note_history_empty: "No previous versions yet.", note_restore: "Restore",
     note_copy_local: "Copy my text", note_load_server: "Load server version", note_keep_local: "Save my version", note_reload_confirm: "Replace the editor text with the server version? Local changes will be lost.",
     note_bullets: "Bullet list",
     note_numbers: "Numbered list",
@@ -1548,6 +1576,7 @@ function isAuthPublicPath(path) {
 }
 
 function clearSession() {
+  resetBranding();
   resetTasks();
   resetComposeAttachments();
   disableWebPush().catch(() => {});
@@ -1694,6 +1723,7 @@ async function loadMe() {
   try {
     const me = await api("/api/v1/me");
     state.me = me;
+    refreshBranding();
     refreshMailImagePreferences();
     state.email = me.email || state.email;
     $("acct-email").textContent = me.email;
@@ -2205,10 +2235,15 @@ async function refreshTenantDomains() {
           </label>
           <label class="field-check" title="${escapeHtml(mailImageText('Общий адресный справочник пользователей этого домена','Global address list for users in this domain'))}"><input type="checkbox" data-domain-gal="${escapeHtml(d.id)}" ${d.gal_enabled?'checked':''}> GAL</label>
           <label class="field-check" title="${escapeHtml(mailImageText('Коллеги этого домена в XMPP и веб-чате. В XMPP обновится при переподключении.','Domain colleagues in XMPP and web chat. Reconnect XMPP to refresh.'))}"><input type="checkbox" data-domain-xmpp-gal="${escapeHtml(d.id)}" ${d.xmpp_gal_enabled?'checked':''}> ${escapeHtml(mailImageText('Общий список контактов XMPP','XMPP shared contacts'))}</label>
+          <button type="button" class="btn-secondary" data-domain-branding="${escapeHtml(d.id)}">${escapeHtml(t("branding_title"))}</button>
+          <button type="button" class="btn-secondary" data-domain-aliases="${escapeHtml(d.id)}">${escapeHtml(mailImageText('Алиасы','Aliases'))}</button>
           <button type="button" class="btn-spray" data-open-domain="${escapeHtml(d.id)}" data-name="${escapeHtml(d.name)}">${escapeHtml(t("domains_open"))}</button>
           <button type="button" class="btn-secondary" data-del-domain="${escapeHtml(d.name)}" ${d.user_count > 0 ? "disabled" : ""}>${escapeHtml(t("domains_remove"))}</button>
         </span>
       </li>`).join("") || `<li><span class="meta">${escapeHtml(t("domains_empty"))}</span></li>`;
+    $('tenant-branding-button')?.classList.toggle('hidden', !state.me?.is_global_admin && state.me?.admin_scope !== 'tenant');
+    list.querySelectorAll('[data-domain-branding]').forEach(button=>button.onclick=()=>openAdminBranding('domains',items.find(d=>d.id===button.dataset.domainBranding)));
+    list.querySelectorAll('[data-domain-aliases]').forEach(button=>button.onclick=()=>openAdminAliases('domain',items.find(d=>d.id===button.dataset.domainAliases)));
     list.querySelectorAll("[data-open-domain]").forEach((btn) => {
       btn.addEventListener("click", () => {
         tenantNav.domainID = btn.dataset.openDomain;
@@ -2397,8 +2432,9 @@ async function refreshAdminUsers() {
             </select>
           </label>
 </td><td><div class="user-action-icons">
- ${[['quota','download',t('users_quota_action')],['toggle','disconnect',t(u.enabled?'users_disable':'users_enable')],['pass','key',t('users_reset_pw')],...(state.me?.is_global_admin?[['user-role','shield',mailImageText('Роль и права пользователя','User role and permissions')]]:[]),['mail-access','reply',mailImageText('Доступ к ящику','Mailbox access')],...((u.id!==state.me?.id&&!u.is_global_admin)?[['delete-user','delete',mailImageText('Удалить пользователя','Delete user')]]:[])].map(([action,icon,label])=>`<button type="button" class="btn-secondary user-action-icon" data-${action}="${escapeHtml(u.id)}" data-enabled="${u.enabled?'1':'0'}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${designIcon(icon)}</button>`).join('')}
+ ${[['quota','download',t('users_quota_action')],['toggle','disconnect',t(u.enabled?'users_disable':'users_enable')],['pass','key',t('users_reset_pw')],...(state.me?.is_global_admin?[['user-role','shield',mailImageText('Роль и права пользователя','User role and permissions')]]:[]),['mailbox-aliases','reply',mailImageText('Алиасы ящика','Mailbox aliases')],['mail-access','reply',mailImageText('Доступ к ящику','Mailbox access')],...((u.id!==state.me?.id&&!u.is_global_admin)?[['delete-user','delete',mailImageText('Удалить пользователя','Delete user')]]:[])].map(([action,icon,label])=>`<button type="button" class="btn-secondary user-action-icon" data-${action}="${escapeHtml(u.id)}" data-enabled="${u.enabled?'1':'0'}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${designIcon(icon)}</button>`).join('')}
  </div></td></tr>`).join("") || `<tr><td colspan="7" class="meta">${t("users_empty")}</td></tr>`;
+    list.querySelectorAll('[data-mailbox-aliases]').forEach(button=>button.onclick=()=>openAdminAliases('mailbox',users.find(u=>u.id===button.dataset.mailboxAliases)));
     list.querySelectorAll('[data-delete-user]').forEach(button=>button.onclick=async()=>{const user=users.find(u=>u.id===button.dataset.deleteUser);if(!await askConfirm(mailImageText('Удалить пользователя и его данные: ','Delete user and their data: ')+user.email+'?',{danger:true}))return;button.disabled=true;try{await api('/api/v1/admin/users/'+encodeURIComponent(user.id),{method:'DELETE'});await refreshAdminUsers()}catch(err){setMsg($('admin-msg'),err.message,'err');button.disabled=false}});
     list.querySelectorAll("[data-mail-access]").forEach(button=>button.onclick=()=>openMailboxAccess(button.dataset.mailAccess));list.querySelectorAll("[data-user-role]").forEach(button=>button.onclick=()=>openUserRole(users.find(u=>u.id===button.dataset.userRole)));
     list.querySelectorAll("[data-user-mig]").forEach((sel) => {
@@ -4064,7 +4100,22 @@ function getComposeText() {
   return el.value || "";
 }
 
-function openCompose({ to = "", cc = "", subject = "", body = "", bodyHTML = "" } = {}) {
+let composeSenderEpoch=0;
+async function loadComposeSenders(preferred='') {
+ const select=$('compose-from');if(!select)return;
+ const epoch=++composeSenderEpoch,userID=state.me?.id,primary=state.me?.email||'';
+ const add=address=>{const option=document.createElement('option');option.value=address;option.textContent=address;select.append(option)};
+ select.replaceChildren();if(primary)add(primary);select.disabled=true;renderComposeAttachments();
+ try{
+  const data=await api('/api/v1/mail/senders');
+  if(epoch!==composeSenderEpoch||state.me?.id!==userID)return;
+  select.replaceChildren();for(const address of data.addresses||[])add(address);
+  select.value=(data.addresses||[]).includes(preferred)?preferred:(data.default||primary);
+ }catch(error){if(epoch===composeSenderEpoch&&state.me?.id===userID)setMsg($('compose-msg'),mailImageText('Не удалось загрузить адреса отправителя. Повторно откройте окно письма.','Could not load sender addresses. Reopen the compose window.'),'err');}
+ finally{if(epoch===composeSenderEpoch&&state.me?.id===userID)select.disabled=false;renderComposeAttachments();}
+}
+
+function openCompose({ to = "", cc = "", from = "", subject = "", body = "", bodyHTML = "" } = {}) {
   if (composeAttachments.sending) return;
   resetComposeAttachments();
   $("compose-backdrop")?.classList.remove("hidden");
@@ -4079,6 +4130,7 @@ function openCompose({ to = "", cc = "", subject = "", body = "", bodyHTML = "" 
   const surface = composeBodyEl();
   if (surface?.dataset) surface.dataset.placeholder = t("body");
   setMsg($("compose-msg"), "");
+  loadComposeSenders(from);
   surface?.focus?.();
 }
 
@@ -4109,7 +4161,7 @@ $("compose-backdrop")?.addEventListener("click", (e) => {
   if (e.target === $("compose-backdrop")) $("compose-backdrop").classList.add("hidden");
 });
 $("btn-compose-send")?.addEventListener("click", async () => {
-  if (composeAttachments.sending || composeAttachments.entries.some(item=>item.status!=="ready")) return;
+  if (composeAttachments.sending || $("compose-from")?.disabled || composeAttachments.entries.some(item=>item.status!=="ready")) return;
   composeAttachments.sending = true;
   renderComposeAttachments();
   const to = ($("compose-to").value || "").split(/[,;]/).map((s) => s.trim()).filter(Boolean);
@@ -4119,6 +4171,7 @@ $("btn-compose-send")?.addEventListener("click", async () => {
     const text = getComposeText(), html = getComposeHTML();
     const attachments = composeAttachments.entries.filter(item=>!item.share).map(item=>item.ref);
     const payload = {
+      from: $("compose-from")?.value || state.me?.email || "",
       to,
       cc: ($("compose-cc")?.value || "").split(/[,;]/).map(value=>value.trim()).filter(Boolean),
       subject: $("compose-subject").value,
@@ -4228,11 +4281,15 @@ function calMonthStart(d) {
 }
 
 function showCalCompose(open) {
+ if($('form-cal-event')?.dataset.saving==='true')return;
+ if(open){calState.editingEvent=null;const form=$('form-cal-event');if(form)form.dataset.editorUser=state.me?.id || '';}
  if(open && $("cal-location")){delete $("cal-location").dataset.geo;$("cal-location").dispatchEvent(new Event("input"));}
   const dialog=mountCalendarEditor();
  if(dialog){if(open&&!dialog.open)dialog.showModal();if(!open&&dialog.open)dialog.close()}
  syncEventCalendarChoice();
   if (open) {
+    const title=$('event-editor-title');if(title){title.removeAttribute('data-i18n');title.textContent=t('new_event');}
+    if($('event-calendar-choice'))$('event-calendar-choice').disabled=false;
     setMsg($("cal-msg"), "");
     mountNewEventRecurrence();
     calState.attendees = [];
@@ -4283,7 +4340,7 @@ function renderCalReadAttachments(atts) {
       return `<div class="cal-attach-item">
         <button type="button" class="btn-secondary btn-sm" data-att-dl="${escapeHtml(a.id)}" data-name="${escapeHtml(a.filename || "file")}">${escapeHtml(a.filename || "file")}</button>
         <span class="meta">${escapeHtml(a.content_type || "")}${size}</span>
-        <button type="button" class="btn-secondary btn-sm" data-att-del="${escapeHtml(a.id)}">${escapeHtml(t("cal_attach_delete"))}</button>
+        ${a.read_only ? "" : `<button type="button" class="btn-secondary btn-sm" data-att-del="${escapeHtml(a.id)}">${escapeHtml(t("cal_attach_delete"))}</button>`}
       </div>`;
     }).join("");
     dd.querySelectorAll("[data-att-dl]").forEach((btn) => {
@@ -4450,11 +4507,11 @@ async function refreshCalInvites() {
         <span class="meta">${escapeHtml(proposal.attendee)}</span>
         <span>${escapeHtml(mailImageText('Сейчас: ', 'Current: ') + fmtCalWhen(proposal.start) + ' — ' + fmtCalWhen(proposal.end))}</span>
         <strong>${escapeHtml(mailImageText('Предложено: ', 'Proposed: ') + fmtCalWhen(proposal.proposed_start) + ' — ' + fmtCalWhen(proposal.proposed_end))}</strong>
-        ${proposal.recurring ? `<span class="meta">${escapeHtml(mailImageText('Повторяющаяся встреча: изменится основное время серии.', 'Recurring meeting: the master series time will change.'))}</span>` : ''}
+        ${proposal.recurrence_id ? `<span class="meta">${escapeHtml(mailImageText('Изменится только это повторение. Остальные даты сохранятся.', 'Only this occurrence will change. Other dates stay unchanged.'))}</span>` : proposal.recurring ? `<span class="meta">${escapeHtml(mailImageText('Повторяющаяся встреча: изменится основное время серии.', 'Recurring meeting: the master series time will change.'))}</span>` : ''}
       </div>
       <div class="cal-invite-actions">
-        <button type="button" class="btn-spray btn-sm" data-proposal-act="accept" data-id="${escapeHtml(proposal.id)}">${escapeHtml(mailImageText('Принять время', 'Accept time'))}</button>
-        <button type="button" class="btn-secondary btn-sm" data-proposal-act="decline" data-id="${escapeHtml(proposal.id)}">${escapeHtml(t('cal_decline'))}</button>
+          <button type="button" class="btn-spray btn-sm" data-proposal-act="accept" data-key="${escapeHtml(proposal.key || proposal.id)}">${escapeHtml(mailImageText('Принять время', 'Accept time'))}</button>
+          <button type="button" class="btn-secondary btn-sm" data-proposal-act="decline" data-key="${escapeHtml(proposal.key || proposal.id)}">${escapeHtml(t('cal_decline'))}</button>
       </div>
     </li>`).join('');
     list.innerHTML = proposals + calState.invites.map((inv) => {
@@ -4478,28 +4535,29 @@ async function refreshCalInvites() {
     list.querySelectorAll("[data-inv-act]").forEach((btn) => {
       btn.addEventListener("click", () => replyCalInvite(btn.dataset.id, btn.dataset.invAct));
     });
-    list.querySelectorAll('[data-proposal-act]').forEach(btn => btn.addEventListener('click', () => decideCalProposal(btn.dataset.id, btn.dataset.proposalAct)));
+    list.querySelectorAll('[data-proposal-act]').forEach(btn => btn.addEventListener('click', () => decideCalProposal(btn.dataset.key, btn.dataset.proposalAct)));
   } catch (err) {
     if (state.me?.id === userID) list.innerHTML = `<li class="meta msg-empty">${escapeHtml(err.message)}</li>`;
   }
 }
 
 let calInviteReplyBusy = false;
-async function decideCalProposal(id, action) {
+async function decideCalProposal(key, action) {
   if (calInviteReplyBusy) return;
-  const proposal = calState.proposals.find(item => item.id === id);
+  const proposal = calState.proposals.find(item => (item.key || item.id) === key);
   if (!proposal) return;
+  const id=proposal.id;
   calInviteReplyBusy = true;
   const userID = state.me?.id;
   const currentUser = () => state.me?.id === userID;
   $('cal-invite-list')?.querySelectorAll('button').forEach(button => button.disabled = true);
   setMsg($('cal-invite-msg'), '', '');
   try {
-    if (action === 'accept' && !await askConfirm(fmtCalWhen(proposal.proposed_start) + ' — ' + fmtCalWhen(proposal.proposed_end) + '\n' + mailImageText('Все участники получат обновлённое приглашение.', 'All attendees will receive an updated invitation.'), {
+    if (action === 'accept' && !await askConfirm(fmtCalWhen(proposal.proposed_start) + ' — ' + fmtCalWhen(proposal.proposed_end) + '\n' + (proposal.recurrence_id ? mailImageText('Изменится только это повторение. Все его участники получат обновлённое приглашение.', 'Only this occurrence will change. Its attendees will receive an updated invitation.') : mailImageText('Все участники получат обновлённое приглашение.', 'All attendees will receive an updated invitation.')), {
       title: mailImageText('Изменить время встречи?', 'Change meeting time?')
     })) return;
     if (!currentUser()) return;
-    await api('/api/v1/calendar/invites/' + encodeURIComponent(id) + '/decision', {method:'POST', body:JSON.stringify({action, event_id:proposal.event_id, revision:proposal.revision, etag:proposal.etag})});
+    await api('/api/v1/calendar/invites/' + encodeURIComponent(id) + '/decision', {method:'POST', body:JSON.stringify({action, event_id:proposal.event_id, revision:proposal.revision, etag:proposal.etag,...(proposal.recurrence_id?{recurrence_id:proposal.recurrence_id}:{})})});
     if (!currentUser()) return;
     await refreshCalInvites();
     if (!currentUser()) return;
@@ -4705,6 +4763,7 @@ function renderCalDay() {
 }
 
 function startNewCalEvent(day = calState.selectedDay || calDayKey(new Date()), hour = 10) {
+  if($('form-cal-event')?.dataset.saving==='true')return;
   if(calState.defaultCalendarID)calState.calendarID=calState.defaultCalendarID;
   if (calState.calendars.find(c=>c.id===calState.calendarID)?.writable===false) {setMsg($("cal-msg"),t("cal_readonly"),"err");return;}
   clearTimeout(calState.dayClickTimer);
@@ -4712,6 +4771,7 @@ function startNewCalEvent(day = calState.selectedDay || calDayKey(new Date()), h
   $("form-cal-event")?.reset();
   delete $("form-cal-event").dataset.createdEvent;
   calState.uploadedFiles=new Set();
+  $('cal-start').type='datetime-local';$('cal-end').type='datetime-local';
   $("cal-start").value = day + "T" + String(hour).padStart(2,"0") + ":00";
   const end = new Date(day + "T" + String(hour).padStart(2,"0") + ":00");
   end.setHours(end.getHours() + 1);
@@ -4898,6 +4958,7 @@ async function loadCalEvents() {
 
 function showCalReader(ev) {
   calState.currentEvent = ev;
+  renderCalOccurrenceReply(ev);
   const empty = $("cal-empty");
   const reader = $("cal-reader");
   if (!empty || !reader) return;
@@ -4937,6 +4998,7 @@ function showCalReader(ev) {
   renderCalReadAttachments(ev.attachments || []);
   const recurring = !!ev.recurrence_id;
   const canEdit = calendar?.writable !== false && !ev.busy_only && (!recurring || ev.occurrence_organizer);
+  $('btn-cal-edit')?.classList.toggle('hidden',!canEditCalendarEvent(ev));
   $('btn-cal-recurrence')?.classList.toggle('hidden',!canEdit || !ev.recurrence_organizer);
   $('btn-cal-instance-edit')?.classList.toggle('hidden',!recurring || !canEdit);
   $('btn-cal-series-delete')?.classList.toggle('hidden',!recurring || !canEdit);
@@ -5073,6 +5135,7 @@ $("cal-backdrop")?.addEventListener("click", (e) => {
   if (e.target === $("cal-backdrop")) showCalCompose(false);
 });
 $("btn-cal-instance-edit")?.addEventListener("click",()=>openCalOccurrenceEditor());
+$("btn-cal-edit")?.addEventListener("click",()=>editCalendarRecord(calState.currentEvent));
 $("btn-cal-series-delete")?.addEventListener("click",()=>deleteCalEvent(true));
 $("btn-cal-delete")?.addEventListener("click",()=>deleteCalEvent(false));
 $("btn-cal-attendee-add")?.addEventListener("click", () => addCalAttendeesFromInput());
@@ -5120,8 +5183,11 @@ $("cal-read-files")?.addEventListener("change", async () => {
 
 $("form-cal-event")?.addEventListener("submit", async (e) => {
   e.preventDefault();
+  const form=$("form-cal-event"),editing=calState.editingEvent,userID=state.me?.id;
+  if(form.dataset.editorUser && form.dataset.editorUser!==userID)return;
+  if(editing && !canEditCalendarEvent(editing))return;
   addCalAttendeesFromInput();
-  calState.calendarID=$("event-calendar-choice")?.value || calState.calendarID;
+  calState.calendarID=editing?.calendar_id || $("event-calendar-choice")?.value || calState.calendarID;
   if(new Date($("cal-end").value)<=new Date($("cal-start").value)){setMsg($("cal-msg"),mailImageText("Конец должен быть позже начала","End must be after start"),"err");return;}
   if (!calState.calendarID) {
     try {
@@ -5134,20 +5200,21 @@ $("form-cal-event")?.addEventListener("submit", async (e) => {
     return;
   }
   let recurrence;
-  try {recurrence=readRecurrenceFields('cal-new-recurrence');} catch(error) {setMsg($('cal-msg'),error.message,'err');return;}
-  const form=$("form-cal-event");if(form.dataset.saving==="true")return;form.dataset.saving="true";
+  try {if(!editing)recurrence=readRecurrenceFields('cal-new-recurrence');} catch(error) {setMsg($('cal-msg'),error.message,'err');return;}
+  if(form.dataset.saving==="true")return;form.dataset.saving="true";
   const saveButton=form.querySelector('[type="submit"]');if(saveButton)saveButton.disabled=true;
   setMsg($("cal-msg"), "…");
   try {
     const created = form.dataset.createdEvent ? {id:form.dataset.createdEvent} : await api("/api/v1/calendar/calendars/" + encodeURIComponent(calState.calendarID) + "/events", {
-      method: "POST",
+      method: editing ? "PUT" : "POST",
       body: JSON.stringify({
+        id: editing?.id, etag: editing?.etag, all_day: editing?.all_day,
         summary: $("cal-summary").value,
         location: $("cal-location")?.value || "",
  geo: $("cal-location")?.dataset.geo || "",
         description: $("cal-description")?.value || "",
-        start: localInputToISO($("cal-start").value),
-        end: localInputToISO($("cal-end").value),
+        start: editing?.all_day ? $("cal-start").value+'T00:00:00.000Z' : localInputToISO($("cal-start").value),
+        end: editing?.all_day ? $("cal-end").value+'T00:00:00.000Z' : localInputToISO($("cal-end").value),
         recurrence,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
         attendees: calState.attendees.map((a) => ({
@@ -5157,6 +5224,7 @@ $("form-cal-event")?.addEventListener("submit", async (e) => {
         })),
       }),
     });
+    if(state.me?.id!==userID)return;
     if(created?.id)form.dataset.createdEvent=created.id;
     const files = $("cal-files")?.files;
     if (created?.id && files?.length) {
@@ -5164,17 +5232,21 @@ $("form-cal-event")?.addEventListener("submit", async (e) => {
         const key=file.name+":"+file.size+":"+file.lastModified;
         if(calState.uploadedFiles?.has(key))continue;
         await uploadCalAttachment(created.id, file);
+        if(state.me?.id!==userID)return;
         if(!calState.uploadedFiles)calState.uploadedFiles=new Set();calState.uploadedFiles.add(key);
       }
     }
     setMsg($("cal-msg"), "OK", "ok");
     $("form-cal-event").reset();
     calState.attendees = [];
+    calState.editingEvent = null;
     renderCalAttendeeChips();
+    delete form.dataset.saving;
     showCalCompose(false);
     await loadCalEvents();
     if (created?.id) openCalEvent(created.id);
   } catch (err) {
+    if(state.me?.id!==userID)return;
     setMsg($("cal-msg"), form.dataset.createdEvent ? mailImageText("Событие сохранено, но не все вложения загружены. Повторите сохранение, чтобы дозагрузить файлы: ","Event saved, but some attachments failed. Save again to retry uploads: ")+err.message : calendarRecurrenceError(err.message), "err");
   } finally {delete form.dataset.saving;if(saveButton)saveButton.disabled=false;}
 });
@@ -6281,6 +6353,47 @@ $("btn-note-draw-save")?.addEventListener("click", async () => {
   }
 });
 
+$('btn-note-history')?.addEventListener('click', async () => {
+ if (!await flushNoteSave()) return;
+ const id = notesState.noteID;
+ if (!id) return;
+ const dialog = document.createElement('dialog');
+ dialog.className = 'migration-dialog'; dialog.setAttribute('aria-label', t('note_history'));
+ const title = document.createElement('h3'); title.textContent = t('note_history');
+ const close = document.createElement('button'); close.type = 'button'; close.className = 'btn-secondary'; close.textContent = t('close'); close.onclick = () => dialog.close();
+ const list = document.createElement('div');
+ const status = document.createElement('p'); status.className = 'msg'; status.setAttribute('role', 'status');
+ dialog.append(title, list, status, close); document.body.append(dialog);
+ dialog.addEventListener('close', () => dialog.remove(), {once:true}); dialog.showModal();
+ try {
+  const data = await api('/api/v1/notes/' + encodeURIComponent(id) + '/versions');
+  if (!dialog.isConnected) return;
+  if (!data.versions.length) list.textContent = t('note_history_empty');
+  for (const version of data.versions) {
+   const row = document.createElement('details');
+   const summary = document.createElement('summary'); summary.textContent = new Date(version.saved_at).toLocaleString() + ' · ' + (version.title || t('note_new'));
+   const preview = document.createElement('p'); preview.style.whiteSpace = 'pre-wrap'; preview.style.overflowWrap = 'anywhere'; preview.textContent = version.body_text;
+   row.append(summary, preview);
+   if (notesState.rights === 'write') {
+    const restore = document.createElement('button'); restore.type = 'button'; restore.className = 'btn-secondary'; restore.textContent = t('note_restore');
+    restore.onclick = async () => {
+     if (notesState.noteID !== id || !await flushNoteSave()) return;
+     restore.disabled = true;
+     try {
+      const revision = notesState.revision, etag = notesState.etags[id];
+      const note = await api('/api/v1/notes/' + encodeURIComponent(id) + '/versions/' + encodeURIComponent(version.id) + '/restore', {method:'POST', body:JSON.stringify({etag})});
+      if (notesState.noteID === id && notesState.revision === revision && !notesState.dirty) showNoteEditor(note);
+      await refreshNotes(); dialog.close();
+     } catch (err) { setMsg(status, err.message, 'err'); }
+     finally { restore.disabled = false; }
+    };
+    row.append(restore);
+   }
+   list.append(row);
+  }
+ } catch (err) { setMsg(status, err.message, 'err'); }
+});
+
 async function openNoteShare(kind) {
   notesState.shareTarget = kind; // folder | note
   $("note-share-backdrop")?.classList.remove("hidden");
@@ -6797,7 +6910,7 @@ const CONFIG_SECTIONS = {
   seed: ["Первоначальная учётная запись", "Параметры создания первой организации и администратора."],
   storage: ["База данных", "Параметры bootstrap YAML, доступные только для чтения."],
   mailstore: ["Письма и S3", "Каталог maildir и зеркало объектного хранилища."],
-  files: ["Файлы и офис", "Адрес отдельного Collabora Online для совместного редактирования."],
+  files: ["Файлы и офис · ONLYOFFICE / Р7", "Подключение Collabora Online, ONLYOFFICE или Р7 для совместного редактирования."],
   ha: ["Высокая доступность", "Лидер, аренда узла и закрепление писателей за пользователями."],
   http: ["Веб-интерфейс и HTTP", "HTTP/HTTPS, публичный адрес и глобальные администраторы."],
   tls: ["TLS и ACME", "Сертификаты сервисов и автоматическая выдача через ACME."],
@@ -6861,7 +6974,7 @@ function configFieldHTML(field, path, locked = false) {
   else if (field.kind === "strings") input = `<textarea id="${id}" class="field-input" rows="3" ${disabled}>${escapeHtml((value || []).join("\n"))}</textarea>`;
   else if (field.options?.length) {
     const options = [...new Set([...(!field.options.includes(value ?? "") ? [value ?? ""] : []), ...field.options])];
-    input = `<select id="${id}" class="field-input" ${disabled}>${options.map(option => `<option value="${escapeHtml(option)}" ${value === option ? "selected" : ""}>${escapeHtml(option)}</option>`).join("")}</select>`;
+    input = `<select id="${id}" class="field-input" ${disabled}>${options.map(option => `<option value="${escapeHtml(option)}" ${value === option ? "selected" : ""}>${escapeHtml(configEditor.section === "files" && field.key === "office_provider" ? ({"":configText("Collabora Online (по умолчанию)","Collabora Online (default)"),collabora:"Collabora Online",onlyoffice:"ONLYOFFICE Document Server",r7:"Р7 — Сервер документов"}[option] || option) : option)}</option>`).join("")}</select>`;
   } else {
     const type = field.secret ? "password" : ["integer", "number"].includes(field.kind) ? "number" : "text";
     input = `<input id="${id}" class="field-input" type="${type}" value="${escapeHtml(field.secret ? "" : value ?? "")}" ${type === "number" ? `step="${field.kind === "integer" ? "1" : "any"}"` : ""} ${field.kind === "duration" ? 'placeholder="30s, 5m, 24h"' : ""} ${field.secret ? `autocomplete="new-password" placeholder="${escapeHtml(value ? t("config_secret_saved") : t("config_secret_empty"))}"` : ""} ${disabled} />`;
@@ -6930,7 +7043,7 @@ async function openAdminConfig(section) {
   const group = CONFIG_GROUPS.find(group => group.sections.includes(section));
   $("config-category").textContent = group ? configText(...group.title) : "";
   $("config-lede").textContent = configDescription(section);
-  $("config-notice").textContent = t(schema.read_only ? "config_bootstrap_hint" : "config_restart_hint");
+  $("config-notice").textContent = section === "files" ? configText("Изменения применяются сразу. После смены подключения откройте документы заново.", "Changes apply immediately. Reopen documents after changing the connection.") : t(schema.read_only ? "config_bootstrap_hint" : "config_restart_hint");
   $("config-save").classList.toggle("hidden", !!schema.read_only);
   $("config-search").value = "";
   setMsg($("config-msg"), "");
@@ -7168,7 +7281,7 @@ function replyToMessage(message, all=false, dialog=null) {
   let quoted=message.text || '';
   if (!quoted && message.html) {const doc=new DOMParser().parseFromString(message.html,'text/html');doc.querySelectorAll('script,style').forEach(node=>node.remove());quoted=doc.body.textContent || '';}
   ensureComposeCC();
-  openCompose({to,cc:all?(message.reply_all_cc || []).join(', '):'',subject:/^re\s*:/i.test(message.subject || '')?message.subject:'Re: '+(message.subject || ''),body:'\n\n---\n'+quoted.slice(0,10000)});
+  openCompose({to,from:message.reply_from||'',cc:all?(message.reply_all_cc || []).join(', '):'',subject:/^re\s*:/i.test(message.subject || '')?message.subject:'Re: '+(message.subject || ''),body:'\n\n---\n'+quoted.slice(0,10000)});
 }
 function forwardMailMessage(message, dialog=null) {
   if (composeAttachments.sending) return;
@@ -7238,7 +7351,8 @@ function mountEditorDialog(id, className) {
  dialog.querySelectorAll(".compose-panel").forEach(panel=>{panel.removeAttribute("role");panel.removeAttribute("aria-modal")});
   old.replaceWith(dialog);document.body.append(dialog);
   if(id==='contact-backdrop'){const form=$('form-contact');const actions=form?.querySelector('.actions');if(actions){actions.classList.add('event-editor-footer');const save=actions.querySelector('[type=submit]');if(save){save.className='btn-spray';save.textContent=mailImageText('Сохранить контакт','Save contact')}const cancel=$('btn-contact-close');if(cancel){cancel.className='btn-secondary';cancel.textContent=mailImageText('Отмена','Cancel')}}}
-  dialog.addEventListener('click',event=>{if(event.target===dialog){const bounds=dialog.getBoundingClientRect();if(event.clientX<bounds.left||event.clientX>bounds.right||event.clientY<bounds.top||event.clientY>bounds.bottom)dialog.close()}});
+  dialog.addEventListener('cancel',event=>{if(dialog.querySelector('form')?.dataset.saving==='true')event.preventDefault()});
+  dialog.addEventListener('click',event=>{if(event.target===dialog && dialog.querySelector('form')?.dataset.saving!=='true'){const bounds=dialog.getBoundingClientRect();if(event.clientX<bounds.left||event.clientX>bounds.right||event.clientY<bounds.top||event.clientY>bounds.bottom)dialog.close()}});
   return dialog;
 }
 function mountCalendarEditor() {
@@ -7272,13 +7386,50 @@ function syncEventCalendarChoice() {
   select.value=calState.calendarID;
 }
 
+function canEditCalendarEvent(record) {
+  return !!record && !record.busy_only && record.recurrence_organizer !== false &&
+    calState.calendars.some(calendar=>calendar.id===record.calendar_id && calendar.writable!==false && !calendar.external);
+}
+
+async function editCalendarRecord(selected) {
+  if(!canEditCalendarEvent(selected) || $('form-cal-event')?.dataset.saving==='true')return;
+  const userID=state.me?.id;
+  try {
+    const record=await api('/api/v1/calendar/events/'+encodeURIComponent(selected.object_id || selected.id));
+    if(state.me?.id!==userID || !canEditCalendarEvent(record))return;
+    calState.calendarID=record.calendar_id;
+    const form=$('form-cal-event');form.reset();delete form.dataset.createdEvent;
+    calState.uploadedFiles=new Set();
+    showCalCompose(true);
+    calState.editingEvent=record;
+    form.dataset.editorUser=userID;
+    const series=!!record.recurrence?.raw;
+    const title=$('event-editor-title');title.removeAttribute('data-i18n');
+    title.textContent=series?mailImageText('Редактировать всю серию','Edit entire series'):mailImageText('Редактировать событие','Edit event');
+    $('event-calendar-choice').disabled=true;
+    $('cal-new-recurrence')?.remove();
+    for(const key of ['summary','location','description'])$('cal-'+key).value=record[key] || '';
+    $('cal-location').dataset.geo=record.geo || '';
+    for(const key of ['start','end']) {
+      $('cal-'+key).type=record.all_day?'date':'datetime-local';
+      $('cal-'+key).step='1';
+      $('cal-'+key).value=record.all_day?String(record[key]).slice(0,10):calendarLocalInput(record[key])+':'+String(new Date(record[key]).getSeconds()).padStart(2,'0');
+    }
+    calState.attendees=(record.attendees || []).map(a=>({...a,kind:a.kind || 'individual'}));
+    renderCalAttendeeChips();
+    setMsg($('cal-msg'),series?mailImageText('Изменения затронут всю серию. Правило повторения и напоминания сохранятся.','Changes apply to the entire series. The recurrence rule and reminders are preserved.'):record.all_day?mailImageText('Событие на весь день. Дата окончания не включается.','All-day event. The end date is exclusive.'):'');
+  } catch(error) {setMsg($('cal-load-msg'),error.message,'err');}
+}
+
 async function openEntityModal(kind,id) {
   let dialog=$('entity-reader-dialog');if(!dialog){dialog=document.createElement('dialog');dialog.id='entity-reader-dialog';dialog.className='mail-message-dialog';document.body.append(dialog)}
   dialog.dataset.entity=id;dialog.replaceChildren();
   const close=document.createElement('button');close.type='button';close.className='btn-secondary btn-sm';close.textContent=mailImageText('Закрыть','Close');close.addEventListener('click',()=>dialog.close());
   const content=document.createElement('div');content.textContent=mailImageText('Загрузка…','Loading…');dialog.append(close,content);if(!dialog.open)dialog.showModal();
   try{
-    const record=await api((kind==='calendar'?'/api/v1/calendar/events/':'/api/v1/contacts/cards/')+encodeURIComponent(id));
+    const cached=kind==='calendar'?calState.events.find(event=>event.id===id):null;
+    const query=cached?.recurrence_id?'?'+new URLSearchParams({recurrence_id:cached.recurrence_id}):'';
+    const record=await api((kind==='calendar'?'/api/v1/calendar/events/':'/api/v1/contacts/cards/')+encodeURIComponent(cached?.object_id || id)+query);
     if(!dialog.open||dialog.dataset.entity!==id)return;
     if(kind==='calendar'){calState.eventID=id;showCalReader(record)}else{contactState.cardID=id;showContactReader(record)}
     const reader=$(kind==='calendar'?'cal-reader':'contact-reader');
@@ -7288,7 +7439,8 @@ async function openEntityModal(kind,id) {
       addButton(mailImageText('Написать письмо','Write email'),()=>{dialog.close();showApp('mail');openCompose({to:record.email||''})});
       const edit=addButton(mailImageText('Редактировать','Edit'),()=>{dialog.close();editContactRecord(record)});edit.disabled=!!record.readonly;
     }else{
-      addButton(mailImageText('Создать похожее событие','Create similar event'),()=>{dialog.close();startNewCalEvent(calEventDayKey(record));$('cal-summary').value=record.summary||'';$('cal-location').value=record.location||'';$('cal-description').value=record.description||''});
+      const edit=addButton(mailImageText('Редактировать','Edit'),()=>{dialog.close();editCalendarRecord(record)});edit.disabled=!canEditCalendarEvent(record);
+      addButton(mailImageText('Создать похожее событие','Create similar event'),()=>{dialog.close();startNewCalEvent(calEventDayKey(record));$('cal-summary').value=record.summary||'';$('cal-location').value=record.location||'';$('cal-location').dataset.geo=record.geo||'';$('cal-description').value=record.description||''});
     }
     const remove=addButton(mailImageText('Удалить','Delete'),async()=>{
       dialog.close();if(!await askConfirm(t('delete_confirm'),{danger:true})){dialog.showModal();return}
@@ -7313,7 +7465,7 @@ document.addEventListener('dblclick',event=>{
   const calendar=event.target.closest('#app-calendar [data-ev]');if(calendar){event.preventDefault();openEntityModal('calendar',calendar.dataset.ev)}
 });
 // Recurrence controls share one contract for creation and whole-series edits.
-function createRecurrenceFields(prefix, info = {}, timezone = '') {
+function createRecurrenceFields(prefix, info = {}, timezone = '', start = '') {
   const host=document.createElement('fieldset');host.className='cal-recurrence-fields';host.id=prefix;
   const rule=info.rule || {frequency:'',interval:1};
   const field=(key,label,type='text')=>{
@@ -7331,6 +7483,27 @@ function createRecurrenceFields(prefix, info = {}, timezone = '') {
   for(const [value,ru,en] of [['MO','Пн','Mon'],['TU','Вт','Tue'],['WE','Ср','Wed'],['TH','Чт','Thu'],['FR','Пт','Fri'],['SA','Сб','Sat'],['SU','Вс','Sun']]){
     const label=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.value=value;input.name=prefix+'-day';input.checked=(rule.weekdays || []).includes(value);label.append(input,document.createTextNode(mailImageText(ru,en)));dayGroup.append(label);
   }
+  const pattern=field('pattern',mailImageText('Повторять по','Repeat by'),'select');
+  for(const [value,ru,en] of [['date','В число первой встречи','First event’s day of month'],['weekday','Порядковому дню недели','Ordinal weekday'],['last-day','Последнему дню месяца','Last day of month']])option(pattern,value,mailImageText(ru,en));
+  pattern.value=rule.week_ordinal?'weekday':rule.month_day===-1?'last-day':'date';
+  const ordinal=field('ordinal',mailImageText('Какой по счёту','Which occurrence'),'select');
+  for(const [value,ru,en] of [[1,'Первый','First'],[2,'Второй','Second'],[3,'Третий','Third'],[4,'Четвёртый','Fourth'],[5,'Пятый','Fifth'],[-1,'Последний','Last']])option(ordinal,String(value),mailImageText(ru,en));
+  const weekday=field('weekday',mailImageText('День недели','Weekday'),'select');
+  for(const [value,ru,en] of [['MO','Понедельник','Monday'],['TU','Вторник','Tuesday'],['WE','Среда','Wednesday'],['TH','Четверг','Thursday'],['FR','Пятница','Friday'],['SA','Суббота','Saturday'],['SU','Воскресенье','Sunday']])option(weekday,value,mailImageText(ru,en));
+  function setDefaultDay(){
+    let date=start || $('cal-start')?.value;
+    if(!date)return;
+    try{
+      const zone=info.timezone || timezone;
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){
+        const parts=new Intl.DateTimeFormat('en',{...(zone&&zone!=='floating'?{timeZone:zone}:{}),year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date(date));
+        const value=key=>parts.find(part=>part.type===key).value;date=value('year')+'-'+value('month')+'-'+value('day');
+      }
+      const day=new Date(date+'T12:00:00Z');
+      ordinal.value=String(Math.floor((day.getUTCDate()-1)/7)+1);weekday.value=['SU','MO','TU','WE','TH','FR','SA'][day.getUTCDay()];
+    }catch{}
+  }
+  setDefaultDay();if(rule.week_ordinal){ordinal.value=String(rule.week_ordinal);weekday.value=rule.weekdays?.[0] || 'MO';}
   const end=field('end',mailImageText('Окончание серии','Ends'),'select');
   for(const [value,ru,en] of [['never','Без окончания','Never'],['count','После числа встреч','After a number of events'],['until','В указанную дату','On a date']])option(end,value,mailImageText(ru,en));
   end.value=rule.count?'count':rule.until?'until':'never';
@@ -7341,18 +7514,20 @@ function createRecurrenceFields(prefix, info = {}, timezone = '') {
   if(info.exceptions){const note=document.createElement('p');note.className='meta';note.textContent=mailImageText('Отдельно изменённых или отменённых встреч: ','Edited or cancelled occurrences: ')+info.exceptions+'. '+mailImageText('Они сохранятся. Правило, исключающее их исходные даты, будет отклонено.','They are preserved. A rule that removes their original dates will be rejected.');host.append(note);}
   if(info.editable===false){const note=document.createElement('p');note.className='msg';note.textContent=mailImageText('Это правило создано в другом календарном клиенте и не представимо в простом редакторе. Измените его в исходном клиенте; данные сохранены.','This imported rule cannot be represented by the simple editor. Edit it in the original client; its data is preserved.');host.append(note);if(info.raw){const code=document.createElement('code');code.textContent=info.raw;host.append(code);}}
   function update(){
-    const active=!!frequency.value,weekly=frequency.value==='WEEKLY';
+    const active=!!frequency.value,weekly=frequency.value==='WEEKLY',calendarPattern=['MONTHLY','YEARLY'].includes(frequency.value),byWeekday=calendarPattern&&pattern.value==='weekday';
     const units={DAILY:mailImageText('Интервал, дней','Interval, days'),WEEKLY:mailImageText('Интервал, недель','Interval, weeks'),MONTHLY:mailImageText('Интервал, месяцев','Interval, months'),YEARLY:mailImageText('Интервал, лет','Interval, years')};
     interval.previousElementSibling.textContent=units[frequency.value] || mailImageText('Интервал повторения','Repeat interval');
-    hint.textContent=mailImageText('Часовой пояс серии: ','Series timezone: ')+(info.timezone==='floating'?mailImageText('локальное время без часового пояса','floating local time'):info.timezone || timezone || 'UTC')+'. '+(weekly?mailImageText('Включите день первой встречи. Без выбора дней используется он.','Include the first event’s weekday. Leaving all days unchecked uses it.'):['MONTHLY','YEARLY'].includes(frequency.value)?mailImageText('В число первой встречи. Несуществующие даты пропускаются.','Uses the first event’s date. Nonexistent dates are skipped.'):'');
+    hint.textContent=mailImageText('Часовой пояс серии: ','Series timezone: ')+(info.timezone==='floating'?mailImageText('локальное время без часового пояса','floating local time'):info.timezone || timezone || 'UTC')+'. '+(weekly?mailImageText('Включите день первой встречи. Без выбора дней используется он.','Include the first event’s weekday. Leaving all days unchecked uses it.'):calendarPattern?mailImageText('Правило должно включать дату первой встречи. Несуществующие даты и пятые дни недели пропускаются. Ежегодное правило действует в месяце первой встречи.','The pattern must include the first event’s date. Nonexistent dates and fifth weekdays are skipped. Yearly patterns use the first event’s month.'):'');
     for(const input of [interval,end]){input.parentElement.hidden=!active;input.disabled=!active;}
     dayGroup.hidden=!weekly;dayGroup.querySelectorAll('input').forEach(input=>input.disabled=!weekly);
+    pattern.parentElement.hidden=!calendarPattern;pattern.disabled=!calendarPattern;
+    for(const input of [ordinal,weekday]){input.parentElement.hidden=!byWeekday;input.disabled=!byWeekday;}
     count.parentElement.hidden=!active || end.value!=='count';count.disabled=count.parentElement.hidden;count.required=!count.disabled;
     until.parentElement.hidden=!active || end.value!=='until';until.disabled=until.parentElement.hidden;until.required=!until.disabled;
     interval.required=active;hint.hidden=!active;
     if(info.editable===false)host.querySelectorAll('input,select').forEach(input=>input.disabled=true);
   }
-  frequency.addEventListener('change',update);end.addEventListener('change',update);host.addEventListener('reset-fields',update);update();
+  frequency.addEventListener('change',update);end.addEventListener('change',update);pattern.addEventListener('change',()=>{if(!start&&pattern.value==='weekday')setDefaultDay();update();});host.addEventListener('reset-fields',update);update();
   return host;
 }
 
@@ -7362,6 +7537,11 @@ function readRecurrenceFields(prefix) {
   const rule={frequency,interval:Number($(prefix+'-interval').value)};
   if(!Number.isInteger(rule.interval)||rule.interval<1||rule.interval>99)throw Error(mailImageText('Интервал должен быть от 1 до 99','Interval must be 1–99'));
   if(frequency==='WEEKLY')rule.weekdays=[...$(prefix).querySelectorAll('input[type=checkbox]:checked')].map(input=>input.value);
+  if(['MONTHLY','YEARLY'].includes(frequency)){
+    const pattern=$(prefix+'-pattern').value;
+    if(pattern==='last-day')rule.month_day=-1;
+    if(pattern==='weekday'){rule.week_ordinal=Number($(prefix+'-ordinal').value);rule.weekdays=[$(prefix+'-weekday').value];}
+  }
   const end=$(prefix+'-end').value;
   if(end==='count'){rule.count=Number($(prefix+'-count').value);if(!Number.isInteger(rule.count)||rule.count<1||rule.count>1000)throw Error(mailImageText('Укажите от 1 до 1000 встреч','Choose 1–1000 events'));}
   if(end==='until'){rule.until=$(prefix+'-until').value;if(!rule.until)throw Error(mailImageText('Укажите дату окончания','Choose an end date'));}
@@ -7394,7 +7574,7 @@ async function openCalRecurrenceEditor() {
     const context=document.createElement('p');context.className='meta';
     let when=fmtCalEventWhen(event,event.start);try{if(!event.all_day && event.recurrence?.timezone && event.recurrence.timezone!=='floating')when=new Date(event.start).toLocaleString(undefined,{timeZone:event.recurrence.timezone});}catch{}
     context.textContent=event.summary+' · '+mailImageText('Начало серии: ','First event: ')+when;title.after(context);
-    const form=document.createElement('form');form.id='form-cal-recurrence';const content=document.createElement('div');content.className='cal-recurrence-content';const fields=createRecurrenceFields('cal-rule',event.recurrence);content.append(fields);form.append(content);
+    const form=document.createElement('form');form.id='form-cal-recurrence';const content=document.createElement('div');content.className='cal-recurrence-content';const fields=createRecurrenceFields('cal-rule',event.recurrence,'',event.all_day?event.start.slice(0,10):event.start);content.append(fields);form.append(content);
     const note=document.createElement('p');note.className='meta';note.textContent=mailImageText('Изменится вся серия. Участникам будут отправлены обновлённые приглашения.','The entire series will change. Attendees will receive updated invitations.');content.append(note);
     const footer=document.createElement('div');footer.className='event-editor-footer';const save=document.createElement('button');save.type='submit';save.className='btn-spray';save.textContent=t('save');save.disabled=event.recurrence?.editable!==true;footer.append(save,close);form.append(status,footer);dialog.append(form);setMsg(status,'');
     form.addEventListener('submit',async e=>{
@@ -7413,6 +7593,7 @@ async function openCalRecurrenceEditor() {
 }
 
 function calendarRecurrenceError(message) {
+  if(message.includes("pattern must include the first event's date"))return mailImageText('Правило должно включать дату первой встречи. Проверьте число, день недели и его порядковый номер; для новой серии измените дату начала.','The pattern must include the first event’s date. Check the day and ordinal; for a new series, adjust the start date.');
   if(message.includes('resource booking requires a recurrence end'))return mailImageText('Для бронирования помещения укажите дату окончания серии или количество встреч.','Choose an end date or occurrence count to book a room.');
   if(message.includes('1000 occurrences within 5 years'))return mailImageText('Можно забронировать до 1000 встреч в пределах 5 лет. Сократите серию.','Book up to 1000 events within 5 years. Shorten the series.');
   if(message.startsWith('resource is busy: ')){
@@ -7430,6 +7611,74 @@ function calendarRecurrenceError(message) {
 }
 
 $('btn-cal-recurrence')?.addEventListener('click',()=>openCalRecurrenceEditor());
+// Instance RSVP uses the invitation's owner and the original recurrence identity.
+let calOccurrenceReplyBusy = false;
+
+function renderCalOccurrenceReply(ev) {
+  $('cal-occurrence-reply')?.remove();
+  if(!ev?.occurrence_invite_id || !ev.recurrence_id || ev.busy_only || ev.status==='CANCELLED')return;
+  const host=document.createElement('section');host.id='cal-occurrence-reply';host.className='cal-invite-item';
+  const label=mailImageText('Ответ только на это повторение','Reply to this occurrence only');
+  host.setAttribute('aria-label',label);
+  host.innerHTML=`<div class="cal-invite-main"><strong>${escapeHtml(label)}</strong><span>${escapeHtml(fmtCalEventWhen(ev,ev.start))}</span><span class="meta">${escapeHtml(mailImageText('Ответ на всю серию и остальные даты не изменятся.','The series response and other dates stay unchanged.'))}</span><span>${escapeHtml(partstatLabel(ev.occurrence_partstat))}</span></div><div class="cal-invite-actions"></div><p class="msg" role="status"></p>`;
+  const actions=host.querySelector('.cal-invite-actions');
+  const hasProposal=!!ev.occurrence_proposed_start;
+  if(hasProposal){
+    const pending=document.createElement('span');pending.className='meta';pending.textContent=mailImageText('Предложено: ','Proposed: ')+fmtCalEventWhen({all_day:false},ev.occurrence_proposed_start)+' — '+fmtCalEventWhen({all_day:false},ev.occurrence_proposed_end);host.querySelector('.cal-invite-main').append(pending);
+    const note=document.createElement('span');note.className='meta';note.textContent=mailImageText('Новый ответ на приглашение снимет это предложение времени.','Responding to the invitation withdraws this time proposal.');host.querySelector('.cal-invite-main').append(note);
+  }
+  const userID=state.me?.id;
+  for(const [action,status,key] of [['accept','ACCEPTED','cal_accept'],['tentative','TENTATIVE','cal_tentative'],['decline','DECLINED','cal_decline']]){
+    const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.textContent=t(key);
+    button.disabled=calOccurrenceReplyBusy || !hasProposal && ev.occurrence_partstat===status;
+    button.addEventListener('click',()=>{if(state.me?.id===userID)replyCalOccurrence(ev,action,status,host);});actions.append(button);
+  }
+  const counter=document.createElement('button');counter.type='button';counter.className='btn-secondary btn-sm';counter.textContent=t('cal_counter');counter.disabled=calOccurrenceReplyBusy;
+  counter.onclick=()=>{if(state.me?.id===userID)replyCalOccurrence(ev,'counter',null,host);};actions.append(counter);
+  $('cal-reader')?.append(host);
+}
+
+async function replyCalOccurrence(ev,action,status,host) {
+  if(calOccurrenceReplyBusy || calState.currentEvent!==ev)return;
+  const userID=state.me?.id;
+  const selected=()=>state.me?.id===userID && calState.currentEvent?.id===ev.id;
+  const read=()=>api('/api/v1/calendar/events/'+encodeURIComponent(ev.object_id)+'?'+new URLSearchParams({recurrence_id:ev.recurrence_id}));
+  calOccurrenceReplyBusy=true;host.querySelectorAll('button').forEach(button=>button.disabled=true);
+  const message=host.querySelector('[role=status]');setMsg(message,'…');
+  let sent=false,inputError='';
+  try{
+    const body={action,etag:ev.etag,recurrence_id:ev.recurrence_id};
+    if(action==='counter'){
+      const start=await askPrompt(t('col_start'),{value:calendarLocalInput(ev.occurrence_proposed_start || ev.start),body:mailImageText('Новое время только этого повторения (YYYY-MM-DDTHH:mm)','New time for this occurrence only (YYYY-MM-DDTHH:mm)')});
+      if(start==null || !String(start).trim() || !selected())return;
+      const end=await askPrompt(t('col_end'),{value:calendarLocalInput(ev.occurrence_proposed_end || ev.end),body:mailImageText('Конец этого повторения (YYYY-MM-DDTHH:mm)','End of this occurrence (YYYY-MM-DDTHH:mm)')});
+      if(end==null || !String(end).trim() || !selected())return;
+      body.start=localInputToISO(String(start).trim());body.end=localInputToISO(String(end).trim());
+      if(!Number.isFinite(Date.parse(body.start)) || !Number.isFinite(Date.parse(body.end)) || new Date(body.end)<=new Date(body.start))throw Error(mailImageText('Конец должен быть позже начала','End must be after start'));
+      if(new Date(body.end)-new Date(body.start)>31*24*60*60*1000)throw Error(mailImageText('Продолжительность повторения не должна превышать 31 день','An occurrence must not exceed 31 days'));
+    }
+    if(!selected())return;sent=true;
+    const result=await api('/api/v1/calendar/invites/'+encodeURIComponent(ev.occurrence_invite_id)+'/reply',{method:'POST',body:JSON.stringify(body)});
+    if(!selected())return;
+    if(result.id!==ev.occurrence_invite_id || result.recurrence_id!==ev.recurrence_id || (action==='counter'?result.action!=='counter':result.partstat!==status))throw Error(mailImageText('Ответ сервера не подтверждён. Обновите встречу.','The response was not confirmed. Refresh the event.'));
+    const updated=await read();if(!selected())return;
+    calOccurrenceReplyBusy=false;showCalReader(updated);
+    await loadCalEvents();
+  }catch(error){
+    if(!selected())return;
+    if(!sent){inputError=error.message;return;}
+    setMsg(message,mailImageText('Не удалось подтвердить ответ. Обновите встречу перед следующей попыткой. ','Could not confirm the response. Refresh the event before trying again. ')+error.message,'err');
+    const refresh=document.createElement('button');refresh.type='button';refresh.className='btn-secondary btn-sm';refresh.textContent=mailImageText('Обновить встречу','Refresh event');
+    refresh.onclick=async()=>{
+      if(!selected())return;refresh.disabled=true;
+      try{const updated=await read();if(selected())showCalReader(updated);}catch(error){if(selected()){setMsg(message,error.message,'err');refresh.disabled=false;}}
+    };
+    host.append(refresh);
+  }finally{
+    calOccurrenceReplyBusy=false;
+    if(!selected() || !sent){renderCalOccurrenceReply(calState.currentEvent);if(selected()&&inputError)setMsg($('cal-occurrence-reply')?.querySelector('[role=status]'),inputError,'err');}
+  }
+}
 /* Keep technical reports out of the message list. Never render quarantine HTML. */
 async function refreshProtectionMessages() {
   refreshProtectionDiagnostics();
@@ -8185,7 +8434,7 @@ function fileAction(label,run,icon='') {
   if(icon)button.innerHTML=designIcon(icon);else button.textContent=label;button.onclick=run;return button;
 }
 function libraryMessage(error) {
-  return ({507:mailImageText('Квота файлов исчерпана. Очистите корзину или удалите ненужные версии.','File quota exceeded. Empty trash or remove old versions.'),409:mailImageText('Файл изменён или путь уже занят. Обновите список и повторите действие.','File changed or the destination exists. Refresh and retry.'),423:mailImageText('Документ открыт для редактирования. Закройте редактор и повторите действие.','Document is locked for editing. Close the editor and retry.'),503:mailImageText('Офисный редактор ещё не подключён. Администратор может указать адрес Collabora в настройках сервера → Файлы.','Office is not connected yet. Configure Collabora in server settings → Files.')})[error.status]||error.message;
+  return ({507:mailImageText('Квота файлов исчерпана. Очистите корзину или удалите ненужные версии.','File quota exceeded. Empty trash or remove old versions.'),409:mailImageText('Файл изменён или путь уже занят. Обновите список и повторите действие.','File changed or the destination exists. Refresh and retry.'),423:mailImageText('Документ открыт для редактирования. Закройте редактор и повторите действие.','Document is locked for editing. Close the editor and retry.'),503:mailImageText('Офисный редактор ещё не подключён. Администратор может подключить Collabora, ONLYOFFICE или Р7 в настройках сервера → Файлы.','Office is not connected yet. Configure Collabora, ONLYOFFICE or R7 in server settings → Files.')})[error.status]||error.message;
 }
 async function openFileHistory(kind,path='') {
   const view=fileLibraryDialog(kind==='trash'?mailImageText('Корзина','Trash'):mailImageText('Версии файла','File versions')+' · '+path);
@@ -8206,6 +8455,7 @@ async function openFileHistory(kind,path='') {
         try{await api('/api/v1/files/library/'+(remove?kind:'restore'),{method:remove?'DELETE':'POST',body:JSON.stringify({id:item.id,kind})});await load();await refreshFiles()}catch(error){view.status.textContent=libraryMessage(error);actions.querySelectorAll('button').forEach(b=>b.disabled=false)}
       };
       actions.append(fileAction(mailImageText('Восстановить','Restore'),()=>act(false),'reply'));actions.append(fileAction(mailImageText('Удалить навсегда','Delete permanently'),()=>act(true),'delete'));row.append(name,date,size,actions);tbody.append(row);
+	  if(kind==='versions'&&!item.is_dir&&/\.(docx|doc|odt|rtf|txt|md|csv|xlsx|ods|pptx|odp|pdf)$/i.test(item.path))actions.prepend(fileAction(mailImageText('Сравнить','Compare'),()=>openFileComparison(item.path,item.id)));
     }
     if(!filtered.length){const row=tbody.insertRow(),cell=row.insertCell();cell.colSpan=4;cell.textContent=mailImageText('Нет файлов','No files')}
     const label=document.createElement('span');label.textContent=filtered.length?`${page*25+1}–${Math.min((page+1)*25,filtered.length)} / ${filtered.length}`:'0';const prev=fileAction('‹',()=>{page--;render()}),next=fileAction('›',()=>{page++;render()});prev.setAttribute('aria-label',mailImageText('Предыдущая страница','Previous page'));next.setAttribute('aria-label',mailImageText('Следующая страница','Next page'));prev.disabled=page===0;next.disabled=(page+1)*25>=filtered.length;nav.replaceChildren(prev,label,next);
@@ -8213,7 +8463,18 @@ async function openFileHistory(kind,path='') {
 }
 async function openFileDAVInfo() {
   const v=fileLibraryDialog(mailImageText('Подключение по WebDAV','Connect with WebDAV'));
-  try{const info=await api('/api/v1/files/office');const label=document.createElement('label'),url=document.createElement('input'),hint=document.createElement('p');label.textContent=mailImageText('Адрес личного хранилища','Personal storage address');url.className='field-input';url.readOnly=true;url.value=info.webdav_url;url.setAttribute('aria-label',label.textContent);hint.textContent=mailImageText('Логин — полный почтовый адрес. Используйте WebDAV-клиент с HTTPS. Passkey применяется только для входа в веб-интерфейс. При обязательном TOTP нужен клиент с поддержкой Bearer-токена.','Use your full email address and an HTTPS WebDAV client. Passkeys are for web sign-in only. Enforced TOTP requires a client that supports Bearer tokens.');v.body.append(label,url,fileAction(mailImageText('Скопировать адрес','Copy address'),async()=>{try{await navigator.clipboard.writeText(url.value);v.status.textContent=mailImageText('Адрес скопирован','Address copied')}catch{url.select()}}),hint)}catch(error){v.status.textContent=libraryMessage(error)}
+  try {
+    const info=await api('/api/v1/files/office');
+    for(const [title,address] of [[mailImageText('Адрес личного хранилища','Personal storage address'),info.webdav_url],[mailImageText('Адрес общих папок','Shared folders address'),info.shared_webdav_url]]) {
+      if(!address)continue;
+      const label=document.createElement('label'),url=document.createElement('input');
+      label.textContent=title;url.className='field-input';url.readOnly=true;url.value=address;url.setAttribute('aria-label',title);
+      v.body.append(label,url,fileAction(mailImageText('Скопировать адрес','Copy address'),async()=>{try{await navigator.clipboard.writeText(url.value);v.status.textContent=mailImageText('Адрес скопирован','Address copied')}catch{url.select()}}));
+    }
+    const hint=document.createElement('p');
+    hint.textContent=mailImageText('Логин — полный почтовый адрес. Используйте WebDAV-клиент с HTTPS. Общие папки доступны с правами, выданными владельцем. Passkey применяется только для входа в веб-интерфейс. При обязательном TOTP нужен клиент с поддержкой Bearer-токена.','Use your full email address and an HTTPS WebDAV client. Shared folders use the permissions granted by their owner. Passkeys are for web sign-in only. Enforced TOTP requires a client that supports Bearer tokens.');
+    v.body.append(hint);
+  }catch(error){v.status.textContent=libraryMessage(error)}
 }
 function mountFileReaderActions(entry) {
   let versions=$('btn-files-versions'),office=$('btn-files-office');
@@ -8221,11 +8482,21 @@ function mountFileReaderActions(entry) {
   if(!office){office=fileAction(mailImageText('Открыть в офисе','Open in office'),()=>{});office.id='btn-files-office';$('btn-files-download').after(office)}
   versions.hidden=entry.is_dir||!!filesState.ownerID;versions.onclick=()=>openFileHistory('versions',joinPath(filesState.path,entry.name));
   office.hidden=entry.is_dir||!(/\.(odt|ods|odp|odg|docx?|xlsx?|pptx?|rtf|csv|txt)$/i.test(entry.name));office.onclick=()=>openOfficeDocument(joinPath(filesState.path,entry.name),entry.name);
+	let template=$('btn-file-use-template');
+	if(!template){template=fileAction(mailImageText('Использовать как шаблон','Use as template'),()=>{});template.id='btn-file-use-template';office.after(template);}
+	template.hidden=entry.is_dir||!(/\.(docx|xlsx|pptx|odt|ods|odp|rtf|txt|csv)$/i.test(entry.name));
+	template.onclick=()=>openDocumentTemplate({name:entry.name,path:joinPath(filesState.path,entry.name),owner:filesState.ownerID});
 }
 async function openOfficeDocument(path,name) {
   const owner=filesState.ownerID,v=fileLibraryDialog(name,true);v.status.textContent=mailImageText('Подключение к редактору…','Connecting to editor…');
   try{
     const session=await api('/api/v1/files/office?lang='+encodeURIComponent(document.documentElement.lang||'ru'),{method:'POST',body:JSON.stringify({path,owner_id:owner})});if(!v.dialog.open)return;
+    if(session.provider==='onlyoffice'||session.provider==='r7'){
+      const endpoint=new URL(session.url);if(endpoint.origin!==location.origin||endpoint.protocol!=='https:')throw new Error('Invalid office origin');
+      const frame=document.createElement('iframe');frame.title=name;frame.allow='clipboard-read; clipboard-write; fullscreen';frame.referrerPolicy='no-referrer';frame.src=endpoint.href;v.body.append(frame);
+      v.status.textContent=session.writable?mailImageText('Сохранение — в меню редактора. После закрытия дождитесь сохранения файла на сервере.','Use Save in the editor. After closing, allow time for the file to be saved on the server.'):mailImageText('Только просмотр','Read only');
+      const close=async()=>{if(session.writable&&!await askConfirm(mailImageText('Закрыть редактор? Изменения сохранятся после завершения сеанса; это может занять несколько секунд.','Close the editor? Changes are saved after the session ends; this may take a few seconds.')))return;v.dialog.close();refreshFiles()};v.close.onclick=close;v.dialog.addEventListener('cancel',event=>{event.preventDefault();close()});return;
+    }
     const endpoint=new URL(session.url);if(endpoint.protocol!=='https:')throw new Error('HTTPS required');
     const frame=document.createElement('iframe');frame.name='tayga-office-'+crypto.randomUUID();frame.title=name;frame.allow='clipboard-read; clipboard-write; fullscreen';frame.referrerPolicy='no-referrer';
     const form=document.createElement('form');form.method='POST';form.action=endpoint.href;form.target=frame.name;form.hidden=true;
@@ -8242,6 +8513,7 @@ async function openOfficeDocument(path,name) {
 }
 const fileBrowser={page:0,identity:'',selected:new Set()};
 function fileEntriesPage(entries) {
+	if($('btn-files-create-document'))$('btn-files-create-document').disabled=!!filesState.ownerID&&filesState.sharedRights!=='write';
   const identity=[state.email,filesState.ownerID,filesState.path,filesState.listTarget].join('|');if(identity!==fileBrowser.identity){fileBrowser.identity=identity;fileBrowser.page=0;fileBrowser.selected.clear();if($('files-search'))$('files-search').value=''}
   const query=($('files-search')?.value||'').trim().toLocaleLowerCase();const sorted=entries.filter(e=>e.name.toLocaleLowerCase().includes(query)).sort((a,b)=>Number(b.is_dir)-Number(a.is_dir)||a.name.localeCompare(b.name));
   const available=new Set(entries.map(e=>e.name));for(const name of fileBrowser.selected)if(!available.has(name))fileBrowser.selected.delete(name);
@@ -8284,6 +8556,407 @@ async function openFileStorageUsage(){
  }catch(error){v.status.textContent=libraryMessage(error)}
 }
 $('files-settings-menu')?.append(fileAction(mailImageText('Место в хранилище','Storage usage'),openFileStorageUsage));
+
+async function openDocumentTemplate(source=null) {
+  const identity=state.email;
+  const personalCopy=source&&filesState.ownerID&&filesState.sharedRights!=='write';
+  const owner=personalCopy?'':filesState.ownerID;
+  const directory=personalCopy?'':filesState.path;
+  const v=fileLibraryDialog(mailImageText('Создать из шаблона','Create from template'));
+  const form=document.createElement('form'),select=document.createElement('select'),name=document.createElement('input');
+  select.className='field-input';select.setAttribute('aria-label',mailImageText('Шаблон','Template'));
+  name.className='field-input';name.required=true;name.maxLength=255;name.setAttribute('aria-label',mailImageText('Имя документа','Document name'));
+  const location=document.createElement('p');location.className='meta';location.textContent=mailImageText('Папка: ','Folder: ')+(directory||'/');
+  const openLabel=document.createElement('label'),open=document.createElement('input');open.type='checkbox';openLabel.append(open,document.createTextNode(' '+mailImageText('Открыть в офисном редакторе','Open in office editor')));
+  const submit=fileAction(mailImageText('Создать','Create'),()=>{});submit.type='submit';submit.disabled=true;
+  form.append(location,select,name,openLabel,submit);v.body.append(form);
+	form.onsubmit=event=>event.preventDefault();
+  let templates=[],busy=false,created=false;
+  try {
+    const data=await api('/api/v1/files/templates');
+    if(state.email!==identity||!v.dialog.open)return;
+    templates=data.templates||[];openLabel.hidden=!data.office_enabled;open.checked=!!data.office_enabled;
+    if(source){select.add(new Option(mailImageText('На основе: ','Based on: ')+source.name,'source'));name.value=source.name.replace(/(\.[^.]+)$/,' '+mailImageText('(копия)','(copy)')+'$1');}
+    for(const item of templates)select.add(new Option(document.documentElement.lang==='en'?item.title_en:item.title,item.id));
+    const updateName=()=>{if(select.value==='source')name.value=source.name.replace(/(\.[^.]+)$/,' '+mailImageText('(копия)','(copy)')+'$1');else {const item=templates.find(item=>item.id===select.value);if(item)name.value=mailImageText('Новый документ','New document')+item.extension;}};
+    select.onchange=updateName;if(!source)updateName();submit.disabled=false;name.focus();name.select();
+  }catch(error){v.status.textContent=libraryMessage(error)}
+  form.onsubmit=async event=>{
+    event.preventDefault();if(busy||created||!name.value.trim())return;
+    if(state.email!==identity){v.dialog.close();return;}
+    busy=true;submit.disabled=true;v.close.disabled=true;select.disabled=true;name.disabled=true;
+    v.status.textContent=mailImageText('Создание…','Creating…');
+    const payload={directory,name:name.value.trim(),owner_id:owner||''};
+    if(select.value==='source'){payload.source_path=source.path;payload.source_owner_id=source.owner||'';}else payload.template_id=select.value;
+    try {
+      const result=await api('/api/v1/files/templates',{method:'POST',body:JSON.stringify(payload)});created=true;
+      if(state.email!==identity){v.dialog.close();return;}
+      v.dialog.close();
+      if(filesState.ownerID===owner&&filesState.path===directory){await refreshFiles();selectFileEntry(result.name);if(open.checked&&result.office_enabled)openOfficeDocument(result.path,result.name);}
+      else setMsg($('files-msg'),mailImageText('Создан документ: ','Document created: ')+result.path,'ok');
+    }catch(error){v.status.textContent=libraryMessage(error);submit.disabled=false;select.disabled=false;name.disabled=false;}
+    finally{busy=false;v.close.disabled=false;}
+  };
+  v.dialog.addEventListener('cancel',event=>{if(busy)event.preventDefault()});
+}
+const createDocumentButton=fileAction(mailImageText('Создать документ','Create document'),()=>openDocumentTemplate());
+createDocumentButton.id='btn-files-create-document';$('btn-files-mkdir')?.after(createDocumentButton);
+
+async function openFileComparison(path,leftID) {
+  const identity=state.email,v=fileLibraryDialog(mailImageText('Сравнение версий','Compare versions')+' · '+path);
+  const form=document.createElement('form');form.className='file-comparison-form';
+  const left=document.createElement('select'),right=document.createElement('select'),mode=document.createElement('select');
+  const field=(title,control)=>{const label=document.createElement('label');label.textContent=title;control.className='field-input';control.setAttribute('aria-label',title);label.append(control);return label};
+  const submit=fileAction(mailImageText('Сравнить','Compare'),()=>{});submit.type='submit';submit.disabled=true;
+  const note=document.createElement('p');note.className='meta';
+  const updateNote=()=>{if(mode.value==='motion'){note.textContent=mailImageText('Сравнение кадров и воспроизведение поддерживаемых эффектов. Для неподдерживаемых эффектов слайд остаётся статичным и показывается предупреждение.','Frame comparison and supported effect playback. Unsupported effects leave the slide static with a warning.');return;}if(mode.value==='visual'){note.textContent=mailImageText('Статичные страницы и слайды: рядом, наложение или разница пикселей. Сопоставление по номеру страницы; эффекты не воспроизводятся.','Static pages and slides: side by side, overlay or pixel difference. Pages are paired by number; effects are not played.');return;}if(mode.value==='details'){note.textContent=mailImageText('Сравниваются также сохранённые свойства оформления, диаграмм, переходов и анимации. Это параметры документа: отрисовка и воспроизведение эффектов не выполняются.','Also compares saved appearance, chart, transition and animation properties. Documents are not rendered and effects are not played.');return;}note.textContent=mode.value==='structured'?(/\.(xlsx|ods)$/i.test(path)?mailImageText('Сравниваются листы, значения и формулы ячеек. Формулы не вычисляются; цвета, шрифты, диаграммы и комментарии не учитываются.','Compares sheets, cell values and formulas. Formulas are not calculated; colors, fonts, charts and comments are excluded.'):mailImageText('Сравниваются текст, порядок слайдов и содержимое изображений. Оформление, диаграммы, анимация и заметки не учитываются.','Compares text, slide order and image content. Layout, charts, animation and notes are excluded.')):mode.value==='office'?mailImageText('Сравнение открывается только для просмотра. Исходные файлы не изменяются.','Comparison opens read-only. Original files are unchanged.'):mailImageText('Сравнивается основной текст. Оформление, изображения, колонтитулы и комментарии не учитываются.','Compares body text. Formatting, images, headers, footers and comments are excluded.');};mode.onchange=updateNote;updateNote();
+  const output=document.createElement('div');output.className='file-comparison-output';output.setAttribute('aria-label',mailImageText('Изменения','Changes'));
+  form.append(field(mailImageText('Исходная версия','Original version'),left),field(mailImageText('Новая версия','Revised version'),right),field(mailImageText('Режим','Mode'),mode),submit);form.onsubmit=event=>event.preventDefault();v.body.append(form,note,output);
+  let busy=false;
+  try{
+    const data=await api('/api/v1/files/library/versions?path='+encodeURIComponent(path));
+    if(!v.dialog.open||state.email!==identity)return;
+    right.add(new Option(mailImageText('Текущий файл','Current file'),'current'));
+    for(const item of data.entries||[]){const title=new Date(item.at).toLocaleString()+' · '+fmtBytes(item.size)+' · '+item.id.slice(0,8);left.add(new Option(title,item.id));right.add(new Option(title,item.id));}
+    left.value=leftID;
+    if(/\.(docx|odt|txt|md|csv)$/i.test(path))mode.add(new Option(mailImageText('Текстовые изменения','Text changes'),'text'));
+	if(/\.(xlsx|ods|pptx|odp)$/i.test(path))mode.add(new Option(/\.(xlsx|ods)$/i.test(path)?mailImageText('Листы и ячейки','Sheets and cells'):mailImageText('Слайды и изображения','Slides and images'),'structured'));
+	if(/\.(xlsx|ods|pptx|odp)$/i.test(path))mode.add(new Option(mailImageText('Подробное сравнение','Detailed comparison'),'details'));
+    if(data.office_compare_enabled&&/\.(docx|doc|odt|rtf|txt)$/i.test(path))mode.add(new Option('ONLYOFFICE / Р7','office'));
+    if(/\.pdf$/i.test(path)||((data.visual_compare_enabled||data.office_compare_enabled)&&/\.(docx|doc|odt|rtf|txt|xlsx|ods|pptx|odp)$/i.test(path)))mode.add(new Option(mailImageText('Визуальное сравнение','Visual comparison'),'visual'));
+    if((data.visual_compare_enabled||data.office_compare_enabled)&&/\.(pptx|odp)$/i.test(path))mode.add(new Option(mailImageText('Кадры и анимация','Frames and animation'),'motion'));
+	updateNote();
+    if(!mode.options.length){v.status.textContent=mailImageText('Для этого формата требуется подключённый ONLYOFFICE/Р7.','This format requires a configured ONLYOFFICE/R7 server.');return;}
+    submit.disabled=!left.value;
+  }catch(error){v.status.textContent=libraryMessage(error);return;}
+  form.onsubmit=async event=>{
+    event.preventDefault();if(busy)return;if(state.email!==identity){v.dialog.close();return;}
+    if(left.value===right.value){v.status.textContent=mailImageText('Выберите две разные версии.','Choose two different versions.');return;}
+    busy=true;submit.disabled=true;left.disabled=true;right.disabled=true;mode.disabled=true;output.replaceChildren();v.status.textContent=mailImageText('Сравнение…','Comparing…');
+    try{
+      const result=await api('/api/v1/files/library/compare',{method:'POST',body:JSON.stringify({path,left:left.value,right:right.value,mode:mode.value,lang:document.documentElement.lang||'ru'})});
+      if(!v.dialog.open||state.email!==identity)return;
+      if(result.mode==='motion'){
+        await openFileMotionComparison(path,result,identity);v.status.textContent=mailImageText('Сравнение кадров открыто.','Frame comparison opened.');
+      }else if(result.mode==='visual'){
+        await openRenderedFileComparison(path,result,identity);v.status.textContent=mailImageText('Визуальное сравнение открыто.','Visual comparison opened.');
+      }else if(result.mode==='office'){
+        const address=new URL(result.url,location.href);if(address.origin!==location.origin)throw new Error(mailImageText('Недопустимый адрес редактора.','Invalid editor address.'));
+        const editor=fileLibraryDialog(mailImageText('Сравнение в редакторе','Compare in editor')+' · '+path,true),frame=document.createElement('iframe');frame.title=path;frame.referrerPolicy='no-referrer';frame.src=address.href;editor.body.append(frame);v.status.textContent=mailImageText('Сравнение открыто только для просмотра. Исходные версии не изменяются.','Comparison opened read-only. Original versions are unchanged.');
+      }else if(result.mode==='structured'){
+		const changes=result.changes||[];let page=0;
+		const renderChanges=()=>{
+		const fragment=document.createDocumentFragment();
+		const sectionName=section=>({workbook:mailImageText('Система дат','Date system'),sheet:mailImageText('Лист','Sheet'),cell:mailImageText('Ячейка','Cell'),slide:mailImageText('Слайд','Slide'),'slide-text':mailImageText('Текст слайда','Slide text'),'slide-images':mailImageText('Изображения слайда','Slide images'),'cell-style':mailImageText('Оформление ячейки','Cell appearance'),'row-style':mailImageText('Оформление строки','Row appearance'),'column-style':mailImageText('Оформление столбца','Column appearance'),'sheet-layout':mailImageText('Разметка листа','Sheet layout'),'sheet-chart':mailImageText('Диаграмма листа','Sheet chart'),'slide-style':mailImageText('Оформление слайда','Slide appearance'),'slide-chart':mailImageText('Диаграмма слайда','Slide chart'),'slide-transition':mailImageText('Переход слайда','Slide transition'),'slide-animation':mailImageText('Анимация слайда','Slide animation'),'presentation-layout':mailImageText('Параметры презентации','Presentation properties'),theme:mailImageText('Темы, макеты и стили','Themes, layouts and styles')})[section]||section;
+		for(const change of changes.slice(page*100,(page+1)*100)){
+		  const card=document.createElement('section');card.className='file-structured-change';
+		  const title=document.createElement('strong');title.textContent=sectionName(change.section)+(change.group?' · '+change.group:'')+(change.address?' · '+change.address:'');
+		  const badge=document.createElement('span');badge.className='meta';badge.textContent=change.kind==='insert'?mailImageText('Добавлено','Added'):change.kind==='delete'?mailImageText('Удалено','Removed'):mailImageText('Изменено','Changed');card.append(title,badge);
+		  const sides=document.createElement('div');sides.className='file-structured-sides';
+		  for(const [label,text,kind] of [[mailImageText('Было','Before'),change.before,'delete'],[mailImageText('Стало','After'),change.after,'insert']]){
+			const side=document.createElement('div');side.className='file-structured-side file-comparison-'+kind;const caption=document.createElement('span');caption.className='meta';caption.textContent=label;const value=document.createElement('pre');value.textContent=change.section==='slide-images'&&text?mailImageText('Изображений: ','Images: ')+text.split('\n').length+'\n'+text.split('\n').map(hash=>/^[a-f0-9]{64}$/.test(hash)?'SHA-256: '+hash.slice(0,16)+'…':hash).join('\n'):(text||'—');side.append(caption,value);sides.append(side);
+		  }
+		  card.append(sides);fragment.append(card);
+		}
+		if(!result.changes?.length){const message=document.createElement('p');message.textContent=mailImageText('В сравниваемом содержимом изменений нет.','No changes in the compared content.');fragment.append(message);}
+		if(changes.length>100){const nav=document.createElement('div');nav.className='file-library-nav';const previous=fileAction('‹',()=>{page--;renderChanges()}),next=fileAction('›',()=>{page++;renderChanges()}),label=document.createElement('span');previous.setAttribute('aria-label',mailImageText('Предыдущая страница','Previous page'));next.setAttribute('aria-label',mailImageText('Следующая страница','Next page'));previous.disabled=page===0;next.disabled=(page+1)*100>=changes.length;label.textContent=`${page*100+1}–${Math.min((page+1)*100,changes.length)} / ${changes.length}`;nav.append(previous,label,next);fragment.append(nav);}
+		output.replaceChildren(fragment);
+		};renderChanges();v.status.textContent=mailImageText('Добавлено: ','Added: ')+result.added+mailImageText('; удалено: ','; removed: ')+result.removed+mailImageText('; изменено: ','; changed: ')+result.modified;
+	  }else{
+        const fragment=document.createDocumentFragment();
+        for(const line of result.lines||[]){
+          const row=document.createElement('div');row.className='file-comparison-line '+({'insert':'file-comparison-insert','delete':'file-comparison-delete'}[line.kind]||'');
+          const label=mailImageText('Без изменений','Unchanged');row.setAttribute('aria-label',line.kind==='insert'?mailImageText('Добавлено','Added'):line.kind==='delete'?mailImageText('Удалено','Removed'):label);
+          for(const value of [line.left||'',line.right||'']){const number=document.createElement('span');number.className='file-comparison-number';number.textContent=value;row.append(number);}
+          const text=document.createElement('span');text.className='file-comparison-text';text.textContent=(line.kind==='insert'?'+ ':line.kind==='delete'?'− ':'  ')+line.text;row.append(text);fragment.append(row);
+        }
+        output.replaceChildren(fragment);v.status.textContent=mailImageText('Добавлено строк: ','Added lines: ')+result.added+mailImageText('; удалено: ','; removed: ')+result.removed;
+      }
+    }catch(error){v.status.textContent=libraryMessage(error)}finally{busy=false;submit.disabled=false;left.disabled=false;right.disabled=false;mode.disabled=false;}
+  };
+}
+
+// Render only the selected page pair. The shared scale preserves changes in paper/slide size.
+async function openRenderedFileComparison(path,result,identity) {
+  const v=fileLibraryDialog(mailImageText('Визуальное сравнение','Visual comparison')+' · '+path,true);
+  v.dialog.classList.add('file-render-dialog');
+  const abort=new AbortController(),documents=[],loads=[],tasks=[];
+  const identityTimer=setInterval(()=>{if(state.email!==identity)v.dialog.close()},500);
+  const alive=()=>v.dialog.open&&state.email===identity;
+  v.dialog.addEventListener('close',()=>{clearInterval(identityTimer);abort.abort();for(const task of tasks)task.cancel();for(const load of loads)load.destroy().catch(()=>{});},{once:true});
+  const toolbar=document.createElement('div');toolbar.className='file-render-toolbar';
+  const page=document.createElement('input');page.type='number';page.min='1';page.value='1';page.className='field-input';page.setAttribute('aria-label',mailImageText('Страница / слайд','Page / slide'));
+  const mode=document.createElement('select');mode.className='field-input';mode.setAttribute('aria-label',mailImageText('Вид сравнения','Comparison view'));
+  for(const [value,ru,en] of [['sides','Рядом','Side by side'],['overlay','Наложение 50%','Overlay 50%'],['diff','Разница пикселей','Pixel difference']])mode.add(new Option(mailImageText(ru,en),value));
+  const label=document.createElement('span'),previous=fileAction('‹',()=>navigate(-1)),next=fileAction('›',()=>navigate(1));previous.setAttribute('aria-label',mailImageText('Предыдущая страница / слайд','Previous page / slide'));next.setAttribute('aria-label',mailImageText('Следующая страница / слайд','Next page / slide'));
+  toolbar.append(previous,page,next,label,mode);const content=document.createElement('div');content.className='file-render-content';v.body.append(toolbar,content);
+  let total=0,busy=false,canvases=[],pairMissing=false;
+  const paint=()=>{
+    if(!alive()||canvases.length!==2)return;
+    v.status.textContent=mailImageText('Страницы сопоставлены по номеру. Общий масштаб; анимация не воспроизводится.','Pages paired by number. Shared scale; animations are not played.')+(pairMissing?mailImageText(' Страница одной из версий отсутствует.',' A page is absent in one version.'):'');
+    content.replaceChildren();content.classList.toggle('file-render-sides',mode.value==='sides');
+    if(mode.value==='sides'){
+      canvases.forEach((canvas,i)=>{const side=document.createElement('figure'),caption=document.createElement('figcaption');caption.textContent=mailImageText(i?'Стало':'Было',i?'After':'Before')+(Number(page.value)>documents[i].numPages?mailImageText(' · страница отсутствует',' · page absent'):'');side.append(caption,canvas);content.append(side)});return;
+    }
+    const [a,b]=canvases,width=a.width,height=a.height,canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;canvas.setAttribute('aria-label',mode.selectedOptions[0].textContent);const ctx=canvas.getContext('2d');
+    if(mode.value==='overlay'){ctx.drawImage(a,0,0);ctx.globalAlpha=.5;ctx.drawImage(b,0,0);content.append(canvas);return;}
+    const left=a.getContext('2d').getImageData(0,0,width,height),right=b.getContext('2d').getImageData(0,0,width,height),out=ctx.createImageData(width,height);let changed=0;
+    for(let i=0;i<left.data.length;i+=4){const delta=Math.max(Math.abs(left.data[i]-right.data[i]),Math.abs(left.data[i+1]-right.data[i+1]),Math.abs(left.data[i+2]-right.data[i+2]));const different=delta>24;changed+=different?1:0;out.data[i]=different?220:Math.round((left.data[i]+left.data[i+1]+left.data[i+2])/3*.25+191);out.data[i+1]=different?30:out.data[i];out.data[i+2]=different?90:out.data[i];out.data[i+3]=255;}
+    ctx.putImageData(out,0,0);content.append(canvas);v.status.textContent=mailImageText('Отличается пикселей: ','Different pixels: ')+(changed/(width*height)*100).toFixed(2)+'%'+mailImageText(' · порог 24/255; статичная отрисовка, не доля изменений документа.',' · threshold 24/255; static rendering, not the fraction of document changes.')+(pairMissing?mailImageText(' Страница одной из версий отсутствует.',' A page is absent in one version.'):'');
+  };
+  async function render(){
+    if(!alive()||busy||!total)return;
+    let index=Math.trunc(Number(page.value));if(!Number.isFinite(index))index=1;index=Math.max(1,Math.min(total,index));page.value=String(index);busy=true;for(const control of [previous,next,page,mode])control.disabled=true;
+    content.replaceChildren();v.status.textContent=mailImageText('Отрисовка…','Rendering…');
+    try{
+      const pages=await Promise.all(documents.map(pdf=>index<=pdf.numPages?pdf.getPage(index):null));if(!alive())return;
+      const views=pages.map(p=>p?.getViewport({scale:1})),width=Math.max(...views.filter(Boolean).map(p=>p.width)),height=Math.max(...views.filter(Boolean).map(p=>p.height));
+      if(!Number.isFinite(width)||!Number.isFinite(height)||width<=0||height<=0)throw Error(mailImageText('Недопустимый размер страницы.','Invalid page size.'));
+      const scale=Math.min(1.5,1800/width,1800/height,Math.sqrt(2000000/(width*height))),w=Math.max(1,Math.ceil(width*scale)),h=Math.max(1,Math.ceil(height*scale));
+      const pair=[];pairMissing=pages.some(p=>!p);
+      for(let i=0;i<2;i++){
+        const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,w,h);canvas.setAttribute('aria-label',mailImageText(i?'Стало':'Было',i?'After':'Before'));
+        if(pages[i]){const task=pages[i].render({canvasContext:ctx,viewport:pages[i].getViewport({scale}),background:'rgb(255,255,255)'});tasks.push(task);try{await task.promise}finally{tasks.splice(tasks.indexOf(task),1);pages[i].cleanup()}}
+        pair.push(canvas);
+      }
+      if(!alive())return;canvases=pair;label.textContent=`${index} / ${total} (${documents[0].numPages} → ${documents[1].numPages})`;v.status.textContent=mailImageText('Страницы сопоставлены по номеру. Общий масштаб; анимация не воспроизводится.','Pages paired by number. Shared scale; animations are not played.');paint();
+    }catch(error){if(alive())v.status.textContent=error.message}finally{busy=false;for(const control of [previous,next,page,mode])control.disabled=false;previous.disabled=index<=1;next.disabled=index>=total;}
+  }
+  function navigate(delta){if(!busy){page.value=String(Number(page.value)+delta);void render()}}
+  page.onchange=()=>void render();mode.onchange=paint;
+  try{
+    for(const control of [previous,next,page,mode])control.disabled=true;
+    v.status.textContent=mailImageText('Подготовка страниц…','Preparing pages…');
+    const pdfjs=await import('/assets/pdfjs/pdf.mjs');pdfjs.GlobalWorkerOptions.workerSrc='/assets/pdfjs/pdf.worker.mjs';
+    for(const address of [result.left_url,result.right_url]){
+      const url=new URL(address,location.href);if(url.origin!==location.origin||url.pathname!=='/office/compare/pdf')throw Error(mailImageText('Недопустимый адрес сравнения.','Invalid comparison address.'));
+      const response=await fetch(url,{credentials:'same-origin',signal:abort.signal,cache:'no-store'});if(!response.ok)throw Error(mailImageText('Не удалось подготовить PDF. Откройте сравнение заново. Код: ','Could not prepare PDF. Reopen comparison. Status: ')+response.status);
+      // Streaming bound also covers chunked responses without Content-Length.
+      const reader=response.body.getReader(),chunks=[];let size=0;
+      while(true){const {value,done}=await reader.read();if(done)break;size+=value.length;if(size>32*1024*1024){await reader.cancel();throw Error('PDF > 32 MiB')}chunks.push(value)}
+      if(!alive())return;const data=new Uint8Array(size);let offset=0;for(const chunk of chunks){data.set(chunk,offset);offset+=chunk.length}
+      const load=pdfjs.getDocument({data,isEvalSupported:false,stopAtErrors:true,maxImageSize:16000000,canvasMaxAreaInBytes:16000000,cMapUrl:'/assets/pdfjs/cmaps/',cMapPacked:true,standardFontDataUrl:'/assets/pdfjs/standard_fonts/',wasmUrl:'/assets/pdfjs/wasm/'});loads.push(load);const pdf=await load.promise;if(!alive())return;if(pdf.numPages>500)throw Error(mailImageText('Не более 500 страниц на версию.','Up to 500 pages per version.'));documents.push(pdf);
+    }
+    total=Math.max(...documents.map(pdf=>pdf.numPages));page.max=String(total);await render();
+  }catch(error){if(alive())v.status.textContent=error.message;for(const load of loads)void load.destroy().catch(()=>{});}
+}
+// Frame playback uses office-rendered key states, never code from the document.
+// A deterministic 500 ms pause advances click-triggered effects for both versions.
+function fileMotionSchedule(slide,previous,events={}) {
+  if(slide?.layers?.length)return fileMotionLayerSchedule(slide,previous,events);
+  if(!slide)return {segments:[],duration:0,initial:0};
+  if(slide.warning)return {segments:[],duration:500,initial:slide.states[0]};
+  const segments=[];let cursor=0,current=slide.states[0];
+  if(slide.transition.kind!=='cut'&&slide.transition.duration>0){segments.push({start:0,end:slide.transition.duration,from:previous?.states.at(-1)||0,to:current,kind:slide.transition.kind,direction:slide.transition.direction});cursor=slide.transition.duration}
+  for(let index=0;index<slide.effects.length;index++){
+    const effect=slide.effects[index];cursor+=effect.delay+(effect.trigger==='click'?500:0);
+    segments.push({start:cursor,end:cursor+Math.max(1,effect.duration),from:current,to:slide.states[index+1],kind:effect.kind});cursor+=Math.max(1,effect.duration);current=slide.states[index+1];
+  }
+  return {segments,duration:cursor+500,initial:slide.states[0]};
+}
+function fileMotionFrame(ctx,cache,schedule,time) {
+  if(schedule.layers){fileMotionLayerFrame(ctx,cache,schedule,time);return}
+  const width=ctx.canvas.width,height=ctx.canvas.height;ctx.globalAlpha=1;ctx.clearRect(0,0,width,height);ctx.fillStyle='white';ctx.fillRect(0,0,width,height);
+  let frame=schedule.initial,active=null;
+  for(const segment of schedule.segments){if(time<segment.start)break;if(time>=segment.end){frame=segment.to;continue}active=segment;break}
+  const draw=(id,x=0,y=0)=>{if(cache.has(id))ctx.drawImage(cache.get(id),x,y)};
+  if(!active){draw(frame);return}
+  const p=Math.max(0,Math.min(1,(time-active.start)/(active.end-active.start)));draw(active.from);
+  if(active.kind==='fade'){ctx.globalAlpha=p;draw(active.to);ctx.globalAlpha=1;return}
+  if(active.kind==='wipe'){
+    ctx.save();ctx.beginPath();const direction=active.direction||'l';
+    if(direction==='l')ctx.rect(width*(1-p),0,width*p,height);if(direction==='r')ctx.rect(0,0,width*p,height);if(direction==='u')ctx.rect(0,height*(1-p),width,height*p);if(direction==='d')ctx.rect(0,0,width,height*p);
+    ctx.clip();draw(active.to);ctx.restore();return;
+  }
+  if(active.kind==='push'){
+    const [x,y]=({l:[-width,0],r:[width,0],u:[0,-height],d:[0,height]})[active.direction||'l'];
+    ctx.fillRect(0,0,width,height);draw(active.from,x*p,y*p);draw(active.to,x*(p-1),y*(p-1));return;
+  }
+  draw(active.to);
+}
+async function openFileMotionComparison(path,result,identity) {
+  const view=fileLibraryDialog(mailImageText('Кадры и анимация','Frames and animation')+' · '+path,true);view.dialog.classList.add('file-render-dialog','file-motion-dialog');
+  const abort=new AbortController(),loads=[],renderTasks=[],pdfs=[],decks=[];let closed=false,raf=0,playing=false,time=0,total=0,busy=false,sequence=0;
+  const alive=()=>!closed&&view.dialog.open&&state.email===identity;
+  const stop=()=>{playing=false;cancelAnimationFrame(raf);play.textContent=mailImageText('Воспроизвести','Play');play.setAttribute('aria-label',play.textContent)};
+  const identityTimer=setInterval(()=>{if(state.email!==identity)view.dialog.close()},500);
+  const visibility=()=>{if(document.hidden)stop()};document.addEventListener('visibilitychange',visibility);
+  view.dialog.addEventListener('close',()=>{closed=true;sequence++;clearInterval(identityTimer);stop();abort.abort();document.removeEventListener('visibilitychange',visibility);for(const task of renderTasks)task.cancel();for(const load of loads)void load.destroy().catch(()=>{});caches=[];},{once:true});
+  const toolbar=document.createElement('div');toolbar.className='file-render-toolbar';
+  const slide=document.createElement('input');slide.type='number';slide.min='1';slide.value='1';slide.className='field-input';slide.setAttribute('aria-label',mailImageText('Слайд','Slide'));
+  const mode=document.createElement('select');mode.className='field-input';mode.setAttribute('aria-label',mailImageText('Вид кадров','Frame view'));for(const [value,ru,en] of [['sides','Рядом','Side by side'],['overlay','Наложение 50%','Overlay 50%'],['diff','Разница кадров','Frame difference']])mode.add(new Option(mailImageText(ru,en),value));
+  const previous=fileAction('‹',()=>navigate(-1)),next=fileAction('›',()=>navigate(1));previous.setAttribute('aria-label',mailImageText('Предыдущий слайд','Previous slide'));next.setAttribute('aria-label',mailImageText('Следующий слайд','Next slide'));
+  const play=fileAction(mailImageText('Воспроизвести','Play'),()=>{if(playing){stop();return}if(time>=total)time=0;playing=true;play.textContent=mailImageText('Пауза','Pause');play.setAttribute('aria-label',play.textContent);let last=performance.now(),lastPaint=0;const tick=now=>{if(!alive()){stop();return}time=Math.min(total,time+now-last);last=now;if(now-lastPaint>=80||time>=total){paint();lastPaint=now}if(time>=total){stop();return}raf=requestAnimationFrame(tick)};raf=requestAnimationFrame(tick)});
+  const back=fileAction('− 1',()=>step(-1)),forward=fileAction('+ 1',()=>step(1));back.setAttribute('aria-label',mailImageText('Предыдущий кадр','Previous frame'));forward.setAttribute('aria-label',mailImageText('Следующий кадр','Next frame'));
+  const scrub=document.createElement('input');scrub.type='range';scrub.min='0';scrub.max='0';scrub.step='40';scrub.value='0';scrub.setAttribute('aria-label',mailImageText('Время кадра','Frame time'));scrub.className='file-motion-scrub';
+  const label=document.createElement('output'),warning=document.createElement('p');warning.className='file-motion-warning';warning.setAttribute('role','note');
+  toolbar.append(previous,slide,next,play,back,forward,mode);const timeline=document.createElement('div');timeline.className='file-render-toolbar';timeline.append(scrub,label);
+  const content=document.createElement('div');content.className='file-render-content';const help=document.createElement('p');help.className='meta';help.textContent=mailImageText('Общая шкала времени. Обычные щелчки моделируются паузой 0,5 с. Интерактивные эффекты запускаются щелчком на объекте в режиме «Рядом» или кнопкой триггера; сброс очищает историю.','Shared timeline. Ordinary clicks advance after 0.5 s. Click an object or a trigger button for interactive effects; reset clears event history.');view.body.append(toolbar,timeline,help,warning,content);
+  let caches=[],schedules=[],canvases=[],difference=null,currentSlides=[],eventMaps=[Object.create(null),Object.create(null)],previousSlides=[];
+  const triggers=document.createElement('div');triggers.className='file-render-toolbar file-motion-triggers';triggers.setAttribute('aria-label',mailImageText('Интерактивные эффекты','Interactive effects'));view.body.insertBefore(triggers,content);
+  const reset=fileAction(mailImageText('Сбросить триггеры','Reset triggers'),()=>{stop();eventMaps=[Object.create(null),Object.create(null)];time=0;refreshSchedules();paint()});
+  function refreshSchedules(){schedules=currentSlides.map((s,i)=>fileMotionSchedule(s,previousSlides[i],eventMaps[i]));total=Math.max(...schedules.map(s=>s.duration));scrub.max=String(total)}
+  function eventTargets(s){const ids=new Set((s?.effects||[]).map(e=>e.event).filter(Boolean));const ordered=(s?.hits||[]).filter(h=>ids.has(h.target)).map(h=>h.target);return [...ordered,...[...ids].filter(id=>!ordered.includes(id))]}
+  function fireTrigger(index){if(busy||!alive())return;stop();let fired=false;currentSlides.forEach((s,i)=>{const target=eventTargets(s)[index];if(target&&eventMaps[i][target]===undefined){eventMaps[i][target]=time;fired=true}});refreshSchedules();paint();if(fired)play.click()}
+  function triggerControls(){triggers.replaceChildren();const count=Math.max(...currentSlides.map(s=>eventTargets(s).length));for(let index=0;index<count;index++){const names=currentSlides.map(s=>{const id=eventTargets(s)[index];return s?.hits?.find(h=>h.target===id)?.name||id||'—'});const button=fileAction(mailImageText('Триггер ','Trigger ')+(index+1)+' · '+names.join(' / '),()=>fireTrigger(index));triggers.append(button)}if(count)triggers.append(reset)}
+  const controls=[slide,previous,next,play,back,forward,mode,scrub];const enabled=ready=>{for(const control of controls)control.disabled=!ready;previous.disabled=!ready||Number(slide.value)<=1;next.disabled=!ready||Number(slide.value)>=Math.max(...decks.map(d=>d.slides.length),0)};enabled(false);
+  const status=message=>{if(alive())view.status.textContent=message};
+  function paint(){
+    if(!alive()||busy||canvases.length!==2)return;
+    for(let i=0;i<2;i++)fileMotionFrame(canvases[i].getContext('2d'),caches[i],schedules[i],time);
+    scrub.value=String(Math.round(time));label.textContent=`${(time/1000).toFixed(2)} / ${(total/1000).toFixed(2)} ${mailImageText('с','s')}`;
+    if(mode.value!=='diff'){status(mailImageText('Общий момент времени: ','Shared frame time: ')+(time/1000).toFixed(2)+' '+mailImageText('с','s'));if(mode.value==='overlay'){const ctx=difference.getContext('2d');ctx.globalAlpha=1;ctx.drawImage(canvases[0],0,0);ctx.globalAlpha=.5;ctx.drawImage(canvases[1],0,0);ctx.globalAlpha=1}return}
+    const ctx=difference.getContext('2d'),w=difference.width,h=difference.height,a=canvases[0].getContext('2d').getImageData(0,0,w,h).data,b=canvases[1].getContext('2d').getImageData(0,0,w,h).data,out=ctx.createImageData(w,h);let count=0;
+    for(let i=0;i<a.length;i+=4){const changed=Math.max(Math.abs(a[i]-b[i]),Math.abs(a[i+1]-b[i+1]),Math.abs(a[i+2]-b[i+2]))>24;count+=changed?1:0;out.data[i]=changed?220:Math.round((a[i]+a[i+1]+a[i+2])/3*.25+191);out.data[i+1]=changed?30:out.data[i];out.data[i+2]=changed?90:out.data[i];out.data[i+3]=255}ctx.putImageData(out,0,0);status(mailImageText('Отличается пикселей кадра: ','Different frame pixels: ')+(100*count/(w*h)).toFixed(2)+'%'+mailImageText(' · порог 24/255.',' · threshold 24/255.'));
+  }
+  function layout(){if(!canvases.length)return;content.replaceChildren();content.classList.toggle('file-render-sides',mode.value==='sides');if(mode.value==='sides'){for(let i=0;i<2;i++){const figure=document.createElement('figure'),caption=document.createElement('figcaption');caption.textContent=mailImageText(i?'Стало':'Было',i?'After':'Before');figure.append(caption,canvases[i]);content.append(figure)}}else{content.append(difference)}paint()}
+  function step(delta){stop();time=Math.max(0,Math.min(total,time+delta*40));paint()}
+  scrub.oninput=()=>{stop();time=Number(scrub.value);paint()};mode.onchange=layout;
+  function navigate(delta){if(busy)return;slide.value=String(Number(slide.value)+delta);void renderSlide()};slide.onchange=()=>void renderSlide();
+  async function renderSlide(){
+    if(!alive()||busy||pdfs.length!==2)return;stop();busy=true;enabled(false);const generation=++sequence;content.replaceChildren();caches=[];canvases=[];status(mailImageText('Отрисовка ключевых состояний…','Rendering key states…'));
+    try{
+      const count=Math.max(...decks.map(d=>d.slides.length));let index=Math.trunc(Number(slide.value));if(!Number.isFinite(index))index=1;index=Math.max(1,Math.min(count,index));slide.value=String(index);const current=decks.map(d=>d.slides[index-1]);currentSlides=current;previousSlides=decks.map(d=>d.slides[index-2]);eventMaps=[Object.create(null),Object.create(null)];refreshSchedules();triggerControls();
+      total=Math.max(...schedules.map(s=>s.duration));scrub.max=String(total);time=0;
+      warning.textContent=current.map((s,i)=>mailImageText(i?'Стало: ':'Было: ',i?'After: ':'Before: ')+(!s?mailImageText('слайд отсутствует','slide absent'):s.warning?mailImageText('Статичный слайд — неподдерживаемая анимация или переход. ','Static slide — unsupported animation or transition. ')+s.warning:mailImageText('поддерживаемые эффекты','supported effects'))).join(' · ');
+      const needed=current.map((s,i)=>[...new Set([...(s?.states||[]),...fileMotionPageIDs(s),...fileMotionPreviousIDs(decks[i].slides[index-2]),decks[i].slides[index-2]?.states.at(-1)||0])]);
+      let width=1,height=1;const pages=[];
+      for(let i=0;i<2;i++){const group=new Map();for(const id of needed[i]){if(!id)continue;const p=await pdfs[i].getPage(id);group.set(id,p);const viewport=p.getViewport({scale:1});width=Math.max(width,viewport.width);height=Math.max(height,viewport.height)}pages.push(group)}
+      if(!Number.isFinite(width)||!Number.isFinite(height)||width<=0||height<=0)throw Error('Invalid frame size');const scale=Math.min(1.5,1000/width,1000/height,Math.sqrt((current.some(s=>s?.layers?.length)?150000:400000)/(width*height))),w=Math.max(1,Math.ceil(width*scale)),h=Math.max(1,Math.ceil(height*scale));
+      for(let i=0;i<2;i++){const cache=new Map();for(const [id,p] of pages[i]){if(!alive()||sequence!==generation)return;const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;const ctx=canvas.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,w,h);const task=p.render({canvasContext:ctx,viewport:p.getViewport({scale}),background:'rgb(255,255,255)'});renderTasks.push(task);try{await task.promise}finally{renderTasks.splice(renderTasks.indexOf(task),1);p.cleanup()}canvas.motionSize=[p.getViewport({scale}).width,p.getViewport({scale}).height];cache.set(id,canvas)}
+        if(current[i]?.layers?.length)fileMotionDecodeLayers(cache,current[i]);
+        const prior=previousSlides[i];if(fileMotionNeedsFinal(prior)){const priorCache=new Map(cache);fileMotionDecodeLayers(priorCache,prior);const snapshot=document.createElement('canvas');snapshot.width=w;snapshot.height=h;const priorSchedule=fileMotionSchedule(prior,null,Object.create(null));fileMotionFrame(snapshot.getContext('2d'),priorCache,priorSchedule,priorSchedule.duration);cache.set(prior.states.at(-1),snapshot);for(const id of fileMotionPageIDs(prior)){if(id!==prior.states.at(-1))cache.delete(id)}}
+        caches.push(cache);const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;canvas.setAttribute('aria-label',mailImageText(i?'Кадр: стало':'Кадр: было',i?'After frame':'Before frame'));canvas.onclick=event=>{if(!currentSlides[i]?.layers?.length)return;const rect=canvas.getBoundingClientRect(),size=caches[i].motionSize||[canvas.width,canvas.height],x=(event.clientX-rect.left)*canvas.width/rect.width/size[0],y=(event.clientY-rect.top)*canvas.height/rect.height/size[1];const targets=eventTargets(currentSlides[i]);for(const hit of [...(currentSlides[i].hits||[])].reverse()){if(!targets.includes(hit.target)||fileMotionTargetOpacity(schedules[i],hit.target,time)<=.01)continue;const tr=fileMotionObjectTransform(schedules[i],hit.target,time),cx=hit.box[0]+hit.box[2]/2,cy=hit.box[1]+hit.box[3]/2,angle=-((hit.rotation||0)+tr.angle)*Math.PI/180,rx=(x-cx-tr.offset[0])*size[0],ry=(y-cy-tr.offset[1])*size[1],ux=(rx*Math.cos(angle)-ry*Math.sin(angle))/tr.scale[0]/size[0],uy=(rx*Math.sin(angle)+ry*Math.cos(angle))/tr.scale[1]/size[1];if(Math.abs(ux)<=hit.box[2]/2&&Math.abs(uy)<=hit.box[3]/2){fireTrigger(targets.indexOf(hit.target));break}}};canvases.push(canvas)}
+      if(!alive()||sequence!==generation)return;difference=document.createElement('canvas');difference.width=w;difference.height=h;difference.setAttribute('aria-label',mailImageText('Сравнение кадров','Frame comparison'));busy=false;layout();
+    }catch(error){status(error.message);caches=[];canvases=[]}finally{busy=false;enabled(canvases.length===2)}
+  }
+  async function responseBytes(address,expected){const url=new URL(address,location.href);if(url.origin!==location.origin||url.pathname!==expected)throw Error('Invalid comparison address');const response=await fetch(url,{credentials:'same-origin',cache:'no-store',signal:abort.signal});if(!response.ok)throw Error(mailImageText('Сравнение недоступно. Откройте заново. Код: ','Comparison unavailable. Reopen. Status: ')+response.status);const reader=response.body.getReader(),chunks=[];let size=0;while(true){const {value,done}=await reader.read();if(done)break;size+=value.length;if(size>32*1024*1024){await reader.cancel();throw Error('Comparison > 32 MiB')}chunks.push(value)}const data=new Uint8Array(size);let offset=0;for(const chunk of chunks){data.set(chunk,offset);offset+=chunk.length}return data}
+  try{
+    status(mailImageText('Подготовка анимации…','Preparing animation…'));
+    const pdfjs=await import('/assets/pdfjs/pdf.mjs');pdfjs.GlobalWorkerOptions.workerSrc='/assets/pdfjs/pdf.worker.mjs';
+    for(const [metadata,address] of [[result.left_timeline,result.left_url],[result.right_timeline,result.right_url]]){
+      const deck=JSON.parse(new TextDecoder().decode(await responseBytes(metadata,'/office/compare/timeline')));if(!alive())return;
+      if(!Array.isArray(deck.slides)||!deck.slides.length||deck.slides.length>50||!Number.isInteger(deck.frames)||deck.frames<1||deck.frames>120)throw Error('Invalid storyboard');
+      for(const s of deck.slides){if(!Array.isArray(s.effects)||s.effects.length>12||!Array.isArray(s.states)||s.states.length!==s.effects.length+1||s.states.some(id=>!Number.isInteger(id)||id<1||id>deck.frames)||!s.transition||!['cut','fade','wipe','push'].includes(s.transition.kind)||!Number.isInteger(s.transition.duration)||s.transition.duration<0||s.transition.duration>30000||s.effects.some(e=>!['cut','fade','path','rotate','scale','color','gradient'].includes(e.kind)||!['click','after','with'].includes(e.trigger)||!Number.isInteger(e.duration)||!Number.isInteger(e.delay)||e.duration<0||e.duration>30000||e.delay<0||e.delay>30000))throw Error('Invalid animation timeline');fileMotionValidateLayers(s,deck.frames)}
+      const data=await responseBytes(address,'/office/compare/pdf');if(!alive())return;const load=pdfjs.getDocument({data,isEvalSupported:false,stopAtErrors:true,maxImageSize:16000000,canvasMaxAreaInBytes:16000000,cMapUrl:'/assets/pdfjs/cmaps/',cMapPacked:true,standardFontDataUrl:'/assets/pdfjs/standard_fonts/',wasmUrl:'/assets/pdfjs/wasm/'});loads.push(load);const pdf=await load.promise;if(!alive())return;if(pdf.numPages!==deck.frames)throw Error(mailImageText('Число отрисованных кадров не совпало с временной шкалой. Этот файл не поддерживается конвертером.','Rendered frame count does not match timeline. Converter does not support this file.'));pdfs.push(pdf);decks.push(deck);
+    }
+    slide.max=String(Math.max(...decks.map(d=>d.slides.length)));await renderSlide();
+  }catch(error){stop();status(error.message);for(const load of loads)void load.destroy().catch(()=>{});enabled(false)}
+}
+
+function fileMotionEffectDuration(e){return Math.max(1,e.duration)*(e.repeat||1)*(e.auto_reverse?2:1)}
+function fileMotionEffectProgress(e,time){const elapsed=Math.max(0,time-e.start),duration=Math.max(1,e.duration);if(elapsed>=fileMotionEffectDuration(e))return e.auto_reverse?0:1;const cycle=duration*(e.auto_reverse?2:1),p=(elapsed%cycle)/duration;return e.auto_reverse&&p>1?2-p:p}
+function fileMotionProperty(e){return e.target+'/'+(['cut','fade'].includes(e.kind)?'opacity':e.kind+(['color','gradient'].includes(e.kind)?'/'+e.property:''))}
+function fileMotionLayerSchedule(slide,previous,events){
+  const groups=new Map(),segments=[],transition=slide.transition.duration&&slide.transition.kind!=='cut'?slide.transition.duration:0;let duration=transition;
+  for(const [effectIndex,effect] of slide.effects.entries()){const key=effect.event||'',base=key?(Object.hasOwn(events,key)?events[key]:undefined):transition;if(base===undefined)continue;const group=groups.get(key)||{start:base,end:base,max:base,count:0};let start;
+    if(effect.trigger==='with')start=group.start+effect.delay;else if(effect.trigger==='after')start=group.end+effect.delay;else start=(key&&group.count===0?base:group.max+500)+effect.delay;
+    const end=start+fileMotionEffectDuration(effect);if(effect.previous!==undefined){const prior=segments.find(s=>s.effectIndex===effect.previous);if(!prior||start<prior.end)throw Error('Overlapping or unordered property stages')}segments.push({...effect,effectIndex,start,end});group.start=start;group.end=end;group.max=Math.max(group.max,end);group.count++;groups.set(key,group);duration=Math.max(duration,end);
+  }
+  return {segments,duration:duration+500,initial:slide.states[0],layers:slide.layers,background:slide.background,transition:slide.transition,previous:previous?.states.at(-1)||0,hits:slide.hits||[],colors:slide.colors||[]};
+}
+function fileMotionPoint(points,progress){
+  let length=0;const lengths=[];for(let i=1;i<points.length;i++){const value=Math.hypot(points[i].x-points[i-1].x,points[i].y-points[i-1].y);lengths.push(value);length+=value}let remaining=length*Math.max(0,Math.min(1,progress));for(let i=0;i<lengths.length;i++){if(remaining<=lengths[i]&&lengths[i]>0){const t=remaining/lengths[i];return [points[i].x+(points[i+1].x-points[i].x)*t,points[i].y+(points[i+1].y-points[i].y)*t]}remaining-=lengths[i]}return [points.at(-1).x,points.at(-1).y];
+}
+function fileMotionTargetOffset(schedule,target,time){let offset=[0,0];for(const e of schedule.segments){if(e.target===target&&e.kind==='path'&&time>=e.start)offset=fileMotionPoint(e.path,fileMotionEffectProgress(e,time))}return offset}
+function fileMotionLayerFrame(ctx,cache,schedule,time){
+  const w=ctx.canvas.width,h=ctx.canvas.height;let scratch=cache.motionScratch;if(!scratch){scratch=document.createElement('canvas');scratch.width=w;scratch.height=h;cache.motionScratch=scratch}const target=scratch.getContext('2d');target.globalAlpha=1;target.fillStyle='white';target.fillRect(0,0,w,h);if(cache.has(schedule.background))target.drawImage(cache.get(schedule.background),0,0);
+  const size=cache.motionSize||[w,h];schedule.layers.forEach((layer,index)=>{
+    const transform=fileMotionObjectTransform(schedule,layer.target,time),hit=schedule.hits.find(hit=>hit.target===layer.target),opacity=fileMotionTargetOpacity(schedule,layer.target,time);let image=cache.get('layer:'+index);
+    if(transform.colors.length)image=fileMotionColorImage(cache,index,image,transform.colors,schedule.colors);
+    target.save();target.globalAlpha=Math.max(0,Math.min(1,opacity));if(hit){const cx=(hit.box[0]+hit.box[2]/2)*size[0],cy=(hit.box[1]+hit.box[3]/2)*size[1],base=hit.rotation||0;target.translate(cx+transform.offset[0]*size[0],cy+transform.offset[1]*size[1]);target.rotate((base+transform.angle)*Math.PI/180);target.scale(transform.scale[0],transform.scale[1]);target.rotate(-base*Math.PI/180);target.translate(-cx,-cy)}else{target.translate(transform.offset[0]*size[0],transform.offset[1]*size[1])}target.drawImage(image,0,0);target.restore();
+  });
+  if(time<schedule.transition.duration&&schedule.transition.kind!=='cut'){cache.set('current-scene',scratch);fileMotionFrame(ctx,cache,{initial:schedule.previous,segments:[{start:0,end:schedule.transition.duration,from:schedule.previous,to:'current-scene',kind:schedule.transition.kind,direction:schedule.transition.direction}]},time);return}
+  ctx.globalAlpha=1;ctx.clearRect(0,0,w,h);ctx.drawImage(scratch,0,0);
+}
+function fileMotionObjectTransform(schedule,target,time){const result={offset:[0,0],angle:0,scale:[1,1],colors:[]},latest=new Map();for(const e of schedule.segments){if(e.target===target&&time>=e.start)latest.set(fileMotionProperty(e),e)}for(const e of latest.values()){const p=fileMotionEffectProgress(e,time);if(e.kind==='path')result.offset=fileMotionPoint(e.path,p);else if(e.kind==='rotate')result.angle=e.from[0]+(e.to[0]-e.from[0])*p;else if(e.kind==='scale')result.scale=e.from.map((v,i)=>v+(e.to[i]-v)*p);else if(e.kind==='color'||e.kind==='gradient')result.colors.push({effect:e,progress:p})}return result}
+
+function fileMotionPageIDs(slide){return [...(slide?.layers||[]).flatMap(l=>[l.black,l.white]),...(slide?.probe||[]),slide?.background||0,...(slide?.colors||[]).flatMap(c=>[c.from_black,c.from_white,c.to_black,c.to_white,...(c.samples||[]).flatMap(s=>[s.black,s.white])])]}
+function fileMotionNeedsFinal(slide){return slide?.layers?.length&&slide.effects.length>0}
+function fileMotionPreviousIDs(slide){return fileMotionNeedsFinal(slide)?fileMotionPageIDs(slide):[]}
+
+function fileMotionValidateLayers(slide,frames){
+  if(!slide.hits)slide.hits=[];
+  const validID=id=>Number.isInteger(id)&&id>0&&id<=frames;
+  for(const e of slide.effects){if(e.kind==='path'&&(!Array.isArray(e.path)||e.path.length<2||e.path.length>512||e.path.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y)||Math.abs(p.x)>16||Math.abs(p.y)>16)))throw Error('Invalid motion path');if(e.event!==undefined&&(typeof e.event!=='string'||e.event.length>256))throw Error('Invalid interactive target')}
+  for(const e of slide.effects){if(['rotate','scale','color','gradient'].includes(e.kind)){const length=e.kind==='gradient'&&e.property==='stops'?e.from?.length:{rotate:1,scale:2,color:3,gradient:1}[e.kind];if(!Array.isArray(e.from)||!Array.isArray(e.to)||e.from.length!==length||e.to.length!==length||[...e.from,...e.to].some(v=>!Number.isFinite(v))||(e.kind==='rotate'&&[...e.from,...e.to].some(v=>Math.abs(v)>3600))||(e.kind==='scale'&&[...e.from,...e.to].some(v=>v<.01||v>8))||(e.kind==='color'&&[...e.from,...e.to].some(v=>v<0||v>255)))throw Error('Invalid transform parameters')}}
+  const lastProperty=new Map();for(const [i,e] of slide.effects.entries()){
+    if(e.repeat!==undefined&&(!Number.isInteger(e.repeat)||e.repeat<1||e.repeat>20)||e.auto_reverse!==undefined&&typeof e.auto_reverse!=='boolean'||fileMotionEffectDuration(e)>600000||(e.repeat>1||e.auto_reverse)&&(!e.duration||e.kind==='cut'))throw Error('Invalid repeat timing');
+    const key=fileMotionProperty(e);if(e.previous!==undefined&&(!Number.isInteger(e.previous)||e.previous<0||e.previous>=i||lastProperty.get(key)!==e.previous||(slide.effects[e.previous].event||'')!==(e.event||'')))throw Error('Invalid property stage');if(lastProperty.has(key)&&e.previous===undefined&&!['fade','cut'].includes(e.kind))throw Error('Missing previous stage');lastProperty.set(key,i);
+  }
+  const covered=new Set();
+  for(const color of slide.colors||[]){
+    if(!Number.isInteger(color.effect)||!['color','gradient'].includes(slide.effects[color.effect]?.kind)||covered.has(color.effect)||[color.from_black,color.from_white,color.to_black,color.to_white].some(id=>!validID(id)))throw Error('Invalid paint layer');covered.add(color.effect);
+    if(color.axes!==undefined){fileMotionValidateAxes(slide,color,covered,validID);continue}
+    const joint=color.geometry_effect!==undefined;
+    if(joint){const g=slide.effects[color.geometry_effect],c=slide.effects[color.effect];if(!Number.isInteger(color.geometry_effect)||g?.kind!=='gradient'||c.kind!=='color'||c.property!=='fill'||g.target!==c.target||covered.has(color.geometry_effect))throw Error('Invalid joint paint');covered.add(color.geometry_effect)}
+    if(!color.samples){if(joint)throw Error('Missing joint samples');continue}
+    const samples=color.samples;if(!Array.isArray(samples)||samples.length<2||samples.length>(joint?45:9)||samples.some(s=>!Number.isFinite(s.at)||s.at<0||s.at>1||!validID(s.black)||!validID(s.white)))throw Error('Invalid color samples');
+    const rows=[];for(const sample of samples){const q=joint?(sample.geometry_at??0):0;if(!Number.isFinite(q)||q<0||q>1)throw Error('Invalid geometry sample');if(!rows.length||rows.at(-1).q!==q){if(rows.length&&q<=rows.at(-1).q)throw Error('Unordered joint samples');rows.push({q,values:[]})}rows.at(-1).values.push(sample.at)}
+    const first=rows[0].values;if(rows[0].q!==0||(joint&&(rows.length<2||rows.length>9||rows.at(-1).q!==1))||first.length<2||first.length>9||first[0]!==0||first.at(-1)!==1||first.some((v,i)=>i&&v<=first[i-1])||rows.some(r=>r.values.length!==first.length||r.values.some((v,i)=>v!==first[i])))throw Error('Incomplete paint grid');
+  }
+  if((slide.colors||[]).length>12||slide.effects.some((e,i)=>['color','gradient'].includes(e.kind)&&!covered.has(i)))throw Error('Missing color layers');
+  for(const e of slide.effects){if(e.kind!=='gradient')continue;if(!['angle','focus-x','focus-y','focus-width','focus-height','stops'].includes(e.property)||[...e.from,...e.to].some(v=>e.property==='angle'?Math.abs(v)>7200:v<0||v>1)||(e.property==='stops'&&(e.from.length<2||e.from.length>16||[e.from,e.to].some(values=>values.some((v,i)=>i&&v<values[i-1])))))throw Error('Invalid gradient geometry')}
+  if(!slide.layers?.length){if(slide.effects.some(e=>['path','rotate','scale','color','gradient'].includes(e.kind)||e.trigger==='with'||e.event))throw Error('Missing animation layers');return}
+  if(slide.layers.length>25||!validID(slide.background)||!Array.isArray(slide.probe)||slide.probe.length!==2||slide.probe.some(id=>!validID(id))||slide.layers.some(l=>!validID(l.black)||!validID(l.white)||typeof l.hidden!=='boolean'||typeof l.target!=='string')||!Array.isArray(slide.hits)||slide.hits.length>1000||slide.hits.some(h=>typeof h.target!=='string'||!Array.isArray(h.box)||h.box.length!==4||h.box.some(n=>!Number.isFinite(n)||Math.abs(n)>16)||(h.rotation!==undefined&&(!Number.isFinite(h.rotation)||Math.abs(h.rotation)>360))))throw Error('Invalid layer manifest');
+}
+function fileMotionValidateTracks(slide,color,covered,validID){
+ const {axes,tracks,samples}=color;if(!Array.isArray(axes)||axes.length<1||axes.length>4||!Array.isArray(tracks)||tracks.length!==axes.length||axes[0]!==color.effect||color.geometry_effect!==undefined||!Array.isArray(samples)||samples.length<2||samples.length>45)throw Error('Invalid paint tracks');
+ const properties=new Set(),seen=new Set();let geometry=0;const target=slide.effects[color.effect].target;
+ for(const [axis,ids] of tracks.entries()){if(!Array.isArray(ids)||!ids.length||ids.length>12||ids[0]!==axes[axis])throw Error('Invalid stage track');const head=slide.effects[ids[0]],key=fileMotionProperty(head);if(head.kind==='gradient')geometry++;if(properties.has(key)||!(head.kind==='gradient'||head.kind==='color')||axes.length>1&&head.kind==='color'&&head.property!=='fill')throw Error('Invalid tracked property');properties.add(key);
+  for(const [j,id] of ids.entries()){const e=slide.effects[id];if(!Number.isInteger(id)||!e||e.target!==target||fileMotionProperty(e)!==key||seen.has(id)||id!==color.effect&&covered.has(id)||j===0&&e.previous!==undefined||j>0&&e.previous!==ids[j-1])throw Error('Invalid paint stage');seen.add(id);covered.add(id)}
+ }
+ if(geometry>3||samples.some(s=>!Array.isArray(s.positions)||s.positions.length!==axes.length||s.positions.some(v=>!Number.isFinite(v)||v<0||v>1)||!validID(s.black)||!validID(s.white)))throw Error('Invalid track sample');
+ const values=axes.map((_,i)=>[...new Set(samples.map(s=>s.positions[i]))].sort((a,b)=>a-b));if(values.reduce((n,v)=>n*v.length,1)!==samples.length)throw Error('Incomplete track grid');
+ for(const [axis,ids] of tracks.entries()){const v=values[axis];if(v.length<2||v[0]!==0||v.at(-1)!==1)throw Error('Missing track endpoints');for(let stage=0;stage<ids.length;stage++){const start=2*stage/(2*ids.length-1),end=(2*stage+1)/(2*ids.length-1);if(!v.includes(start)||!v.includes(end)||v.filter(x=>x>=start&&x<=end).length<2)throw Error('Missing stage samples')}if(v.some(x=>!ids.some((_,stage)=>x>=2*stage/(2*ids.length-1)&&x<=(2*stage+1)/(2*ids.length-1))))throw Error('Sample in stage gap')}
+ for(let i=0;i<samples.length;i++){let stride=samples.length;for(let axis=0;axis<axes.length;axis++){stride/=values[axis].length;if(samples[i].positions[axis]!==values[axis][Math.floor(i/stride)%values[axis].length])throw Error('Unordered track grid')}}
+}
+function fileMotionValidateAxes(slide,color,covered,validID){
+ const axes=color.axes,samples=color.samples;
+ if(color.tracks!==undefined){fileMotionValidateTracks(slide,color,covered,validID);return}
+ if(!Array.isArray(axes)||axes.length<2||axes.length>4||axes[0]!==color.effect||new Set(axes).size!==axes.length||color.geometry_effect!==undefined||!Array.isArray(samples)||samples.length<4||samples.length>45)throw Error('Invalid paint axes');
+ const properties=new Set();let geometry=0,fill=0;const target=slide.effects[color.effect].target;
+ for(const axis of axes){const e=slide.effects[axis];if(!Number.isInteger(axis)||!e||e.target!==target||!(e.kind==='gradient'||e.kind==='color'&&e.property==='fill')||axis!==color.effect&&covered.has(axis)||properties.has(e.kind+'/'+e.property))throw Error('Invalid paint axis effect');properties.add(e.kind+'/'+e.property);if(e.kind==='gradient')geometry++;else fill++;covered.add(axis)}
+ if(geometry<2||geometry>3||fill>1)throw Error('Too many geometry axes');
+ if(samples.some(s=>!Array.isArray(s.positions)||s.positions.length!==axes.length||s.positions.some(v=>!Number.isFinite(v)||v<0||v>1)||!validID(s.black)||!validID(s.white)))throw Error('Invalid paint axis sample');
+ const values=axes.map((_,i)=>[...new Set(samples.map(s=>s.positions[i]))].sort((a,b)=>a-b));
+ if(values.some(v=>v.length<2||v.length>9||v[0]!==0||v.at(-1)!==1)||values.reduce((n,v)=>n*v.length,1)!==samples.length)throw Error('Incomplete multidimensional paint grid');
+ for(let i=0;i<samples.length;i++){let stride=samples.length;for(let axis=0;axis<axes.length;axis++){stride/=values[axis].length;if(samples[i].positions[axis]!==values[axis][Math.floor(i/stride)%values[axis].length])throw Error('Unordered paint grid')}}
+}
+function fileMotionDecodeLayers(cache,slide){
+  const black=cache.get(slide.probe[0]),white=cache.get(slide.probe[1]);if(!black||!white)throw Error('Missing matte probes');const bx=black.getContext('2d'),wx=white.getContext('2d');for(const [x,y] of [[1,1],[Math.max(1,Math.floor(black.motionSize[0]/2)),Math.max(1,Math.floor(black.motionSize[1]/2))]]){const b=bx.getImageData(x,y,1,1).data,w=wx.getImageData(x,y,1,1).data;if([0,1,2].some(c=>b[c]>12||w[c]<243))throw Error(mailImageText('Офисный сервер не сохранил фоны слоёв. Воспроизведение остановлено.','Office server did not preserve layer mattes. Playback stopped.'))}
+  cache.motionSize=black.motionSize;
+  const decode=(blackID,whiteID,key)=>{const b=cache.get(blackID),w=cache.get(whiteID),width=b.width,height=b.height,bd=b.getContext('2d').getImageData(0,0,width,height).data,wd=w.getContext('2d').getImageData(0,0,width,height).data,canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;const ctx=canvas.getContext('2d'),out=ctx.createImageData(width,height);for(let i=0;i<bd.length;i+=4){const alpha=Math.max(0,Math.min(255,255-Math.max(wd[i]-bd[i],wd[i+1]-bd[i+1],wd[i+2]-bd[i+2])));out.data[i+3]=alpha;if(alpha>1)for(let c=0;c<3;c++)out.data[i+c]=Math.min(255,bd[i+c]*255/alpha)}ctx.putImageData(out,0,0);ctx.clearRect(Math.ceil(b.motionSize[0]),0,width,height);ctx.clearRect(0,Math.ceil(b.motionSize[1]),width,height);if(key.startsWith('color:')){cache.set(key,ctx.getImageData(0,0,width,height).data)}else{cache.set(key,canvas)}cache.delete(blackID);cache.delete(whiteID)};
+  slide.layers.forEach((layer,index)=>decode(layer.black,layer.white,'layer:'+index));for(const color of slide.colors||[]){if(color.samples){color.samples.forEach((s,i)=>decode(s.black,s.white,'color:'+color.effect+':sample:'+i))}else{decode(color.from_black,color.from_white,'color:'+color.effect+':from');decode(color.to_black,color.to_white,'color:'+color.effect+':to')}}cache.delete(slide.probe[0]);cache.delete(slide.probe[1]);
+}
+
+function fileMotionTargetOpacity(schedule,target,time){let opacity=schedule.layers?.find(l=>l.target===target)?.hidden?0:1;for(const e of schedule.segments){if(e.target!==target||!['cut','fade'].includes(e.kind)||time<e.start)continue;const p=fileMotionEffectProgress(e,time);opacity=e.kind==='cut'?(e.exit?0:1):e.exit?1-p:p}return opacity}
+
+function fileMotionAxisPaint(cache,color,phase,running){
+ const values=color.axes.map((_,i)=>[...new Set(color.samples.map(s=>s.positions[i]))].sort((a,b)=>a-b));
+ const positions=color.axes.map((axis,i)=>{const ids=color.tracks?.[i];let stage=ids?ids.findIndex(id=>running.has(id)):0;if(stage<0)stage=0;const p=ids?(2*stage+phase(ids[stage]))/(2*ids.length-1):phase(axis),v=values[i];let left=0;while(left<v.length-2&&p>v[left+1])left++;return [left,Math.max(0,Math.min(1,(p-v[left])/(v[left+1]-v[left])))]});
+ let weights=[[0,1]];for(let axis=0;axis<values.length;axis++){const [left,blend]=positions[axis],count=values[axis].length;weights=weights.flatMap(([index,weight])=>[[index*count+left,weight*(1-blend)],[index*count+left+1,weight*blend]])}
+ const get=i=>cache.get('color:'+color.effect+':sample:'+i);
+ return {from:get(0),terms:weights.filter(([,weight])=>weight>0).map(([i,weight])=>({data:get(i),weight}))};
+}
+function fileMotionColorImage(cache,index,base,active,manifest){
+  let data=cache.get('base-pixels:'+index);if(!data){data=base.getContext('2d').getImageData(0,0,base.width,base.height).data;cache.set('base-pixels:'+index,data)}
+  const running=new Map(active.map(a=>[a.effect.effectIndex,a]));
+  const phase=index=>{const a=running.get(index);return a?(a.effect.discrete?(a.progress<.5?0:1):a.progress):0};
+  const bracket=(values,p)=>{let left=0;while(left<values.length-2&&p>values[left+1])left++;return [left,Math.max(0,Math.min(1,(p-values[left])/(values[left+1]-values[left])))]};
+  const changes=manifest.filter(c=>running.has(c.effect)||running.has(c.geometry_effect)||c.axes?.some(axis=>running.has(axis))||c.tracks?.some(ids=>ids.some(id=>running.has(id)))).map(color=>{
+    if(color.axes)return fileMotionAxisPaint(cache,color,phase,running);
+    const samples=color.samples||[{at:0,key:'from'},{at:1,key:'to'}],joint=color.geometry_effect!==undefined,p=phase(color.effect),q=joint?phase(color.geometry_effect):0;
+    let columns=samples.length;if(joint){columns=samples.findIndex(s=>(s.geometry_at??0)>0)}
+    const [x,u]=bracket(samples.slice(0,columns).map(s=>s.at),p);let row=0,v=0;
+    if(joint)[row,v]=bracket(samples.filter((_,i)=>i%columns===0).map(s=>s.geometry_at??0),q);
+    const key=i=>'color:'+color.effect+':'+(color.samples?'sample:'+i:samples[i].key),weights=joint?[[row*columns+x,(1-u)*(1-v)],[row*columns+x+1,u*(1-v)],[(row+1)*columns+x,(1-u)*v],[(row+1)*columns+x+1,u*v]]:[[x,1-u],[x+1,u]];
+    return {from:cache.get(key(0)),terms:weights.map(([i,weight])=>({data:cache.get(key(i)),weight}))};
+  });
+  let canvas=cache.motionColorScratch;if(!canvas){canvas=document.createElement('canvas');canvas.width=base.width;canvas.height=base.height;cache.motionColorScratch=canvas}const ctx=canvas.getContext('2d'),out=ctx.createImageData(base.width,base.height);
+  for(let i=0;i<data.length;i+=4){let alpha=data[i+3];const premul=[data[i]*alpha/255,data[i+1]*alpha/255,data[i+2]*alpha/255];for(const c of changes){const initial=data[i+3];alpha-=initial;for(let k=0;k<3;k++)premul[k]-=data[i+k]*initial/255;for(const term of c.terms){const a=term.data[i+3]*term.weight;alpha+=a;for(let k=0;k<3;k++)premul[k]+=term.data[i+k]*a/255}}alpha=Math.max(0,Math.min(255,alpha));out.data[i+3]=alpha;if(alpha>1)for(let k=0;k<3;k++)out.data[i+k]=Math.max(0,Math.min(255,premul[k]*255/alpha))}
+  ctx.putImageData(out,0,0);return canvas;
+}
 /* Durable, account-scoped uploads. A browser reload requires selecting the file
    again; persisted chunk hashes verify its entire already uploaded prefix. */
 const fileUploadChunkSize = 8 * 1024 * 1024;
@@ -8360,7 +9033,7 @@ function resetComposeAttachments() {
 }
 function renderComposeAttachments() {
   const items=composeAttachments.entries, busy=composeAttachments.sending||!!composeAttachments.preparing;
-  const send=$('btn-compose-send');if(send)send.disabled=busy||items.some(item=>item.status!=='ready');
+  const send=$('btn-compose-send');if(send)send.disabled=busy||!!$('compose-from')?.disabled||items.some(item=>item.status!=='ready');
   if($('compose-attach'))$('compose-attach').disabled=composeAttachments.sending;
   const list=$('compose-uploads');if(!list)return;list.replaceChildren();list.hidden=!items.length;
   for(const item of items){
@@ -9053,3 +9726,201 @@ function showDirectoryPreview(report,applied){
 }
 $('btn-org-structure')?.addEventListener('click',()=>openOrganization());
 $('btn-org-structure-admin')?.addEventListener('click',()=>{if(tenantNav.domainID)openOrganization(tenantNav.domainID);});
+function aliasErrorText(message) {
+  const messages={
+    'address already exists':['Этот адрес уже занят доменом, ящиком, алиасом или группой.','This address is already used by a domain, mailbox, alias or group.'],
+    'invalid alias or target mailbox':['Проверьте адрес алиаса и целевой ящик.','Check the alias address and target mailbox.'],
+    'alias or target not found':['Алиас или ящик уже удалён. Обновите список.','The alias or mailbox was deleted. Reload the list.'],
+    'forbidden':['Недостаточно прав для управления этим адресом.','You do not have permission to manage this address.'],
+    'global admin required':['Алиасами доменов управляет глобальный администратор.','Domain aliases require a global administrator.'],
+    'cannot save alias':['Не удалось сохранить алиас. Повторите попытку.','Could not save the alias. Please try again.']
+  };
+  return messages[message]?directoryLabel(...messages[message]):message;
+}
+async function openAdminAliases(kind, target) {
+  const isDomain=kind==='domain';
+  const title=isDomain?directoryLabel('Алиасы домена','Domain aliases'):directoryLabel('Алиасы ящика','Mailbox aliases');
+  const dialog=directoryDialog(title+' — '+(isDomain?target.name:target.email),'org-editor');
+  dialog.classList.add('alias-dialog');
+  const description=document.createElement('p');description.className='meta';
+  description.textContent=isDomain
+    ?directoryLabel('Адреса с тем же именем получателя доставляются в основной домен. Пользователи могут отправлять с этих адресов. Настройте MX, SPF и DKIM домена-алиаса.','Addresses with the same local part deliver to the primary domain and are available for sending. Configure MX, SPF and DKIM for the alias domain.')
+    :directoryLabel('Дополнительные адреса доступны для получения и отправки почты. Вход выполняется по основному адресу.','Additional addresses are available for receiving and sending mail. Sign in with the primary address.');
+  const status=document.createElement('p');status.className='msg';status.setAttribute('role','status');
+  const list=document.createElement('div');list.className='alias-list';
+  const form=document.createElement('form');form.className='alias-form';
+  const addressLabel=document.createElement('label');addressLabel.className='field';
+  addressLabel.textContent=isDomain?directoryLabel('Домен-алиас','Alias domain'):directoryLabel('Имя до @','Local part before @');
+  const input=document.createElement('input');input.className='field-input';input.required=true;input.maxLength=isDomain?253:64;input.autocomplete='off';input.spellcheck=false;
+  input.placeholder=isDomain?'example.org':'sales';addressLabel.append(input);form.append(addressLabel);
+  const domainLabel=document.createElement('label');domainLabel.className='field';domainLabel.textContent=directoryLabel('Домен адреса','Address domain');
+  const domainSelect=document.createElement('select');domainSelect.className='field-input';domainLabel.append(domainSelect);
+  if(!isDomain)form.append(domainLabel);
+  const actions=document.createElement('div');actions.className='org-toolbar';
+  const save=directoryButton(directoryLabel('Добавить алиас','Add alias'),null,true);save.type='submit';
+  const cancel=directoryButton(t('cancel'),()=>reset());cancel.hidden=true;actions.append(save,cancel);form.append(actions);
+  dialog.append(description,status,list,form);
+  const base='/api/v1/admin/'+(isDomain?'domains/':'users/')+encodeURIComponent(target.id)+'/aliases';
+  let aliases=[],editing=null,busy=false;
+  const writable=!isDomain||!!state.me?.is_global_admin;
+  form.hidden=!writable;
+  function reset(){editing=null;input.value='';domainSelect.disabled=false;save.textContent=directoryLabel('Добавить алиас','Add alias');cancel.hidden=true;}
+  function lock(value){busy=value;dialog.querySelectorAll('button,input,select').forEach(el=>el.disabled=value);if(!value&&editing)domainSelect.disabled=true;}
+  function render(){
+    list.replaceChildren();
+    if(!aliases.length){const empty=document.createElement('p');empty.className='meta';empty.textContent=directoryLabel('Алиасов пока нет.','No aliases yet.');list.append(empty);}
+    for(const alias of aliases){
+      const row=document.createElement('div');row.className='alias-row';
+      const address=document.createElement('span');address.textContent=isDomain?alias.name:alias.email;row.append(address);
+      if(writable){
+        const controls=document.createElement('div');controls.className='org-toolbar';
+        controls.append(directoryButton(directoryLabel('Изменить','Edit'),()=>{
+          editing=alias;input.value=isDomain?alias.name:alias.local_part;
+          domainSelect.value=alias.domain_id;domainSelect.disabled=true;
+          save.textContent=directoryLabel('Сохранить','Save');cancel.hidden=false;input.focus();
+        }),directoryButton(directoryLabel('Удалить','Delete'),async()=>{
+          if(busy||!await askConfirm(directoryLabel('Удалить алиас ','Delete alias ')+(isDomain?alias.name:alias.email)+'?',{danger:true}))return;
+          lock(true);setMsg(status,'','');
+          try{await api(base+'/'+encodeURIComponent(alias.id),{method:'DELETE'});reset();await reload();}
+          catch(error){setMsg(status,aliasErrorText(error.message),'err');}finally{lock(false);}
+        }));row.append(controls);
+      }
+      list.append(row);
+    }
+  }
+  async function reload(){const data=await api(base);if(!dialog.isConnected)return;aliases=data.aliases||[];render();}
+  form.addEventListener('submit',async event=>{
+    event.preventDefault();if(busy)return;lock(true);setMsg(status,'','');
+    const payload=isDomain?{name:input.value.trim()}:{local_part:input.value.trim(),domain_id:editing?editing.domain_id:domainSelect.value};
+    try{await api(base+(editing?'/'+encodeURIComponent(editing.id):''),{method:editing?'PATCH':'POST',body:JSON.stringify(payload)});reset();await reload();setMsg(status,directoryLabel('Алиас сохранён.','Alias saved.'),'ok');}
+    catch(error){setMsg(status,aliasErrorText(error.message),'err');}finally{lock(false);}
+  });
+  lock(true);
+  try{
+    if(!isDomain){
+      const data=await api('/api/v1/admin/domains?tenant_id='+encodeURIComponent(target.tenant_id));
+      for(const domain of data.domains||[]){const option=document.createElement('option');option.value=domain.id;option.textContent='@'+domain.name;domainSelect.append(option);}
+      domainSelect.value=target.domain_id;
+    }
+    await reload();
+  }catch(error){setMsg(status,aliasErrorText(error.message),'err');}finally{lock(false);}
+}
+// Attribution is part of the application, outside all customizable images.
+let brandingRevision = 0;
+function renderHeaderBranding(value) {
+  const image = $('header-branding-image');
+  $('header-branding-name').textContent = value.name || 'Tayga Mail';
+  if (value.image) image.src = value.image;
+  else image.removeAttribute('src');
+  image.classList.toggle('hidden', !value.image);
+}
+function resetBranding() {
+  brandingRevision++;
+  document.querySelector('dialog.branding-dialog')?.close();
+  renderHeaderBranding({});
+}
+async function refreshBranding() {
+  const revision = ++brandingRevision;
+  try {
+    const value = await api('/api/v1/me/branding');
+    if (revision === brandingRevision) renderHeaderBranding(value);
+  } catch {
+    if (revision === brandingRevision) renderHeaderBranding({});
+  }
+}
+
+async function openAdminBranding(kind, target) {
+  document.querySelector('dialog.branding-dialog')?.close();
+  const dialog = directoryDialog(t(kind === 'domains' ? 'branding_domain' : 'branding_tenant') + ' — ' + target.name);
+  dialog.classList.add('branding-dialog');
+  dialog.append($('branding-template').content.cloneNode(true));
+  // Templates are inert until opened; translate the newly inserted elements.
+  dialog.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+  const el = id => dialog.querySelector('#' + id);
+  const form = el('branding-form'), status = el('branding-msg');
+  const base = '/api/v1/admin/branding/' + kind + '/' + encodeURIComponent(target.id);
+  let draft = {enabled:false, name:'', image:''}, busy = false, reading = false, revision = 0;
+  function preview() {
+    el('branding-preview-name').textContent = draft.enabled ? draft.name || 'Tayga Mail' : (kind === 'domains' ? t('mig_inherit') : 'Tayga Mail');
+    const image = el('branding-preview-image');
+    if (draft.enabled && draft.image) image.src = draft.image;
+    else image.removeAttribute('src');
+    image.classList.toggle('hidden', !draft.enabled || !draft.image);
+  }
+  function fill(value) {
+    draft = value;
+    el('branding-name').value = value.name;
+    el('branding-enabled').checked = value.enabled;
+    el('branding-file').value = '';
+    preview();
+  }
+  function lock(value) {
+    busy = value;
+    [...form.elements].forEach(control => { control.disabled = value; });
+  }
+  el('branding-name').oninput = event => { draft.name = event.target.value; preview(); };
+  el('branding-enabled').onchange = event => { draft.enabled = event.target.checked; preview(); };
+  el('branding-file').onchange = async event => {
+    const file = event.target.files[0];
+    if (!file) return;
+    const read = ++revision;
+    reading = true;
+    el('branding-form').querySelector('[type=submit]').disabled = true;
+    try {
+      if (!['image/png', 'image/jpeg'].includes(file.type) || file.size > 1048576) throw Error();
+      const bitmap = await createImageBitmap(file);
+      const valid = bitmap.width <= 4096 && bitmap.height <= 4096;
+      bitmap.close();
+      if (!valid) throw Error();
+      const image = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      if (read !== revision || !dialog.isConnected) return;
+      draft.image = image;
+      draft.enabled = true;
+      el('branding-enabled').checked = true;
+      preview();
+      setMsg(status, '');
+    } catch {
+      if (read === revision && dialog.isConnected) {
+        event.target.value = '';
+        setMsg(status, t('branding_invalid'), 'err');
+      }
+    } finally {
+      if (read === revision) { reading = false; el('branding-form').querySelector('[type=submit]').disabled = busy; }
+    }
+  };
+  el('branding-remove-image').onclick = () => {
+    revision++; reading = false;
+    draft.image = '';
+    el('branding-file').value = '';
+    form.querySelector('[type=submit]').disabled = busy;
+    preview();
+  };
+  async function save(value) {
+    if (busy || reading) return;
+    lock(true); setMsg(status, '');
+    try {
+      const saved = await api(base, {method:'PUT', body:JSON.stringify(value)});
+      if (!dialog.isConnected) return;
+      fill(saved);
+      setMsg(status, t('saved'), 'ok');
+      await refreshBranding();
+    } catch { if (dialog.isConnected) setMsg(status, t('branding_save_error'), 'err'); }
+    finally { lock(false); }
+  }
+  form.onsubmit = event => { event.preventDefault(); save({...draft, name:draft.name.trim()}); };
+  el('branding-reset').onclick = () => {
+    revision++; reading = false;
+    save({enabled:false, name:'', image:''});
+  };
+  lock(true);
+  try {
+    const value = await api(base);
+    if (dialog.isConnected) { fill(value); lock(false); }
+  } catch (err) { if (dialog.isConnected) setMsg(status, err.message, 'err'); }
+}
+$('tenant-branding-button')?.addEventListener('click', () => openAdminBranding('tenants', {id:tenantNav.tenantID, name:tenantNav.tenantName}));

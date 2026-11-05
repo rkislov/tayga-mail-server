@@ -88,7 +88,7 @@ func (s *Server) adminDomainNames(r *http.Request, admin *storage.User) ([]strin
 		for _, domain := range domains {
 			names = append(names, domain.Name)
 		}
-		return names, nil
+		return s.expandMailDomainNames(r, names)
 	}
 	ids, err := s.store.ListDomainAdminDomains(r.Context(), admin.ID)
 	if err != nil {
@@ -117,5 +117,23 @@ func (s *Server) adminDomainNames(r *http.Request, admin *storage.User) ([]strin
 			names = append(names, n)
 		}
 	}
-	return names, nil
+	return s.expandMailDomainNames(r, names)
+}
+
+func (s *Server) expandMailDomainNames(r *http.Request, names []string) ([]string, error) {
+	out := append([]string{}, names...)
+	for _, name := range names {
+		domain, err := s.store.GetDomainByName(r.Context(), name)
+		if err != nil {
+			return nil, err
+		}
+		aliases, err := s.store.ListDomainAliases(r.Context(), domain.ID)
+		if err != nil {
+			return nil, err
+		}
+		for _, alias := range aliases {
+			out = append(out, alias.Name)
+		}
+	}
+	return out, nil
 }

@@ -25,19 +25,20 @@ type Server struct {
 
 	pushMu sync.Mutex
 
-	resumeMu  sync.Mutex
-	resumable map[string]resumableStream
-	upload    UploadHandler
-	uploadMu  sync.RWMutex
-	cfg       *config.Config
-	log       *slog.Logger
-	store     storage.Driver
-	authn     *auth.Layer
-	tls       *tlsutil.Manager
-	tlsCfg    *tls.Config
-	hub       *Hub
-	domain    string
-	db        *sql.DB
+	resumeMu       sync.Mutex
+	resumable      map[string]resumableStream
+	closingStreams map[*Session]struct{} // transports being cleaned up before SM snapshot publication
+	upload         UploadHandler
+	uploadMu       sync.RWMutex
+	cfg            *config.Config
+	log            *slog.Logger
+	store          storage.Driver
+	authn          *auth.Layer
+	tls            *tlsutil.Manager
+	tlsCfg         *tls.Config
+	hub            *Hub
+	domain         string
+	db             *sql.DB
 
 	webPresenceMu sync.Mutex
 	presence      map[string]map[string]presenceState

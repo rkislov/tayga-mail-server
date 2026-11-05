@@ -18,6 +18,7 @@ type CalendarMail struct {
 
 type CalendarDelivery struct {
 	ID, Sender, Recipient, RecipientUserID, Subject, State, LeaseToken string
+	TargetMailbox                                                      string
 	Data                                                               []byte
 	Attempts                                                           int
 	CreatedAt                                                          int64
@@ -56,7 +57,21 @@ func calendarAttendeeMail(from, name string, attendees []calutil.Attendee, subje
 	return out
 }
 
+type calendarMailSuppressedKey struct{}
+
+// WithoutCalendarMail applies protocol SendToNone semantics: calendar copies,
+// invitation state and bookings still commit together, but no mail is queued.
+func WithoutCalendarMail(ctx context.Context) context.Context {
+	return context.WithValue(ctx, calendarMailSuppressedKey{}, true)
+}
+
 func (s *Store) queueCalendarMail(ctx context.Context, tx *sql.Tx, mails []CalendarMail) error {
+	if suppressed, _ := ctx.Value(calendarMailSuppressedKey{}).(bool); suppressed {
+		return nil
+	}
+	options, _ := ctx.Value(calendarMailOptionsKey{}).(calendarMailOptions)
+	var copies []calendarSentSnapshot
+	groups := map[string]int{}
 	for _, m := range mails {
 		var err error
 		m.ICS, err = calutil.SchedulingMailICS(m.ICS)
@@ -64,7 +79,7 @@ func (s *Store) queueCalendarMail(ctx context.Context, tx *sql.Tx, mails []Calen
 			return err
 		}
 		// Booking resources receive calendar objects, not invitation mail.
-		if m.Method == "REQUEST" {
+		if m.Method == "REQUEST" || m.Method == "CANCEL" {
 			var n int
 			if err := tx.QueryRowContext(ctx, s.rebind(`SELECT COUNT(*) FROM calendar_resources WHERE LOWER(email)=LOWER(?) AND enabled=1`), m.To).Scan(&n); err != nil {
 				return err
@@ -73,27 +88,40 @@ func (s *Store) queueCalendarMail(ctx context.Context, tx *sql.Tx, mails []Calen
 				continue
 			}
 		}
+		if options.SaveCopy && (m.Method == "REQUEST" || m.Method == "CANCEL") {
+			key := m.From + "\x00" + m.Method + "\x00" + m.Subject + "\x00" + m.Text + "\x00" + m.ICS
+			index, found := groups[key]
+			if !found {
+				index = len(copies)
+				groups[key] = index
+				copies = append(copies, calendarSentSnapshot{Mail: m})
+			}
+			copies[index].Recipients = append(copies[index].Recipients, m.To)
+		}
 		// Resolve a local identity now: an account deleted before delivery must
 		// never turn a previously local invitation into an external email.
-		var userID string
-		err = tx.QueryRowContext(ctx, s.rebind(`SELECT id FROM users WHERE LOWER(email)=LOWER(?)`), m.To).Scan(&userID)
-		if err != nil && err != sql.ErrNoRows {
+		userID, err := s.calendarRecipientTx(ctx, tx, m.To)
+		if err != nil {
 			return err
 		}
-		if err == sql.ErrNoRows {
-			at := strings.LastIndex(m.To, "@")
-			if at < 1 {
-				return fmt.Errorf("invalid calendar recipient")
-			}
-			err = tx.QueryRowContext(ctx, s.rebind(`SELECT a.user_id FROM aliases a JOIN domains d ON d.id=a.domain_id WHERE LOWER(d.name)=LOWER(?) AND LOWER(a.local_part)=LOWER(?)`), m.To[at+1:], m.To[:at]).Scan(&userID)
-			if err != nil && err != sql.ErrNoRows {
+		if err = s.calendarMailDownloadLinks(ctx, tx, &m); err != nil {
+			return err
+		}
+		id, now := NewID(), time.Now().UTC()
+		if userID != "" && (m.Method == "REQUEST" || m.Method == "CANCEL" || m.Method == "REPLY") {
+			if _, err = tx.ExecContext(ctx, s.rebind(`INSERT INTO calendar_scheduling_inbox(id,user_id,data,etag,created_at) VALUES(?,?,?,?,?)`), id, userID, m.ICS, ContentETag(m.ICS), now); err != nil {
 				return err
 			}
 		}
-		id, now := NewID(), time.Now().UTC()
+
 		raw := calutil.IMIPMessage(m.From, m.FromName, m.To, m.Subject, m.Text, m.ICS, m.Method, id, now)
 		_, err = tx.ExecContext(ctx, s.rebind(`INSERT INTO calendar_deliveries(id,sender,recipient,recipient_user_id,subject,data,next_attempt,created_at) VALUES(?,?,?,?,?,?,?,?)`), id, m.From, m.To, userID, m.Subject, raw, now.UnixMilli(), now.UnixNano())
 		if err != nil {
+			return err
+		}
+	}
+	for _, copy := range copies {
+		if err := s.queueCalendarSentCopy(ctx, tx, copy); err != nil {
 			return err
 		}
 	}
@@ -105,7 +133,7 @@ func (s *Store) queueCalendarMail(ctx context.Context, tx *sql.Tx, mails []Calen
 func (s *Store) ClaimCalendarDelivery(ctx context.Context) (*CalendarDelivery, error) {
 	now := time.Now().UnixMilli()
 	job := &CalendarDelivery{}
-	err := s.db.QueryRowContext(ctx, s.rebind(`SELECT id,sender,recipient,recipient_user_id,subject,data,state,attempts,created_at FROM calendar_deliveries WHERE state<>'done' AND next_attempt<=? AND lease_until<=? ORDER BY created_at,id LIMIT 1`), now, now).Scan(&job.ID, &job.Sender, &job.Recipient, &job.RecipientUserID, &job.Subject, &job.Data, &job.State, &job.Attempts, &job.CreatedAt)
+	err := s.db.QueryRowContext(ctx, s.rebind(`SELECT id,sender,recipient,recipient_user_id,subject,data,state,attempts,created_at,target_mailbox FROM calendar_deliveries WHERE state<>'done' AND next_attempt<=? AND lease_until<=? ORDER BY created_at,id LIMIT 1`), now, now).Scan(&job.ID, &job.Sender, &job.Recipient, &job.RecipientUserID, &job.Subject, &job.Data, &job.State, &job.Attempts, &job.CreatedAt, &job.TargetMailbox)
 	if err != nil {
 		return nil, mapErr(err)
 	}
@@ -160,16 +188,33 @@ func (s *Store) CommitCalendarDelivery(ctx context.Context, job *CalendarDeliver
 	if n != 1 {
 		return ErrCalendarConflict
 	}
+	var target, recipientUserID string
+	if err = tx.QueryRowContext(ctx, s.rebind(`SELECT target_mailbox,recipient_user_id FROM calendar_deliveries WHERE id=?`), job.ID).Scan(&target, &recipientUserID); err != nil {
+		return err
+	}
+	jobTarget := job.TargetMailbox
+	if jobTarget == "" {
+		jobTarget = "INBOX"
+	}
+	if target != jobTarget || recipientUserID != job.RecipientUserID || target == "Sent" && recipientUserID == "" {
+		return ErrUnauthorized
+	}
 	if job.RecipientUserID != "" {
 		if message == nil {
 			return fmt.Errorf("local calendar mail is missing")
 		}
-		var owner string
-		if err = tx.QueryRowContext(ctx, s.rebind(`SELECT user_id FROM mailboxes WHERE id=?`), message.MailboxID).Scan(&owner); err != nil {
+		var owner, mailbox string
+		if err = tx.QueryRowContext(ctx, s.rebind(`SELECT user_id,name FROM mailboxes WHERE id=?`), message.MailboxID).Scan(&owner, &mailbox); err != nil {
 			return err
 		}
 		if owner != job.RecipientUserID {
 			return ErrUnauthorized
+		}
+		if job.TargetMailbox == "Sent" {
+			if mailbox != "Sent" {
+				return ErrUnauthorized
+			}
+			message.Flags = `\Seen`
 		}
 		message.ID = job.ID
 		message.MessageID = "<" + job.ID + "@tayga>"
@@ -220,8 +265,11 @@ func (s *Store) deleteCalendarObject(ctx context.Context, o *CalendarObject, mai
 	if err != nil {
 		return err
 	}
-	if stored.ETag != o.ETag || stored.CalendarID != o.CalendarID {
+	if (o.ExpectedScheduleTag == "" || o.StrictETag) && stored.ETag != o.ETag || stored.CalendarID != o.CalendarID {
 		return ErrCalendarConflict
+	}
+	if err = s.calendarSchedulePreconditionTx(ctx, tx, o, stored.ID, stored.ETag); err != nil {
+		return err
 	}
 	o = stored
 	var actorEmail string
@@ -231,6 +279,26 @@ func (s *Store) deleteCalendarObject(ctx context.Context, o *CalendarObject, mai
 		}
 	}
 
+	if options, calDAV := ctx.Value(calDAVSchedulingKey{}).(calDAVSchedulingOptions); calDAV && options.Reply {
+		parsed, e := calutil.ParseICS(o.Data)
+		if e != nil {
+			return e
+		}
+		if parsed.Organizer.Email != "" && !strings.EqualFold(parsed.Organizer.Email, actorEmail) && (parsed.Organizer.ScheduleAgent == "" || strings.EqualFold(parsed.Organizer.ScheduleAgent, "SERVER")) {
+			invites, e := s.calDAVInvitesTx(ctx, tx, actorID, o.ID)
+			if e != nil {
+				return e
+			}
+			for _, inv := range invites {
+				if _, e = s.replyCalendarInviteTx(ctx, tx, actorID, inv.ID, "DECLINED", nil, nil, o.ETag, "", true, true, ""); e != nil {
+					return e
+				}
+				if e = tx.QueryRowContext(ctx, s.rebind(`SELECT etag FROM calendar_objects WHERE id=?`), o.ID).Scan(&o.ETag); e != nil {
+					return e
+				}
+			}
+		}
+	}
 	res, err := tx.ExecContext(ctx, s.rebind(`DELETE FROM calendar_objects WHERE id=? AND etag=?`), o.ID, o.ETag)
 	if err != nil {
 		return err
