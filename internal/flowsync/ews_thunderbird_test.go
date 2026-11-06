@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -34,6 +35,9 @@ func TestTaygaEWSThunderbirdNative(t *testing.T) {
 	sentDateElement := regexp.MustCompile(`<(?:[A-Za-z0-9_]+:)?DateTimeSent\b[^>]*>[^<]*</(?:[A-Za-z0-9_]+:)?DateTimeSent>`)
 	var legacySentDate atomic.Bool
 	legacySentDate.Store(true)
+	var legacyThreading atomic.Bool
+	legacyThreading.Store(true)
+	threadElements := regexp.MustCompile(`(?s)<(?:[A-Za-z0-9_]+:)?(?:InternetMessageId|References|InternetMessageHeaders)\b[^>]*>.*?</(?:[A-Za-z0-9_]+:)?(?:InternetMessageId|References|InternetMessageHeaders)>`)
 	h.sender = &mailSubmission{store: st, ms: eas.ms, submit: func(_ context.Context, _ *storage.User, _ []string, raw []byte) error {
 		sentMu.Lock()
 		defer sentMu.Unlock()
@@ -122,6 +126,39 @@ func TestTaygaEWSThunderbirdNative(t *testing.T) {
 				"sentAttachment": func() bool { sentMu.Lock(); defer sentMu.Unlock(); return sentAttachment }(),
 				"sentCount":      func() int { sentMu.Lock(); defer sentMu.Unlock(); return sentCount }()})
 			return
+		case "/test/restore-threading":
+			legacyThreading.Store(false)
+			msgs, _ := st.ListMessages(ctx, inbox.ID)
+			for _, msg := range msgs {
+				flags := `\Flagged`
+				if storage.HasFlag(msg.Flags, `\Flagged`) {
+					flags = ""
+				}
+				if err := st.UpdateMessageFlags(ctx, msg.ID, flags); err != nil {
+					http.Error(w, err.Error(), 500)
+					return
+				}
+			}
+			write(map[string]bool{"ok": true})
+		case "/test/thread-mail":
+			for i, headers := range []string{
+				"Message-ID: <thread-reply@example.com>\r\nReferences: <ews-native-test@example.com>\r\nIn-Reply-To: <ews-native-test@example.com>\r\n",
+				"Message-ID: <thread-child@example.com>\r\nReferences: <ews-native-test@example.com>\r\n\t<thread-reply@example.com>\r\nIn-Reply-To: <thread-reply@example.com>\r\n",
+				"Message-ID: <thread-parent-only@example.com>\r\nIn-Reply-To: <ews-native-test@example.com>\r\n",
+				"Message-ID: <thread-unrelated@example.com>\r\n",
+			} {
+				// Different subjects ensure that grouping uses actual message links.
+				raw := []byte("From: sender@example.com\r\nSubject: Thread fixture " + strconv.Itoa(i) + "\r\n" + headers + "\r\nBody")
+				path, size, err := eas.ms.Deliver(u.Email, "INBOX", raw)
+				if err == nil {
+					_, err = st.InsertMessage(ctx, &storage.Message{MailboxID: inbox.ID, FilePath: path, Size: size, InternalDate: time.Now()})
+				}
+				if err != nil {
+					http.Error(w, err.Error(), 500)
+					return
+				}
+			}
+			write(map[string]any{"ok": true})
 		case "/test/restore-dates":
 			legacySentDate.Store(false)
 			msgs, _ := st.ListMessages(ctx, inbox.ID)
@@ -190,14 +227,21 @@ func TestTaygaEWSThunderbirdNative(t *testing.T) {
 				http.Error(w, "fixture response lost after commit", 503)
 				return
 			}
-			if legacySentDate.Load() {
+			if legacySentDate.Load() || legacyThreading.Load() {
 				recorded := httptest.NewRecorder()
 				h.ServeHTTP(recorded, r.WithContext(withUser(r.Context(), u)))
 				for key, values := range recorded.Header() {
 					w.Header()[key] = values
 				}
 				w.WriteHeader(recorded.Code)
-				io.WriteString(w, sentDateElement.ReplaceAllString(recorded.Body.String(), ""))
+				response := recorded.Body.String()
+				if legacySentDate.Load() {
+					response = sentDateElement.ReplaceAllString(response, "")
+				}
+				if legacyThreading.Load() {
+					response = threadElements.ReplaceAllString(response, "")
+				}
+				io.WriteString(w, response)
 				return
 			}
 			h.ServeHTTP(w, r.WithContext(withUser(r.Context(), u)))

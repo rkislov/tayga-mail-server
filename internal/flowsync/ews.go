@@ -310,8 +310,8 @@ func (h *ewsHandler) findMailItems(ctx context.Context, u *storage.User, mailbox
 			return "", err
 		}
 		sensitivity, early, extended, flag := metadataFields(metadata, m.Flags)
-		fmt.Fprintf(&b, `<t:Message><t:ItemId Id="%s" ChangeKey="%s"/><t:Subject>%s</t:Subject>%s<t:DateTimeSent>%s</t:DateTimeSent><t:DateTimeReceived>%s</t:DateTimeReceived>%s%s%s<t:IsRead>%t</t:IsRead></t:Message>`,
-			xmlEscape(m.ID), digest(m.ID+m.Flags+metadata), xmlEscape(hdr.Subject), sensitivity, ewsMailSentDate(hdr.SentDate, m.InternalDate), m.InternalDate.UTC().Format("2006-01-02T15:04:05Z"), early, extended, flag, storage.HasFlag(m.Flags, `\Seen`))
+		fmt.Fprintf(&b, `<t:Message><t:ItemId Id="%s" ChangeKey="%s"/><t:Subject>%s</t:Subject>%s<t:DateTimeSent>%s</t:DateTimeSent><t:DateTimeReceived>%s</t:DateTimeReceived>%s%s%s<t:IsRead>%t</t:IsRead>%s</t:Message>`,
+			xmlEscape(m.ID), digest(m.ID+m.Flags+metadata), xmlEscape(hdr.Subject), sensitivity, ewsMailSentDate(hdr.SentDate, m.InternalDate), m.InternalDate.UTC().Format("2006-01-02T15:04:05Z"), early, extended, flag, storage.HasFlag(m.Flags, `\Seen`), ewsMailThreadFields(hdr.MessageID, hdr.References, hdr.InReplyTo))
 	}
 	b.WriteString(`</t:Items></m:RootFolder></m:FindItemResponseMessage></m:ResponseMessages></m:FindItemResponse>`)
 	return b.String(), nil

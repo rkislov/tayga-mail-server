@@ -18,6 +18,12 @@ async function taygaNativeTest(api, args) {
     const server = MailServices.accounts.getIncomingServer(record.serverKey);
     const folders = Array.from(server.rootFolder.descendants);
     const inbox = folders.find((f) => f.flags & Ci.nsMsgFolderFlags.Inbox);
+    if (inbox && args.repair) {
+      const win = Services.wm.getMostRecentWindow("mail:3pane");
+      const { FolderCommands } = win.ChromeUtils.importESModule(
+        "chrome://messenger/content/FolderCommands.mjs", { global: "current" });
+      await FolderCommands.rebuildFolderSummary(inbox);
+    }
     if (inbox && args.markRead)
       inbox.markMessagesRead(Array.from(inbox.messages), true);
     if (inbox && args.update) inbox.updateFolder(null);
@@ -32,6 +38,8 @@ async function taygaNativeTest(api, args) {
             subject: m.subject,
             date: m.dateInSeconds,
             key: m.messageKey,
+ messageId: m.messageId,
+ threadId: m.threadId,
           }))
         : [],
     };

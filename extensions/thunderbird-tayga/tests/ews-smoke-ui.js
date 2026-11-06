@@ -614,6 +614,37 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     checks.push(
       "existing zero-date native headers repaired in place from MIME Date, with timezone and without duplicates",
     );
+    await fetch(fixture + "/test/thread-mail", { method: "POST" });
+    for (let i = 0; i < 150; i++) {
+      mail = await inspect({ op: "mail", update: true });
+      if (mail.inbox.length === 5) break;
+      await sleep(100);
+    }
+    assert(mail.inbox.length === 5 && !mail.inbox.some(m => m.messageId === "thread-reply@example.com"), "Legacy thread fixture failed: " + JSON.stringify(mail));
+    await fetch(fixture + "/test/restore-threading", { method: "POST" });
+    for (let i = 0; i < 150; i++) {
+      mail = await inspect({ op: "mail", update: true });
+      if (mail.inbox.length === 5 && mail.inbox.every(m => m.messageId)) break;
+      await sleep(100);
+    }
+    // Thunderbird updates header fields but retains the old thread graph.
+    // Exercise the same Repair Folder command available in folder properties.
+    await inspect({ op: "mail", repair: true });
+    for (let i = 0; i < 150; i++) {
+      mail = await inspect({ op: "mail", update: true });
+      if (mail.inbox.length === 5 && mail.inbox.every(m => m.messageId)) break;
+      await sleep(100);
+    }
+    const rootMail = mail.inbox.find(m => m.messageId === "ews-native-test@example.com");
+    assert(rootMail && mail.inbox.length === 5, "Thread fixture not synchronized: " + JSON.stringify(mail));
+    for (const id of ["thread-reply", "thread-child", "thread-parent-only"]) {
+      const reply = mail.inbox.find(m => m.messageId === id + "@example.com");
+      assert(reply && reply.threadId === rootMail.threadId,
+        "Reply not grouped into native Thunderbird thread: " + JSON.stringify(mail));
+    }
+    const unrelated = mail.inbox.find(m => m.messageId === "thread-unrelated@example.com");
+    assert(unrelated && unrelated.threadId !== rootMail.threadId, "Unrelated message merged into thread");
+    checks.push("native Thunderbird groups replies and folded reference chains, including In-Reply-To only, without merging unrelated mail");
     const mailRecord = Object.values((await native("state")).mail)[0];
     const account = await browser.accounts.get(mailRecord.accountId);
     const compose = await browser.compose.beginNew({
