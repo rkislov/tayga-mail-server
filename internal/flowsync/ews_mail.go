@@ -106,6 +106,7 @@ func (h *ewsHandler) getMailItem(ctx context.Context, u *storage.User, msg *stor
 		out.WriteString(`</t:Attachments>`)
 	}
 	fmt.Fprintf(&out, `<t:DateTimeSent>%s</t:DateTimeSent><t:DateTimeReceived>%s</t:DateTimeReceived><t:Size>%d</t:Size>%s<t:HasAttachments>%t</t:HasAttachments>%s%s`, ewsMailSentDate(content.SentDate, msg.InternalDate), msg.InternalDate.UTC().Format("2006-01-02T15:04:05Z"), msg.Size, early, len(content.Attachments) > 0, extended, flag)
+	out.WriteString(ewsMailThreadFields(content.MessageID, content.References, content.InReplyTo))
 	out.WriteString(ewsAddress("ToRecipients", content.To))
 	out.WriteString(ewsAddress("CcRecipients", content.Cc))
 	out.WriteString(ewsAddress("From", content.From))

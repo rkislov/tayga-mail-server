@@ -14,6 +14,7 @@ import (
 )
 
 type messageContent struct {
+	MessageID, References, InReplyTo           string
 	Subject, From, To, Cc, ReplyTo, Text, HTML string
 	SentDate                                   time.Time
 	Attachments                                []messageAttachment
@@ -54,6 +55,9 @@ func readMessageContent(source io.Reader, raw []byte, metadataOnly bool) (messag
 	}
 	defer r.Close()
 	out.MIME = raw
+	out.MessageID = r.Header.Get("Message-ID")
+	out.References = r.Header.Get("References")
+	out.InReplyTo = r.Header.Get("In-Reply-To")
 	out.SentDate, _ = r.Header.Date()
 	media, params, _ := r.Header.ContentType()
 	out.SMIME = media == "application/pkcs7-mime" || media == "application/x-pkcs7-mime" || (media == "multipart/signed" && strings.Contains(params["protocol"], "pkcs7-signature"))

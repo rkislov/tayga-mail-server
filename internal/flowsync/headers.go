@@ -16,9 +16,10 @@ import (
 )
 
 type msgHeaders struct {
-	Subject  string
-	From     string
-	SentDate time.Time
+	MessageID, References, InReplyTo string
+	Subject                          string
+	From                             string
+	SentDate                         time.Time
 }
 
 func readMsgHeaders(ms *mailstore.Store, filePath string) msgHeaders {
@@ -37,10 +38,13 @@ func readMsgHeaders(ms *mailstore.Store, filePath string) msgHeaders {
 // SMTP, IMAP imports and submission already index these immutable MIME headers.
 // Only legacy rows with missing metadata need a bounded file read.
 func indexedMsgHeaders(ms *mailstore.Store, msg *storage.Message) msgHeaders {
-	h := msgHeaders{Subject: msg.Subject, From: msg.FromAddr}
+	h := msgHeaders{Subject: msg.Subject, From: msg.FromAddr, MessageID: msg.MessageID}
 	h.SentDate, _ = mail.ParseDate(msg.DateHdr)
-	if msg.Subject == "" || msg.DateHdr == "" {
+	if msg.Subject == "" || msg.DateHdr == "" || msg.MessageID == "" {
 		fallback := readMsgHeaders(ms, msg.FilePath)
+		if msg.MessageID == "" {
+			h.MessageID = fallback.MessageID
+		}
 		if msg.Subject == "" {
 			h.Subject = fallback.Subject
 		}
@@ -68,6 +72,12 @@ func parseMsgHeaders(r io.Reader) msgHeaders {
 			}
 		case "from":
 			h.From = mailsearch.DecodeHeader(v)
+		case "message-id":
+			h.MessageID = v
+		case "references":
+			h.References = v
+		case "in-reply-to":
+			h.InReplyTo = v
 		case "date":
 			h.SentDate, _ = mail.ParseDate(v)
 		}
