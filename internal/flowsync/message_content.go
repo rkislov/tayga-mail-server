@@ -14,6 +14,7 @@ import (
 )
 
 type messageContent struct {
+	ThreadIndex, ThreadTopic                   string
 	MessageID, References, InReplyTo           string
 	Subject, From, To, Cc, ReplyTo, Text, HTML string
 	SentDate                                   time.Time
@@ -55,6 +56,8 @@ func readMessageContent(source io.Reader, raw []byte, metadataOnly bool) (messag
 	}
 	defer r.Close()
 	out.MIME = raw
+	out.ThreadIndex = r.Header.Get("Thread-Index")
+	out.ThreadTopic = mailsearch.DecodeHeader(r.Header.Get("Thread-Topic"))
 	out.MessageID = r.Header.Get("Message-ID")
 	out.References = r.Header.Get("References")
 	out.InReplyTo = r.Header.Get("In-Reply-To")

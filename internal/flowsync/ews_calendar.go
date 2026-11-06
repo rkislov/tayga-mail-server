@@ -126,7 +126,9 @@ func (h *ewsHandler) calendarItemXML(ctx context.Context, u *storage.User, o *st
 	if windows := ianaWindowsZones[zone]; windows != "" {
 		zone = windows
 	}
-	fmt.Fprintf(&b, `<t:StartTimeZone Id="%s"/><t:EndTimeZone Id="%s"/>`, xmlEscape(zone), xmlEscape(zone))
+	// Mac Outlook unconditionally decodes both Id and Name; missing Name
+	// crashes its CTimeZoneDefinition constructor while parsing the response.
+	fmt.Fprintf(&b, `<t:StartTimeZone Id="%s" Name="%s"/><t:EndTimeZone Id="%s" Name="%s"/>`, xmlEscape(zone), xmlEscape(zone), xmlEscape(zone), xmlEscape(zone))
 	response := "Unknown"
 	for _, a := range ev.Attendees {
 		if strings.EqualFold(a.Email, u.Email) {

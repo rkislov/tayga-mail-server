@@ -16,6 +16,7 @@ import (
 )
 
 type msgHeaders struct {
+	ThreadIndex, ThreadTopic         string
 	MessageID, References, InReplyTo string
 	Subject                          string
 	From                             string
@@ -72,6 +73,10 @@ func parseMsgHeaders(r io.Reader) msgHeaders {
 			}
 		case "from":
 			h.From = mailsearch.DecodeHeader(v)
+		case "thread-index":
+			h.ThreadIndex = v
+		case "thread-topic":
+			h.ThreadTopic = mailsearch.DecodeHeader(v)
 		case "message-id":
 			h.MessageID = v
 		case "references":

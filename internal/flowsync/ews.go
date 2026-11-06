@@ -154,9 +154,16 @@ func (h *ewsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			if start, ok := token.(xml.StartElement); ok && start.Name.Local == "ResponseCode" {
 				var code string
-				if decoder.DecodeElement(&code, &start) == nil && code != "NoError" {
-					t.Result = boundedLog(code)
-					break
+				if decoder.DecodeElement(&code, &start) == nil {
+					if code != "NoError" {
+						t.Result = boundedLog(code)
+						break
+					}
+					// One GetItem request has one response code, before its
+					// payload. Logging must not decode a large MIME body again.
+					if op == "GetItem" && t.ItemCount == 1 {
+						break
+					}
 				}
 			}
 		}
@@ -288,10 +295,10 @@ func (h *ewsHandler) findItem(ctx context.Context, u *storage.User, body string)
 	if _, err := h.store.NoteFolderRightsForUser(ctx, folderID, u.ID); err == nil {
 		return h.findNoteItems(ctx, u, folderID)
 	}
-	return h.findMailItems(ctx, u, folderID)
+	return h.findMailItems(ctx, u, folderID, body)
 }
 
-func (h *ewsHandler) findMailItems(ctx context.Context, u *storage.User, mailboxID string) (string, error) {
+func (h *ewsHandler) findMailItems(ctx context.Context, u *storage.User, mailboxID string, requests ...string) (string, error) {
 	if err := h.ensureMailboxOwned(ctx, u.ID, mailboxID); err != nil {
 		return ewsFault("ErrorAccessDenied", "forbidden"), nil
 	}
@@ -303,6 +310,14 @@ func (h *ewsHandler) findMailItems(ctx context.Context, u *storage.User, mailbox
 	if err != nil {
 		return "", err
 	}
+	wantConversation := false
+	if len(requests) > 0 {
+		shape, err := parseEWSMailShape(requests[0])
+		if err != nil {
+			return "", err
+		}
+		wantConversation = shape.fields["item:ConversationId"] || shape.fields["message:ConversationIndex"] || shape.fields["message:ConversationTopic"] || extractTag(requests[0], "BaseShape") == "AllProperties"
+	}
 	var b strings.Builder
 	b.WriteString(`<m:FindItemResponse xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types">`)
 	b.WriteString(`<m:ResponseMessages><m:FindItemResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:RootFolder IncludesLastItemInRange="true">`)
@@ -313,9 +328,21 @@ func (h *ewsHandler) findMailItems(ctx context.Context, u *storage.User, mailbox
 		if !exists {
 			metadata = "{}"
 		}
+		conversation := ""
+		if wantConversation {
+			rawHeaders := readMsgHeaders(h.ms, m.FilePath)
+			content := messageContent{MessageID: rawHeaders.MessageID, References: rawHeaders.References, InReplyTo: rawHeaders.InReplyTo, ThreadIndex: rawHeaders.ThreadIndex, ThreadTopic: rawHeaders.ThreadTopic, Subject: hdr.Subject, SentDate: hdr.SentDate}
+			if content.MessageID == "" {
+				content.MessageID = m.MessageID
+			}
+			conversation, err = h.ewsConversationFields(ctx, u, m, content)
+			if err != nil {
+				return "", err
+			}
+		}
 		sensitivity, early, extended, flag := metadataFields(metadata, m.Flags)
-		fmt.Fprintf(&b, `<t:Message><t:ItemId Id="%s" ChangeKey="%s"/><t:Subject>%s</t:Subject>%s<t:DateTimeSent>%s</t:DateTimeSent><t:DateTimeReceived>%s</t:DateTimeReceived>%s%s%s<t:IsRead>%t</t:IsRead>%s</t:Message>`,
-			xmlEscape(m.ID), digest(m.ID+m.Flags+metadata), xmlEscape(hdr.Subject), sensitivity, ewsMailSentDate(hdr.SentDate, m.InternalDate), m.InternalDate.UTC().Format("2006-01-02T15:04:05Z"), early, extended, flag, storage.HasFlag(m.Flags, `\Seen`), ewsMailThreadFields(hdr.MessageID, hdr.References, hdr.InReplyTo))
+		fmt.Fprintf(&b, `<t:Message><t:ItemId Id="%s" ChangeKey="%s"/><t:Subject>%s</t:Subject>%s<t:DateTimeSent>%s</t:DateTimeSent><t:DateTimeReceived>%s</t:DateTimeReceived>%s%s%s<t:IsRead>%t</t:IsRead>%s%s</t:Message>`,
+			xmlEscape(m.ID), digest(m.ID+m.Flags+metadata), xmlEscape(hdr.Subject), sensitivity, ewsMailSentDate(hdr.SentDate, m.InternalDate), m.InternalDate.UTC().Format("2006-01-02T15:04:05Z"), early, extended, flag, storage.HasFlag(m.Flags, `\Seen`), ewsMailThreadFields(hdr.MessageID, hdr.References, hdr.InReplyTo), conversation)
 	}
 	b.WriteString(`</t:Items></m:RootFolder></m:FindItemResponseMessage></m:ResponseMessages></m:FindItemResponse>`)
 	return b.String(), nil

@@ -39,7 +39,7 @@ func (h *ewsHandler) syncEWSItems(ctx context.Context, u *storage.User, body str
 	}
 	fingerprint := digest(body)
 	if key != "" && key == state.PreviousKey && fingerprint == state.RequestHash {
-		return state.Response, nil
+		return repairEWSTimeZoneNames(state.Response), nil
 	}
 	if token != "" && (state.Key == "" || state.Key != key) {
 		return ewsOperationError("SyncFolderItems", "ErrorInvalidSyncStateData", "invalid sync state"), nil

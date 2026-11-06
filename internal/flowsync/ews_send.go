@@ -42,6 +42,45 @@ func messageFromEWS(u *storage.User, node *protocolNode) ([]byte, error) {
 	}
 	subject := strings.ReplaceAll(strings.ReplaceAll(node.value("Subject"), "\r", " "), "\n", " ")
 	fmt.Fprintf(&b, "Subject: %s\r\nMIME-Version: 1.0\r\n", mime.QEncoding.Encode("utf-8", subject))
+	// Keep conversation headers when a client submits structured EWS mail,
+	// as well as when it submits the original MIME bytes.
+	threadHeaders := map[string]string{}
+	if headers := node.child("InternetMessageHeaders"); headers != nil {
+		for _, header := range headers.Children {
+			name := strings.ToLower(nodeAttr(header, "HeaderName"))
+			switch name {
+			case "references", "in-reply-to", "thread-index", "thread-topic":
+				threadHeaders[name] = header.Text
+			}
+		}
+	}
+	if value := node.value("References"); value != "" {
+		threadHeaders["references"] = value
+	}
+	if value := node.value("ConversationIndex"); value != "" {
+		threadHeaders["thread-index"] = value
+	}
+	if value := node.value("ConversationTopic"); value != "" {
+		threadHeaders["thread-topic"] = value
+	}
+	for _, field := range []struct{ key, name string }{{"references", "References"}, {"in-reply-to", "In-Reply-To"}} {
+		if ids := conversationIDs(threadHeaders[field.key]); len(ids) > 0 {
+			fmt.Fprintf(&b, "%s: %s\r\n", field.name, strings.Join(ids, " "))
+		}
+	}
+	if value := threadHeaders["thread-index"]; value != "" {
+		index := validConversationIndex(value)
+		if index == nil {
+			return nil, fmt.Errorf("invalid Thread-Index")
+		}
+		fmt.Fprintf(&b, "Thread-Index: %s\r\n", base64.StdEncoding.EncodeToString(index))
+	}
+	if value := threadHeaders["thread-topic"]; value != "" {
+		if strings.ContainsAny(value, "\r\n") {
+			return nil, fmt.Errorf("invalid Thread-Topic")
+		}
+		fmt.Fprintf(&b, "Thread-Topic: %s\r\n", mime.QEncoding.Encode("utf-8", value))
+	}
 	body := node.child("Body")
 	kind := "text/plain"
 	text := ""

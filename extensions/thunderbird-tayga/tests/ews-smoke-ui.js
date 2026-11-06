@@ -645,6 +645,52 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     const unrelated = mail.inbox.find(m => m.messageId === "thread-unrelated@example.com");
     assert(unrelated && unrelated.threadId !== rootMail.threadId, "Unrelated message merged into thread");
     checks.push("native Thunderbird groups replies and folded reference chains, including In-Reply-To only, without merging unrelated mail");
+    stage = "large message opening";
+    const largeFixture = await fetch(fixture + "/test/large-mail", { method: "POST" }).then(r => r.json());
+    let largeMessage;
+    for (let i = 0; i < 150; i++) {
+      await inspect({ op: "mail", update: true });
+      const found = await browser.messages.query({ headerMessageId: "large-open@example.com" });
+      largeMessage = found.messages[0];
+      if (largeMessage) break;
+      await sleep(100);
+    }
+    assert(largeMessage, "Large native mail did not synchronize");
+    const openLarge = async () => {
+      const start = performance.now();
+      let listener;
+      const displayed = new Promise(resolve => {
+        listener = (tab, message) => { if (message.id === largeMessage.id) resolve(tab); };
+        browser.messageDisplay.onMessageDisplayed.addListener(listener);
+      });
+      try {
+        const tab = await browser.messageDisplay.open({ messageId: largeMessage.id, location: "tab" });
+        await Promise.race([displayed, sleep(30000).then(() => { throw new Error("Large message display timeout"); })]);
+        let shown;
+        for (let i = 0; i < 100; i++) {
+          shown = await inspect({ op: "displayedBody" });
+          if (shown.text.includes("Large MIME body marker")) break;
+          await sleep(50);
+        }
+        assert(shown.text.includes("Large MIME body marker"), "Body not rendered: " + JSON.stringify(shown));
+        return { tab, ms: Math.round(performance.now() - start) };
+      } finally { browser.messageDisplay.onMessageDisplayed.removeListener(listener); }
+    };
+    const coldOpen = await openLarge();
+    const rawLarge = await browser.messages.getRaw(largeMessage.id, { data_format: "File" });
+    assert(rawLarge.size === largeFixture.size, "Native MIME size changed");
+    const attachments = await browser.messages.listAttachments(largeMessage.id);
+    assert(attachments.length === 1, "Large attachment missing");
+    const attachmentFile = await browser.messages.getAttachmentFile(largeMessage.id, attachments[0].partName);
+    assert(attachmentFile.size === 24 * 1024 * 1024 && await attachmentFile.slice(0, 3).text() === "ABC", "Large attachment bytes changed");
+    await browser.tabs.remove(coldOpen.tab.id);
+    const downloadsBeforeWarm = await fetch(fixture + "/test/large-mail-stats").then(r => r.json());
+    const warmOpen = await openLarge();
+    const downloadsAfterWarm = await fetch(fixture + "/test/large-mail-stats").then(r => r.json());
+    assert(downloadsAfterWarm.downloads === downloadsBeforeWarm.downloads,
+      "Repeated native opening downloaded MIME again: " + JSON.stringify({ downloadsBeforeWarm, downloadsAfterWarm }));
+    await browser.tabs.remove(warmOpen.tab.id);
+    checks.push(`native 32 MiB MIME/24 MiB attachment renders intact; cold ${coldOpen.ms} ms, cached ${warmOpen.ms} ms, no repeated MIME download`);
     const mailRecord = Object.values((await native("state")).mail)[0];
     const account = await browser.accounts.get(mailRecord.accountId);
     const compose = await browser.compose.beginNew({
