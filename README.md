@@ -19,7 +19,7 @@ See [docs/architecture.md](docs/architecture.md) and `configs/tayga.example.yaml
 
 **План разработки (RU):** [Дорожная карта: порядок работ, зависимости и критерии готовности](docs/roadmap.md).
 
-**Выпуск 0.10.5:** [исправления и обновление](docs/release-0.10.5.md); Thunderbird 2.4.0 поставляется отдельным XPI в GitHub Release.
+**Выпуск 0.10.6:** [исправления и обновление](docs/release-0.10.6.md); Thunderbird 2.4.0 поставляется отдельным XPI в GitHub Release.
 
 ## Quick start
 

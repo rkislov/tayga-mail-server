@@ -13,6 +13,26 @@ func (s *Store) EWSMailMetadata(ctx context.Context, id string) (string, error) 
 	}
 	return data, err
 }
+
+// EWSMailboxMetadata fetches the sparse set of custom properties in one query.
+// Listing a large mailbox must not perform one SQL round trip per message.
+func (s *Store) EWSMailboxMetadata(ctx context.Context, mailboxID string) (map[string]string, error) {
+	rows, err := s.db.QueryContext(ctx, s.rebind(`SELECT e.message_id, e.data FROM ews_mail_metadata e JOIN messages m ON m.id=e.message_id WHERE m.mailbox_id=?`), mailboxID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make(map[string]string)
+	for rows.Next() {
+		var id, data string
+		if err := rows.Scan(&id, &data); err != nil {
+			return nil, err
+		}
+		result[id] = data
+	}
+	return result, rows.Err()
+}
+
 func (s *Store) UpdateEWSMailMetadata(ctx context.Context, id, flags, data string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {

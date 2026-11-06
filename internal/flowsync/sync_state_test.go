@@ -12,7 +12,7 @@ import (
 	"testing"
 )
 
-func syncFixture(t *testing.T) (context.Context, storage.Driver, *storage.User, *easHandler, *storage.FlowSyncDevice, string) {
+func syncFixture(t testing.TB) (context.Context, storage.Driver, *storage.User, *easHandler, *storage.FlowSyncDevice, string) {
 	t.Helper()
 	ctx := context.Background()
 	dir := t.TempDir()
