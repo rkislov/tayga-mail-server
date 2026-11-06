@@ -72,6 +72,12 @@ func (h *ewsHandler) batchItems(ctx context.Context, u *storage.User, op, body s
 		if strings.Contains(result, "<m:FaultResponse") {
 			result = ewsOperationError(op, extractTag(result, "ResponseCode"), extractTag(result, "MessageText"))
 		}
+		// A single native MIME download already is a complete GetItem response.
+		// Re-parsing and re-encoding its base64 creates many payload-sized
+		// allocations and cannot add anything to a one-item batch.
+		if op == "GetItem" && len(children) == 1 && strings.HasPrefix(result, "<m:GetItemResponse") {
+			return result, nil
+		}
 		parsed, err := parseProtocolXML([]byte(result))
 		if err != nil {
 			return "", err

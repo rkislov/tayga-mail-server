@@ -84,6 +84,9 @@ func TestTaygaEWSThunderbirdNative(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	var largeMailID atomic.Value
+	largeMailID.Store("")
+	var largeDownloads atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		write := func(v any) { w.Header().Set("Content-Type", "application/json"); json.NewEncoder(w).Encode(v) }
 		switch r.URL.Path {
@@ -159,6 +162,22 @@ func TestTaygaEWSThunderbirdNative(t *testing.T) {
 				}
 			}
 			write(map[string]any{"ok": true})
+		case "/test/large-mail":
+			raw := []byte("From: sender@example.com\r\nTo: alice@example.com\r\nMessage-ID: <large-open@example.com>\r\nSubject: Large native opening test\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=large-boundary\r\n\r\n--large-boundary\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nLarge MIME body marker\r\n--large-boundary\r\nContent-Type: application/octet-stream\r\nContent-Disposition: attachment; filename=large-open.bin\r\nContent-Transfer-Encoding: base64\r\n\r\n" + strings.Repeat("QUJD", 8<<20) + "\r\n--large-boundary--\r\n")
+			path, size, err := eas.ms.Deliver(u.Email, "INBOX", raw)
+			if err != nil {
+				http.Error(w, err.Error(), 500)
+				return
+			}
+			msg, err := st.InsertMessage(ctx, &storage.Message{MailboxID: inbox.ID, FilePath: path, Size: size, Subject: "Large native opening test", MessageID: "<large-open@example.com>", InternalDate: time.Now()})
+			if err != nil {
+				http.Error(w, err.Error(), 500)
+				return
+			}
+			largeMailID.Store(msg.ID)
+			write(map[string]any{"size": len(raw)})
+		case "/test/large-mail-stats":
+			write(map[string]any{"downloads": largeDownloads.Load()})
 		case "/test/restore-dates":
 			legacySentDate.Store(false)
 			msgs, _ := st.ListMessages(ctx, inbox.ID)
@@ -217,6 +236,9 @@ func TestTaygaEWSThunderbirdNative(t *testing.T) {
 			}
 			body, _ := io.ReadAll(r.Body)
 			r.Body = io.NopCloser(bytes.NewReader(body))
+			if id := largeMailID.Load().(string); id != "" && strings.Contains(string(body), id) && (extractTag(string(body), "IncludeMimeContent") == "true" || extractTag(string(body), "IncludeMimeContent") == "1") {
+				largeDownloads.Add(1)
+			}
 			if strings.Contains(string(body), "TaygaCreateId") && ((strings.Contains(string(body), "UID:native-event") && !lostCreate.Swap(true)) || (strings.Contains(string(body), "UID:native-task") && !lostTaskCreate.Swap(true))) {
 				recorded := httptest.NewRecorder()
 				h.ServeHTTP(recorded, r.WithContext(withUser(r.Context(), u)))

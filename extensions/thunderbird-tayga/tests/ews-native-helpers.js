@@ -13,6 +13,13 @@ async function taygaNativeTest(api, args) {
     MailServices.accounts.removeAccount(account, false);
     return { ok: true };
   }
+  if (args.op === "displayedBody") {
+    const win = Services.wm.getMostRecentWindow("mail:3pane");
+    const tab = win.document.getElementById("tabmail").currentTabInfo;
+    const doc = (tab.chromeBrowser || tab.browser)?.contentDocument;
+    return { text: doc?.getElementById("messagepane")?.contentDocument?.body?.textContent || "",
+      tabKeys: Object.keys(tab) };
+  }
   if (args.op === "mail") {
     const record = Object.values(api.state.mail)[0];
     const server = MailServices.accounts.getIncomingServer(record.serverKey);

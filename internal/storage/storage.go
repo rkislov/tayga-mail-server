@@ -193,6 +193,7 @@ type Driver interface {
 	InsertCopiedMessage(ctx context.Context, msg *Message, sourceMailboxID string) (*Message, error)
 	InsertMessage(ctx context.Context, msg *Message) (*Message, error)
 	GetMessageByID(ctx context.Context, id string) (*Message, error)
+	MessagesByInternetMessageIDs(context.Context, string, []string) ([]*Message, error)
 	GetMessageByUID(ctx context.Context, mailboxID string, uid int64) (*Message, error)
 	ListMessages(ctx context.Context, mailboxID string) ([]*Message, error)
 	UpdateMessageFlags(ctx context.Context, messageID, flags string) error
