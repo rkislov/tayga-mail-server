@@ -48,7 +48,15 @@ func (s ewsMailShape) project(response string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	message := doc.find("Message")
+	s.projectMessage(doc.find("Message"))
+	return doc.render(), nil
+}
+
+func (s ewsMailShape) projectMessage(message *protocolNode) bool {
+	if !s.idOnly || message == nil {
+		return false
+	}
+	originalCount := len(message.Children)
 	children := message.Children[:0]
 	for _, child := range message.Children {
 		name := child.Name.Local
@@ -63,5 +71,35 @@ func (s ewsMailShape) project(response string) (string, error) {
 		}
 	}
 	message.Children = children
-	return doc.render(), nil
+	return len(children) != originalCount
+}
+
+// Replies stored by older versions may contain properties outside IdOnly.
+// Preserve byte-for-byte replay for responses which already match the shape.
+func (s ewsMailShape) projectCachedMailSync(response string) (string, error) {
+	if !s.idOnly {
+		return response, nil
+	}
+	doc, err := parseProtocolXML([]byte(response))
+	if err != nil {
+		return "", err
+	}
+	changed := false
+	var visit func(*protocolNode)
+	visit = func(n *protocolNode) {
+		if n.Name.Local == "Message" {
+			if s.projectMessage(n) {
+				changed = true
+			}
+			return
+		}
+		for _, c := range n.Children {
+			visit(c)
+		}
+	}
+	visit(doc)
+	if changed {
+		return doc.render(), nil
+	}
+	return response, nil
 }

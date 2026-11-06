@@ -19,6 +19,10 @@ func (h *ewsHandler) syncEWSItems(ctx context.Context, u *storage.User, body str
 	if err := h.readableEWSCollection(ctx, u, folder); err != nil && systemFolderName(u, folder) == "" {
 		return ewsOperationError("SyncFolderItems", "ErrorAccessDenied", "folder unavailable"), nil
 	}
+	shape, err := parseEWSMailShape(body)
+	if err != nil {
+		return "", err
+	}
 	token := extractTag(body, "SyncState")
 	client, key := "ews:"+storage.NewID(), ""
 	if token != "" {
@@ -39,7 +43,7 @@ func (h *ewsHandler) syncEWSItems(ctx context.Context, u *storage.User, body str
 	}
 	fingerprint := digest(body)
 	if key != "" && key == state.PreviousKey && fingerprint == state.RequestHash {
-		return repairEWSTimeZoneNames(state.Response), nil
+		return shape.projectCachedMailSync(repairEWSTimeZoneNames(state.Response))
 	}
 	if token != "" && (state.Key == "" || state.Key != key) {
 		return ewsOperationError("SyncFolderItems", "ErrorInvalidSyncStateData", "invalid sync state"), nil
@@ -81,6 +85,9 @@ func (h *ewsHandler) syncEWSItems(ctx context.Context, u *storage.User, body str
 		op := "Create"
 		if _, seen := state.Items[id]; seen {
 			op = "Update"
+		}
+		if item.Name.Local == "Message" {
+			shape.projectMessage(item)
 		}
 		fmt.Fprintf(&out, `<t:%s>%s</t:%s>`, op, item.render(), op)
 	}

@@ -687,7 +687,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     const downloadsBeforeWarm = await fetch(fixture + "/test/large-mail-stats").then(r => r.json());
     const warmOpen = await openLarge();
     const downloadsAfterWarm = await fetch(fixture + "/test/large-mail-stats").then(r => r.json());
-    assert(downloadsAfterWarm.downloads === downloadsBeforeWarm.downloads,
+    assert(downloadsBeforeWarm.downloads > 0 && downloadsAfterWarm.downloads === downloadsBeforeWarm.downloads,
       "Repeated native opening downloaded MIME again: " + JSON.stringify({ downloadsBeforeWarm, downloadsAfterWarm }));
     await browser.tabs.remove(warmOpen.tab.id);
     checks.push(`native 32 MiB MIME/24 MiB attachment renders intact; cold ${coldOpen.ms} ms, cached ${warmOpen.ms} ms, no repeated MIME download`);
