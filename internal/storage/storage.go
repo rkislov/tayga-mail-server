@@ -60,6 +60,7 @@ type Driver interface {
 	CreateEWSTask(context.Context, string, string, *Task) (string, error)
 
 	EWSMailMetadata(context.Context, string) (string, error)
+	EWSMailboxMetadata(context.Context, string) (map[string]string, error)
 	UpdateEWSMailMetadata(context.Context, string, string, string) error
 	SaveMetricSample(context.Context, string, MetricSample) error
 	MetricHistory(context.Context, string, int64) ([]MetricSample, error)

@@ -299,15 +299,19 @@ func (h *ewsHandler) findMailItems(ctx context.Context, u *storage.User, mailbox
 	if err != nil {
 		return "", err
 	}
+	mailMetadata, err := h.store.EWSMailboxMetadata(ctx, mailboxID)
+	if err != nil {
+		return "", err
+	}
 	var b strings.Builder
 	b.WriteString(`<m:FindItemResponse xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types">`)
 	b.WriteString(`<m:ResponseMessages><m:FindItemResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:RootFolder IncludesLastItemInRange="true">`)
 	b.WriteString(`<t:Items>`)
 	for _, m := range msgs {
 		hdr := indexedMsgHeaders(h.ms, m)
-		metadata, err := h.store.EWSMailMetadata(ctx, m.ID)
-		if err != nil {
-			return "", err
+		metadata, exists := mailMetadata[m.ID]
+		if !exists {
+			metadata = "{}"
 		}
 		sensitivity, early, extended, flag := metadataFields(metadata, m.Flags)
 		fmt.Fprintf(&b, `<t:Message><t:ItemId Id="%s" ChangeKey="%s"/><t:Subject>%s</t:Subject>%s<t:DateTimeSent>%s</t:DateTimeSent><t:DateTimeReceived>%s</t:DateTimeReceived>%s%s%s<t:IsRead>%t</t:IsRead>%s</t:Message>`,

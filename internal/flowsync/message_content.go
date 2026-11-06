@@ -115,6 +115,13 @@ func readMessageContent(source io.Reader, raw []byte, metadataOnly bool) (messag
 			media, _, _ := h.ContentType()
 			out.Attachments = append(out.Attachments, messageAttachment{Name: name, ContentType: media, ContentID: strings.Trim(h.Get("Content-ID"), " <>"), ContentLocation: h.Get("Content-Location"), Data: data})
 		}
+		// Metadata only needs to know whether any attachment exists. Do not
+		// drain its payload or subsequent parts once the answer is known.
+		// A non-multipart message has only the part already inspected.
+		if metadataOnly && (len(out.Attachments) > 0 || !strings.HasPrefix(media, "multipart/")) {
+			return out, nil
+		}
+
 	}
 	// Some senders label CID parts as attachments even though HTML embeds them.
 	for i := range out.Attachments {
