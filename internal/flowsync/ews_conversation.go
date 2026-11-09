@@ -72,7 +72,17 @@ func conversationChild(index []byte, id string, sent time.Time) []byte {
 	return append(index, block[:]...)
 }
 
+type mailConversation struct{ ID, Index, Topic string }
+
 func (h *ewsHandler) ewsConversationFields(ctx context.Context, u *storage.User, msg *storage.Message, content messageContent) (string, error) {
+	c, err := h.mailConversation(ctx, u, msg, content)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf(`<t:ConversationId Id="%s"/><t:ConversationIndex>%s</t:ConversationIndex><t:ConversationTopic>%s</t:ConversationTopic>`, c.ID, c.Index, xmlEscape(c.Topic)), nil
+}
+
+func (h *ewsHandler) mailConversation(ctx context.Context, u *storage.User, msg *storage.Message, content messageContent) (mailConversation, error) {
 	own := content.MessageID
 	if conversationIDKey(own) == "" {
 		own = "<tayga:" + msg.ID + ">"
@@ -81,8 +91,10 @@ func (h *ewsHandler) ewsConversationFields(ctx context.Context, u *storage.User,
 	if len(refs) == 0 {
 		refs = conversationIDs(content.InReplyTo)
 	}
-	// Recover the ancestor chain for mailers which supply only In-Reply-To.
-	if len(refs) == 1 && content.References == "" {
+	// Some mailers put only the immediate parent into References as well as
+	// In-Reply-To. Walk the first available ancestor before choosing the root;
+	// treating that shortened References value as a root splits sent replies.
+	if len(refs) > 0 {
 		seen := map[string]bool{conversationIDKey(own): true}
 		for depth := 0; depth < 16; depth++ {
 			parentID := refs[0]
@@ -93,7 +105,7 @@ func (h *ewsHandler) ewsConversationFields(ctx context.Context, u *storage.User,
 			seen[key] = true
 			parents, err := h.store.MessagesByInternetMessageIDs(ctx, u.ID, []string{parentID, key})
 			if err != nil {
-				return "", err
+				return mailConversation{}, err
 			}
 			if len(parents) == 0 {
 				break
@@ -102,7 +114,7 @@ func (h *ewsHandler) ewsConversationFields(ctx context.Context, u *storage.User,
 			ancestors := conversationIDs(hdr.References)
 			if len(ancestors) > 0 {
 				refs = append(ancestors, refs...)
-				break
+				continue
 			}
 			ancestors = conversationIDs(hdr.InReplyTo)
 			if len(ancestors) == 0 {
@@ -134,7 +146,7 @@ func (h *ewsHandler) ewsConversationFields(ctx context.Context, u *storage.User,
 	}
 	ancestors, err := h.store.MessagesByInternetMessageIDs(ctx, u.ID, lookup)
 	if err != nil {
-		return "", err
+		return mailConversation{}, err
 	}
 	indexed := map[string]*storage.Message{}
 	for _, m := range ancestors {
@@ -198,5 +210,5 @@ func (h *ewsHandler) ewsConversationFields(ctx context.Context, u *storage.User,
 		topic = "(no subject)"
 	}
 	idHash := sha256.Sum256(append([]byte(u.ID+"\n"), index[6:22]...))
-	return fmt.Sprintf(`<t:ConversationId Id="%s"/><t:ConversationIndex>%s</t:ConversationIndex><t:ConversationTopic>%s</t:ConversationTopic>`, base64.StdEncoding.EncodeToString(idHash[:16]), base64.StdEncoding.EncodeToString(index), xmlEscape(topic)), nil
+	return mailConversation{ID: base64.StdEncoding.EncodeToString(idHash[:16]), Index: base64.StdEncoding.EncodeToString(index), Topic: topic}, nil
 }

@@ -1,4 +1,12 @@
 "use strict";
+document.getElementById("open-conversations").addEventListener("click", async () => {
+  try {
+    await browser.runtime.sendMessage({ type: "tayga.ews.conversations" });
+    window.close();
+  } catch (error) {
+    document.getElementById("status").textContent = error.message;
+  }
+});
 document
   .getElementById("open-options")
   .addEventListener("click", () => browser.runtime.openOptionsPage());

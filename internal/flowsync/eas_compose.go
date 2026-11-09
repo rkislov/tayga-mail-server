@@ -54,6 +54,15 @@ func (h *easHandler) composeMail(ctx context.Context, u *storage.User, body []by
 		if _, err = h.mailboxByID(ctx, u.ID, msg.MailboxID); err != nil {
 			return status(150, "compose_source_not_found")
 		}
+		if command == "SmartReply" {
+			if h.ms == nil {
+				return status(110, "compose_source_unavailable")
+			}
+			raw, err = ensureReplyHeaders(raw, readMsgHeaders(h.ms, msg.FilePath))
+			if err != nil {
+				return status(110, "compose_invalid_reply")
+			}
+		}
 		// iPhone sends ReplaceMime: its MIME already contains the entire reply.
 		// Appending the original here would duplicate body text and attachments.
 		if root.child("ReplaceMime") == nil {

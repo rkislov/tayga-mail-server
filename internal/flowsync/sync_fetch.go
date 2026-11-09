@@ -57,7 +57,7 @@ func (h *easHandler) repairSyncFetchReplay(ctx context.Context, u *storage.User,
 	needsRepair := doc.find("Fetch") == nil
 	if responses := doc.find("Responses"); responses != nil {
 		for _, response := range responses.Children {
-			if response.Name.Local == "Fetch" && response.value("Status") == "1" && response.find("NativeBodyType") == nil {
+			if response.Name.Local == "Fetch" && response.value("Status") == "1" && (response.find("NativeBodyType") == nil || response.find("ConversationId") == nil || response.find("ConversationIndex") == nil) {
 				needsRepair = true
 			}
 		}
@@ -159,7 +159,12 @@ func (h *easHandler) fetchSyncItems(ctx context.Context, u *storage.User, kind c
 			return nil, err
 		}
 		body, bodyType, size, truncated := preferredBody(content, contextPreferences(ctx))
+		conversation, err := (&ewsHandler{store: h.store, ms: h.ms}).mailConversation(ctx, u, msg, content)
+		if err != nil {
+			return nil, err
+		}
 		full := renderMailSyncXML("", collectionID, []syncAdd{{
+			ConversationID: conversation.ID, ConversationIndex: conversation.Index,
 			ServerID: id, Subject: content.Subject, From: content.From, To: content.To,
 			NativeBodyType: content.nativeBodyType(),
 			Date:           msg.InternalDate.UTC().Format("2006-01-02T15:04:05.000Z"),

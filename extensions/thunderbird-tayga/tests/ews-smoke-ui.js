@@ -645,6 +645,22 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     const unrelated = mail.inbox.find(m => m.messageId === "thread-unrelated@example.com");
     assert(unrelated && unrelated.threadId !== rootMail.threadId, "Unrelated message merged into thread");
     checks.push("native Thunderbird groups replies and folded reference chains, including In-Reply-To only, without merging unrelated mail");
+    stage = "sent-conversation";
+    await fetch(fixture + "/test/sent-thread-mail", {method:"POST"});
+    let conversation;
+    for (let i=0;i<100;i++) {
+      await native("syncMail");
+      conversation=await inspect({op:"conversations",open:i===0});
+      if (conversation.rows.some(r=>r.id==="sent-thread-reply@example.com")) break;
+      await sleep(100);
+    }
+    await native("openConversations");
+    const sentReply=conversation.rows.find(r=>r.id==="sent-thread-reply@example.com");
+    const incomingRoot=conversation.rows.find(r=>r.id==="ews-native-test@example.com");
+    assert(sentReply && incomingRoot && sentReply.root===incomingRoot.root && sentReply.folder!==incomingRoot.folder,
+      "Sent and Inbox did not share a native virtual-view thread: "+JSON.stringify(conversation));
+    assert(conversation.rows.filter(r=>r.id==="sent-thread-reply@example.com").length===1,"Sent reply duplicated");
+    checks.push("native conversation view joins Inbox and Sent in one thread without copying messages");
     stage = "large message opening";
     const largeFixture = await fetch(fixture + "/test/large-mail", { method: "POST" }).then(r => r.json());
     let largeMessage;
@@ -693,6 +709,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     checks.push(`native 32 MiB MIME/24 MiB attachment renders intact; cold ${coldOpen.ms} ms, cached ${warmOpen.ms} ms, no repeated MIME download`);
     const mailRecord = Object.values((await native("state")).mail)[0];
     const account = await browser.accounts.get(mailRecord.accountId);
+    const sentCopiesBeforeCompose = (await serverState()).sentCopies;
     const compose = await browser.compose.beginNew({
       identityId: account.identities[0].id,
       to: ["bob@example.com"],
@@ -709,7 +726,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     assert(
       server.sentCount === 1 &&
         server.sentAttachment &&
-        server.sentCopies === 1,
+        server.sentCopies === sentCopiesBeforeCompose + 1,
       "Native EWS outgoing message or attachment or Sent copy failed: " +
         JSON.stringify(server),
     );

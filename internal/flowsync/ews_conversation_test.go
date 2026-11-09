@@ -44,6 +44,7 @@ func TestEWSOutlookConversationsAndShapes(t *testing.T) {
 	reply := add("reply@example.com", "Re: Project & budget", "References: <root@example.com>\r\nIn-Reply-To: <root@example.com>\r\n", sent.ID, 11)
 	child := add("child@example.com", "Re: Changed subject", "References: <root@example.com>\r\n\t<reply@example.com>\r\n", inbox.ID, 12)
 	parentOnly := add("parent-only@example.com", "Re: Changed again", "In-Reply-To: <child@example.com>\r\n", inbox.ID, 13)
+	shortReferences := add("short-references@example.com", "Re: Changed again", "References: <child@example.com>\r\nIn-Reply-To: <child@example.com>\r\n", sent.ID, 14)
 	unrelated := add("unrelated@example.com", "Project & budget", "", inbox.ID, 14)
 	copyRoot := add("root@example.com", "Project & budget", "", sent.ID, 10)
 	get := func(m *storage.Message, shape string) *protocolNode {
@@ -82,6 +83,9 @@ func TestEWSOutlookConversationsAndShapes(t *testing.T) {
 	}
 	if nodeAttr(get(copyRoot, "").find("ConversationId"), "Id") != conversationID {
 		t.Fatal("Sent/Inbox copies split")
+	}
+	if nodeAttr(get(shortReferences, "").find("ConversationId"), "Id") != conversationID {
+		t.Fatal("shortened References split Sent reply from its ancestors")
 	}
 	only := get(child, `<ItemShape><BaseShape>IdOnly</BaseShape><AdditionalProperties><FieldURI FieldURI="item:ConversationId"/></AdditionalProperties></ItemShape>`)
 	if only.find("ConversationId") == nil || only.find("ConversationIndex") != nil || only.find("ConversationTopic") != nil || len(only.find("Message").Children) != 2 {

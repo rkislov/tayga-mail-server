@@ -183,9 +183,17 @@ func (h *easHandler) syncMailCollection(ctx context.Context, u *storage.User, co
 		}
 		body, bt, estimated, truncated := preferredBody(content, preferences)
 		if metadata {
-			body = digest(fmt.Sprintf("%s:%d:%s", m.FilePath, m.Size, m.Flags))
+			body = digest(fmt.Sprintf("conversation-v1:%s:%d:%s", m.FilePath, m.Size, m.Flags))
+		}
+		conversation := mailConversation{}
+		if !metadata {
+			conversation, err = (&ewsHandler{store: h.store, ms: h.ms}).mailConversation(ctx, u, m, content)
+			if err != nil {
+				return "", nil, err
+			}
 		}
 		adds = append(adds, syncAdd{
+			ConversationID: conversation.ID, ConversationIndex: conversation.Index,
 			ServerID:       m.ID,
 			NativeBodyType: content.nativeBodyType(),
 			Body:           body, BodyType: bt, EstimatedSize: estimated, Truncated: truncated, To: content.To, Attachments: content.Attachments,
@@ -312,6 +320,7 @@ func renderMailSyncXML(syncKey, collectionID string, adds []syncAdd, wb []writeb
 		fmt.Fprintf(&b, `<Email:DateReceived xmlns:Email="Email:">%s</Email:DateReceived>`, xmlEscape(a.Date))
 		fmt.Fprintf(&b, `<Email:Read xmlns:Email="Email:">%d</Email:Read>`, bool01(a.Read))
 		fmt.Fprintf(&b, `<Email:To xmlns:Email="Email:">%s</Email:To>`, xmlEscape(a.To))
+		b.WriteString(renderMailConversation(a))
 		b.WriteString(renderMailBody(a))
 		b.WriteString(`</ApplicationData></Add>`)
 	}
@@ -562,4 +571,11 @@ func calendarWireTime(value string) string {
 		return t.UTC().Format("20060102T150405Z")
 	}
 	return value
+}
+
+func renderMailConversation(a syncAdd) string {
+	if a.ConversationID == "" || a.ConversationIndex == "" {
+		return ""
+	}
+	return fmt.Sprintf(`<ConversationId xmlns="Email2:">%s</ConversationId><ConversationIndex xmlns="Email2:">%s</ConversationIndex>`, a.ConversationID, a.ConversationIndex)
 }

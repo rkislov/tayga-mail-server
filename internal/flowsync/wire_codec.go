@@ -13,8 +13,9 @@ import (
 
 // Protocol names are shared by the XML and binary transports. Numeric assignments
 // are defined by MS-ASWBXML; unknown request tags remain opaque, never reinterpreted.
-var wirePages = map[byte]string{0: "AirSync:", 1: "Contacts:", 2: "Email:", 4: "Calendar:", 5: "Move:", 6: "GetItemEstimate:", 7: "FolderHierarchy:", 8: "MeetingResponse:", 9: "Tasks:", 10: "ResolveRecipients:", 12: "Contacts2:", 13: "Ping:", 14: "Provision:", 15: "Search:", 16: "GAL:", 17: "AirSyncBase:", 18: "Settings:", 20: "ItemOperations:", 21: "ComposeMail:", 23: "Notes:"}
+var wirePages = map[byte]string{0: "AirSync:", 1: "Contacts:", 2: "Email:", 4: "Calendar:", 5: "Move:", 6: "GetItemEstimate:", 7: "FolderHierarchy:", 8: "MeetingResponse:", 9: "Tasks:", 10: "ResolveRecipients:", 12: "Contacts2:", 13: "Ping:", 14: "Provision:", 15: "Search:", 16: "GAL:", 17: "AirSyncBase:", 18: "Settings:", 20: "ItemOperations:", 21: "ComposeMail:", 22: "Email2:", 23: "Notes:"}
 var wireTags = map[byte]map[byte]string{
+	22: {9: "ConversationId", 10: "ConversationIndex", 15: "IsDraft"},
 	0:  {5: "Sync", 6: "Responses", 7: "Add", 8: "Change", 9: "Delete", 10: "Fetch", 11: "SyncKey", 12: "ClientId", 13: "ServerId", 14: "Status", 15: "Collection", 16: "Class", 18: "CollectionId", 19: "GetChanges", 20: "MoreAvailable", 21: "WindowSize", 22: "Commands", 23: "Options", 24: "FilterType", 27: "Conflict", 28: "Collections", 29: "ApplicationData", 30: "DeletesAsMoves", 32: "Supported", 33: "SoftDelete", 34: "MIMESupport", 35: "MIMETruncation", 36: "Wait", 37: "Limit", 38: "Partial", 41: "HeartbeatInterval"},
 	4:  {5: "Timezone", 6: "AllDayEvent", 7: "Attendees", 8: "Attendee", 9: "Email", 10: "Name", 11: "Body", 12: "BodyTruncated", 13: "BusyStatus", 14: "Categories", 15: "Category", 17: "DTStamp", 18: "EndTime", 19: "Exception", 20: "Exceptions", 21: "Deleted", 22: "ExceptionStartTime", 23: "Location", 24: "MeetingStatus", 25: "OrganizerEmail", 26: "OrganizerName", 27: "Recurrence", 28: "Type", 29: "Until", 30: "Occurrences", 31: "Interval", 32: "DayOfWeek", 33: "DayOfMonth", 34: "WeekOfMonth", 35: "MonthOfYear", 36: "Reminder", 37: "Sensitivity", 38: "Subject", 39: "StartTime", 40: "UID", 41: "AttendeeStatus", 42: "AttendeeType", 51: "DisallowNewTimeProposal", 52: "ResponseRequested", 53: "AppointmentReplyTime", 54: "ResponseType", 55: "CalendarType", 56: "IsLeapMonth", 57: "FirstDayOfWeek", 58: "OnlineMeetingConfLink", 59: "OnlineMeetingExternalLink", 60: "ClientUid"},
 	10: {5: "ResolveRecipients", 6: "Response", 7: "Status", 8: "Type", 9: "Recipient", 10: "DisplayName", 11: "EmailAddress", 12: "Certificates", 13: "Certificate", 14: "MiniCertificate", 15: "Options", 16: "To", 17: "CertificateRetrieval", 18: "RecipientCount", 19: "MaxCertificates", 20: "MaxAmbiguousRecipients", 21: "CertificateCount", 22: "Availability", 23: "StartTime", 24: "EndTime", 25: "MergedFreeBusy", 26: "Picture", 27: "MaxSize", 28: "Data", 29: "MaxPictures"},
@@ -107,7 +108,7 @@ func decodeWire(body []byte) ([]byte, error) {
 					bodyTypes[len(bodyTypes)-2] += string(value)
 				}
 				mimeBody := name == (xml.Name{Space: "AirSyncBase:", Local: "Data"}) && len(bodyTypes) > 1 && bodyTypes[len(bodyTypes)-2] == "4"
-				if name == (xml.Name{Space: "ComposeMail:", Local: "Mime"}) || (token == wbxmlOpaque && (name == (xml.Name{Space: "ItemOperations:", Local: "Data"}) || name == (xml.Name{Space: "Calendar:", Local: "Timezone"}))) || mimeBody {
+				if name == (xml.Name{Space: "ComposeMail:", Local: "Mime"}) || (token == wbxmlOpaque && (name == (xml.Name{Space: "ItemOperations:", Local: "Data"}) || name == (xml.Name{Space: "Calendar:", Local: "Timezone"}))) || mimeBody || conversationBinary(name) {
 					value = []byte(base64.StdEncoding.EncodeToString(value))
 				}
 				err = enc.EncodeToken(xml.CharData(value))
@@ -220,7 +221,7 @@ func encodeWire(body string) ([]byte, error) {
 				// base64 string. Keep STR_I; binary OPAQUE breaks Gmail's parser.
 				// MS-ASDTYPE 2.7.6 likewise requires Calendar/Timezone as an
 				// inline base64 string, not the decoded binary structure.
-				if len(names) > 0 && (mimeBody || (names[len(names)-1].Space == "ComposeMail:" && names[len(names)-1].Local == "Mime")) {
+				if len(names) > 0 && (conversationBinary(names[len(names)-1]) || mimeBody || (names[len(names)-1].Space == "ComposeMail:" && names[len(names)-1].Local == "Mime")) {
 					raw, e := base64.StdEncoding.DecodeString(string(t))
 					if e != nil {
 						return nil, e
@@ -289,4 +290,10 @@ func writeMBInt(w *bytes.Buffer, value uint64) {
 		b[i] = byte(value&127) | 128
 	}
 	w.Write(b[i:])
+}
+
+// MS-ASCON 2.2.2.3/4 use byte arrays, not inline base64 text. XML uses
+// base64 only as a lossless intermediate for OPAQUE WBXML payloads.
+func conversationBinary(name xml.Name) bool {
+	return name.Space == "Email2:" && (name.Local == "ConversationId" || name.Local == "ConversationIndex")
 }

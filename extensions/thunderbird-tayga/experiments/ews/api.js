@@ -450,6 +450,48 @@ var taygaEws = class extends ExtensionCommon.ExtensionAPI {
       return null;
     }
   }
+  ensureConversations(record) {
+    const server = this.managedIncoming(record);
+    if (!server) return null;
+    const folders = Array.from(server.rootFolder.descendants).filter(
+      folder => !(folder.flags & Ci.nsMsgFolderFlags.Virtual) &&
+        (folder.flags & (Ci.nsMsgFolderFlags.Inbox | Ci.nsMsgFolderFlags.SentMail)),
+    );
+    if (!folders.some(f => f.flags & Ci.nsMsgFolderFlags.Inbox) ||
+        !folders.some(f => f.flags & Ci.nsMsgFolderFlags.SentMail)) return null;
+    const { VirtualFolderHelper } = ChromeUtils.importESModule(
+      "resource:///modules/VirtualFolderWrapper.sys.mjs",
+    );
+    let folder;
+    if (record.conversationsURI) {
+      try { folder = MailServices.folderLookup.getFolderForURL(record.conversationsURI); } catch {}
+      if (!folder?.parent || !(folder.flags & Ci.nsMsgFolderFlags.Virtual) ||
+          folder.getStringProperty("taygaConversationServer") !== record.serverKey)
+        folder = null;
+    }
+    if (!folder) {
+      const parent = MailServices.accounts.localFoldersServer.rootFolder;
+      let name = "Tayga · Беседы · " + server.username;
+      if (parent.containsChildNamed(name)) name += " · " + this.uuid().slice(0, 8);
+      folder = VirtualFolderHelper.createNewVirtualFolder(name, parent, folders, "ALL", false).virtualFolder;
+      folder.setStringProperty("taygaConversationServer", record.serverKey);
+      const info = folder.msgDatabase.dBFolderInfo;
+      info.viewFlags = Ci.nsMsgViewFlagsType.kThreadedDisplay;
+      info.sortType = Ci.nsMsgViewSortType.byDate;
+      info.sortOrder = Ci.nsMsgViewSortOrder.descending;
+      folder.msgDatabase.commit(Ci.nsMsgDBCommitType.kLargeCommit);
+      record.conversationsURI = folder.URI;
+      this.save();
+    } else {
+      const wrapped = VirtualFolderHelper.wrapVirtualFolder(folder);
+      const source = folders.map(f => f.URI).sort().join("|");
+      if (Array.from(wrapped.searchFolders).map(f => f.URI).sort().join("|") !== source) {
+        wrapped.searchFolders = folders;
+        MailServices.accounts.saveVirtualFolders();
+      }
+    }
+    return folder;
+  }
   async configure(args) {
     const url = new URL(args.baseUrl);
     if (
@@ -548,6 +590,8 @@ var taygaEws = class extends ExtensionCommon.ExtensionAPI {
     incoming.doBiff = true;
     incoming.biffMinutes = 1;
     incoming.valid = true;
+    // An optional local view must never interrupt authentication refresh.
+    try { this.ensureConversations(record); } catch { console.warn("Tayga conversation view is not ready"); }
     MailServices.outgoingServer.getServerByKey(record.outgoingKey).password =
       record.marker;
     MailServices.accounts.saveAccountInfo();
@@ -892,10 +936,26 @@ var taygaEws = class extends ExtensionCommon.ExtensionAPI {
         return { ok: true };
       }
       case "syncMail": {
-        if (this.session)
-          this.managedIncoming(
-            this.state.mail[this.session.scope],
-          )?.performBiff(null);
+        if (this.session) {
+          const record = this.state.mail[this.session.scope];
+          const server = this.managedIncoming(record);
+          server?.performBiff(null);
+          this.ensureConversations(record);
+          // Native biff may update Inbox first. Load Sent headers as well so
+          // replies enter the virtual view without visiting Sent manually.
+          for (const folder of Array.from(server?.rootFolder.descendants || []))
+            if (folder.flags & Ci.nsMsgFolderFlags.SentMail) folder.updateFolder(null);
+        }
+        return { ok: true };
+      }
+      case "openConversations": {
+        const record = this.state.mail[this.session?.scope];
+        const folder = this.ensureConversations(record);
+        if (!folder) throw new Error("Дождитесь синхронизации «Входящих» и «Отправленных» и повторите открытие бесед.");
+        const win = Services.wm.getMostRecentWindow("mail:3pane");
+        if (!win) throw new Error("Откройте основное окно Thunderbird.");
+        win.document.getElementById("tabmail").openTab("mail3PaneTab", { folderURI: folder.URI });
+        win.focus();
         return { ok: true };
       }
       case "stop":

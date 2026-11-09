@@ -100,7 +100,12 @@ func (h *easHandler) itemOperations(ctx context.Context, u *storage.User, body [
 				continue
 			}
 			text, kind, size, truncated := preferredBody(content, prefs)
+			conversation, err := helper.mailConversation(ctx, u, msg, content)
+			if err != nil {
+				return "", err
+			}
 			properties := renderMailBody(syncAdd{ServerID: id, Body: text, BodyType: kind, NativeBodyType: content.nativeBodyType(), EstimatedSize: size, Truncated: truncated, Attachments: content.Attachments})
+			properties += renderMailConversation(syncAdd{ConversationID: conversation.ID, ConversationIndex: conversation.Index})
 			fmt.Fprintf(&out, `<Fetch><Status>1</Status><CollectionId xmlns="AirSync:">%s</CollectionId><ServerId xmlns="AirSync:">%s</ServerId><Properties>%s</Properties></Fetch>`, xmlEscape(msg.MailboxID), xmlEscape(id), properties)
 		}
 	}

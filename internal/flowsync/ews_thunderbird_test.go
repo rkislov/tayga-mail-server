@@ -162,6 +162,22 @@ func TestTaygaEWSThunderbirdNative(t *testing.T) {
 				}
 			}
 			write(map[string]any{"ok": true})
+		case "/test/sent-thread-mail":
+			folder, err := st.EnsureMailbox(ctx, u.ID, "Sent", "")
+			if err != nil {
+				http.Error(w, err.Error(), 500)
+				return
+			}
+			raw := []byte("From: alice@example.com\r\nTo: sender@example.com\r\nSubject: Re: Thread fixture\r\nMessage-ID: <sent-thread-reply@example.com>\r\nReferences: <ews-native-test@example.com>\r\nIn-Reply-To: <ews-native-test@example.com>\r\n\r\nMy sent reply")
+			path, size, err := eas.ms.Deliver(u.Email, "Sent", raw)
+			if err == nil {
+				_, err = st.InsertMessage(ctx, &storage.Message{MailboxID: folder.ID, FilePath: path, Size: size, Flags: `\Seen`, MessageID: "<sent-thread-reply@example.com>", InternalDate: time.Now()})
+			}
+			if err != nil {
+				http.Error(w, err.Error(), 500)
+				return
+			}
+			write(map[string]bool{"ok": true})
 		case "/test/large-mail":
 			raw := []byte("From: sender@example.com\r\nTo: alice@example.com\r\nMessage-ID: <large-open@example.com>\r\nSubject: Large native opening test\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=large-boundary\r\n\r\n--large-boundary\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nLarge MIME body marker\r\n--large-boundary\r\nContent-Type: application/octet-stream\r\nContent-Disposition: attachment; filename=large-open.bin\r\nContent-Transfer-Encoding: base64\r\n\r\n" + strings.Repeat("QUJD", 8<<20) + "\r\n--large-boundary--\r\n")
 			path, size, err := eas.ms.Deliver(u.Email, "INBOX", raw)

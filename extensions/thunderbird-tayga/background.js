@@ -140,6 +140,8 @@ async function message(msg, sender) {
       return { ok: true };
     case "tayga.rules.load": return rules.load();
     case "tayga.rules.save": return diagnostics.observe("rules.save", () => rules.save(msg));
+    case "tayga.ews.conversations":
+      return browser.taygaEws.invoke("openConversations", {});
     case "tayga.ews.status":
       return ews.summary();
     case "tayga.ews.sync":

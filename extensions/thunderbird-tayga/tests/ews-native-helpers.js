@@ -1,5 +1,23 @@
 // Injected ONLY into a temporary smoke-test copy of the Experiment.
 async function taygaNativeTest(api, args) {
+  if (args.op === "conversations") {
+    const record = Object.values(api.state.mail)[0];
+    const folder = api.ensureConversations(record);
+    const tabmail = Services.wm.getMostRecentWindow("mail:3pane").document.getElementById("tabmail");
+    if (args.open) tabmail.openTab("mail3PaneTab", {folderURI:folder.URI});
+    const pane = tabmail.currentAbout3Pane;
+    const view = pane?.gDBView;
+    const rows=[];
+    if (view && pane.gFolder?.URI === folder?.URI) {
+      view.doCommand(Ci.nsMsgViewCommandType.expandAll);
+      for (let i=0;i<view.rowCount;i++) {
+        const header=view.getMsgHdrAt(i);
+        rows.push({id:header.messageId,folder:header.folder.URI,
+          root:view.getThreadContainingMsgHdr(header)?.getRootHdr()?.messageId});
+      }
+    }
+    return {uri:folder?.URI, rows, flags:view?.viewFlags};
+  }
   if (args.op === "capabilities")
     return {
       interfaces: Object.keys(Ci).filter((k) => /ews|outgoing/i.test(k)),

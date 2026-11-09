@@ -200,18 +200,19 @@ type folderChange struct {
 }
 
 type syncAdd struct {
-	EstimatedSize  int
-	Truncated      bool
-	Body           string
-	BodyType       string
-	NativeBodyType string
-	To             string
-	Attachments    []messageAttachment
-	ServerID       string
-	Subject        string
-	From           string
-	Date           string
-	Read           bool
+	ConversationID, ConversationIndex string
+	EstimatedSize                     int
+	Truncated                         bool
+	Body                              string
+	BodyType                          string
+	NativeBodyType                    string
+	To                                string
+	Attachments                       []messageAttachment
+	ServerID                          string
+	Subject                           string
+	From                              string
+	Date                              string
+	Read                              bool
 }
 
 func encodeSyncWBXML(syncKey, collectionID, class string, adds []syncAdd) []byte {
