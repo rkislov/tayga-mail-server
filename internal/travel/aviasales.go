@@ -13,7 +13,7 @@ import (
 var (
 	aviasalesFlight    = regexp.MustCompile(`\b([A-Z0-9]{2})[- ](\d{2,4})\b`)
 	aviasalesClock     = regexp.MustCompile(`\b\d{1,2}:\d{2}\b`)
-	aviasalesDate      = regexp.MustCompile(`(?i)\b(\d{1,2})[ \t]+(янв(?:аря)?|фев(?:раля)?|мар(?:та)?|апр(?:еля)?|ма[йя]|июн[ья]?|июл[ья]?|авг(?:уста)?|сен(?:тября)?|окт(?:ября)?|ноя(?:бря)?|дек(?:абря)?)\.?[ \t]+(\d{4})\b`)
+	aviasalesDate      = regexp.MustCompile(`(?i)\b(\d{1,2})[ \t]+(янв(?:аря)?|фев(?:раля)?|мар(?:та)?|апр(?:еля)?|ма[йя]|июн[ья]?|июл[ья]?|авг(?:уста)?|сен(?:тября)?|окт(?:ября)?|ноя(?:б(?:ря)?)?|дек(?:абря)?)\.?[ \t]+(\d{4})\b`)
 	aviasalesBooking   = regexp.MustCompile(`(?im)^\s*Номер брони для регистрации:[ \t]*([A-Z0-9]{5,12})\b`)
 	aviasalesPassenger = regexp.MustCompile(`(?im)^\s*ПАССАЖИР[ \t]*/[ \t]*ДОКУМЕНТ[ \t]*\n\s*([^\n/]{2,160})[ \t]*/`)
 	aviasalesAirport   = regexp.MustCompile(`\(([A-Z]{3})\)`)
