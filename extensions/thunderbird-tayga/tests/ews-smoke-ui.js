@@ -55,8 +55,12 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
         Object.keys((await native("state")).mail).length === 1,
         "Restart duplicated the mail account",
       );
+      const restoredView = await inspect({ op: "conversations" });
+      assert(restoredView.underAccount && restoredView.uri === restart.conversationsURI &&
+        restoredView.accountViewCount === 1, "Account conversation folder did not survive restart");
       checks.push(
         ...restart.checks,
+        "account conversation folder survives restart without duplication",
         "pending edit survives a full Thunderbird restart",
       );
       await background.ews.stop();
@@ -646,11 +650,12 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     assert(unrelated && unrelated.threadId !== rootMail.threadId, "Unrelated message merged into thread");
     checks.push("native Thunderbird groups replies and folded reference chains, including In-Reply-To only, without merging unrelated mail");
     stage = "sent-conversation";
+    const legacyView = await inspect({op:"legacyConversations"});
     await fetch(fixture + "/test/sent-thread-mail", {method:"POST"});
     let conversation;
     for (let i=0;i<100;i++) {
       await native("syncMail");
-      conversation=await inspect({op:"conversations",open:i===0});
+      conversation=await inspect({op:"conversations",open:i===0,legacyURI:legacyView.uri});
       if (conversation.rows.some(r=>r.id==="sent-thread-reply@example.com")) break;
       await sleep(100);
     }
@@ -660,7 +665,11 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     assert(sentReply && incomingRoot && sentReply.root===incomingRoot.root && sentReply.folder!==incomingRoot.folder,
       "Sent and Inbox did not share a native virtual-view thread: "+JSON.stringify(conversation));
     assert(conversation.rows.filter(r=>r.id==="sent-thread-reply@example.com").length===1,"Sent reply duplicated");
+    assert(conversation.underAccount && conversation.name === "Беседы" && conversation.ascending &&
+      !conversation.localLegacyPresent && conversation.accountViewCount === 1,
+      "Legacy conversation folder was not migrated under the EWS account: " + JSON.stringify(conversation));
     checks.push("native conversation view joins Inbox and Sent in one thread without copying messages");
+    checks.push("legacy conversation folder moves under the EWS account and retains its sort order");
     stage = "large message opening";
     const largeFixture = await fetch(fixture + "/test/large-mail", { method: "POST" }).then(r => r.json());
     let largeMessage;
@@ -795,7 +804,15 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       localId: "legacy-task",
       title: "Задача после перезапуска",
     });
-    await browser.storage.local.set({ ewsSmokeRestart: { checks } });
+    let restartView;
+    for (let i = 0; i < 100; i++) {
+      await native("syncMail");
+      restartView = await inspect({ op: "conversations" });
+      if (restartView.underAccount) break;
+      await sleep(100);
+    }
+    assert(restartView?.underAccount, "Conversation folder missing after account recreation");
+    await browser.storage.local.set({ ewsSmokeRestart: { checks, conversationsURI: restartView.uri } });
     await fetch(resultURL, {
       method: "POST",
       body: JSON.stringify({ restart: true }),

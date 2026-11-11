@@ -462,26 +462,35 @@ var taygaEws = class extends ExtensionCommon.ExtensionAPI {
     const { VirtualFolderHelper } = ChromeUtils.importESModule(
       "resource:///modules/VirtualFolderWrapper.sys.mjs",
     );
-    let folder;
+    const parent = server.rootFolder;
+    const isManagedView = folder =>
+      Boolean(folder?.parent && (folder.flags & Ci.nsMsgFolderFlags.Virtual) &&
+        folder.getStringProperty("taygaConversationServer") === record.serverKey);
+    let previous;
     if (record.conversationsURI) {
-      try { folder = MailServices.folderLookup.getFolderForURL(record.conversationsURI); } catch {}
-      if (!folder?.parent || !(folder.flags & Ci.nsMsgFolderFlags.Virtual) ||
-          folder.getStringProperty("taygaConversationServer") !== record.serverKey)
-        folder = null;
+      try {
+        const found = MailServices.folderLookup.getFolderForURL(record.conversationsURI);
+        if (isManagedView(found)) previous = found;
+      } catch {}
     }
+    let folder = previous?.parent.URI === parent.URI
+      ? previous
+      : Array.from(parent.subFolders).find(isManagedView);
     if (!folder) {
-      const parent = MailServices.accounts.localFoldersServer.rootFolder;
-      let name = "Tayga · Беседы · " + server.username;
-      if (parent.containsChildNamed(name)) name += " · " + this.uuid().slice(0, 8);
+      let name = "Беседы";
+      for (let suffix = 2; parent.containsChildNamed(name); suffix++)
+        name = `Беседы (${suffix})`;
+      const previousInfo = previous?.msgDatabase.dBFolderInfo;
+      const viewFlags = previousInfo?.viewFlags ?? Ci.nsMsgViewFlagsType.kThreadedDisplay;
+      const sortType = previousInfo?.sortType ?? Ci.nsMsgViewSortType.byDate;
+      const sortOrder = previousInfo?.sortOrder ?? Ci.nsMsgViewSortOrder.descending;
       folder = VirtualFolderHelper.createNewVirtualFolder(name, parent, folders, "ALL", false).virtualFolder;
       folder.setStringProperty("taygaConversationServer", record.serverKey);
       const info = folder.msgDatabase.dBFolderInfo;
-      info.viewFlags = Ci.nsMsgViewFlagsType.kThreadedDisplay;
-      info.sortType = Ci.nsMsgViewSortType.byDate;
-      info.sortOrder = Ci.nsMsgViewSortOrder.descending;
+      info.viewFlags = viewFlags;
+      info.sortType = sortType;
+      info.sortOrder = sortOrder;
       folder.msgDatabase.commit(Ci.nsMsgDBCommitType.kLargeCommit);
-      record.conversationsURI = folder.URI;
-      this.save();
     } else {
       const wrapped = VirtualFolderHelper.wrapVirtualFolder(folder);
       const source = folders.map(f => f.URI).sort().join("|");
@@ -489,6 +498,17 @@ var taygaEws = class extends ExtensionCommon.ExtensionAPI {
         wrapped.searchFolders = folders;
         MailServices.accounts.saveVirtualFolders();
       }
+    }
+    // Remove the old saved search only after the account view is ready.
+    if (previous && previous.URI !== folder.URI &&
+        previous.parent.URI === MailServices.accounts.localFoldersServer.rootFolder.URI &&
+        !previous.hasSubFolders) {
+      previous.parent.propagateDelete(previous, true);
+      MailServices.accounts.saveVirtualFolders();
+    }
+    if (record.conversationsURI !== folder.URI) {
+      record.conversationsURI = folder.URI;
+      this.save();
     }
     return folder;
   }
