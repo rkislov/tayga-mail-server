@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"mime"
 	"os"
 	"os/exec"
 	"strings"
@@ -17,6 +18,10 @@ import (
 const testTicketText = "Flight:SU1234\nFrom:Moscow\nTo:Delhi\nDeparture:2026-10-25 23:30 UTC+3\nArrival:2026-10-26 07:00 +05:30\nPassenger:TEST PERSON\nBooking:TEST123\nSeat:12A"
 
 func insertTicketMail(t *testing.T, f *fileFixture, body, kind, folder string) *storage.Message {
+	return insertTicketMailWithSubject(t, f, "Itinerary", body, kind, folder)
+}
+
+func insertTicketMailWithSubject(t *testing.T, f *fileFixture, subject, body, kind, folder string) *storage.Message {
 	t.Helper()
 	ctx := context.Background()
 	u, err := f.s.store.GetUserByID(ctx, f.users[0])
@@ -27,7 +32,7 @@ func insertTicketMail(t *testing.T, f *fileFixture, body, kind, folder string) *
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw := []byte("From: travel@example.com\r\nTo: owner@example.com\r\nSubject: Itinerary\r\nMIME-Version: 1.0\r\nContent-Type: " + kind + "; charset=utf-8\r\n\r\n" + body)
+	raw := []byte("From: travel@example.com\r\nTo: owner@example.com\r\nSubject: " + mime.BEncoding.Encode("UTF-8", subject) + "\r\nMIME-Version: 1.0\r\nContent-Type: " + kind + "; charset=utf-8\r\n\r\n" + body)
 	path, size, err := f.s.ms.Deliver(u.Email, folder, raw)
 	if err != nil {
 		t.Fatal(err)
@@ -37,6 +42,47 @@ func insertTicketMail(t *testing.T, f *fileFixture, body, kind, folder string) *
 		t.Fatal(err)
 	}
 	return m
+}
+
+func TestTravelWorkerAeroflotBoardingPassReply(t *testing.T) {
+	f := newFileFixture(t)
+	ctx := context.Background()
+	f.call(0, "PUT", "/api/v1/travel/preferences", `{"mode":"auto"}`, 200)
+	const subject = "Ваш посадочный талон для перелета в г. Екатеринбург (11.11.2026)"
+	const body = `<blockquote><p>Вы прошли онлайн-регистрацию на рейс</p>
+<p>Москва — Екатеринбург</p><p>11 ноября в 21:20</p>
+<p>Код бронирования<br>AB12CD</p><a href="#">Мобильный посадочный</a>
+<h2>О маршруте</h2><p>Время отправления и прибытия местное</p><p>11 ноября</p>
+<table><tr><td>SU 1406 &middot; Airbus A321</td></tr>
+<tr><td>21:20&nbsp;11 нояб.</td><td>Москва&nbsp;SVO B, Шереметьево</td></tr>
+<tr><td>02:00&nbsp;12 нояб.</td><td>Екатеринбург&nbsp;SVX , Кольцово</td></tr></table>
+<h2>Данные о пассажирах</h2><div>IVAN TESTOV</div><div>Аэрофлот Бонус&nbsp;123</div>
+<div>Москва — Екатеринбург SVO — SVX</div><div>ANNA TESTOVA</div>
+<div>Москва — Екатеринбург SVO — SVX</div><h2>Инструкция перед полетом</h2></blockquote>`
+	const alternative = "--travel-test\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\nСмотри письмо ниже.\r\n" +
+		"--travel-test\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n" + body + "\r\n--travel-test--\r\n"
+	insertTicketMailWithSubject(t, f, "Re: "+subject, alternative, `multipart/alternative; boundary=travel-test`, "INBOX")
+	insertTicketMailWithSubject(t, f, subject, body, "text/html", "INBOX")
+	// A quoted card whose departure date conflicts with the subject is ambiguous.
+	insertTicketMailWithSubject(t, f, strings.Replace(subject, "11.11.2026", "13.11.2026", 1), body, "text/html", "INBOX")
+	if err := f.s.drainTravelJobs(ctx); err != nil {
+		t.Fatal(err)
+	}
+	items := travelList(t, f)
+	if len(items) != 1 || items[0].State != "saved" || items[0].Ticket.Passenger != "ANNA TESTOVA, IVAN TESTOV" {
+		t.Fatal(items)
+	}
+	event, err := f.s.store.GetCalendarObjectByID(ctx, items[0].EventID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	calendar, err := f.s.store.GetCalendarByID(ctx, f.users[0], event.CalendarID)
+	if err != nil || calendar.Name != "personal" {
+		t.Fatal(calendar, err)
+	}
+	if event.DTStart == nil || event.DTEnd == nil || event.DTStart.UTC().Format("2006-01-02 15:04") != "2026-11-11 18:20" || event.DTEnd.UTC().Format("2006-01-02 15:04") != "2026-11-11 21:00" {
+		t.Fatalf("unexpected flight times: %v to %v", event.DTStart, event.DTEnd)
+	}
 }
 func travelList(t *testing.T, f *fileFixture) []storage.TravelCandidate {
 	t.Helper()

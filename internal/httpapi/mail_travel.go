@@ -90,7 +90,20 @@ func extractTravelTickets(ctx context.Context, raw []byte) ([]*travel.Ticket, []
 		text = text[:512<<10]
 		warnings = append(warnings, "text_limit")
 	}
-	appendText(text, "message")
+	boarding := travel.ParseAeroflotBoardingPass(parsed.Subject, text)
+	if boarding == nil && parsed.Text != "" && parsed.HTML != "" && strings.Contains(strings.ToLower(parsed.Subject), "посадочный талон") {
+		// Replies can have a plain-text alternative without the route card.
+		htmlText := mailsearch.ExtractHTMLText(parsed.HTML)
+		if len(htmlText) <= 512<<10 {
+			boarding = travel.ParseAeroflotBoardingPass(parsed.Subject, htmlText)
+		}
+	}
+	if boarding != nil {
+		boarding.Source = "message"
+		drafts = append(drafts, boarding)
+	} else {
+		appendText(text, "message")
+	}
 	count := 0
 	for _, attachment := range parsed.Attachments {
 		if attachment.ContentType != "application/pdf" && !strings.HasSuffix(strings.ToLower(attachment.Filename), ".pdf") {
