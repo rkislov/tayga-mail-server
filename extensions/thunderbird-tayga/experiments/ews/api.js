@@ -25,6 +25,11 @@ var { VCardUtils } = ChromeUtils.importESModule(
   "resource:///modules/VCardUtils.sys.mjs",
 );
 
+// Match every message. The extra space survives saving but Thunderbird drops it
+// when serializing the active query. The virtual view then skips its cached
+// hits, which can otherwise reinsert an EWS header already in the view.
+const CONVERSATION_SEARCH = "AND  (status,is,read) OR (status,isn't,read)";
+
 var taygaEws = class extends ExtensionCommon.ExtensionAPI {
   getAPI(context) {
     this.ready ||= this.initialize();
@@ -484,7 +489,9 @@ var taygaEws = class extends ExtensionCommon.ExtensionAPI {
       const viewFlags = previousInfo?.viewFlags ?? Ci.nsMsgViewFlagsType.kThreadedDisplay;
       const sortType = previousInfo?.sortType ?? Ci.nsMsgViewSortType.byDate;
       const sortOrder = previousInfo?.sortOrder ?? Ci.nsMsgViewSortOrder.descending;
-      folder = VirtualFolderHelper.createNewVirtualFolder(name, parent, folders, "ALL", false).virtualFolder;
+      folder = VirtualFolderHelper.createNewVirtualFolder(
+        name, parent, folders, CONVERSATION_SEARCH, false,
+      ).virtualFolder;
       folder.setStringProperty("taygaConversationServer", record.serverKey);
       const info = folder.msgDatabase.dBFolderInfo;
       info.viewFlags = viewFlags;
@@ -493,8 +500,11 @@ var taygaEws = class extends ExtensionCommon.ExtensionAPI {
       folder.msgDatabase.commit(Ci.nsMsgDBCommitType.kLargeCommit);
     } else {
       const wrapped = VirtualFolderHelper.wrapVirtualFolder(folder);
+      const migrateSearch = wrapped.searchString === "ALL";
+      if (migrateSearch) wrapped.searchString = CONVERSATION_SEARCH;
       const source = folders.map(f => f.URI).sort().join("|");
-      if (Array.from(wrapped.searchFolders).map(f => f.URI).sort().join("|") !== source) {
+      const sourcesChanged = Array.from(wrapped.searchFolders).map(f => f.URI).sort().join("|") !== source;
+      if (sourcesChanged || migrateSearch) {
         wrapped.searchFolders = folders;
         MailServices.accounts.saveVirtualFolders();
       }

@@ -31,7 +31,7 @@ async function taygaNativeTest(api, args) {
       view.doCommand(Ci.nsMsgViewCommandType.expandAll);
       for (let i=0;i<view.rowCount;i++) {
         const header=view.getMsgHdrAt(i);
-        rows.push({id:header.messageId,folder:header.folder.URI,
+        rows.push({id:header.messageId,folder:header.folder.URI,key:header.messageKey,
           root:view.getThreadContainingMsgHdr(header)?.getRootHdr()?.messageId});
       }
     }
@@ -44,6 +44,10 @@ async function taygaNativeTest(api, args) {
       ascending: folder?.msgDatabase.dBFolderInfo.sortOrder === Ci.nsMsgViewSortOrder.ascending,
       localLegacyPresent: Array.from(localRoot.subFolders).some(f => f.URI === args.legacyURI),
       accountViewCount: Array.from(root.subFolders).filter(f => f.flags & Ci.nsMsgFolderFlags.Virtual).length,
+      searching: pane?.gViewWrapper?.searching,
+      sourceCount: Array.from(root.descendants)
+        .filter(f => f.flags & (Ci.nsMsgFolderFlags.Inbox | Ci.nsMsgFolderFlags.SentMail))
+        .reduce((total, f) => total + f.getTotalMessages(false), 0),
       rows,
     };
   }

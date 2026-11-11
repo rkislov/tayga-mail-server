@@ -656,7 +656,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     for (let i=0;i<100;i++) {
       await native("syncMail");
       conversation=await inspect({op:"conversations",open:i===0,legacyURI:legacyView.uri});
-      if (conversation.rows.some(r=>r.id==="sent-thread-reply@example.com")) break;
+      if (!conversation.searching && conversation.rows.some(r=>r.id==="sent-thread-reply@example.com")) break;
       await sleep(100);
     }
     await native("openConversations");
@@ -665,6 +665,12 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     assert(sentReply && incomingRoot && sentReply.root===incomingRoot.root && sentReply.folder!==incomingRoot.folder,
       "Sent and Inbox did not share a native virtual-view thread: "+JSON.stringify(conversation));
     assert(conversation.rows.filter(r=>r.id==="sent-thread-reply@example.com").length===1,"Sent reply duplicated");
+    const rowKeys = new Set(conversation.rows.map(row => JSON.stringify([row.folder, row.key])));
+    const standalone = conversation.rows.filter(row => row.id === unrelated.messageId);
+    assert(!conversation.searching && rowKeys.size === conversation.rows.length &&
+      rowKeys.size === conversation.sourceCount && standalone.length === 1 &&
+      standalone[0].root === standalone[0].id,
+      "The virtual folder must show each original message once: " + JSON.stringify(conversation));
     assert(conversation.underAccount && conversation.name === "Беседы" && conversation.ascending &&
       !conversation.localLegacyPresent && conversation.accountViewCount === 1,
       "Legacy conversation folder was not migrated under the EWS account: " + JSON.stringify(conversation));
