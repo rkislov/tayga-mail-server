@@ -11,7 +11,7 @@ func (s *Server) domainGALEnabled(r *http.Request, domainID string) bool {
 	return err == nil && ok && value == "true"
 }
 func (s *Server) galContact(user *storage.User) map[string]any {
-	return map[string]any{"id": "gal-" + user.ID, "book_id": "gal", "uid": user.ID, "fn": user.DisplayName, "email": user.Email, "readonly": true}
+	return map[string]any{"id": "gal-" + user.ID, "book_id": "gal", "uid": user.ID, "fn": user.DisplayLabel(), "email": user.Email, "readonly": true}
 }
 func (s *Server) handleGAL(w http.ResponseWriter, r *http.Request, au *authUser, id string) {
 	current, err := s.store.GetUserByID(r.Context(), au.ID)

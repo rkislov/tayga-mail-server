@@ -1,6 +1,6 @@
 /* Typed configuration forms follow the schema exposed by the server. */
 const CONFIG_GROUPS = [
-  { title: ["Почта и клиенты", "Mail and clients"], icon: "mail", sections: ["smtp", "imap", "pop3", "managesieve", "flowsync", "xmpp"] },
+  { title: ["Почта и клиенты", "Mail and clients"], icon: "mail", sections: ["smtp", "imap", "pop3", "managesieve", "flowsync", "mattermost"] },
   { title: ["Защита почты", "Mail protection"], icon: "lock", sections: ["spam", "scan", "dkim_verify", "spf", "iprev", "helo", "greylist", "dmarc", "arc"] },
   { title: ["Вход и пользователи", "Identity and users"], icon: "user", sections: ["ldap", "oidc", "mfa", "seed"] },
   { title: ["Хранение и доступность", "Storage and availability"], icon: "files", sections: ["storage", "mailstore", "files", "ha"] },
@@ -13,7 +13,7 @@ const CONFIG_SECTIONS = {
   pop3: ["POP3", "Получение писем клиентами POP3."],
   managesieve: ["ManageSieve", "Подключение клиентов для управления почтовыми фильтрами."],
   flowsync: ["FlowSync", "Синхронизация клиентов ActiveSync и EWS."],
-  xmpp: ["XMPP и компоненты", "Чат, TLS-соединения, внешние боты и мосты."],
+  mattermost:["Mattermost","Сервер, тенанты, домены и плагины."],
   spam: ["Антиспам", "Rspamd, пороги оценки и обработка подозрительных писем."],
   scan: ["Антивирус", "ClamAV, ICAP или внешняя команда проверки."],
   dkim_verify: ["Проверка DKIM", "Проверка подписей входящей почты."],
@@ -48,7 +48,7 @@ function renderAdminCatalog() {
   const schema = settingsState.all.schema;
   let count = 0;
   const known = CONFIG_GROUPS.flatMap(group => group.sections);
-  const extra = Object.keys(schema).filter(key => !known.includes(key));
+  const extra = Object.keys(schema).filter(key => key!=="xmpp"&&!known.includes(key));
   const groups = [...CONFIG_GROUPS, ...(extra.length ? [{title:["Другие настройки", "Other settings"],icon:"server",sections:extra}] : [])];
   host.innerHTML = groups.map(group => {
     const sections = group.sections.filter(section => schema[section] && `${section} ${configLabel(section)} ${configDescription(section)} ${JSON.stringify(schema[section])}`.toLowerCase().includes(query));
@@ -57,7 +57,7 @@ function renderAdminCatalog() {
     return `<section class="config-group"><h4><span class="nav-ico" data-ico="${group.icon}" aria-hidden="true"></span>${escapeHtml(configText(...group.title))}</h4><div class="config-section-grid">${sections.map(section => `<button type="button" class="config-section-card" data-config-open="${section}"><span><strong>${escapeHtml(configLabel(section))}</strong><span class="meta">${escapeHtml(configDescription(section))}</span></span><span class="config-card-foot"><span>${configFieldCount(schema[section])} ${escapeHtml(t("config_parameters"))}</span><span>${escapeHtml(schema[section].read_only ? t("config_readonly") : t("server_open"))} →</span></span></button>`).join("")}</div></section>`;
   }).join("") || `<p class="meta">${escapeHtml(t("config_no_results"))}</p>`;
   $("settings-summary").textContent = `${count} ${t("config_sections")} · ${t("config_help_every_field")}`;
-  host.querySelectorAll("[data-config-open]").forEach(button => button.addEventListener("click", () => openAdminConfig(button.dataset.configOpen)));
+  host.querySelectorAll("[data-config-open]").forEach(button => button.addEventListener("click", () => button.dataset.configOpen==="mattermost"?showApp("mattermost"):openAdminConfig(button.dataset.configOpen)));
 }
 function configDefault(field) {
   if (field.kind === "object") return Object.fromEntries(field.fields.map(child => [child.key, configDefault(child)]));

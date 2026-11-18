@@ -52,7 +52,7 @@ func (s *Server) writeDirectory(w http.ResponseWriter, r *http.Request, domainID
 			continue
 		}
 		visible[user.ID] = true
-		members = append(members, map[string]any{"id": user.ID, "name": user.DisplayName, "email": user.Email, "enabled": user.Enabled})
+		members = append(members, map[string]any{"id": user.ID, "name": user.DisplayLabel(), "email": user.Email, "enabled": user.Enabled})
 	}
 	for _, group := range groups {
 		ids := []string{}

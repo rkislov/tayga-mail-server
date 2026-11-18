@@ -56,8 +56,14 @@
 
   <div id="cal-invites-backdrop" class="dialog-backdrop hidden">
     <section id="cal-invites-dialog" class="config-dialog cal-invites-dialog" role="dialog" aria-modal="true" aria-labelledby="cal-invites-title">
-      <div class="config-dialog-head"><h3 class="heading" id="cal-invites-title" data-i18n="cal_invites">Приглашения</h3><button type="button" class="btn-icon" id="btn-cal-invites-close" data-i18n-title="close" aria-label="Закрыть">×</button></div>
+      <div class="config-dialog-head"><h3 class="heading" id="cal-invites-title" data-i18n="cal_inbox_title">Входящие события</h3><button type="button" class="btn-icon" id="btn-cal-invites-close" data-i18n-title="close" aria-label="Закрыть">×</button></div>
       <p class="meta" data-i18n="cal_inbox_hint">Ответьте на приглашения и согласуйте предложения нового времени для ваших встреч.</p>
+      <div id="cal-inbox-filters" class="cal-inbox-filters" role="group" aria-label="Фильтр входящих событий">
+        <button type="button" class="btn-secondary btn-sm" data-inbox-filter="pending" aria-pressed="true" data-i18n="cal_inbox_pending">Требуют ответа</button>
+        <button type="button" class="btn-secondary btn-sm" data-inbox-filter="history" aria-pressed="false" data-i18n="cal_inbox_history">История</button>
+        <button type="button" class="btn-secondary btn-sm" data-inbox-filter="all" aria-pressed="false" data-i18n="cal_inbox_all">Все</button>
+        <button type="button" class="btn-secondary btn-sm" id="btn-cal-inbox-refresh" data-i18n="refresh">Обновить</button>
+      </div>
       <ul id="cal-invite-list" class="cal-invite-list"></ul>
       <p id="cal-invite-msg" class="msg" role="status"></p>
     </section>
@@ -184,6 +190,7 @@
         <button type="button" class="nav-btn" data-app="tasks"><span aria-hidden="true">✓</span><span data-i18n="nav_tasks">Задачи</span></button>
         <button type="button" class="nav-btn" data-app="notes"><span class="nav-ico" data-ico="notes" aria-hidden="true"></span><span data-i18n="nav_notes">Заметки</span></button>
         <button type="button" class="nav-btn" data-app="files"><span class="nav-ico" data-ico="files" aria-hidden="true"></span><span data-i18n="nav_files">Файлы</span></button>
+        <button type="button" class="nav-btn" data-app="vks"><span class="nav-ico" data-ico="video" aria-hidden="true"></span><span data-i18n="nav_vks">Видеоконференции</span></button>
         <button type="button" class="nav-btn" data-app="chat"><span class="nav-ico" data-ico="chat" aria-hidden="true"></span><span data-i18n="nav_chat">Чат</span></button>
         <p class="nav-group" data-i18n="nav_settings">Настройки</p>
         <button type="button" class="nav-btn" data-app="profile"><span class="nav-ico" data-ico="user" aria-hidden="true"></span><span data-i18n="nav_profile">Профиль</span></button>
@@ -200,7 +207,7 @@
           <button type="button" class="nav-btn" data-app="migration"><span class="nav-ico" data-ico="filter" aria-hidden="true"></span><span data-i18n="nav_migration">Миграция IMAP/DAV</span></button>
           <button type="button" class="nav-btn" data-app="tenants"><span class="nav-ico" data-ico="domains" aria-hidden="true"></span><span data-i18n="nav_tenants">Домены и пользователи</span></button>
           <button type="button" class="nav-btn" data-app="tls"><span class="nav-ico" data-ico="tls" aria-hidden="true"></span><span data-i18n="nav_tls">УЦ</span></button>
-          <button type="button" class="nav-btn" data-app="xmpp"><span class="nav-ico" data-ico="chat" aria-hidden="true"></span><span data-i18n="nav_xmpp">XMPP</span></button>
+          <button type="button" class="nav-btn" data-app="mattermost"><span class="nav-ico" data-ico="chat" aria-hidden="true"></span><span data-i18n="nav_mattermost">Mattermost</span></button>
           <button type="button" class="nav-btn" data-app="server"><span class="nav-ico" data-ico="server" aria-hidden="true"></span><span data-i18n="nav_server">Сервер</span></button>
           <button type="button" class="nav-btn" data-app="cos"><span class="nav-ico" data-ico="filter" aria-hidden="true"></span><span data-i18n="nav_cos">CoS</span></button>
         </div>
@@ -310,7 +317,7 @@
               <strong id="cal-month-label" class="cal-month-label"></strong>
               <button type="button" class="btn-secondary btn-sm" id="btn-cal-next" aria-label="Next">›</button>
               <button type="button" class="btn-secondary btn-sm" id="btn-cal-today" data-i18n="cal_today">Сегодня</button>
-              <button type="button" class="btn-secondary btn-sm btn-ico cal-inbox-button" id="btn-cal-invites" aria-haspopup="dialog" aria-controls="cal-invites-dialog" data-i18n-title="cal_invites" title="Приглашения" aria-label="Приглашения">
+              <button type="button" class="btn-secondary btn-sm btn-ico cal-inbox-button" id="btn-cal-invites" aria-haspopup="dialog" aria-controls="cal-invites-dialog" data-i18n-title="cal_inbox_title" title="Входящие события" aria-label="Входящие события">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 5h16l2 12v3H2v-3L4 5Z"/><path d="M2 16h6l2 3h4l2-3h6"/></svg>
                 <span id="cal-invite-count" class="cal-inbox-count hidden" aria-hidden="true"></span>
               </button>
@@ -628,51 +635,40 @@
       </div>
 
       <!-- CHAT -->
-      <div id="app-chat" class="app-page hidden mail-layout chat-layout">
-        <div class="mail-list panel-pane mail-list-pane chat-roster-pane">
-          <div class="pane-head mail-list-toolbar">
-            <strong data-i18n="chat_title">Чат</strong>
-            <button type="button" class="btn-spray btn-sm btn-ico" id="btn-chat-new" data-i18n-title="chat_new" title="Диалог" aria-label="Диалог"><span class="ico" data-ico="chat" aria-hidden="true"></span></button>
+      <div id="app-chat" class="app-page hidden mail-layout chat-layout mm-chat">
+        <aside class="mail-list panel-pane mail-list-pane chat-roster-pane">
+          <div class="pane-head"><strong>Чаты</strong><button type="button" id="mm-chat-refresh" class="btn-secondary btn-sm">Обновить</button></div>
+          <div class="mm-chat-identity"><strong id="mm-chat-self"></strong><span id="mm-chat-connection" class="meta" role="status"></span></div>
+          <div class="actions mm-chat-actions"><button type="button" id="mm-chat-new" class="btn-spray btn-sm">Новый диалог</button><button type="button" id="mm-chat-create" class="btn-secondary btn-sm">Создать канал</button><button type="button" id="mm-chat-browse" class="btn-secondary btn-sm">Открытые каналы</button></div>
+          <label class="sr-only" for="mm-chat-filter">Поиск каналов и диалогов</label><input id="mm-chat-filter" class="field-input" placeholder="Найти канал или диалог…" type="search">
+          <nav id="mm-chat-channels" aria-label="Каналы и личные сообщения"></nav>
+          <p id="mm-chat-error" class="msg" role="status"></p>
+        </aside>
+        <section class="mail-read panel-pane chat-thread-pane">
+          <div id="mm-chat-empty" class="empty-state">Выберите канал или начните личный диалог</div>
+          <div id="mm-chat-thread" class="hidden chat-thread">
+            <div class="reader-actions chat-thread-head"><button type="button" class="btn-secondary btn-sm mobile-only" data-pane-back>К списку</button><h2 id="mm-chat-title" class="heading reader-subject"></h2><button type="button" class="btn-secondary btn-sm" id="mm-chat-members">Участники</button><button type="button" class="btn-secondary btn-sm" id="mm-chat-call">Звонок Jitsi</button></div>
+            <div id="mm-chat-posts" class="chat-messages" aria-label="Сообщения" role="log" aria-live="polite"></div>
+            <div id="mm-chat-reply" class="hidden mm-chat-reply"><span id="mm-chat-reply-label"></span><button type="button" class="btn-secondary btn-sm" id="mm-chat-reply-cancel">Отменить ответ</button></div>
+            <form id="mm-chat-send" class="chat-compose"><label class="sr-only" for="mm-chat-body">Сообщение</label><textarea class="field-input" id="mm-chat-body" placeholder="Сообщение…" rows="2" maxlength="16000"></textarea><button type="submit" class="btn-spray btn-ico" title="Отправить" aria-label="Отправить"><span class="ico" data-ico="send" aria-hidden="true"></span></button></form>
+            <p id="mm-chat-send-error" class="msg" role="status"></p>
           </div>
-          <div class="chat-self" id="chat-self">
-            <div class="chat-self-identity"><strong id="chat-self-name"></strong><span class="meta" id="chat-self-email"></span></div>
-            <button type="button" id="chat-presence-toggle" class="chat-presence-toggle" aria-haspopup="menu" aria-expanded="false" aria-controls="chat-presence-menu" aria-label="Мой статус"><span class="presence-dot" data-presence="online" aria-hidden="true"></span></button>
-            <div id="chat-presence-menu" class="chat-presence-menu" role="menu" aria-label="Мой статус" hidden></div>
-          </div>
-          <ul id="chat-roster" class="msg-list"></ul>
-          <p id="chat-roster-msg" class="msg files-msg"></p>
-        </div>
-        <div class="mail-read panel-pane chat-thread-pane">
-          <div id="chat-empty" class="empty-state" data-i18n="chat_select">Выберите диалог</div>
-          <div id="chat-thread" class="hidden chat-thread">
-            <div class="reader-actions chat-thread-head">
-              <button type="button" class="btn-secondary btn-sm btn-ico mobile-only" data-pane-back data-i18n-title="back_list" title="К списку" aria-label="К списку"><span class="ico" data-ico="back" aria-hidden="true"></span></button>
-              <h2 class="heading reader-subject" id="chat-peer"></h2><button id="chat-request-presence" class="btn-secondary btn-sm" data-i18n="presence_request_action">Запросить статус</button>
-            </div>
-            <div class="chat-messages" id="chat-messages"></div>
-            <form id="form-chat-send" class="chat-compose">
-              <button type="button" id="chat-attach" class="btn-secondary btn-ico" title="Прикрепить файл" aria-label="Прикрепить файл">📎</button><input type="file" id="chat-file" hidden />
-              <input class="field-input" id="chat-body" data-i18n-placeholder="chat_placeholder" placeholder="Сообщение…" autocomplete="off" />
-              <button type="submit" class="btn-spray btn-ico" data-i18n-title="send" title="Отправить" aria-label="Отправить"><span class="ico" data-ico="send" aria-hidden="true"></span></button>
-            </form>
-            <p id="chat-msg" class="msg"></p>
-          </div>
-        </div>
+        </section>
       </div>
+      <dialog id="mm-chat-people" class="mm-chat-dialog"><form method="dialog" class="pane-head"><h3 id="mm-chat-people-title" class="heading">Новый диалог</h3><button class="btn-secondary">Закрыть</button></form><label class="field-label" for="mm-chat-search">Имя, почта или логин</label><input id="mm-chat-search" class="field-input" type="search" maxlength="256" autocomplete="off"><p id="mm-chat-people-error" class="msg" role="status"></p><div id="mm-chat-people-list"></div></dialog>
+      <dialog id="mm-chat-create-dialog" class="mm-chat-dialog"><form id="mm-chat-create-form"><h3 class="heading">Создать канал</h3><label class="field-label" for="mm-chat-create-name">Название</label><input id="mm-chat-create-name" class="field-input" required maxlength="64"><label class="field-label" for="mm-chat-create-type">Доступ</label><select id="mm-chat-create-type" class="field-input"><option value="P">Закрытый — по приглашению создателя</option><option value="O">Открытый — доступен для вступления в организации</option></select><p id="mm-chat-create-error" class="msg" role="status"></p><div class="actions"><button type="submit" class="btn-spray">Создать</button><button type="button" id="mm-chat-create-cancel" class="btn-secondary">Отмена</button></div></form></dialog>
 
-      <div id="chat-backdrop" class="compose-backdrop hidden">
-        <div class="compose-panel" role="dialog" aria-modal="true">
-          <h3 class="heading" data-i18n="chat_new">Диалог</h3>
-          <label class="field-label" data-i18n="chat_peer_jid">Email / JID</label>
-          <input class="field-input" id="chat-new-jid" type="email" placeholder="user@example.com" />
-          <label class="field-label" data-i18n="col_name">Имя</label>
-          <input class="field-input" id="chat-new-name" />
-          <div class="actions">
-            <button type="button" class="btn-spray btn-ico" id="btn-chat-start" data-i18n-title="chat_start" title="Открыть" aria-label="Открыть"><span class="ico" data-ico="open" aria-hidden="true"></span></button>
-            <button type="button" class="btn-secondary btn-ico" id="btn-chat-cancel" data-i18n-title="back" title="Назад" aria-label="Назад"><span class="ico" data-ico="back" aria-hidden="true"></span></button>
-          </div>
-        </div>
-      </div>
+      <dialog id="mm-chat-browse-dialog" class="mm-chat-dialog">
+        <form method="dialog" class="pane-head"><h3 class="heading">Открытые каналы</h3><button class="btn-secondary">Закрыть</button></form>
+        <form id="mm-chat-browse-form">
+          <label class="field-label" for="mm-chat-browse-query">Название канала</label>
+          <input id="mm-chat-browse-query" class="field-input" type="search" maxlength="128">
+          <button type="submit" class="btn-secondary">Найти</button>
+        </form>
+        <p id="mm-chat-browse-status" class="msg" role="status"></p>
+        <div id="mm-chat-browse-results"></div>
+        <button type="button" id="mm-chat-browse-more" class="btn-secondary hidden">Показать ещё</button>
+      </dialog>
 
       <!-- PROFILE -->
       <div id="app-profile" class="app-page hidden panel-page panel-page-wide stack-gap">
@@ -689,6 +685,14 @@
 <section class="card" id="travel-profile" aria-live="polite"></section>
 <section class="card"><h3 class="heading" data-i18n="signature_title"></h3><p class="field-hint" data-i18n="signature_hint"></p><form id="signature-form"><label class="field-label" for="profile-signature" data-i18n="signature_title"></label><textarea class="field-input" id="profile-signature" rows="5" maxlength="10000"></textarea><label class="field-check"><input type="checkbox" id="signature-new"/><span data-i18n="signature_new"></span></label><label class="field-check"><input type="checkbox" id="signature-reply"/><span data-i18n="signature_reply"></span></label><p class="field-label" data-i18n="signature_preview"></p><div id="signature-preview" class="signature-preview"></div><div class="actions"><button type="submit" class="btn-spray" data-i18n="save"></button></div><p class="msg" id="signature-msg" role="status"></p></form></section><h3 class="heading" data-i18n="nav_security"></h3>      <!-- SECURITY -->
       <div id="profile-security" class="profile-security">
+        <section class="card stack-gap" id="mm-session-card" aria-labelledby="mm-session-title">
+          <h3 id="mm-session-title" class="heading" data-i18n="mm_sessions_title">Сессии Mattermost</h3>
+          <div class="actions">
+            <button type="button" class="btn-secondary" id="mm-sessions-refresh" data-i18n="refresh">Обновить</button>
+          </div>
+          <p id="mm-sessions-status" class="msg" role="status"></p>
+          <ul id="mm-sessions-list" class="mm-session-list"></ul>
+        </section>
         <div class="card">
           <h3 class="heading">Authenticator (TOTP)</h3>
           <div class="actions">
@@ -1044,6 +1048,60 @@ keep;</textarea>
           </div>
           <section class="xmpp-section xmpp-bots-section"><div class="pane-head"><h4 class="heading" data-i18n="xmpp_bots">HTTP-боты</h4><button type="button" class="btn-spray" id="btn-xmpp-bot-open" data-i18n="xmpp_bot_create">Создать бота</button></div><p class="field-hint" data-i18n="xmpp_bots_hint">Бот действует от выбранной учётной записи и может получать сообщения через webhook.</p><ul class="creds" id="xmpp-bot-list"></ul></section>
           <p id="xmpp-msg" class="msg"></p>
+        </div>
+      </div>
+
+      <div id="app-vks" class="app-page hidden panel-page panel-page-wide">
+ <div class="card"><h3 class="heading" data-i18n="nav_vks">Видеоконференции</h3>
+ <form id="vks-create" class="grid gap-3 mb-4">
+ <label class="field-label">Название встречи<input id="vks-title" class="field-input" required maxlength="120"></label>
+ <label class="field-label">Email участников своего домена (через пробел)<input id="vks-participants" class="field-input"></label>
+ <button class="btn-spray" type="submit">Создать встречу</button></form>
+ <p class="msg" id="vks-msg" role="status"></p><div id="vks-meetings"></div>
+ <h4 id="vks-conference-title"></h4><button id="vks-leave" class="btn-secondary hidden">Завершить участие</button><div id="vks-conference"></div>
+ <details id="vks-admin" class="hidden mt-6"><summary>Настройки ВКС и STUN/TURN</summary>
+ <label class="field-label">Область<select id="vks-scope" class="field-input"></select></label><p class="field-hint" id="vks-policy-status"></p>
+ <form id="vks-policy-form" class="grid gap-3">
+ <label class="field-label">Доступ к ВКС<select id="vks-enabled" class="field-input"><option value="inherit">Наследовать</option><option value="on">Включить</option><option value="off">Выключить</option></select></label>
+ <label class="field-label"><input type="checkbox" id="vks-stun-inherit" checked> Наследовать STUN</label><label class="field-label">STUN URL (по одному на строку)<textarea id="vks-stun" class="field-input"></textarea></label>
+ <label class="field-label"><input type="checkbox" id="vks-turn-inherit" checked> Наследовать TURN</label><label class="field-label">TURN URL (по одному на строку)<textarea id="vks-turn" class="field-input"></textarea></label>
+ <p>TURN использует временные реквизиты. Брендирование берётся из настроек домена, затем тенанта.</p>
+ <button class="btn-spray">Сохранить область</button><p class="msg" id="vks-policy-msg" role="status"></p></form></details></div>
+ </div>
+      <div id="app-mattermost" class="app-page hidden panel-page panel-page-wide">
+        <div class="card">
+          <div class="pane-head"><h3 class="heading">Mattermost</h3><button type="button" class="btn-secondary" id="mm-refresh">Обновить</button></div>
+          <p class="meta">Сервер → тенант → домен. Настройки выбранной области заменяют только соответствующие значения родителя.</p>
+          <label class="field-label" for="mm-scope">Область настроек</label><select id="mm-scope" class="field-input"></select>
+          <p id="mm-effective" class="field-hint" role="status"></p>
+          <form id="mm-policy-form">
+            <fieldset class="config-collection-item"><legend>Push-уведомления</legend>
+ <label class="field-label" for="mm-push-enabled">Автоматическая отправка</label><select id="mm-push-enabled" class="field-input"><option value="inherit">Наследовать</option><option value="on">Включить</option><option value="off">Выключить</option></select>
+              <label class="field-check"><input type="checkbox" id="mm-push-inherit" checked> Наследовать шлюз родительской области</label>
+              <label class="field-label" for="mm-push-url">Шлюз</label><select id="mm-push-url" class="field-input"><option value="">Не подготовлен</option><option value="https://push-test.mattermost.com">Mattermost TPNS (тестовый)</option></select>
+              <p id="mm-push-status" class="meta"></p>
+              <p class="meta">Текст переписки, имена отправителей и названия каналов в push не передаются. Уведомление: «Новое сообщение». TPNS поддерживает штатные мобильные клиенты Mattermost; MattCha на iPhone не поддерживает фоновые push.</p>
+            </fieldset>
+            <div class="config-fields">
+              <label class="field-label" for="mm-enabled">Доступ к Mattermost</label><select id="mm-enabled" class="field-input"><option value="inherit">Наследовать</option><option value="on">Включить</option><option value="off">Выключить</option></select>
+              <label class="field-label" for="mm-plugins-enabled">Серверные плагины</label><select id="mm-plugins-enabled" class="field-input"><option value="inherit">Наследовать</option><option value="on">Включить</option><option value="off">Выключить</option></select>
+              <label class="field-check"><input type="checkbox" id="mm-name-inherit" checked> Наследовать название</label>
+              <label class="field-label" for="mm-name">Название сервера в приложении</label><input id="mm-name" class="field-input" maxlength="128" disabled>
+              <details><summary>Параметры плагинов выбранной области</summary><p class="field-hint">JSON с идентификаторами установленных плагинов, enabled и configuration. Секреты скрыты как ***; неизменённые значения сохраняются. Пустой объект наследует настройки родителя.</p><label class="sr-only" for="mm-plugin-config">Параметры плагинов JSON</label><textarea id="mm-plugin-config" class="field-input" rows="10" spellcheck="false">{}</textarea></details>
+            </div>
+            <details style="margin-top:1rem"><summary>Email ↔ Mattermost — подготовка</summary>
+              <p class="field-hint">Приём писем в канал и отправка уведомлений выключены. Сохранение настроек не включает пересылку и не отправляет письма. Конкретные адреса и канал задаются в области домена.</p>
+              <label class="field-label" for="mm-email-incoming">Почтовый адрес для приёма писем в канал</label><input type="email" class="field-input" id="mm-email-incoming" maxlength="254" placeholder="notifications@example.com">
+              <label class="field-label" for="mm-email-channel">ID канала для входящих писем</label><input class="field-input" id="mm-email-channel" maxlength="26" autocomplete="off">
+              <label class="field-label" for="mm-email-from">Адрес отправителя почтовых уведомлений</label><input type="email" class="field-input" id="mm-email-from" maxlength="254" placeholder="chat@example.com">
+              <label class="field-check"><input type="checkbox" id="mm-email-prefix-inherit" checked> Наследовать префикс темы</label>
+              <label class="field-label" for="mm-email-prefix">Префикс темы письма</label><input class="field-input" id="mm-email-prefix" maxlength="80" disabled>
+              <p class="field-hint">Будущие уведомления — на собственный адрес пользователя, только после включения личной подписки. Адреса других доменов и каналы других тенантов не принимаются.</p>
+            </details>
+            <div class="actions"><button type="submit" class="btn-primary" id="mm-save">Сохранить область</button><button type="button" class="btn-secondary" id="mm-reset">Наследовать все настройки</button><button type="button" class="btn-secondary" id="mm-host-settings">Запуск API и хоста плагинов</button></div>
+          </form>
+          <section style="margin-top:1.5rem"><h4 class="heading">Пакеты плагинов</h4><p class="field-hint">Пакет устанавливается на сервере. Конфигурация, состояние и данные плагина разделены по тенантам и доменам. Для запуска выберите домен.</p><div id="mm-plugin-list"></div><label class="field-label" for="mm-plugin-upload">Загрузить пакет Mattermost (.tar.gz)</label><input type="file" id="mm-plugin-upload" accept=".gz,.tgz" class="field-input"></section>
+          <p id="mm-msg" class="msg" role="status"></p>
         </div>
       </div>
 

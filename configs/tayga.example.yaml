@@ -68,3 +68,16 @@ log:
 #   acme:
 #     email: admin@example.com
 #     staging: false
+
+# Optional Mattermost-compatible chat. Set http.public_url to the public HTTPS URL.
+# mattermost:
+#   enabled: true
+#   plugins_enabled: false
+#
+# Optional Jitsi integration. See docs/vks.md for authentication and TURN setup.
+# vks:
+#   enabled: true
+#   public_url: https://meet.example.com
+#   upstream: http://127.0.0.1:18088
+#   signing_key_file: /etc/tayga/vks/signing.pem
+#   key_id: tms/vks

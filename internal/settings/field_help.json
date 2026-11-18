@@ -1,4 +1,20 @@
 {
+  "mattermost.plugins_enabled": {
+    "label": "Серверные плагины Mattermost",
+    "description": "Включает экспериментальный RPC-хост серверных плагинов. Требуется перезапуск; совместимость SDK ограничена."
+  },
+  "mattermost.plugin_directory": {
+    "label": "Каталог плагинов Mattermost",
+    "description": "Каталог распакованных серверных плагинов; по умолчанию mattermost-plugins в каталоге почты."
+  },
+  "mattermost": {
+    "label": "Mattermost API",
+    "description": "Экспериментальная совместимость с клиентами Mattermost."
+  },
+  "mattermost.enabled": {
+    "label": "Включить Mattermost API",
+    "description": "Экспериментальный API /api/v4 и WebSocket; требуется перезапуск."
+  },
   "files": {
     "label": "Файловый сервис",
     "description": "Общее хранилище, WebDAV и подключение отдельного офисного сервиса."
@@ -774,5 +790,37 @@
   "smtp.dlp.allow_plaintext": {
     "label": "Разрешить соединение без TLS",
     "description": "По умолчанию требуется STARTTLS с проверкой сертификата. Включайте только для доверенного локального транспорта. Если шлюз предлагает TLS, сертификат всё равно проверяется."
+  },
+  "vks": {
+    "label": "Видеоконференции",
+    "description": "Подключение Jitsi и STUN/TURN; область доступа задаётся по тенантам и доменам."
+  },
+  "upstream": {
+    "label": "Внутренний HTTP-сервис Jitsi",
+    "description": "HTTP-адрес только на 127.0.0.1 или ::1; TMS проксирует домен ВКС."
+  },
+  "signing_key_file": {
+    "label": "Ключ подписи ВКС",
+    "description": "Путь к приватному RSA-ключу. В браузер передаются только подписанные токены комнат."
+  },
+  "key_id": {
+    "label": "Идентификатор ключа ВКС",
+    "description": "Значение kid в RS256 JWT; публичный ключ доступен через endpoint ASAP."
+  },
+  "stun_urls": {
+    "label": "Адреса STUN",
+    "description": "Список stun: или stuns: URL; может наследоваться или заменяться областью."
+  },
+  "turn_urls": {
+    "label": "Адреса TURN",
+    "description": "Список turn: или turns: URL; TMS выдаёт временные реквизиты."
+  },
+  "turn_secret_file": {
+    "label": "Файл секрета TURN",
+    "description": "Файл общего секрета coturn не короче 32 байт. Секрет остаётся на сервере."
+  },
+  "turn_ttl": {
+    "label": "Срок реквизитов TURN",
+    "description": "От 1m до 24h; по умолчанию 1h."
   }
 }

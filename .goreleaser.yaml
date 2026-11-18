@@ -56,6 +56,8 @@ archives:
       - docs/xmpp.md
       - docs/xmpp-*.md
       - docs/files-and-office.md
+      - docs/mattermost-compatibility.md
+      - docs/vks.md
       - docs/external-mail.md
       - docs/mail-delivery-logs.md
       - docs/travel-tickets.md

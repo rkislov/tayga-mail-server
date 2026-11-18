@@ -13,8 +13,31 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// MattermostConfig enables the experimental client compatibility API.
+type MattermostConfig struct {
+	PluginsEnabled  bool   `yaml:"plugins_enabled"`
+	PluginDirectory string `yaml:"plugin_directory"`
+	Enabled         bool   `yaml:"enabled"`
+}
+
+// VKSConfig connects TMS to native or containerized conferencing services.
+// TURN credentials are generated server-side from a protected shared-secret file.
+type VKSConfig struct {
+	Enabled        bool          `yaml:"enabled"`
+	PublicURL      string        `yaml:"public_url"`
+	Upstream       string        `yaml:"upstream"`
+	SigningKeyFile string        `yaml:"signing_key_file"`
+	KeyID          string        `yaml:"key_id"`
+	STUNURLs       []string      `yaml:"stun_urls"`
+	TURNURLs       []string      `yaml:"turn_urls"`
+	TURNSecretFile string        `yaml:"turn_secret_file"`
+	TURNTTL        time.Duration `yaml:"turn_ttl"`
+}
+
 // Config is the top-level server configuration loaded from YAML.
 type Config struct {
+	VKS         VKSConfig         `yaml:"vks"`
+	Mattermost  MattermostConfig  `yaml:"mattermost"`
 	Server      ServerConfig      `yaml:"server"`
 	Storage     StorageConfig     `yaml:"storage"`
 	Mailstore   MailstoreConfig   `yaml:"mailstore"`
@@ -695,6 +718,26 @@ func Default() *Config {
 
 // Validate checks required fields.
 func (c *Config) Validate() error {
+	if c.VKS.Enabled {
+		u, err := url.Parse(c.VKS.PublicURL)
+		if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
+			return fmt.Errorf("vks.public_url must be an HTTPS origin")
+		}
+		up, err := url.Parse(c.VKS.Upstream)
+		if err != nil || up.Scheme != "http" || (up.Hostname() != "127.0.0.1" && up.Hostname() != "::1") || up.User != nil || up.Path != "" || up.RawQuery != "" || up.Fragment != "" {
+			return fmt.Errorf("vks.upstream must be a loopback HTTP origin")
+		}
+		if c.VKS.SigningKeyFile == "" || c.VKS.KeyID == "" {
+			return fmt.Errorf("vks signing key file and key id are required")
+		}
+		if len(c.VKS.TURNURLs) > 0 && c.VKS.TURNSecretFile == "" {
+			return fmt.Errorf("vks.turn_secret_file is required with TURN")
+		}
+		if c.VKS.TURNTTL != 0 && (c.VKS.TURNTTL < time.Minute || c.VKS.TURNTTL > 24*time.Hour) {
+			return fmt.Errorf("vks.turn_ttl must be between 1m and 24h")
+		}
+	}
+
 	if c.SMTP.DLP.Enabled {
 		host, port, err := net.SplitHostPort(c.SMTP.DLP.Host)
 		p, pe := strconv.Atoi(port)
