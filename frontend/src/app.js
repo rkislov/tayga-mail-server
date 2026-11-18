@@ -278,7 +278,7 @@ function applyTheme(name, {persist = true} = {}) {
 }
 
 function accountInitials(name, email='') {
-  const clean=String(name||'').replace(/<[^>]*>/g,'').replace(/["']/g,'').trim();
+  const clean=String(name||'').replace(/<[^<>]*>/g,'').replace(/[<>"']/g,'').trim();
   const words=(clean&&!clean.includes('@')?clean:String(email||clean).split('@')[0]).split(/[\s._-]+/u).filter(Boolean);
   return (words.length>1 ? Array.from(words[0])[0]+Array.from(words[words.length-1])[0] : Array.from(words[0]||'?').slice(0,2).join('')).toLocaleUpperCase();
 }

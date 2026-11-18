@@ -1401,7 +1401,7 @@ function applyTheme(name, {persist = true} = {}) {
 }
 
 function accountInitials(name, email='') {
-  const clean=String(name||'').replace(/<[^>]*>/g,'').replace(/["']/g,'').trim();
+  const clean=String(name||'').replace(/<[^<>]*>/g,'').replace(/[<>"']/g,'').trim();
   const words=(clean&&!clean.includes('@')?clean:String(email||clean).split('@')[0]).split(/[\s._-]+/u).filter(Boolean);
   return (words.length>1 ? Array.from(words[0])[0]+Array.from(words[words.length-1])[0] : Array.from(words[0]||'?').slice(0,2).join('')).toLocaleUpperCase();
 }
@@ -9803,7 +9803,10 @@ async function omemoDevices(jid,guard=omemoGuard()){const raw=await omemoPEP(jid
 async function omemoBundle(jid,id,guard=omemoGuard()){const raw=await omemoPEP(jid,omemoNS+'.bundles:'+id,guard);if(!raw)throw Error('Нет ключей устройства / Missing device bundle: '+id);const doc=omemoXML(raw);const key=omemoElement(doc,'identityKey'),signed=omemoElement(doc,'signedPreKeyPublic'),sig=omemoElement(doc,'signedPreKeySignature'),prekeys=omemoElements(doc,'preKeyPublic');if(!key||!signed||!sig||!prekeys.length)throw Error('Incomplete OMEMO bundle');const pre=prekeys[crypto.getRandomValues(new Uint32Array(1))[0]%prekeys.length];return {registrationId:id,identityKey:omemoBytes(key.textContent),signedPreKey:{keyId:Number(signed.getAttribute('signedPreKeyId')),publicKey:omemoBytes(signed.textContent),signature:omemoBytes(sig.textContent)},preKey:{keyId:Number(pre.getAttribute('preKeyId')),publicKey:omemoBytes(pre.textContent)}}}
 async function omemoInitialize(ctx){
  const {lib,data,store,save}=ctx;
- if(!data.id){data.id=crypto.getRandomValues(new Uint32Array(1))[0]%2147483646+1;store.put('identityKey',await lib.KeyHelper.generateIdentityKeyPair());store.put('registrationId',data.id);data.prekeys=[];data.nextPrekey=1;const signed=await lib.KeyHelper.generateSignedPreKey(store.getIdentityKeyPair(),1,omemoNS);store.storeSignedPreKey(1,signed.keyPair);data.signature=signed.signature;await save()}
+ if(!data.id){
+ const random=new Uint32Array(1);
+ do { crypto.getRandomValues(random);data.id=random[0]&0x7fffffff; } while(data.id===0||data.id===0x7fffffff);
+ store.put('identityKey',await lib.KeyHelper.generateIdentityKeyPair());store.put('registrationId',data.id);data.prekeys=[];data.nextPrekey=1;const signed=await lib.KeyHelper.generateSignedPreKey(store.getIdentityKeyPair(),1,omemoNS);store.storeSignedPreKey(1,signed.keyPair);data.signature=signed.signature;await save()}
  data.prekeys=data.prekeys.filter(id=>!!store.get('25519KeypreKey'+id));
  while(data.prekeys.length<100){const pre=await lib.KeyHelper.generatePreKey(data.nextPrekey++);store.storePreKey(pre.keyId,pre.keyPair);data.prekeys.push(pre.keyId)}
  await save(); // Persist private keys before advertising public material.

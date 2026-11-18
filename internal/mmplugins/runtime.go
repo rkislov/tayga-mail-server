@@ -10,9 +10,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -204,8 +206,13 @@ func (r *Runtime) Remove(id string) error {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	root, err := os.OpenRoot(r.options.Directory)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
 	r.env.RemovePlugin(id)
-	return os.RemoveAll(filepath.Join(r.options.Directory, id))
+	return root.RemoveAll(id)
 }
 func (r *Runtime) Install(reader io.Reader, force bool) (*model.Manifest, error) {
 	r.mu.Lock()
@@ -213,13 +220,19 @@ func (r *Runtime) Install(reader io.Reader, force bool) (*model.Manifest, error)
 	if r.closed {
 		return nil, ErrInvalid
 	}
-	temp, err := os.MkdirTemp(r.options.Directory, ".upload-")
+	root, err := os.OpenRoot(r.options.Directory)
 	if err != nil {
 		return nil, err
 	}
-	defer os.RemoveAll(temp)
+	defer root.Close()
+	tempDir, err := os.MkdirTemp(r.options.Directory, ".upload-")
+	if err != nil {
+		return nil, err
+	}
+	temp := filepath.Base(tempDir)
+	defer root.RemoveAll(temp)
 	extracted := filepath.Join(temp, "bundle")
-	if err = os.Mkdir(extracted, 0700); err != nil {
+	if err = root.Mkdir(extracted, 0700); err != nil {
 		return nil, err
 	}
 	gz, err := gzip.NewReader(io.LimitReader(reader, 100<<20))
@@ -243,25 +256,25 @@ func (r *Runtime) Install(reader io.Reader, force bool) (*model.Manifest, error)
 		if entries > 2500 || h.Size < 0 || total > 256<<20 || h.Size > 100<<20 {
 			return nil, ErrInvalid
 		}
-		clean := filepath.Clean(h.Name)
-		if filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) || strings.Contains(h.Name, "\\") {
+		clean, e := filepath.Localize(path.Clean(h.Name))
+		if e != nil || strings.Contains(h.Name, "\\") {
 			return nil, ErrInvalid
 		}
 		target := filepath.Join(extracted, clean)
 		switch h.Typeflag {
 		case tar.TypeDir:
-			if err = os.MkdirAll(target, 0700); err != nil {
+			if err = root.MkdirAll(target, 0700); err != nil {
 				return nil, err
 			}
 		case tar.TypeReg, tar.TypeRegA:
-			if err = os.MkdirAll(filepath.Dir(target), 0700); err != nil {
+			if err = root.MkdirAll(filepath.Dir(target), 0700); err != nil {
 				return nil, err
 			}
 			mode := os.FileMode(0600)
 			if h.Mode&0111 != 0 {
 				mode = 0700
 			}
-			f, e := os.OpenFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY, mode)
+			f, e := root.OpenFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY, mode)
 			if e != nil {
 				return nil, e
 			}
@@ -278,14 +291,14 @@ func (r *Runtime) Install(reader io.Reader, force bool) (*model.Manifest, error)
 		}
 	}
 	bundle := extracted
-	if _, err = os.Stat(filepath.Join(bundle, "plugin.json")); err != nil {
-		entries, e := os.ReadDir(extracted)
+	if _, err = root.Stat(filepath.Join(bundle, "plugin.json")); err != nil {
+		entries, e := fs.ReadDir(root.FS(), filepath.ToSlash(extracted))
 		if e != nil || len(entries) != 1 || !entries[0].IsDir() {
 			return nil, ErrInvalid
 		}
 		bundle = filepath.Join(extracted, entries[0].Name())
 	}
-	raw, err := os.ReadFile(filepath.Join(bundle, "plugin.json"))
+	raw, err := root.ReadFile(filepath.Join(bundle, "plugin.json"))
 	if err != nil {
 		return nil, ErrInvalid
 	}
@@ -296,24 +309,24 @@ func (r *Runtime) Install(reader io.Reader, force bool) (*model.Manifest, error)
 	if err = m.IsValid(); err != nil {
 		return nil, err
 	}
-	dest := filepath.Join(r.options.Directory, m.Id)
-	if _, err = os.Stat(dest); err == nil {
+	dest := m.Id
+	if _, err = root.Stat(dest); err == nil {
 		if !force || r.env.IsActive(m.Id) {
 			return nil, fmt.Errorf("plugin already installed; disable it before replacing")
 		}
 		old := filepath.Join(temp, ".replaced")
-		if err = os.Rename(dest, old); err != nil {
+		if err = root.Rename(dest, old); err != nil {
 			return nil, err
 		}
-		if err = os.Rename(bundle, dest); err != nil {
-			_ = os.Rename(old, dest)
+		if err = root.Rename(bundle, dest); err != nil {
+			_ = root.Rename(old, dest)
 			return nil, err
 		}
 	} else {
 		if !os.IsNotExist(err) {
 			return nil, err
 		}
-		if err = os.Rename(bundle, dest); err != nil {
+		if err = root.Rename(bundle, dest); err != nil {
 			return nil, err
 		}
 	}
