@@ -38,13 +38,21 @@ async function omemoLocked(fn){
 async function omemoPEP(owner,node,guard=omemoGuard()){guard();const r=await api('/api/v1/chat/omemo?owner='+encodeURIComponent(owner)+'&node='+encodeURIComponent(node),{_guard:guard});guard();return r.items?.find(i=>i.id==='current')?.xml||r.items?.[0]?.xml||''}
 async function omemoPublish(ctx,node,xml){await ctx.request('/api/v1/chat/omemo',{method:'PUT',body:JSON.stringify({node,xml})})}
 async function omemoDevices(jid,guard=omemoGuard()){const raw=await omemoPEP(jid,omemoNS+'.devicelist',guard);if(!raw)return [];const ids=omemoElements(omemoXML(raw),'device').map(e=>Number(e.getAttribute('id')));if(ids.length>100||ids.some(i=>!Number.isInteger(i)||i<1||i>2147483647))throw Error('Invalid device list');return [...new Set(ids)]}
-async function omemoBundle(jid,id,guard=omemoGuard()){const raw=await omemoPEP(jid,omemoNS+'.bundles:'+id,guard);if(!raw)throw Error('Нет ключей устройства / Missing device bundle: '+id);const doc=omemoXML(raw);const key=omemoElement(doc,'identityKey'),signed=omemoElement(doc,'signedPreKeyPublic'),sig=omemoElement(doc,'signedPreKeySignature'),prekeys=omemoElements(doc,'preKeyPublic');if(!key||!signed||!sig||!prekeys.length)throw Error('Incomplete OMEMO bundle');const pre=prekeys[crypto.getRandomValues(new Uint32Array(1))[0]%prekeys.length];return {registrationId:id,identityKey:omemoBytes(key.textContent),signedPreKey:{keyId:Number(signed.getAttribute('signedPreKeyId')),publicKey:omemoBytes(signed.textContent),signature:omemoBytes(sig.textContent)},preKey:{keyId:Number(pre.getAttribute('preKeyId')),publicKey:omemoBytes(pre.textContent)}}}
+function omemoRandomBelow(upperBound){
+ const random=new Uint32Array(1);
+ const bucketSize=Math.floor(0x100000000/upperBound);
+ let index;
+ do {
+   crypto.getRandomValues(random);
+   index=Math.floor(random[0]/bucketSize);
+ } while(index>=upperBound);
+ return index;
+}
+async function omemoBundle(jid,id,guard=omemoGuard()){const raw=await omemoPEP(jid,omemoNS+'.bundles:'+id,guard);if(!raw)throw Error('Нет ключей устройства / Missing device bundle: '+id);const doc=omemoXML(raw);const key=omemoElement(doc,'identityKey'),signed=omemoElement(doc,'signedPreKeyPublic'),sig=omemoElement(doc,'signedPreKeySignature'),prekeys=omemoElements(doc,'preKeyPublic');if(!key||!signed||!sig||!prekeys.length)throw Error('Incomplete OMEMO bundle');const pre=prekeys[omemoRandomBelow(prekeys.length)];return {registrationId:id,identityKey:omemoBytes(key.textContent),signedPreKey:{keyId:Number(signed.getAttribute('signedPreKeyId')),publicKey:omemoBytes(signed.textContent),signature:omemoBytes(sig.textContent)},preKey:{keyId:Number(pre.getAttribute('preKeyId')),publicKey:omemoBytes(pre.textContent)}}}
 async function omemoInitialize(ctx){
  const {lib,data,store,save}=ctx;
  if(!data.id){
- const random=new Uint32Array(1);
- do { crypto.getRandomValues(random); } while(random[0]===0||random[0]>2147483646);
- data.id=random[0];
+ data.id=omemoRandomBelow(2147483646)+1;
  store.put('identityKey',await lib.KeyHelper.generateIdentityKeyPair());store.put('registrationId',data.id);data.prekeys=[];data.nextPrekey=1;const signed=await lib.KeyHelper.generateSignedPreKey(store.getIdentityKeyPair(),1,omemoNS);store.storeSignedPreKey(1,signed.keyPair);data.signature=signed.signature;await save()}
  data.prekeys=data.prekeys.filter(id=>!!store.get('25519KeypreKey'+id));
  while(data.prekeys.length<100){const pre=await lib.KeyHelper.generatePreKey(data.nextPrekey++);store.storePreKey(pre.keyId,pre.keyPair);data.prekeys.push(pre.keyId)}
