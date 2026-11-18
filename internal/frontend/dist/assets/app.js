@@ -1401,7 +1401,7 @@ function applyTheme(name, {persist = true} = {}) {
 }
 
 function accountInitials(name, email='') {
-  const clean=String(name||'').replace(/<[^<>]*>/g,'').replace(/[<>"']/g,'').trim();
+  const clean=String(name||'').replace(/[<>"']/g,'').trim();
   const words=(clean&&!clean.includes('@')?clean:String(email||clean).split('@')[0]).split(/[\s._-]+/u).filter(Boolean);
   return (words.length>1 ? Array.from(words[0])[0]+Array.from(words[words.length-1])[0] : Array.from(words[0]||'?').slice(0,2).join('')).toLocaleUpperCase();
 }
@@ -9805,7 +9805,8 @@ async function omemoInitialize(ctx){
  const {lib,data,store,save}=ctx;
  if(!data.id){
  const random=new Uint32Array(1);
- do { crypto.getRandomValues(random);data.id=random[0]&0x7fffffff; } while(data.id===0||data.id===0x7fffffff);
+ do { crypto.getRandomValues(random); } while(random[0]===0||random[0]>2147483646);
+ data.id=random[0];
  store.put('identityKey',await lib.KeyHelper.generateIdentityKeyPair());store.put('registrationId',data.id);data.prekeys=[];data.nextPrekey=1;const signed=await lib.KeyHelper.generateSignedPreKey(store.getIdentityKeyPair(),1,omemoNS);store.storeSignedPreKey(1,signed.keyPair);data.signature=signed.signature;await save()}
  data.prekeys=data.prekeys.filter(id=>!!store.get('25519KeypreKey'+id));
  while(data.prekeys.length<100){const pre=await lib.KeyHelper.generatePreKey(data.nextPrekey++);store.storePreKey(pre.keyId,pre.keyPair);data.prekeys.push(pre.keyId)}
