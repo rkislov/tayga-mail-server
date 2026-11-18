@@ -62,6 +62,15 @@ const I18N = {
     cal_grid_hint: "Клик — открыть день · двойной клик — создать событие · Shift+Enter — создать с клавиатуры",
     cal_back_month: "К месяцу",
     cal_hour_add: "Двойной клик",
+    cal_inbox_title: "Входящие события",
+    cal_inbox_short: "Входящие",
+    cal_inbox_pending: "Требуют ответа",
+    cal_inbox_history: "История",
+    cal_inbox_all: "Все",
+    cal_inbox_history_empty: "В этом разделе пока нет событий",
+    cal_inbox_cancelled: "Отменено организатором",
+    cal_inbox_series: "Повторяющаяся встреча · ответ для всей серии",
+    cal_inbox_open: "Открыть событие",
     cal_inbox_hint: "Ответьте на приглашения и согласуйте предложения нового времени для ваших встреч.",
 
     config_search: "Поиск параметра…",
@@ -223,7 +232,8 @@ const I18N = {
     users_enable: "Включить",
     users_reset_pw: "Сброс пароля",
     nav_tls: "УЦ",
-    nav_xmpp: "XMPP",
+    nav_vks: "Видеоконференции", nav_mattermost: "Mattermost",
+ nav_xmpp: "XMPP",
     nav_server: "Сервер",
     nav_cos: "Классы обслуживания",
     server_lede: "Выберите раздел настроек. Все параметры сгруппированы по назначению и открываются в отдельных окнах с пояснениями. После сохранения требуется перезапуск.",
@@ -512,6 +522,7 @@ contacts_search: "Поиск контактов…",
     type_folder: "Папка",
     type_file: "Файл",
     profile_title: "Профиль",
+    mm_sessions_title: "Сессии Mattermost",
     security_title: "Безопасность",
     passkey_web_only: "Passkey используется только для входа в веб-интерфейс. Добавление ключа не меняет вход по паролю в FlowSync (ActiveSync/EWS), почтовых, календарных и XMPP-клиентах. Для TOTP действует отдельная политика администратора.",
     passkey_registered: "Passkey добавлен для входа в веб-интерфейс.",
@@ -594,6 +605,15 @@ contacts_search: "Поиск контактов…",
     cal_grid_hint: "Click to open a day · double-click to create an event · Shift+Enter to create with the keyboard",
     cal_back_month: "Back to month",
     cal_hour_add: "Double-click",
+    cal_inbox_title: "Event inbox",
+    cal_inbox_short: "Inbox",
+    cal_inbox_pending: "Needs response",
+    cal_inbox_history: "History",
+    cal_inbox_all: "All",
+    cal_inbox_history_empty: "No events in this section yet",
+    cal_inbox_cancelled: "Cancelled by organizer",
+    cal_inbox_series: "Recurring meeting · reply applies to the series",
+    cal_inbox_open: "Open event",
     cal_inbox_hint: "Respond to invitations and review proposed times for meetings you organize.",
 
     config_search: "Search parameters…",
@@ -755,7 +775,8 @@ contacts_search: "Поиск контактов…",
     users_enable: "Enable",
     users_reset_pw: "Reset pw",
     nav_tls: "CA",
-    nav_xmpp: "XMPP",
+    nav_vks: "Video meetings", nav_mattermost: "Mattermost",
+ nav_xmpp: "XMPP",
     nav_server: "Server",
     nav_cos: "CoS",
     server_lede: "Pick a settings section. Common options use simple forms; a restart is usually required after save.",
@@ -1045,6 +1066,7 @@ contacts_search: "Search contacts…",
     type_folder: "Folder",
     type_file: "File",
     profile_title: "Profile",
+    mm_sessions_title: "Mattermost sessions",
     security_title: "Security",
     passkey_web_only: "Passkeys protect web sign-in only. Adding a key does not change password sign-in in FlowSync (ActiveSync/EWS), mail, calendar or XMPP clients. TOTP follows a separate administrator policy.",
     passkey_registered: "Passkey registered for web sign-in.",
@@ -1389,7 +1411,7 @@ function updateNavUser(email, isAdmin) {
   const emailEl = $("nav-user-email");
   const roleEl = $("nav-user-role");
   if (avatar) avatar.textContent = accountInitials(state.me?.email===mail ? state.me.display_name : "", mail);
-  if (emailEl) emailEl.textContent = mail || "—";
+  if (emailEl) { emailEl.textContent = String(state.me?.email === mail ? state.me.display_name || "" : "").trim() || mail || "—"; emailEl.title = mail; }
   if (roleEl) {
     const key = isAdmin ? "role_admin" : "role_user";
     roleEl.setAttribute("data-i18n", key);
@@ -1422,7 +1444,7 @@ $("color-mode-select")?.addEventListener("change",event=>applyColorMode(event.ta
 const APPS = [
   "mail", "calendar", "contacts", "notes", "tasks", "files", "chat",
   "profile", "security", "appearance", "filters", "language", "migration",
-  "monitor", "outbound", "antispam", "maillog", "tenants", "tls", "xmpp", "server", "cos",
+  "monitor", "outbound", "antispam", "maillog", "tenants", "tls", "xmpp", "mattermost", "vks", "server", "cos",
 ];
 
 const mailState = { mailboxID: "", messageID: "", mailboxes: [], order: [], searchQ: "", offset: 0, pageSize: 50, request: 0, sort: "date", sortOrder: "desc", filter: "all" };
@@ -1441,6 +1463,8 @@ const calState = {
   dayClickTimer: null,
   attendees: [],
   invites: [],
+  inboxFilter: "pending",
+  inboxRequest: 0,
   proposals: [],
   highlightInvite: "",
   resources: [],
@@ -1484,6 +1508,7 @@ const APP_I18N = {
   tenants: "nav_tenants",
   tls: "nav_tls",
   xmpp: "nav_xmpp",
+ mattermost:"nav_mattermost", vks:"nav_vks",
   server: "nav_server",
   cos: "nav_cos",
 };
@@ -1517,7 +1542,7 @@ function showApp(name) {
   }
   $("compose-backdrop")?.classList.add("hidden");
   setNavOpen(false);
-  if (app === "profile") {loadMe();refreshSignature();refreshPasskeys();refreshMailSources();refreshTravelProfile();refreshXMPPDevices();}
+  if (app === "profile") {loadMe();refreshSignature();refreshPasskeys();refreshMailSources();refreshTravelProfile();mmProfileSessions.refresh();}
   const migrationPane=$("app-migration");
   if (migrationPane) {
     if (!migrationPane._originalParent) migrationPane._originalParent=migrationPane.parentElement;
@@ -1543,7 +1568,8 @@ function showApp(name) {
   if (app === "maillog") refreshMailLog();
   if (app === "tenants") refreshTenantNav();
   if (app === "tls") refreshTLS();
-  if (app === "xmpp") refreshXMPP();
+  if(app==="mattermost")refreshMattermostAdmin();
+  if(app==="vks")refreshVKS();
   if (app === "migration") refreshMigration();
   if (app === "server") refreshSettings();
   if (app === "cos") refreshCoS();
@@ -1581,7 +1607,7 @@ function isAuthPublicPath(path) {
 
 function clearSession() {
   if (typeof omemoCancelOperations === 'function') omemoCancelOperations();
-  if (typeof resetXMPPDevices === 'function') resetXMPPDevices();
+  mmProfileSessions.reset();
   resetBranding();
   resetTasks();
   resetComposeAttachments();
@@ -3419,16 +3445,19 @@ $("btn-sieve-save").addEventListener("click", async () => {
 });
 
 function enterAccount(tokens, email) {
+  if (typeof mmChat !== "undefined") mmChat.stop();
   if (typeof omemoCancelOperations === 'function') omemoCancelOperations();
-  if (typeof resetXMPPDevices === 'function') resetXMPPDevices();
+  mmProfileSessions.reset();
   state.tokens = tokens;
   state.email = email || state.email;
   localStorage.setItem("tayga.tokens", JSON.stringify(tokens));
   localStorage.setItem("tayga.email", state.email);
   $("acct-email").textContent = state.email;
   show("view-account");
-  loadMe();
-  showApp("mail");
+  loadMe().then(() => {
+    if (state.tokens === tokens && state.me && new URL(location.href).searchParams.get('app') === 'vks') showApp('vks');
+  });
+  showApp(/Mattermost/i.test(navigator.userAgent) ? "chat" : "mail");
   applyLang(lang);
   startNotifyLive();
 }
@@ -4513,19 +4542,25 @@ async function refreshCalInvites() {
   const list = $("cal-invite-list");
   if (!list) return;
   const userID = state.me?.id;
+  const request = calState.inboxRequest = (calState.inboxRequest || 0) + 1;
   setMsg($('cal-invite-msg'), '', '');
   try {
-    const data = await api("/api/v1/calendar/invites");
-    if (state.me?.id !== userID) return;
+    const data = await api("/api/v1/calendar/invites?all=1");
+    if (state.me?.id !== userID || request !== calState.inboxRequest) return;
     calState.invites = data.invites || [];
     calState.proposals = data.proposals || [];
     updateCalInviteBadge();
-    if (!calState.invites.length && !calState.proposals.length) {
+    const needsReply = inv => !inv.cancelled && inv.can_reply !== false && ['NEEDS-ACTION', 'TENTATIVE'].includes(String(inv.partstat || 'NEEDS-ACTION').toUpperCase());
+    const filter = calState.inboxFilter || 'pending';
+    const invites = calState.invites.filter(inv => filter === 'all' || (filter === 'pending' ? needsReply(inv) : !needsReply(inv)));
+    $('cal-inbox-filters')?.querySelectorAll('[data-inbox-filter]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.inboxFilter === filter)));
+    const visibleProposals = filter === 'history' ? [] : calState.proposals;
+    if (!invites.length && !visibleProposals.length) {
       if (!$("cal-invites-backdrop").classList.contains("hidden")) $("btn-cal-invites-close").focus();
-      list.innerHTML = `<li class="meta msg-empty">${escapeHtml(t("cal_invites_empty"))}</li>`;
+      list.innerHTML = `<li class="meta msg-empty">${escapeHtml(filter === "pending" ? t("cal_invites_empty") : t("cal_inbox_history_empty"))}</li>`;
       return;
     }
-    const proposals = calState.proposals.map(proposal => `<li class="cal-invite-item cal-proposal-item">
+    const proposals = visibleProposals.map(proposal => `<li class="cal-invite-item cal-proposal-item">
       <div class="cal-invite-main">
         <span class="meta">${escapeHtml(mailImageText('Предложение нового времени', 'New time proposal'))}</span>
         <strong>${escapeHtml(proposal.summary || '—')}</strong>
@@ -4539,30 +4574,39 @@ async function refreshCalInvites() {
           <button type="button" class="btn-secondary btn-sm" data-proposal-act="decline" data-key="${escapeHtml(proposal.key || proposal.id)}">${escapeHtml(t('cal_decline'))}</button>
       </div>
     </li>`).join('');
-    list.innerHTML = proposals + calState.invites.map((inv) => {
-      const when = inv.start ? fmtCalWhen(inv.start) : "";
+    list.innerHTML = proposals + invites.map((inv) => {
+      const when = inv.start ? fmtCalWhen(inv.start) + (inv.end ? " — " + fmtCalWhen(inv.end) : "") : "";
       const org = inv.organizer?.email || "";
       const hi = inv.id === calState.highlightInvite ? " is-active" : "";
       return `<li class="cal-invite-item${hi}" data-invite="${escapeHtml(inv.id)}">
         <div class="cal-invite-main">
           <strong>${escapeHtml(inv.summary || "—")}</strong>
-          <span class="meta">${escapeHtml(org)}${when ? " · " + escapeHtml(when) : ""}</span>
+          <span class="cal-invite-status">${escapeHtml(inv.cancelled ? t('cal_inbox_cancelled') : partstatLabel(inv.partstat))}</span>
+          <span class="meta">${escapeHtml(org)}</span>
+          <span>${escapeHtml(when)}</span>
+          ${inv.location ? `<span class="meta">${escapeHtml(inv.location)}</span>` : ''}
+          ${inv.recurring ? `<span class="meta">${escapeHtml(t('cal_inbox_series'))}</span>` : ''}
         </div>
         <div class="cal-invite-actions">
-          <button type="button" class="btn-spray btn-sm" data-inv-act="accept" data-id="${escapeHtml(inv.id)}">${escapeHtml(t("cal_accept"))}</button>
+          ${inv.calendar_object_id ? `<button type="button" class="btn-secondary btn-sm" data-inv-open="${escapeHtml(inv.calendar_object_id)}">${escapeHtml(t('cal_inbox_open'))}</button>` : ''}
+          ${inv.can_reply !== false && !inv.cancelled ? `<button type="button" class="btn-spray btn-sm" data-inv-act="accept" data-id="${escapeHtml(inv.id)}">${escapeHtml(t("cal_accept"))}</button>
           <button type="button" class="btn-secondary btn-sm" data-inv-act="tentative" data-id="${escapeHtml(inv.id)}">${escapeHtml(t("cal_tentative"))}</button>
           <button type="button" class="btn-secondary btn-sm" data-inv-act="decline" data-id="${escapeHtml(inv.id)}">${escapeHtml(t("cal_decline"))}</button>
-          <button type="button" class="btn-secondary btn-sm" data-inv-act="counter" data-id="${escapeHtml(inv.id)}">${escapeHtml(t("cal_counter"))}</button>
+          <button type="button" class="btn-secondary btn-sm" data-inv-act="counter" data-id="${escapeHtml(inv.id)}">${escapeHtml(t("cal_counter"))}</button>` : ''}
         </div>
       </li>`;
     }).join("");
     if (!$("cal-invites-backdrop").classList.contains("hidden") && document.activeElement === document.body) $("btn-cal-invites-close").focus();
+    list.querySelectorAll('[data-inv-open]').forEach(button => button.addEventListener('click', () => {
+      closeCalInviteInbox();
+      openCalEvent(button.dataset.invOpen);
+    }));
     list.querySelectorAll("[data-inv-act]").forEach((btn) => {
       btn.addEventListener("click", () => replyCalInvite(btn.dataset.id, btn.dataset.invAct));
     });
     list.querySelectorAll('[data-proposal-act]').forEach(btn => btn.addEventListener('click', () => decideCalProposal(btn.dataset.key, btn.dataset.proposalAct)));
   } catch (err) {
-    if (state.me?.id === userID) list.innerHTML = `<li class="meta msg-empty">${escapeHtml(err.message)}</li>`;
+    if (state.me?.id === userID && request === calState.inboxRequest) list.innerHTML = `<li class="meta msg-empty">${escapeHtml(err.message)}</li>`;
   }
 }
 
@@ -4806,15 +4850,16 @@ function startNewCalEvent(day = calState.selectedDay || calDayKey(new Date()), h
 
 let calInboxFocus = null;
 function updateCalInviteBadge() {
-  const count = calState.invites.length + (calState.proposals?.length || 0);
+  const count = calState.invites.filter(inv => !inv.cancelled && inv.can_reply !== false && ["NEEDS-ACTION", "TENTATIVE"].includes(String(inv.partstat || "NEEDS-ACTION").toUpperCase())).length + (calState.proposals?.length || 0);
   $("cal-invite-count").textContent = String(count);
   $("cal-invite-count").classList.toggle("hidden", count === 0);
-  const label = t("cal_invites") + (count ? ` · ${count}` : "");
+  const label = t("cal_inbox_title") + (count ? ` · ${count}` : "");
   $("btn-cal-invites").setAttribute("aria-label", label);
   $("btn-cal-invites").title = label;
 }
 async function openCalInviteInbox() {
   calInboxFocus = document.activeElement;
+  if (calState.highlightInvite) calState.inboxFilter = "all";
   $("cal-invites-backdrop").classList.remove("hidden");
   $("view-account").inert = true;
   $("btn-cal-invites-close").focus();
@@ -4826,6 +4871,13 @@ function closeCalInviteInbox() {
   $("view-account").inert = false;
   calInboxFocus?.focus();
 }
+$('cal-inbox-filters')?.addEventListener('click', event => {
+  const button = event.target.closest('[data-inbox-filter]');
+  if (!button || calInviteReplyBusy) return;
+  calState.inboxFilter = button.dataset.inboxFilter;
+  refreshCalInvites();
+});
+$('btn-cal-inbox-refresh')?.addEventListener('click', () => refreshCalInvites());
 $("btn-cal-invites")?.addEventListener("click", openCalInviteInbox);
 $("btn-cal-invites-close")?.addEventListener("click", closeCalInviteInbox);
 $("cal-invites-backdrop")?.addEventListener("click", event => { if (event.target === $("cal-invites-backdrop")) closeCalInviteInbox(); });
@@ -5517,6 +5569,7 @@ function chatBare(jid) {
 }
 
 function stopChatLive() {
+  if (typeof mmChat !== "undefined") mmChat.stop();
   chatState.historyRevision++;
   chatState.history = null;
   if (chatState.es) {
@@ -5525,51 +5578,7 @@ function stopChatLive() {
   }
 }
 
-function startChatLive() {
-  stopChatLive();
-  const tok = state.tokens?.access_token;
-  if (!tok || typeof EventSource === "undefined") return;
-  const es = new EventSource("/api/v1/chat/events?access_token=" + encodeURIComponent(tok));
-  chatState.es = es;
-  // Events missed while disconnected are not replayed: reload consent state.
-  es.addEventListener("open", async () => {
-    try {
-      const data = await api("/api/v1/chat/roster");
-      if (chatState.es !== es) return;
-      const previous=chatState.roster;
-      chatState.roster = data.roster || [];
-      clearRemovedRoom(previous);
-      chatState.me = data.me || state.email;
-      chatState.presence = data.presence || 'online';
-      renderChatRoster();
-    } catch (err) {
-      if (chatState.es === es) setMsg($("chat-roster-msg"), err.message, "err");
-    }
-  });
-  es.addEventListener("message", (ev) => {
-    if (chatState.es !== es) return;
-    let data;
-    try { data = JSON.parse(ev.data); } catch { return; }
-    if(data.type==='presence'){const contact=chatState.roster.find(r=>chatBare(r.jid)===chatBare(data.from));if(contact){contact.presence=data.body;renderChatRoster()}return}
-    if(data.type==='roster'){refreshChat();return}
-    if (data.type !== "message" && !data.body) return;
-    const from = chatBare(data.from);
-    const to = chatBare(data.to);
-    const me = chatBare(chatState.me || state.email);
-    const peer = data.room || (from === me ? to : from);
-    if (!peer) return;
-    if (peer !== me && !chatState.roster.some((r) => chatBare(r.jid) === peer)) {
-      chatState.roster.unshift({ jid: peer, name: "", subscription: "none", group: !!data.room });
-      if(data.room) refreshChat();
-      renderChatRoster();
-    }
-    if(from!==me) showToast({id:data.id,kind:"chat",title:chatState.roster.find(r=>r.jid===peer)?.name||from,body:data.encrypted?"OMEMO":data.body||data.attachment?.name||"",href:"chat?peer="+encodeURIComponent(peer)});
-    if (chatBare(chatState.peer) === peer) {
-      appendChatBubble(data);
-      scrollChatBottom();
-    }
-  });
-}
+function startChatLive() { mmChat.start(); }
 
 function appendChatBubble(m) {
   const box = $("chat-messages");
@@ -5678,21 +5687,7 @@ function clearRemovedRoom(previousRoster) {
   $('chat-messages')?.replaceChildren();$('chat-thread')?.classList.add('hidden');$('chat-empty')?.classList.remove('hidden');
 }
 
-async function refreshChat() {
-  const guard=omemoGuard();
-  try {
-    const data = await api("/api/v1/chat/roster",{_guard:guard});guard();
-    const previous=chatState.roster;
-    chatState.roster = data.roster || [];
-    chatState.me = data.me || state.email;
-    chatState.presence = data.presence || 'online';
-    clearRemovedRoom(previous);renderChatRoster();
-    if (chatState.peer) await openChatPeer(chatState.peer, true);
-  } catch (err) {
-    try{guard()}catch{return}
-    setMsg($("chat-roster-msg"), err.message, "err");
-  }
-}
+async function refreshChat() { return mmChat.refresh(); }
 
 function chatHistoryButton(history) {
   const button=history.button;
@@ -5728,57 +5723,8 @@ async function loadChatHistory(history) {
   }
 }
 
-async function openChatPeer(jid, keepPane) {
-  const peer=chatBare(jid),revision=++chatState.historyRevision;
-  chatState.peer=peer;chatState.messages=[];
-  renderChatRoster();
-  $('chat-empty')?.classList.add('hidden');$('chat-thread')?.classList.remove('hidden');
-  const contact=chatState.roster.find(r=>chatBare(r.jid)===peer);
-  if($('chat-peer'))$('chat-peer').textContent=contact?.self?t('chat_self_notes'):contact?.name||peer;
-  const box=$('chat-messages');if(!box)return;box.replaceChildren();
-  const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm chat-history-older';
-  const history={peer,revision,guard:omemoGuard(),group:!!contact?.group,before:'',complete:false,loaded:false,loading:false,button};
-  chatState.history=history;button.onclick=()=>loadChatHistory(history);box.prepend(button);
-  if(!keepPane)setMobilePane('read');
-  await loadChatHistory(history);
-}
+async function openChatPeer(jid, keepPane) { return mmChat.openPeer(jid); }
 
-$("btn-chat-new")?.addEventListener("click", () => {
-  $("chat-backdrop")?.classList.remove("hidden");
-  $("chat-new-jid")?.focus();
-});
-$("btn-chat-cancel")?.addEventListener("click", () => $("chat-backdrop")?.classList.add("hidden"));
-$("btn-chat-start")?.addEventListener("click", async () => {
-  const jid = ($("chat-new-jid")?.value || "").trim();
-  const name = ($("chat-new-name")?.value || "").trim();
-  if (!jid) return;
-  try {
-    await api("/api/v1/chat/roster", { method: "POST", body: JSON.stringify({ jid, name }) });
-    $("chat-backdrop")?.classList.add("hidden");
-    await refreshChat();
-    await openChatPeer(jid);
-  } catch (err) {
-    setMsg($("chat-roster-msg"), err.message, "err");
-  }
-});
-$("form-chat-send")?.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const input=$("chat-body"),draft=input?.value||'',body=draft.trim(),peer=chatState.peer;
-  if (!body || !peer || chatState.sending) return;
-  const guard=omemoGuard();
-  chatState.sending=true;
-  const button=e.currentTarget.querySelector('[type=submit]');if(button)button.disabled=true;
-  try {
-    const encryptedMode=await omemoEnabled(peer);guard();
-    const ev=encryptedMode?await omemoSend(peer,body):await api('/api/v1/chat/send',{method:'POST',body:JSON.stringify({to:peer,body}),_guard:guard});
-    guard();
-    if(chatBare(chatState.peer)===chatBare(peer)){
-      if(input && input.value===draft)input.value='';
-      appendChatBubble(ev);scrollChatBottom();
-    }
-  } catch(err){setMsg($('chat-msg'),err.message,'err')}
-  finally {chatState.sending=false;if(button)button.disabled=false;}
-});
 
 function filesGoUp() {
   if (!filesState.path||filesState.listTarget||(filesState.ownerID&&filesState.path===filesState.sharedRoot)) return;
@@ -6871,69 +6817,6 @@ for (const action of ['assign','revoke','accept','decline']) $('task-'+action)?.
 $('task-dialog')?.addEventListener('cancel',e=>{if(taskAssignmentBusy)e.preventDefault();});
 $('task-dialog')?.addEventListener('close',()=>{clearTimeout(taskSearchTimer);++taskCandidateRequest;++taskHistoryRequest;});
 
-async function chatSubscription(jid,action){try{await api('/api/v1/chat/subscription',{method:'POST',body:JSON.stringify({jid,action})});await refreshChat()}catch(e){setMsg($('chat-roster-msg'),e.message,'err')}}
-$('chat-presence-toggle')?.addEventListener('click', () => setChatPresenceMenu($('chat-presence-menu').hidden));
-$('chat-presence-menu')?.addEventListener('click', async e => {
-  const option = e.target.closest('[data-presence-choice]');
-  if (!option || chatState.presenceSaving) return;
-  const presence = option.dataset.presenceChoice;
-  setChatPresenceMenu(false, true);
-  if (presence === chatState.presence) return;
-  chatState.presenceSaving = true;
-  renderChatSelfPresence();
-  try {
-    await api('/api/v1/chat/presence', {method:'POST', body:JSON.stringify({state:presence})});
-    chatState.presence = presence;
-    setMsg($('chat-roster-msg'), '');
-  } catch (err) { setMsg($('chat-roster-msg'), err.message, 'err'); }
-  finally { chatState.presenceSaving = false; renderChatSelfPresence(); $('chat-presence-toggle').focus(); }
-});
-$('chat-self')?.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { setChatPresenceMenu(false, true); return; }
-  if (e.key === 'Tab') { setChatPresenceMenu(false); return; }
-  if (!['ArrowDown','ArrowUp','Home','End'].includes(e.key)) return;
-  e.preventDefault();
-  const menu = $('chat-presence-menu');
-  if (menu.hidden) { setChatPresenceMenu(true); return; }
-  const options = [...menu.querySelectorAll('[data-presence-choice]')];
-  const current = options.indexOf(document.activeElement);
-  const next = e.key==='Home'?0:e.key==='End'?options.length-1:(current+(e.key==='ArrowDown'?1:-1)+options.length)%options.length;
-  options[next]?.focus();
-});
-document.addEventListener('pointerdown', e => { if (!e.target.closest('#chat-self')) setChatPresenceMenu(false); });
-$('chat-request-presence')?.addEventListener('click',()=>{if(chatState.peer)chatSubscription(chatState.peer,'request')});
-
-$('chat-attach')?.addEventListener('click',()=>{
- if(!chatState.peer||chatState.sending)return;
- setMsg($('chat-msg'),mailImageText('Вложение доступно 7 дней; файл сохранится в папке chat.','Attachment available for 7 days; file stays in chat folder.'));
- $('chat-file').click();
-});
-$('chat-file')?.addEventListener('change',async e=>{
- const file=e.target.files?.[0],peer=chatState.peer;e.target.value='';if(!file||!peer||chatState.sending)return;
- if(file.size>WEB_UPLOAD_BYTES){setMsg($('chat-msg'),mailImageText('Максимум 10 ГиБ','Maximum 10 GiB'),'err');return}
- const guard=omemoGuard();
- chatState.sending=true;$('chat-attach').disabled=true;
- const name=file.name.replace(/[\/\\\r\n]/g,'_'),path='chat/'+crypto.randomUUID()+'/'+name;let share;
- try {
-  const encryptedMode=await omemoEnabled(peer);guard();
-  const encryptedFile=encryptedMode?await omemoEncryptFile(file):null;
-  guard();
-  const upload=encryptedFile?.blob||file;
-  const linkMode=!encryptedMode&&$('chat-file-mode')?.value==='link';
-  const slot=linkMode?null:await api('/api/v1/chat/upload',{method:'POST',body:JSON.stringify({name,size:upload.size,type:encryptedMode?"application/octet-stream":file.type}),_guard:guard});
-  guard();
-  await new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest();xhr.open('PUT',slot?slot.put:'/api/v1/files/content?path='+encodeURIComponent(path));if(!slot)xhr.setRequestHeader('Authorization','Bearer '+state.tokens.access_token);xhr.timeout=0;xhr.upload.onprogress=ev=>{if(ev.lengthComputable)setMsg($('chat-msg'),Math.round(ev.loaded/ev.total*100)+'%')};xhr.onerror=xhr.ontimeout=()=>reject(new Error(mailImageText('Ошибка загрузки','Upload failed')));xhr.onload=()=>xhr.status>=200&&xhr.status<300?resolve():reject(new Error(mailImageText('Не удалось загрузить файл','Unable to upload file')));xhr.send(upload)});
-  guard();
-  share=slot?{url:slot.get}:await api('/api/v1/files/shares',{method:'POST',body:JSON.stringify({path,rights:'read',ttl_hours:168}),_guard:guard});
-  guard();
-  const ev=encryptedMode?await omemoSend(peer,omemoFileURI(share.url,encryptedFile)):await api('/api/v1/chat/send',{method:'POST',body:JSON.stringify({to:peer,body:linkMode?name+'\n'+share.url:share.url}),_guard:guard});
-  guard();
-  if(chatBare(chatState.peer)===chatBare(peer)){appendChatBubble(ev);scrollChatBottom()}
-  setMsg($('chat-msg'),mailImageText('Файл отправлен. Ссылка действует 7 дней.','File sent. Link valid for 7 days.'),'ok');
- }catch(err){setMsg($('chat-msg'),err.message,'err')}
- finally{chatState.sending=false;$('chat-attach').disabled=false}
-});
-
 function directoryMatches(tenant,domain,query) {
  return (String(tenant||'')+' '+String(domain||'')).toLocaleLowerCase().includes(String(query||'').trim().toLocaleLowerCase());
 }
@@ -6955,7 +6838,7 @@ function addChatInlinePreview(container,attachment,button) {
 }
 /* Typed configuration forms follow the schema exposed by the server. */
 const CONFIG_GROUPS = [
-  { title: ["Почта и клиенты", "Mail and clients"], icon: "mail", sections: ["smtp", "imap", "pop3", "managesieve", "flowsync", "xmpp"] },
+  { title: ["Почта и клиенты", "Mail and clients"], icon: "mail", sections: ["smtp", "imap", "pop3", "managesieve", "flowsync", "mattermost"] },
   { title: ["Защита почты", "Mail protection"], icon: "lock", sections: ["spam", "scan", "dkim_verify", "spf", "iprev", "helo", "greylist", "dmarc", "arc"] },
   { title: ["Вход и пользователи", "Identity and users"], icon: "user", sections: ["ldap", "oidc", "mfa", "seed"] },
   { title: ["Хранение и доступность", "Storage and availability"], icon: "files", sections: ["storage", "mailstore", "files", "ha"] },
@@ -6968,7 +6851,7 @@ const CONFIG_SECTIONS = {
   pop3: ["POP3", "Получение писем клиентами POP3."],
   managesieve: ["ManageSieve", "Подключение клиентов для управления почтовыми фильтрами."],
   flowsync: ["FlowSync", "Синхронизация клиентов ActiveSync и EWS."],
-  xmpp: ["XMPP и компоненты", "Чат, TLS-соединения, внешние боты и мосты."],
+  mattermost:["Mattermost","Сервер, тенанты, домены и плагины."],
   spam: ["Антиспам", "Rspamd, пороги оценки и обработка подозрительных писем."],
   scan: ["Антивирус", "ClamAV, ICAP или внешняя команда проверки."],
   dkim_verify: ["Проверка DKIM", "Проверка подписей входящей почты."],
@@ -7003,7 +6886,7 @@ function renderAdminCatalog() {
   const schema = settingsState.all.schema;
   let count = 0;
   const known = CONFIG_GROUPS.flatMap(group => group.sections);
-  const extra = Object.keys(schema).filter(key => !known.includes(key));
+  const extra = Object.keys(schema).filter(key => key!=="xmpp"&&!known.includes(key));
   const groups = [...CONFIG_GROUPS, ...(extra.length ? [{title:["Другие настройки", "Other settings"],icon:"server",sections:extra}] : [])];
   host.innerHTML = groups.map(group => {
     const sections = group.sections.filter(section => schema[section] && `${section} ${configLabel(section)} ${configDescription(section)} ${JSON.stringify(schema[section])}`.toLowerCase().includes(query));
@@ -7012,7 +6895,7 @@ function renderAdminCatalog() {
     return `<section class="config-group"><h4><span class="nav-ico" data-ico="${group.icon}" aria-hidden="true"></span>${escapeHtml(configText(...group.title))}</h4><div class="config-section-grid">${sections.map(section => `<button type="button" class="config-section-card" data-config-open="${section}"><span><strong>${escapeHtml(configLabel(section))}</strong><span class="meta">${escapeHtml(configDescription(section))}</span></span><span class="config-card-foot"><span>${configFieldCount(schema[section])} ${escapeHtml(t("config_parameters"))}</span><span>${escapeHtml(schema[section].read_only ? t("config_readonly") : t("server_open"))} →</span></span></button>`).join("")}</div></section>`;
   }).join("") || `<p class="meta">${escapeHtml(t("config_no_results"))}</p>`;
   $("settings-summary").textContent = `${count} ${t("config_sections")} · ${t("config_help_every_field")}`;
-  host.querySelectorAll("[data-config-open]").forEach(button => button.addEventListener("click", () => openAdminConfig(button.dataset.configOpen)));
+  host.querySelectorAll("[data-config-open]").forEach(button => button.addEventListener("click", () => button.dataset.configOpen==="mattermost"?showApp("mattermost"):openAdminConfig(button.dataset.configOpen)));
 }
 function configDefault(field) {
   if (field.kind === "object") return Object.fromEntries(field.fields.map(child => [child.key, configDefault(child)]));
@@ -7170,6 +7053,638 @@ $("config-dialog")?.addEventListener("submit", async event => {
   } catch (error) { setMsg($("config-msg"), error.message, "err"); }
   finally { configEditor.busy = false; $("config-fields").inert = false; $("config-save").disabled = false; }
 });
+/* Scoped Mattermost administration; all changes retain their selected scope. */
+const mmAdmin = { scopes: [], selected: null, value: null, epoch: 0, account: "" };
+function mmQuery(scope) { const query = new URLSearchParams(); if (scope.tenant_id) query.set('tenant_id', scope.tenant_id); if (scope.domain_id) query.set('domain_id', scope.domain_id); return query.size ? '?' + query : ''; }
+function mmBool(value) { return value === undefined || value === null ? 'inherit' : value ? 'on' : 'off'; }
+function mmCurrentGuard(epoch, account) { return () => { if (mmAdmin.epoch !== epoch || state.me?.id !== account) throw new Error('Область настроек изменилась'); }; }
+async function refreshMattermostAdmin() {
+  const epoch = ++mmAdmin.epoch, account = state.me?.id; const guard = mmCurrentGuard(epoch, account);
+  setMsg($('mm-msg'), '');
+  try {
+    const result = await api('/api/v1/admin/mattermost/scopes', {_guard: guard});
+    mmAdmin.scopes = result.scopes || [];
+    const previous = JSON.stringify(mmAdmin.selected);
+    $('mm-scope').innerHTML = mmAdmin.scopes.map((item, index) => `<option value="${index}" ${JSON.stringify(item.scope) === previous ? 'selected' : ''}>${escapeHtml(item.label)}</option>`).join('');
+    if (!mmAdmin.scopes.length) { setMsg($('mm-msg'), 'Нет доступных областей настроек', 'err'); return; }
+    mmAdmin.account = account;
+    await loadMattermostScope();
+  } catch (error) { if (mmAdmin.epoch === epoch) setMsg($('mm-msg'), error.message, 'err'); }
+}
+async function loadMattermostScope() {
+  const item = mmAdmin.scopes[Number($('mm-scope').value)]; if (!item) return;
+  mmAdmin.selected = {...item.scope}; const epoch = ++mmAdmin.epoch, guard = mmCurrentGuard(epoch, state.me?.id);
+  $('mm-policy-form').inert = true; $('mm-plugin-upload').disabled = true;
+  try {
+    const value = await api('/api/v1/admin/mattermost' + mmQuery(item.scope), {_guard: guard});
+    mmAdmin.value = value; renderMattermostScope(value); setMsg($('mm-msg'), '');
+  } catch (error) { if (mmAdmin.epoch === epoch) setMsg($('mm-msg'), error.message, 'err'); }
+  finally { if (mmAdmin.epoch === epoch) $('mm-policy-form').inert = false; }
+}
+function renderMattermostScope(value) {
+  const own = value.overrides || {}, effective = value.effective || {};
+  $('mm-enabled').value = mmBool(own.enabled); $('mm-plugins-enabled').value = mmBool(own.plugins_enabled);
+  $('mm-name-inherit').checked = own.site_name === undefined;
+  $('mm-name').value = own.site_name ?? effective.site_name ?? ''; $('mm-name').disabled = $('mm-name-inherit').checked;
+  $('mm-plugin-config').value = JSON.stringify(own.plugins || {}, null, 2);
+  $('mm-host-settings').classList.toggle('hidden', !value.global_admin);
+  $('mm-plugin-upload').disabled = !value.global_admin || !value.plugin_host_enabled;
+  $('mm-effective').textContent = `Итог: ${effective.site_name || 'Mattermost'} · доступ ${effective.enabled ? 'включён' : 'выключен'} · плагины ${effective.plugins_enabled ? 'включены' : 'выключены'}` + (!value.host_enabled ? '. Серверный API выключен — включите его в настройках запуска и перезапустите службу.' : !value.plugin_host_enabled ? '. Хост плагинов выключен — для запуска нужен перезапуск с включённым хостом.' : '');
+  $('mm-push-enabled').value = mmBool(own.push?.enabled);
+  $('mm-push-inherit').checked = own.push?.proxy_url === undefined;
+  $('mm-push-url').value = own.push?.proxy_url ?? effective.push?.proxy_url ?? '';
+  $('mm-push-url').disabled = $('mm-push-inherit').checked;
+  $('mm-push-status').textContent = effective.push?.enabled ? 'Автоматическая отправка включена. Без текста сообщений.' : effective.push?.prepared ? 'TPNS подготовлен. Автоматическая отправка выключена.' : 'Тестовый шлюз не подготовлен.';
+  const email = own.email || {};
+  for (const [field,id] of [['incoming_address','mm-email-incoming'],['incoming_channel_id','mm-email-channel'],['outgoing_from','mm-email-from']]) {
+    $(id).value = email[field] || ''; $(id).disabled = !value.scope?.domain_id;
+  }
+  $('mm-email-prefix-inherit').checked = email.subject_prefix === undefined;
+  $('mm-email-prefix').value = email.subject_prefix ?? effective.email?.subject_prefix ?? '[TMS]';
+  $('mm-email-prefix').disabled = $('mm-email-prefix-inherit').checked;
+  const catalog = value.catalog || {}, manifests = [...(catalog.active || []), ...(catalog.inactive || [])];
+  const seen = new Set(); const items = manifests.filter(item => { if (seen.has(item.id)) return false; seen.add(item.id); return true; });
+  $('mm-plugin-list').innerHTML = items.map(item => {
+    const enabled = effective.plugins?.[item.id]?.enabled === true;
+    return `<div class="config-collection-item"><strong>${escapeHtml(item.name || item.id)}</strong><p class="meta">${escapeHtml(item.id)} · ${escapeHtml(item.version || '')}</p><div class="actions"><button type="button" class="btn-secondary" data-mm-plugin="${escapeHtml(item.id)}" data-mm-action="${enabled ? 'disable' : 'enable'}" ${!value.scope?.domain_id || !value.plugin_host_enabled || !effective.plugins_enabled ? 'disabled' : ''}>${enabled ? 'Отключить в домене' : 'Запустить в домене'}</button></div></div>`;
+  }).join('') || '<p class="meta">Пакеты ещё не установлены. Наличие пакета не подтверждает совместимость всех его функций.</p>';
+  $('mm-plugin-list').querySelectorAll('[data-mm-plugin]').forEach(button => button.addEventListener('click', async () => {
+    const scope = {...mmAdmin.selected}, epoch = mmAdmin.epoch, guard = mmCurrentGuard(epoch, state.me?.id); button.disabled = true;
+    try { await api('/api/v4/plugins/' + encodeURIComponent(button.dataset.mmPlugin) + '/' + button.dataset.mmAction + mmQuery(scope), {method: 'POST', body: '{}', _guard: guard}); guard(); await loadMattermostScope(); }
+    catch (error) { if (mmAdmin.epoch === epoch) { setMsg($('mm-msg'), error.data?.message || error.message, 'err'); button.disabled = false; } }
+  }));
+}
+$('mm-push-inherit')?.addEventListener('change', () => { $('mm-push-url').disabled = $('mm-push-inherit').checked; });
+$('mm-scope')?.addEventListener('change', loadMattermostScope);
+$('mm-refresh')?.addEventListener('click', refreshMattermostAdmin);
+$('mm-email-prefix-inherit')?.addEventListener('change', () => { $('mm-email-prefix').disabled = $('mm-email-prefix-inherit').checked; });
+$('mm-name-inherit')?.addEventListener('change', () => { $('mm-name').disabled = $('mm-name-inherit').checked; });
+$('mm-host-settings')?.addEventListener('click', async () => {
+  try { settingsState.all = await api('/api/v1/admin/settings'); await openAdminConfig('mattermost'); }
+  catch (error) { setMsg($('mm-msg'), error.message, 'err'); }
+});
+async function saveMattermostPolicy(value) {
+  const scope = {...mmAdmin.selected}, epoch = mmAdmin.epoch, guard = mmCurrentGuard(epoch, state.me?.id);
+  $('mm-policy-form').inert = true;
+  try { const result = await api('/api/v1/admin/mattermost' + mmQuery(scope), {method: 'PUT', body: JSON.stringify(value), _guard: guard}); mmAdmin.value = result; renderMattermostScope(result); setMsg($('mm-msg'), 'Настройки выбранной области сохранены', 'ok'); }
+  catch (error) { if (mmAdmin.epoch === epoch) setMsg($('mm-msg'), error.message, 'err'); }
+  finally { if (mmAdmin.epoch === epoch) $('mm-policy-form').inert = false; }
+}
+$('mm-policy-form')?.addEventListener('submit', async event => {
+  event.preventDefault(); const value = {};
+  const email = {};
+  if (mmAdmin.selected?.domain_id) {
+    for (const [field,id] of [['incoming_address','mm-email-incoming'],['incoming_channel_id','mm-email-channel'],['outgoing_from','mm-email-from']]) email[field] = $(id).value.trim();
+  }
+  if (!$('mm-email-prefix-inherit').checked) email.subject_prefix = $('mm-email-prefix').value;
+  value.email = email;
+  value.push = {};
+  if (!$('mm-push-inherit').checked) value.push.proxy_url = $('mm-push-url').value;
+  if ($('mm-push-enabled').value !== 'inherit') value.push.enabled = $('mm-push-enabled').value === 'on';
+  for (const [field, id] of [['enabled','mm-enabled'], ['plugins_enabled','mm-plugins-enabled']]) if ($(id).value !== 'inherit') value[field] = $(id).value === 'on';
+  if (!$('mm-name-inherit').checked) { value.site_name = $('mm-name').value.trim(); if (!value.site_name) { setMsg($('mm-msg'), 'Укажите название или включите наследование', 'err'); return; } }
+  try { value.plugins = JSON.parse($('mm-plugin-config').value || '{}'); if (!value.plugins || Array.isArray(value.plugins) || typeof value.plugins !== 'object') throw new Error(); }
+  catch { setMsg($('mm-msg'), 'Параметры плагинов должны быть JSON-объектом', 'err'); return; }
+  await saveMattermostPolicy(value);
+});
+$('mm-reset')?.addEventListener('click', async () => { if (await askConfirm('Удалить переопределения только выбранной области и наследовать настройки родителя?')) await saveMattermostPolicy({}); });
+$('mm-plugin-upload')?.addEventListener('change', async event => {
+  const input = event.target, file = input.files?.[0]; if (!file) return;
+  const epoch = mmAdmin.epoch, guard = mmCurrentGuard(epoch, state.me?.id), scope = {...mmAdmin.selected};
+  input.disabled = true;
+  try {
+    if (file.size > 100 * 1024 * 1024) throw new Error('Пакет превышает 100 МиБ');
+    await api('/api/v1/me', {_guard: guard}); guard(); const form = new FormData(); form.append('plugin', file);
+    const response = await fetch('/api/v4/plugins' + mmQuery(scope), {method: 'POST', headers: {Authorization: 'Bearer ' + state.tokens.access_token}, body: form});
+    const result = await response.json(); guard(); if (!response.ok) throw new Error(result.message || 'Не удалось установить пакет');
+    await loadMattermostScope(); setMsg($('mm-msg'), 'Пакет установлен. Настройте и запустите его в нужном домене.', 'ok');
+  } catch (error) { if (mmAdmin.epoch === epoch) setMsg($('mm-msg'), error.message, 'err'); }
+  finally { input.value = ''; if (mmAdmin.epoch === epoch) input.disabled = !mmAdmin.value?.global_admin; }
+});
+/* Shared TMS/Mattermost chat. No XMPP requests or tokens in WebSocket URLs. */
+const mmChat = (() => {
+  let generation = 0, owner = '', boot = null, socket = null, reconnect = null, heartbeat = null, poll = null;
+  let me = null, team = null, channels = [], users = new Map(), memberships = new Map();
+  let selected = '', posts = new Map(), page = 0, complete = false, historyBusy = false, historyRevision = 0;
+  let sending = false, reply = '', pending = null, peopleMode = 'direct', peopleChannel = '', searchRevision = 0, searchTimer = null;
+  let refreshing = null, viewBusy = false;
+  let browseRevision = 0, browsePage = 0, browseTerm = '';
+  const el = id => $('mm-chat-' + id);
+  const label = user => user?.nickname?.trim() || [user?.first_name, user?.last_name].filter(Boolean).join(' ').trim() || user?.email || user?.username || 'Пользователь';
+  const current = () => owner && owner === state.email && !!state.tokens?.access_token;
+  const guard = () => { const version = generation; return () => { if (!current() || generation !== version) throw Error('Учётная запись изменилась'); }; };
+  async function request(path, options = {}) {
+    const check = guard(); check();
+    const result = await api('/api/v4' + path, {...options, _guard: check}); check(); return result;
+  }
+  const errorText = error => error.data?.message || error.message;
+  const visible = () => !document.hidden && !el('thread').closest('#app-chat').classList.contains('hidden') && document.hasFocus();
+  function connection(text) { el('connection').textContent = text; }
+  function stop() {
+    generation++; historyRevision++; searchRevision++; browseRevision++;
+    el('browse-dialog')?.close(); el('browse-results')?.replaceChildren();
+    clearTimeout(reconnect); clearTimeout(searchTimer); clearInterval(heartbeat); clearInterval(poll);
+    reconnect = heartbeat = poll = null;
+    const old = socket; socket = null; if (old) { old.onclose = null; old.close(); }
+    owner = ''; boot = refreshing = null; me = team = null; channels = []; users = new Map(); memberships = new Map();
+    selected = reply = ''; posts = new Map(); pending = null; sending = historyBusy = viewBusy = false;
+    el('posts').replaceChildren(); el('channels').replaceChildren(); el('people-list').replaceChildren(); el('body').value = ''; el('filter').value = ''; el('search').value = '';
+    el('people').close(); el('create-dialog').close(); el('thread').classList.add('hidden'); el('empty').classList.remove('hidden');
+    el('reply').classList.add('hidden'); el('self').textContent = ''; el('send').querySelector('[type=submit]').disabled = false;
+  }
+  async function ensure() {
+    if (!state.tokens?.access_token || !state.email) return false;
+    if (owner && owner !== state.email) stop();
+    if (boot) return boot;
+    owner = state.email; const version = generation;
+    const pendingBoot = (async () => {
+      connection('Подключение…');
+      try {
+        me = await request('/users/me'); users.set(me.id, me);
+        const teams = await request('/users/me/teams'); team = teams[0];
+        if (!team) throw Error('Нет доступной команды');
+        el('self').textContent = label(me);
+        await syncChannels(); connect();
+        poll = setInterval(() => { if (current()) syncChannels().catch(report); }, 30000);
+        return true;
+      } catch (error) {
+        if (generation === version && current()) { connection('Нет соединения'); report(error); boot = null; }
+        return false;
+      }
+    })();
+    boot = pendingBoot;
+    return pendingBoot;
+  }
+  function report(error) { if (current()) setMsg(el('error'), errorText(error), 'err'); }
+  function start() { void ensure(); }
+  async function getUsers(ids) {
+    const missing = [...new Set(ids.filter(id => id && !users.has(id)))];
+    for (let offset = 0; offset < missing.length; offset += 200) {
+      const list = await request('/users/ids', {method:'POST', body:JSON.stringify(missing.slice(offset, offset + 200))});
+      list.forEach(user => users.set(user.id, user));
+    }
+  }
+  async function syncChannels() {
+    if (refreshing) return refreshing;
+    const version = generation, check = guard();
+    const task = (async () => {
+      const [list, members] = await Promise.all([
+        request('/users/me/teams/' + team.id + '/channels'),
+        request('/users/me/teams/' + team.id + '/channels/members')
+      ]);
+      await getUsers(list.filter(channel => channel.type === 'D').flatMap(channel => channel.name.split('__')));
+      check(); channels = list; memberships = new Map(members.map(member => [member.channel_id, member]));
+      if (selected && !channels.some(channel => channel.id === selected)) { selected = ''; posts.clear(); el('posts').replaceChildren(); el('thread').classList.add('hidden'); el('empty').classList.remove('hidden'); }
+      renderChannels(); setMsg(el('error'), '');
+    })().finally(() => { if (generation === version) refreshing = null; });
+    refreshing = task; return task;
+  }
+  function channelName(channel) {
+    if (channel.type !== 'D') return channel.display_name || channel.name;
+    const other = channel.name.split('__').find(id => id !== me?.id) || me?.id;
+    return other === me?.id ? 'Избранное (сообщения себе)' : label(users.get(other));
+  }
+  function renderChannels() {
+    const query = el('filter').value.trim().toLocaleLowerCase(), container = el('channels');
+    container.replaceChildren();
+    for (const [type, title] of [['channels','Каналы'],['direct','Личные сообщения']]) {
+      const list = channels.filter(channel => (channel.type === 'D') === (type === 'direct') && channelName(channel).toLocaleLowerCase().includes(query));
+      const heading = document.createElement('h3'); heading.className = 'meta mm-chat-group'; heading.textContent = title; container.append(heading);
+      list.sort((a,b) => type === 'direct' ? b.last_post_at - a.last_post_at || channelName(a).localeCompare(channelName(b)) : channelName(a).localeCompare(channelName(b)));
+      for (const channel of list) {
+        const member = memberships.get(channel.id), unread = Math.max(0, channel.total_msg_count - (member?.msg_count || 0));
+        const button = document.createElement('button'); button.type = 'button'; button.className = 'msg-item mm-chat-channel'; button.classList.toggle('is-active', channel.id === selected);
+        if (channel.id === selected) button.setAttribute('aria-current','true');
+        const name = document.createElement('span'); name.textContent = (channel.type === 'D' ? '' : channel.type === 'P' ? '🔒 ' : '# ') + channelName(channel); button.append(name);
+        if (unread) { const badge = document.createElement('span'); badge.className = 'mm-chat-unread'; badge.textContent = String(unread); badge.setAttribute('aria-label',unread + ' непрочитанных'); button.append(badge); }
+        button.onclick = () => open(channel.id).catch(report); container.append(button);
+      }
+      if (!list.length) { const hint = document.createElement('p'); hint.className = 'meta'; hint.textContent = type === 'direct' ? 'Начните новый диалог' : 'Нет каналов'; container.append(hint); }
+    }
+    const channel = channels.find(item => item.id === selected);
+    if (channel) el('title').textContent = channelName(channel);
+  }
+  async function refresh() {
+    if (!await ensure()) return;
+    try { await syncChannels(); if (selected) await loadHistory(true); } catch (error) { report(error); }
+  }
+  async function open(id) {
+    if (!await ensure()) return;
+    selected = id; historyRevision++; posts = new Map(); page = 0; complete = historyBusy = false; reply = ''; pending = null;
+    el('reply').classList.add('hidden'); el('body').value = ''; el('thread').classList.remove('hidden'); el('empty').classList.add('hidden');
+    el('posts').replaceChildren(); setMsg(el('send-error'),''); renderChannels(); setMobilePane('read');
+    await loadHistory();
+  }
+  async function loadHistory(resync = false) {
+    if (!selected || historyBusy) return;
+    const id = selected, revision = historyRevision, version = generation;
+    historyBusy = true;
+    try {
+      // Reconnect fetches the latest page while preserving older loaded entries.
+      const since = resync && posts.size ? Math.max(...[...posts.values()].map(post => post.create_at)) - 1 : 0;
+      const list = []; let cursor = resync ? 0 : page, batch;
+      do {
+        const data = await request('/channels/' + id + '/posts?per_page=80&page=' + cursor + (since ? '&since=' + Math.max(0,since) : ''));
+        batch = data.order.map(key => data.posts[key]); list.push(...batch); cursor++;
+        if (revision !== historyRevision || version !== generation || id !== selected) return;
+      } while (since && batch.length === 80);
+      await getUsers(list.map(post => post.user_id));
+      if (revision !== historyRevision || version !== generation || id !== selected) return;
+      list.forEach(post => posts.set(post.id, post));
+      if (!resync) { page++; complete = list.length < 80; }
+      renderPosts(!resync && page > 1); void markViewed();
+    } catch (error) { if (revision === historyRevision && version === generation) setMsg(el('send-error'),errorText(error),'err'); }
+    finally { if (revision === historyRevision && version === generation) historyBusy = false; }
+  }
+  function renderPosts(keepScroll = false) {
+    const box = el('posts'), previousHeight = box.scrollHeight, previousTop = box.scrollTop;
+    const nearBottom = previousHeight - previousTop - box.clientHeight < 100;
+    box.replaceChildren();
+    if (!complete) { const older = document.createElement('button'); older.type = 'button'; older.className = 'btn-secondary btn-sm'; older.textContent = 'Загрузить более ранние'; older.onclick = () => loadHistory(); box.append(older); }
+    const ordered = [...posts.values()].sort((a,b) => a.create_at - b.create_at || a.id.localeCompare(b.id));
+    for (const post of ordered) {
+      const article = document.createElement('article'); article.className = 'chat-bubble' + (post.user_id === me.id ? ' is-mine' : ''); article.dataset.postId = post.id;
+      const author = document.createElement('strong'); author.textContent = label(users.get(post.user_id)); article.append(author);
+      if (post.root_id) { const root = posts.get(post.root_id), quote = document.createElement('div'); quote.className = 'mm-chat-quote'; quote.textContent = 'Ответ: ' + (root?.message?.slice(0,160) || 'сообщение в ветке'); article.append(quote); }
+      const text = document.createElement('p');
+      const callURL = meetingURL(post.props?.tms_meeting_url);
+      if (callURL) {
+        const link = document.createElement('a');
+        link.href = callURL;
+        link.textContent = 'Присоединиться к звонку Jitsi';
+        text.append(link);
+      } else {
+        text.textContent = post.message || (post.file_ids?.length ? 'Вложение' : '');
+      }
+      article.append(text);
+      const time = document.createElement('time'); time.dateTime = new Date(post.create_at).toISOString(); time.textContent = new Date(post.create_at).toLocaleString(lang === 'en' ? 'en-GB' : 'ru-RU'); article.append(time);
+      const answer = document.createElement('button'); answer.type = 'button'; answer.className = 'btn-secondary btn-sm mm-chat-answer'; answer.textContent = 'Ответить'; answer.onclick = () => { reply = post.root_id || post.id; el('reply-label').textContent = 'Ответ: ' + post.message.slice(0,120); el('reply').classList.remove('hidden'); el('body').focus(); }; article.append(answer);
+      box.append(article);
+    }
+    if (!ordered.length) { const hint = document.createElement('p'); hint.className = 'meta'; hint.textContent = 'Сообщений пока нет'; box.append(hint); }
+    if (keepScroll) box.scrollTop = previousTop + box.scrollHeight - previousHeight;
+    else if (nearBottom || previousHeight <= box.clientHeight) box.scrollTop = box.scrollHeight;
+  }
+  async function markViewed() {
+    if (!selected || !visible() || viewBusy) return;
+    const id = selected, version = generation; viewBusy = true;
+    try {
+      await request('/channels/members/me/view',{method:'POST',body:JSON.stringify({channel_id:id})});
+      const member = memberships.get(id), channel = channels.find(item => item.id === id);
+      if (member && channel) { member.msg_count = channel.total_msg_count; renderChannels(); }
+    } catch {} finally { if (version === generation) viewBusy = false; }
+  }
+  function connect() {
+    if (!current() || socket) return;
+    const check = guard(), version = generation;
+    const url = new URL('/api/v4/websocket', location.href); url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(url); socket = ws; let seq = 1;
+    ws.onopen = () => { try { check(); ws.send(JSON.stringify({seq:seq++,action:'authentication_challenge',data:{token:state.tokens.access_token}})); } catch { ws.close(); } };
+    ws.onmessage = async event => {
+      if (socket !== ws) return;
+      try {
+        check(); const message = JSON.parse(event.data);
+        if (message.event === 'hello') {
+          connection('Подключено');
+          clearInterval(heartbeat); heartbeat = setInterval(() => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({seq:seq++,action:'ping',data:{}})); },25000);
+          await syncChannels(); if (selected) await loadHistory(true); return;
+        }
+        if (message.event !== 'posted') { if (['channel_created','direct_added','added_to_team','user_added','channel_viewed'].includes(message.event)) await syncChannels(); return; }
+        const post = JSON.parse(message.data.post);
+        if (!channels.some(channel => channel.id === post.channel_id)) await syncChannels();
+        const channel = channels.find(item => item.id === post.channel_id);
+        if (channel) { channel.last_post_at = Math.max(channel.last_post_at,post.create_at); }
+        if (post.channel_id === selected) {
+          await getUsers([post.user_id]); check();
+          if (post.channel_id === selected) { posts.set(post.id,post); renderPosts(); void markViewed(); }
+        }
+        renderChannels();
+        // Counts are authoritative on the server; never infer them from duplicate events.
+        await syncChannels();
+      } catch (error) { if (version === generation && current()) report(error); }
+    };
+    ws.onclose = () => {
+      if (socket !== ws || generation !== version) return;
+      socket = null; clearInterval(heartbeat); connection('Соединение потеряно · переподключение…');
+      reconnect = setTimeout(async () => {
+        if (!current() || generation !== version) return;
+        try { await request('/users/me'); connect(); } catch (error) { if (generation === version && current()) { report(error); reconnect = setTimeout(connect,5000); } }
+      },2000);
+    };
+    ws.onerror = () => { if (socket === ws) connection('Переподключение…'); };
+  }
+  async function send(event) {
+    event.preventDefault();
+    const input = el('body'), body = input.value.trim(), id = selected, root = reply;
+    if (!body || !id || sending || !me) return;
+    const version = generation; sending = true; const button = el('send').querySelector('[type=submit]'); button.disabled = true; setMsg(el('send-error'),'');
+    if (!pending || pending.channel_id !== id || pending.message !== body || pending.root_id !== root) pending = {channel_id:id,message:body,root_id:root,pending_post_id:me.id + ':' + crypto.randomUUID()};
+    try {
+      const submission = pending;
+      const post = await request('/posts',{method:'POST',body:JSON.stringify(submission)});
+      if (selected === id) { posts.set(post.id,post); renderPosts(); el('posts').scrollTop = el('posts').scrollHeight; if (input.value.trim() === body) input.value = ''; reply = ''; el('reply').classList.add('hidden'); }
+      if (pending === submission) pending = null; await syncChannels(); void markViewed();
+    } catch (error) { if (generation === version) setMsg(el('send-error'),errorText(error),'err'); }
+    finally { if (generation === version) { sending = false; button.disabled = false; } }
+  }
+  async function searchPeople() {
+    const revision = ++searchRevision;
+    try {
+      const list = await request('/users/search',{method:'POST',body:JSON.stringify({term:el('search').value.trim(),team_id:team.id,limit:100})});
+      if (revision !== searchRevision || !el('people').open) return;
+      el('people-list').replaceChildren(); setMsg(el('people-error'),'');
+      for (const user of list) {
+        users.set(user.id,user);
+        const button = document.createElement('button'); button.type = 'button'; button.className = 'msg-item mm-chat-person';
+        const name = document.createElement('strong'); name.textContent = label(user); const username = document.createElement('span'); username.className = 'meta'; username.textContent = '@' + user.username; button.append(name,username);
+        button.onclick = async () => {
+          button.disabled = true;
+          try {
+            if (peopleMode === 'member') { await request('/channels/' + peopleChannel + '/members',{method:'POST',body:JSON.stringify({user_id:user.id})}); el('people').close(); }
+            else { const channel = await request('/channels/direct',{method:'POST',body:JSON.stringify([me.id,user.id])}); el('people').close(); await syncChannels(); await open(channel.id); }
+          } catch (error) { setMsg(el('people-error'),errorText(error),'err'); button.disabled = false; }
+        };
+        el('people-list').append(button);
+      }
+      if (!list.length) { const hint = document.createElement('p'); hint.className = 'meta'; hint.textContent = 'Пользователи не найдены'; el('people-list').append(hint); }
+    } catch (error) { if (revision === searchRevision && current()) setMsg(el('people-error'),errorText(error),'err'); }
+  }
+  async function people(mode = 'direct') {
+    if (!await ensure()) return;
+    peopleMode = mode; peopleChannel = selected; el('search').hidden = false; el('people-list').replaceChildren(); el('search').value = ''; setMsg(el('people-error'),'');
+    el('people-title').textContent = mode === 'member' ? 'Добавить участника' : 'Новый диалог'; el('people').showModal(); el('search').focus(); await searchPeople();
+  }
+  async function openPeer(email) {
+    if (!await ensure()) return;
+    try { const user = await request('/users/email/' + encodeURIComponent(email)); users.set(user.id,user); const channel = await request('/channels/direct',{method:'POST',body:JSON.stringify([me.id,user.id])}); await syncChannels(); await open(channel.id); } catch (error) { report(error); }
+  }
+  async function members() {
+    if (!selected) return;
+    const id = selected;
+    try {
+      const list = await request('/channels/' + id + '/members'); await getUsers(list.map(member => member.user_id));
+      if (id !== selected) return;
+      el('people-list').replaceChildren(); el('search').value = ''; el('search').hidden = true; el('people-title').textContent = 'Участники'; setMsg(el('people-error'),'');
+      for (const member of list) { const row = document.createElement('p'); row.textContent = label(users.get(member.user_id)); el('people-list').append(row); }
+      if (channels.find(channel => channel.id === id)?.type !== 'D') { const add = document.createElement('button'); add.type = 'button'; add.className = 'btn-spray'; add.textContent = 'Добавить участника'; add.onclick = () => { peopleMode = 'member'; peopleChannel = id; el('search').hidden = false; el('people-title').textContent = 'Добавить участника'; el('search').focus(); void searchPeople(); }; el('people-list').append(add); }
+      el('people').showModal();
+    } catch (error) { report(error); }
+  }
+  function meetingURL(value) {
+    if (!value) return '';
+    try {
+      const url = new URL(value);
+      if (url.origin === location.origin && url.pathname === '/' &&
+          url.searchParams.get('app') === 'vks' && /^tms-[0-9a-f]{32}$/.test(url.searchParams.get('room'))) {
+        return url.href;
+      }
+    } catch {}
+    return '';
+  }
+
+  async function startCall() {
+    const channel = selected, check = guard(), button = el('call');
+    if (!channel) return;
+    button.disabled = true;
+    try {
+      const result = await request('/commands/execute', {
+        method:'POST', body:JSON.stringify({command:'/meet',channel_id:channel,team_id:team.id}),
+      });
+      check();
+      const link = meetingURL(result.goto_location);
+      if (!link) throw new Error('Не удалось открыть звонок');
+      if (selected === channel) location.assign(link);
+    } catch (error) { report(error); }
+    finally { button.disabled = false; }
+  }
+
+  async function browseChannels(append = false) {
+    if (!await ensure() || !el('browse-dialog').open) return;
+    const results = el('browse-results'), more = el('browse-more');
+    if (!append) {
+      browseRevision++;
+      browsePage = 0;
+      browseTerm = el('browse-query').value.trim();
+      results.replaceChildren();
+    }
+    const revision = browseRevision;
+    more.classList.add('hidden');
+    setMsg(el('browse-status'), 'Поиск…');
+    try {
+      const list = await request('/teams/' + team.id + '/channels/search?page=' + browsePage + '&per_page=30', {
+        method:'POST', body:JSON.stringify({term:browseTerm}),
+      });
+      if (revision !== browseRevision || !el('browse-dialog').open) return;
+      for (const channel of list) {
+        const row = document.createElement('div');
+        row.className = 'mm-person-row';
+        const title = document.createElement('span');
+        title.textContent = channelName(channel);
+        const action = document.createElement('button');
+        action.type = 'button';
+        action.className = 'btn-secondary btn-sm';
+        action.textContent = memberships.has(channel.id) ? 'Открыть' : 'Вступить';
+        action.onclick = async () => {
+          if (revision !== browseRevision || !el('browse-dialog').open) return;
+          action.disabled = true;
+          try {
+            if (!memberships.has(channel.id)) {
+              await request('/channels/' + channel.id + '/members', {
+                method:'POST', body:JSON.stringify({user_id:me.id}),
+              });
+              await syncChannels();
+              if (!memberships.has(channel.id)) await syncChannels();
+            }
+            if (revision !== browseRevision) return;
+            el('browse-dialog').close();
+            await open(channel.id);
+          } catch (error) {
+            if (revision === browseRevision) setMsg(el('browse-status'), errorText(error), 'err');
+          } finally { action.disabled = false; }
+        };
+        row.append(title, action);
+        results.append(row);
+      }
+      browsePage++;
+      more.classList.toggle('hidden', list.length < 30);
+      setMsg(el('browse-status'), results.childElementCount ? '' : 'Открытые каналы не найдены');
+    } catch (error) {
+      if (revision === browseRevision) setMsg(el('browse-status'), errorText(error), 'err');
+    }
+  }
+
+  el('call')?.addEventListener('click', startCall);
+  el('browse')?.addEventListener('click', () => {
+    el('browse-query').value = '';
+    el('browse-dialog').showModal();
+    void browseChannels();
+  });
+  el('browse-dialog')?.addEventListener('close', () => { browseRevision++; });
+  el('browse-form')?.addEventListener('submit', event => {
+    event.preventDefault();
+    void browseChannels();
+  });
+  el('browse-more')?.addEventListener('click', () => browseChannels(true));
+  el('filter').addEventListener('input',renderChannels);
+  el('refresh').onclick = refresh; el('new').onclick = () => people(); el('members').onclick = members;
+  el('search').oninput = () => { clearTimeout(searchTimer); searchRevision++; searchTimer = setTimeout(searchPeople,200); };
+  el('people').addEventListener('close',() => { searchRevision++; clearTimeout(searchTimer); el('search').hidden = false; });
+  el('send').onsubmit = send;
+  el('body').addEventListener('keydown',event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); el('send').requestSubmit(); } });
+  el('reply-cancel').onclick = () => { reply = ''; el('reply').classList.add('hidden'); };
+  el('create').onclick = async () => { if (await ensure()) { el('create-name').value = ''; setMsg(el('create-error'),''); el('create-dialog').showModal(); } };
+  el('create-cancel').onclick = () => el('create-dialog').close();
+  el('create-form').onsubmit = async event => {
+    event.preventDefault(); const button = event.submitter; button.disabled = true;
+    try { const channel = await request('/channels',{method:'POST',body:JSON.stringify({team_id:team.id,name:'channel-' + crypto.randomUUID(),display_name:el('create-name').value.trim(),type:el('create-type').value})}); el('create-dialog').close(); await syncChannels(); await open(channel.id); }
+    catch (error) { setMsg(el('create-error'),errorText(error),'err'); } finally { button.disabled = false; }
+  };
+  window.addEventListener('focus',() => { if (current() && me) { void syncChannels().then(() => selected ? loadHistory(true) : null).catch(report); } });
+  document.addEventListener('visibilitychange',() => { if (!document.hidden && current() && me) { void syncChannels().then(() => selected ? loadHistory(true) : null).catch(report); } });
+  return {start,stop,refresh,openPeer};
+})();
+const mmProfileSessions = (() => {
+  const list = $('mm-sessions-list');
+  const status = $('mm-sessions-status');
+  const reload = $('mm-sessions-refresh');
+  let generation = 0;
+
+  function reset() {
+    generation++;
+    list?.replaceChildren();
+    if (status) setMsg(status, '');
+    if (reload) reload.disabled = false;
+  }
+
+  function formatDate(value) {
+    return new Date(value).toLocaleString(lang === 'en' ? 'en' : 'ru', {
+      dateStyle: 'medium', timeStyle: 'short',
+    });
+  }
+
+  async function refresh() {
+    if (!list || !state.tokens?.access_token) return;
+    const revision = ++generation;
+    const guard = () => {
+      if (revision !== generation || !state.tokens?.access_token) {
+        throw new Error('Session changed');
+      }
+    };
+    reload.disabled = true;
+    list.replaceChildren();
+    setMsg(status, mailImageText('Загрузка…', 'Loading…'));
+    try {
+      const sessions = await api('/api/v4/users/me/sessions', {_guard: guard});
+      guard();
+      for (const session of sessions) {
+        // The profiled web login also appears in the Mattermost session list.
+        // Do not offer to revoke it or any entry from an older API without the flag.
+        if (session.is_current === true) continue;
+        const row = document.createElement('li');
+        row.className = 'mm-session-row';
+        const details = document.createElement('span');
+        details.textContent = mailImageText('Последняя активность: ', 'Last active: ') +
+          formatDate(session.last_activity_at) + ' · ' +
+          mailImageText('Действует до: ', 'Expires: ') + formatDate(session.expires_at);
+        row.append(details);
+        if (session.is_current === false) {
+          const revoke = document.createElement('button');
+          revoke.type = 'button';
+          revoke.className = 'btn-secondary';
+          revoke.textContent = mailImageText('Завершить', 'End session');
+          revoke.addEventListener('click', async () => {
+            if (generation !== revision) return;
+            if (!window.confirm(mailImageText('Завершить эту сессию Mattermost? На устройстве потребуется повторный вход.',
+              'End this Mattermost session? The device will need to sign in again.'))) return;
+            revoke.disabled = true;
+            try {
+              await api('/api/v4/users/sessions/revoke', {
+                method: 'POST', body: JSON.stringify({session_id: session.id}), _guard: guard,
+              });
+              guard();
+              await refresh();
+            } catch (error) {
+              if (revision !== generation) return;
+              revoke.disabled = false;
+              setMsg(status, error.data?.message || error.message, 'err');
+            }
+          });
+          row.append(revoke);
+        }
+        list.append(row);
+      }
+      setMsg(status, list.childElementCount ? '' : mailImageText('Других активных сессий нет.', 'No other active sessions.'));
+    } catch (error) {
+      if (revision !== generation) return;
+      const unavailable = [403, 404, 501].includes(error.status);
+      setMsg(status, unavailable ? mailImageText('Mattermost недоступен для этой учётной записи.',
+        'Mattermost is unavailable for this account.') : error.data?.message || error.message, unavailable ? '' : 'err');
+    } finally {
+      if (revision === generation) reload.disabled = false;
+    }
+  }
+
+  reload?.addEventListener('click', refresh);
+  return {refresh, reset};
+})();
+/* Authenticated TMS conferencing. Meeting links never contain JWTs. */
+let vksMeetingAPI = null;
+let vksEpoch = 0;
+let vksScopes = [];
+let vksScopeEpoch = 0;
+function vksGuard(epoch, account) { return () => { if (epoch !== vksEpoch || state.me?.id !== account) throw new Error('Учётная запись изменилась'); }; }
+async function refreshVKS() {
+ const epoch=++vksEpoch, account=state.me?.id, guard=vksGuard(epoch,account);
+ try {
+  const out=await api('/api/v1/vks/meetings',{_guard:guard});
+  $('vks-meetings').replaceChildren();
+  for(const meeting of out.meetings||[]) {
+   const item=document.createElement('div');item.className='flex items-center gap-3 py-2';
+   const title=document.createElement('span');title.className='flex-1';title.textContent=meeting.title;
+   const join=document.createElement('button');join.className='btn-spray';join.textContent='Войти';join.onclick=()=>joinVKS(meeting.room);
+   const share=document.createElement('button');share.className='btn-secondary';share.textContent='Ссылка';share.onclick=async()=>{const link=new URL('/',location.origin);link.searchParams.set('app','vks');link.searchParams.set('room',meeting.room);await navigator.clipboard.writeText(link.href);setMsg($('vks-msg'),'Ссылка скопирована. Доступ получат приглашённые участники.','ok');};
+   item.append(title,join,share);$('vks-meetings').append(item);
+  }
+  setMsg($('vks-msg'),out.meetings?.length?'':'Создайте встречу и пригласите пользователей своего домена.');
+ }catch(e){if(epoch===vksEpoch)setMsg($('vks-msg'),e.message,'err');}
+ const admin=document.querySelector('#nav-admin');$('vks-admin').classList.toggle('hidden',!!admin?.classList.contains('hidden'));
+ if(!admin?.classList.contains('hidden')) {
+  try {const out=await api('/api/v1/admin/mattermost/scopes',{_guard:guard});vksScopes=out.scopes||[];$('vks-scope').innerHTML=vksScopes.map((s,i)=>`<option value="${i}">${escapeHtml(s.label)}</option>`).join('');await loadVKSScope();}catch(e){if(epoch===vksEpoch)setMsg($('vks-policy-msg'),e.message,'err');}
+ }
+ const room=new URL(location.href).searchParams.get('room');if(room&&epoch===vksEpoch) await joinVKS(room);
+}
+async function loadVKSScope(){
+ const item=vksScopes[Number($('vks-scope').value)];if(!item)return;const epoch=++vksScopeEpoch,account=state.me?.id;
+ const guard=()=>{if(epoch!==vksScopeEpoch||account!==state.me?.id)throw new Error('Область изменилась');};
+ $('vks-policy-form').inert=true;
+ try{const value=await api('/api/v1/admin/vks'+mmQuery(item.scope),{_guard:guard});const own=value.overrides||{};$('vks-enabled').value=mmBool(own.enabled);$('vks-stun').value=own.stun_urls===undefined?'':own.stun_urls.join('\n');$('vks-turn').value=own.turn_urls===undefined?'':own.turn_urls.join('\n');$('vks-stun-inherit').checked=own.stun_urls===undefined;$('vks-turn-inherit').checked=own.turn_urls===undefined;$('vks-policy-status').textContent=`ВКС ${value.effective.enabled?'включена':'выключена'} · STUN: ${(value.effective.stun_urls||[]).join(', ')||'не задан'} · TURN: ${(value.effective.turn_urls||[]).join(', ')||'не задан'}`;setMsg($('vks-policy-msg'),'');}catch(e){if(epoch===vksScopeEpoch)setMsg($('vks-policy-msg'),e.message,'err');}finally{if(epoch===vksScopeEpoch)$('vks-policy-form').inert=false;}
+}
+$('vks-scope')?.addEventListener('change',loadVKSScope);
+$('vks-policy-form')?.addEventListener('submit',async event=>{
+ event.preventDefault();const item=vksScopes[Number($('vks-scope').value)];if(!item)return;const epoch=vksScopeEpoch,account=state.me?.id,guard=()=>{if(epoch!==vksScopeEpoch||account!==state.me?.id)throw new Error('Область изменилась');};
+ const body={};if($('vks-enabled').value!=='inherit')body.enabled=$('vks-enabled').value==='on';
+ for(const kind of ['stun','turn'])if(!$('vks-'+kind+'-inherit').checked)body[kind+'_urls']=$('vks-'+kind).value.split(/\s+/).filter(Boolean);
+ try{await api('/api/v1/admin/vks'+mmQuery(item.scope),{method:'PUT',body:JSON.stringify(body),_guard:guard});await loadVKSScope();setMsg($('vks-policy-msg'),'Настройки области сохранены','ok');}catch(e){if(epoch===vksScopeEpoch)setMsg($('vks-policy-msg'),e.message,'err');}
+});
+$('vks-create')?.addEventListener('submit',async event=>{
+ event.preventDefault();const epoch=vksEpoch,guard=vksGuard(epoch,state.me?.id);
+ try{const resolved=$('vks-participants').value.split(/[\s,]+/).filter(Boolean);
+ const meeting=await api('/api/v1/vks/meetings',{method:'POST',body:JSON.stringify({title:$('vks-title').value,participants:resolved}),_guard:guard});await refreshVKS();await joinVKS(meeting.room);
+ }catch(e){if(epoch===vksEpoch)setMsg($('vks-msg'),e.message,'err');}
+});
+async function joinVKS(room){
+ const epoch=vksEpoch,guard=vksGuard(epoch,state.me?.id);
+ try{
+  const out=await api('/api/v1/vks/join/'+encodeURIComponent(room),{method:'POST',_guard:guard});
+  const host=new URL(out.public_url);if(host.protocol!=='https:')throw new Error('Для ВКС требуется HTTPS');
+  if(!window.JitsiMeetExternalAPI){await new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=host.origin+'/external_api.js';script.onload=resolve;script.onerror=()=>reject(new Error('Не удалось загрузить Jitsi'));document.head.append(script);});}
+  guard();vksMeetingAPI?.dispose();$('vks-conference').replaceChildren();$('vks-conference-title').textContent=out.branding?.name||'Видеоконференция';
+  vksMeetingAPI=new JitsiMeetExternalAPI(host.host,{roomName:out.room,jwt:out.jwt,parentNode:$('vks-conference'),width:'100%',height:640,configOverwrite:{disableDeepLinking:true},interfaceConfigOverwrite:{APP_NAME:out.branding?.name||'TMS',NATIVE_APP_NAME:out.branding?.name||'TMS'}});
+  $('vks-leave').classList.remove('hidden');
+ }catch(e){if(epoch===vksEpoch)setMsg($('vks-msg'),e.message,'err');}
+}
+$('vks-leave')?.addEventListener('click',()=>{vksMeetingAPI?.dispose();vksMeetingAPI=null;$('vks-conference').replaceChildren();$('vks-leave').classList.add('hidden');});
+$('btn-logout')?.addEventListener('click',()=>{++vksEpoch;++vksScopeEpoch;vksMeetingAPI?.dispose();vksMeetingAPI=null;});
 // Account preferences are cached by access token, never shared between logins.
 let mailImagePreferences = {mode: "block", senders: []};
 let mailImagePreferenceToken = "";
@@ -8206,12 +8721,13 @@ function updateCreateButton(app) {
  let root=document.getElementById('section-create');
  if(!root){root=document.createElement('div');root.id='section-create';root.className='section-create';document.getElementById('view-account').append(root);}
  root.replaceChildren();
- const actions={mail:['compose','btn-compose'],calendar:['new_event','btn-cal-new'],contacts:['new_contact','btn-contact-new'],notes:['note_new','btn-note-new'],tasks:['tasks_new','tasks-new'],chat:['chat_new','btn-chat-new'],filters:['rules_new','btn-rule-new'],tenants:['users_create','btn-directory-create'],files:['upload','files-upload']};
+ if(app==='chat'){root.hidden=true;return;}
+ const actions={mail:['compose','btn-compose'],calendar:['new_event','btn-cal-new'],contacts:['new_contact','btn-contact-new'],notes:['note_new','btn-note-new'],tasks:['tasks_new','tasks-new'],chat:['chat_new','mm-chat-new'],filters:['rules_new','btn-rule-new'],tenants:['users_create','btn-directory-create'],files:['upload','files-upload']};
  const action=actions[app];root.hidden=!action;if(!action)return;if(app==='tenants'&&tenantNav.level==='tenants'&&!state.me?.is_global_admin){root.hidden=true;return;}
  const button=document.createElement('button');button.type='button';button.className='create-fab';button.textContent='+';button.title=t(action[0]);button.setAttribute('aria-label',t(action[0]));if(app==='files')button.disabled=!!filesState.ownerID&&filesState.sharedRights!=='write';root.append(button);
  if(app==='chat'||app==='files'||(app==='tenants'&&tenantNav.level==='users')){
   const menu=document.createElement('div');menu.className='create-fab-menu';menu.hidden=true;menu.id='create-file-menu';
-  for(const [key,id] of (app==='chat'?[['chat_new','btn-chat-new'],['chat_group_new','btn-chat-group-new']]:app==='files'?[['upload','files-upload'],['mkdir','btn-files-mkdir'],['files_upload_folder','files-upload-folder']]:[['users_create','btn-directory-create'],['resources_add','btn-directory-resource']])){const item=document.createElement('button');item.type='button';item.textContent=t(key);item.onclick=()=>{menu.hidden=true;button.setAttribute('aria-expanded','false');document.getElementById(id)?.click();};menu.append(item);}
+  for(const [key,id] of (app==='chat'?[['chat_new','mm-chat-new'],['chat_group_new','mm-chat-create']]:app==='files'?[['upload','files-upload'],['mkdir','btn-files-mkdir'],['files_upload_folder','files-upload-folder']]:[['users_create','btn-directory-create'],['resources_add','btn-directory-resource']])){const item=document.createElement('button');item.type='button';item.textContent=t(key);item.onclick=()=>{menu.hidden=true;button.setAttribute('aria-expanded','false');document.getElementById(id)?.click();};menu.append(item);}
   root.prepend(menu);button.setAttribute('aria-controls',menu.id);button.setAttribute('aria-expanded','false');button.onclick=()=>{menu.hidden=!menu.hidden;button.setAttribute('aria-expanded',String(!menu.hidden));};root.onkeydown=e=>{if(e.key==='Escape'){menu.hidden=true;button.setAttribute('aria-expanded','false');button.focus();}};
  }else button.onclick=()=>{const target=document.getElementById(action[1]);if(target&&!target.disabled){button.classList.remove('is-activated');void button.offsetWidth;button.classList.add('is-activated');button.addEventListener('animationend',()=>button.classList.remove('is-activated'),{once:true});target.click();}};
 }
@@ -8466,24 +8982,6 @@ async function openRolesDirectory(){
 }
 const rolesNav=document.createElement('button');rolesNav.type='button';rolesNav.className='nav-btn';rolesNav.textContent='Роли и права';rolesNav.onclick=()=>{setNavOpen(false);openRolesDirectory()};$('nav-admin')?.append(rolesNav);
 
-const groupCreateButton=document.createElement('button');groupCreateButton.id='btn-chat-group-new';groupCreateButton.hidden=true;document.body.append(groupCreateButton);
-groupCreateButton.onclick=()=>openChatGroupDialog();
-async function openChatGroupDialog(){
- const dialog=document.createElement('dialog');dialog.className='document-preview chat-group-dialog';
- dialog.innerHTML='<header><strong></strong><button type="button" class="btn-secondary" aria-label="Close">×</button></header><form class="stack-gap"><label class="field"><span></span><input class="field-input" name="name" required maxlength="100"></label><label class="field"><span></span><textarea class="field-input" name="members" required rows="3" placeholder="user@example.com"></textarea></label><p class="meta"></p><p role="status"></p><button class="btn-spray" type="submit"></button></form>';
- dialog.querySelector('strong').textContent=mailImageText('Новая группа','New group');dialog.querySelector('header button').onclick=()=>dialog.close();
- const form=dialog.querySelector('form'),labels=form.querySelectorAll('label span');labels[0].textContent=mailImageText('Название','Name');labels[1].textContent=mailImageText('Участники — email через запятую','Participants — comma-separated emails');
- form.querySelector('.meta').textContent=mailImageText('Группа для пользователей вашей организации в вебе и XMPP-клиентах. До 100 участников, общая история. Групповые сообщения пока без OMEMO.','Group for your organization in web and XMPP clients, up to 100 members and shared history. Group messages do not use OMEMO yet.');
- const submit=form.querySelector('[type=submit]');submit.textContent=mailImageText('Создать группу','Create group');
- form.onsubmit=async e=>{e.preventDefault();submit.disabled=true;try{const room=await api('/api/v1/chat/rooms',{method:'POST',body:JSON.stringify({name:form.elements.name.value,members:form.elements.members.value.split(/[,;\s]+/).filter(Boolean)})});dialog.close();await refreshChat();await openChatPeer(room.jid)}catch(error){form.querySelector('[role=status]').textContent=error.message}finally{submit.disabled=false}};
- document.body.append(dialog);dialog.addEventListener('close',()=>dialog.remove(),{once:true});dialog.showModal();form.elements.name.focus();
-}
-function renderChatGroupButton(){
- let button=$('chat-group-info');if(!button){button=document.createElement('button');button.id='chat-group-info';button.type='button';button.className='btn-secondary btn-sm';$('chat-peer')?.after(button)}
- button.hidden=!chatState.roster.find(r=>r.jid===chatState.peer)?.group;button.textContent=mailImageText('Участники','Members');
- button.onclick=()=>openGroupMembers(chatState.peer);
-}
-
 async function openCalendarSubscriptions() {
  const dialog=document.createElement('dialog'); dialog.className='document-preview calendar-subscriptions';
  const header=document.createElement('header'),title=document.createElement('strong'),close=document.createElement('button');
@@ -8501,20 +8999,6 @@ async function openCalendarSubscriptions() {
  const render=async()=>{const data=await api('/api/v1/calendar/subscriptions');list.replaceChildren();for(const cal of data.calendars||[]){const row=document.createElement('div');row.className='subscription-row';const info=document.createElement('div'),name=document.createElement('strong'),detail=document.createElement('p'),remove=document.createElement('button');name.textContent=cal.display_name;detail.className='meta';detail.textContent=cal.error||mailImageText('Обновлено: ','Updated: ')+new Date(cal.updated_at).toLocaleString();info.append(name,detail);remove.type='button';remove.className='btn-secondary';remove.textContent=mailImageText('Отписаться','Unsubscribe');remove.onclick=async()=>{if(!await askConfirm(mailImageText('Удалить эту подписку?','Remove this subscription?')))return;remove.disabled=true;try{await api('/api/v1/calendar/subscriptions?id='+encodeURIComponent(cal.id),{method:'DELETE'});await render();await refreshCalendar()}catch(e){status.textContent=e.message;remove.disabled=false}};row.append(info,remove);list.append(row)}};
  form.onsubmit=async event=>{event.preventDefault();submit.disabled=true;status.textContent=mailImageText('Загружаем календарь…','Loading calendar…');try{const payload={kind:kind.value};for(const [key,input]of Object.entries(fields))payload[key]=input.value;await api('/api/v1/calendar/subscriptions',{method:'POST',body:JSON.stringify(payload)});fields.password.value='';status.textContent=mailImageText('Подписка добавлена','Subscription added');await render();await refreshCalendar()}catch(e){status.textContent=e.message}finally{submit.disabled=false}};
  body.append(hint,list,form,status);dialog.append(header,body);document.body.append(dialog);dialog.addEventListener('close',()=>{fields.password.value='';dialog.remove()},{once:true});dialog.showModal();try{await render()}catch(e){status.textContent=e.message}
-}
-
-async function openGroupMembers(jid){
- const dialog=document.createElement('dialog');dialog.className='document-preview chat-group-dialog';const header=document.createElement('header'),title=document.createElement('strong'),close=document.createElement('button'),body=document.createElement('div'),status=document.createElement('p');close.className='btn-secondary action-icon';close.textContent='×';close.setAttribute('aria-label',t('close'));close.onclick=()=>dialog.close();body.className='stack-gap';status.setAttribute('role','status');header.append(title,close);dialog.append(header,body,status);document.body.append(dialog);dialog.onclose=()=>dialog.remove();dialog.showModal();
- const roleName=role=>({owner:mailImageText('Владелец','Owner'),admin:mailImageText('Администратор','Administrator'),member:mailImageText('Участник','Member')}[role]||role);
- const clearPeer=()=>{chatState.peer='';$('chat-thread').classList.add('hidden');$('chat-empty').classList.remove('hidden')};
- const change=async(email,affiliation,destroy=false)=>{if(!await askConfirm(destroy?mailImageText('Удалить группу и всю её историю для всех участников?','Delete the group and its history for all members?'):affiliation==='none'?mailImageText('Исключить участника и закрыть ему доступ к истории?','Remove this member and revoke history access?'):affiliation==='owner'?mailImageText('Передать владение группой этому участнику?','Transfer ownership to this member?'):mailImageText('Изменить состав или права участника?','Change membership or member permissions?'),{danger:destroy||affiliation==='none'}))return;try{await api('/api/v1/chat/rooms/'+encodeURIComponent(jid),{method:'PATCH',body:JSON.stringify({email,affiliation,destroy})});if(destroy){dialog.close();clearPeer()}else await load();await refreshChat()}catch(error){status.textContent=error.message}};
- const load=async()=>{try{const {rooms}=await api('/api/v1/chat/rooms');const room=rooms.find(r=>r.jid===jid);if(!room){dialog.close();return}title.textContent=room.name;body.replaceChildren();const address=document.createElement('p');address.className='meta';address.textContent=room.jid;body.append(address);const mine=room.affiliations?.[state.email]||(room.owner===state.email?'owner':'member');
- for(const email of room.members){const row=document.createElement('div');row.className='group-member-row';const name=document.createElement('span');name.textContent=email;const role=room.affiliations?.[email]||(room.owner===email?'owner':'member');const label=document.createElement('small');label.textContent=roleName(role);row.append(name,label);
- if(mine==='owner'&&email!==state.email){row.append(fileAction(role==='admin'?mailImageText('Снять права','Remove admin'):mailImageText('Администратор','Make admin'),()=>change(email,role==='admin'?'member':'admin')),fileAction(mailImageText('Передать владение','Transfer ownership'),()=>change(email,'owner')))}
- if((mine==='owner'||mine==='admin'&&role==='member')&&email!==state.email)row.append(fileAction(mailImageText('Исключить','Remove'),()=>change(email,'none'),'delete'));body.append(row)}
- if(mine==='owner'||mine==='admin'){const form=document.createElement('form');form.className='group-member-row';const email=document.createElement('input');email.className='field-input';email.type='email';email.required=true;email.placeholder=mailImageText('Email нового участника','New member email');email.setAttribute('aria-label',email.placeholder);const add=fileAction(mailImageText('Пригласить','Invite'),()=>{});add.type='submit';form.append(email,add);form.onsubmit=e=>{e.preventDefault();change(email.value.trim(),'member')};body.append(form)}
- const leave=fileAction(mine==='owner'?mailImageText('Удалить группу','Delete group'):mailImageText('Выйти из группы','Leave group'),async()=>{if(mine==='owner'){await change('','',true);return}if(!await askConfirm(mailImageText('Выйти из группы? Доступ к истории будет закрыт.','Leave the group? History access will be revoked.')))return;try{await api('/api/v1/chat/rooms/'+encodeURIComponent(jid),{method:'DELETE'});dialog.close();clearPeer();await refreshChat()}catch(error){status.textContent=error.message}});body.append(leave);
- }catch(error){status.textContent=error.message}};await load();
 }
 // File library UI: all mutations use the same versioned server storage as DAV/WOPI.
 function fileLibraryDialog(title, wide=false) {
@@ -9419,8 +9903,7 @@ async function omemoSettings(){
  const footer=omemoNode('footer','omemo-footer'),refresh=omemoNode('button','btn-secondary',omemoText('Обновить устройства','Refresh devices'));
  refresh.type='button';
  const hint=omemoNode('p','meta',omemoText('Доверие, исключения и названия действуют в этом браузере. Отзыв собственного ключа на сервере действует для всей учётной записи. Очистка его данных удалит ключи и доступ к старым сообщениям.','Trust, exclusions and labels apply in this browser. Retiring your own key on the server applies to the whole account. Clearing its data removes keys and access to old messages.'));
- const access=omemoNode('button','btn-secondary',omemoText('Пароли и доступ устройств','Device passwords and access'));access.type='button';access.onclick=()=>{dialog.close();showApp('profile');$('xmpp-devices-card')?.scrollIntoView({block:'start',behavior:'smooth'})};
- footer.append(refresh,access,hint);body.append(notice,content);dialog.append(header,body,footer);document.body.append(dialog);
+ footer.append(refresh,hint);body.append(notice,content);dialog.append(header,body,footer);document.body.append(dialog);
  let snapshot,audience={members:[]},devices=[],loading=false,busy=false,revision=0,changed=false;
  const active=()=>{try{sessionGuard();return dialog.isConnected}catch{return false}};
  const guard=c=>{if(c.account!==account||!active())throw Error(omemoText('Учётная запись изменилась. Откройте настройки заново.','Account changed. Reopen these settings.'))};
@@ -9601,145 +10084,6 @@ function omemoAttachmentBubble(message,element){
  let file;try{file=omemoFileDescriptor(message.body)}catch(e){text.textContent=e.message;return}
  text.textContent='🔒 '+file.name;const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.textContent='Открыть зашифрованный файл';element.append(button);
  button.onclick=async()=>{button.disabled=true;try{guard();const response=await fetch(file.url,{credentials:'omit',referrerPolicy:'no-referrer'});guard();if(!response.ok)throw Error('Файл недоступен');const encrypted=await boundedPreviewBlob(response,omemoFileLimit+16),blob=await omemoDecryptFile(file,encrypted);guard();await openDocumentPreview({name:file.name,blob,size:blob.size})}catch(e){text.textContent='Не удалось расшифровать файл: '+e.message}finally{button.disabled=false}};
-}
-// SPDX-License-Identifier: GPL-3.0-only
-// The generated secret exists only in its one-time dialog, never in storage.
-let xmppDevicesRevision = 0;
-const xmppDevicesAPI = '/api/v1/me/xmpp-devices';
-function xmppDeviceNode(tag, className = '', text = '') {
-  const node = document.createElement(tag); node.className = className; node.textContent = text; return node;
-}
-function xmppDeviceButton(text, action, primary = false) {
-  const button = xmppDeviceNode('button', primary ? 'btn-spray' : 'btn-secondary', text);
-  button.type = 'button'; button.onclick = action; return button;
-}
-function xmppDeviceError(error) {
-  const messages = {
-    device_connection_required: ['Сначала подключите хотя бы один клиент с новым паролем устройства.', 'Connect at least one client with a device password first.'],
-    device_limit: ['Можно создать не более 50 действующих паролей.', 'Up to 50 active device passwords are allowed.'],
-    invalid_device_name: ['Введите название от 1 до 80 символов.', 'Enter a name between 1 and 80 characters.'],
-    device_not_found: ['Устройство или соединение уже удалено. Обновите список.', 'The device or connection is gone. Refresh the list.'],
-    xmpp_device_operation_failed: ['Не удалось выполнить операцию. Обновите список и повторите.', 'Operation failed. Refresh the list and try again.']
-  };
-  return messages[error.message] ? mailImageText(...messages[error.message]) : error.message;
-}
-function resetXMPPDevices() {
-  xmppDevicesRevision++;
-  for (const dialog of document.querySelectorAll('.xmpp-device-dialog')) { dialog.querySelectorAll('input').forEach(input => { input.value = ''; }); dialog.close(); dialog.remove(); }
-  $('xmpp-devices-card')?.replaceChildren();
-}
-async function refreshXMPPDevices() {
-  const host = $('profile-security'); if (!host || !state.tokens?.access_token) return;
-  let card = $('xmpp-devices-card');
-  if (!card) { card = xmppDeviceNode('section', 'card stack-gap'); card.id = 'xmpp-devices-card'; host.prepend(card); }
-  const query = card.querySelector('input[type=search]')?.value || '';
-  const revision = ++xmppDevicesRevision, guard = omemoGuard();
-  const active = () => { try { guard(); return revision === xmppDevicesRevision; } catch { return false; } };
-  card.replaceChildren(xmppDeviceNode('p', 'meta', mailImageText('Загрузка устройств XMPP…', 'Loading XMPP devices…')));
-  try {
-    const data = await api(xmppDevicesAPI, { _guard: guard }); if (!active()) return;
-    const header = xmppDeviceNode('div', 'xmpp-device-toolbar');
-    header.append(xmppDeviceNode('h3', 'heading', mailImageText('Устройства XMPP', 'XMPP devices')),
-      xmppDeviceButton(mailImageText('Обновить', 'Refresh'), refreshXMPPDevices),
-      xmppDeviceButton(mailImageText('Создать пароль устройства', 'Create device password'), createXMPPDeviceDialog, true));
-    const hint = xmppDeviceNode('p', 'meta', mailImageText(
-      'Создайте отдельный пароль для каждого клиента: Monal, Conversations или другого приложения. Он работает только в XMPP. Отзыв отключает все соединения с этим паролем, восстановление сессий и связанные push-подписки.',
-      'Create a separate password for each client: Monal, Conversations or another app. It works only with XMPP. Revoking it disconnects every connection using it, disables session resume and removes associated push subscriptions.'));
-    const status = xmppDeviceNode('p', 'msg'); status.setAttribute('role', 'status');
-    const policy = xmppDeviceNode('label', 'field-check');
-    const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.checked = !!data.devices_only;
-    checkbox.onchange = async () => {
-      const only = checkbox.checked; checkbox.checked = !!data.devices_only;
-      if (!confirm(mailImageText(only
-        ? 'Разрешить XMPP только с паролями устройств? Клиенты с обычным паролем или общим токеном отключатся; их push-подписки будут удалены. Сначала замените пароль в каждом приложении. Почта и веб-вход продолжат работать.'
-        : 'Снова разрешить обычный пароль и общий токен для входа в XMPP?', only
-        ? 'Allow XMPP only with device passwords? Clients using an account password or general token will disconnect and their push registrations will be removed. Update each app first. Mail and web login will keep working.'
-        : 'Allow account passwords and general tokens for XMPP again?'))) return;
-      checkbox.disabled = true;
-      try { await api(xmppDevicesAPI + '/policy', { method: 'PUT', body: JSON.stringify({ devices_only: only }), _guard: guard }); if (active()) await refreshXMPPDevices(); }
-      catch (error) { if (active()) { status.textContent = xmppDeviceError(error); checkbox.disabled = false; } }
-    };
-    policy.append(checkbox, xmppDeviceNode('span', '', mailImageText('Только пароли устройств для XMPP', 'Device passwords only for XMPP')));
-    const policyHint = xmppDeviceNode('p', 'meta', mailImageText(data.devices_only
-      ? 'Включено. Обычный пароль и общие токены больше не подходят для XMPP.'
-      : 'Переходный режим: прежние способы входа ещё разрешены. Подключите клиент с новым паролем, затем включите ограничение.', data.devices_only
-      ? 'Enabled. Account passwords and general tokens are no longer accepted for XMPP.'
-      : 'Migration mode: existing login methods are still allowed. Connect with a new device password, then enable the restriction.'));
-    const search = document.createElement('input'); search.type = 'search'; search.value = query; search.className = 'field-input'; search.placeholder = mailImageText('Поиск по названию, ресурсу или IP', 'Search by name, resource or IP'); search.setAttribute('aria-label', search.placeholder);
-    const lists = xmppDeviceNode('div', 'xmpp-device-lists');
-    const perform = async (url, confirmation, button) => {
-      if (!confirm(confirmation)) return; button.disabled = true;
-      try { await api(url, { method: 'DELETE', _guard: guard }); if (active()) await refreshXMPPDevices(); }
-      catch (error) { if (active()) { status.textContent = xmppDeviceError(error); button.disabled = false; } }
-    };
-    const date = value => value ? new Date(value).toLocaleString(state.lang === 'en' ? 'en-US' : 'ru-RU') : '—';
-    const deviceName = id => data.devices.find(d => d.id === id)?.name || mailImageText('Обычный пароль / общий токен', 'Account password / general token');
-    const paginatedTable = (title, columns, rows, render, textForSearch) => {
-      const section = xmppDeviceNode('section', 'xmpp-device-list'), heading = xmppDeviceNode('h4', '', title);
-      const wrap = xmppDeviceNode('div', 'xmpp-device-table-wrap'), table = xmppDeviceNode('table', 'admin-users-table');
-      const thead = document.createElement('thead'), headRow = document.createElement('tr');
-      columns.forEach(text => headRow.append(xmppDeviceNode('th', '', text))); thead.append(headRow);
-      const tbody = document.createElement('tbody'); table.append(thead, tbody); wrap.append(table);
-      const pager = xmppDeviceNode('div', 'xmpp-device-toolbar'), counter = xmppDeviceNode('span', 'meta'); let page = 0;
-      const prev = xmppDeviceButton(mailImageText('Назад', 'Previous'), () => { page--; draw(); });
-      const next = xmppDeviceButton(mailImageText('Далее', 'Next'), () => { page++; draw(); }); pager.append(counter, prev, next);
-      const draw = () => {
-        const filtered = rows.filter(row => textForSearch(row).toLocaleLowerCase().includes(search.value.trim().toLocaleLowerCase()));
-        page = Math.min(Math.max(page, 0), Math.max(0, Math.ceil(filtered.length / 8) - 1)); tbody.replaceChildren();
-        filtered.slice(page * 8, page * 8 + 8).forEach(item => {
-          const tr = document.createElement('tr'); render(item).forEach(content => { const td = document.createElement('td'); if (typeof content === 'string') td.textContent = content; else td.append(content); tr.append(td); }); tbody.append(tr);
-        });
-        if (!filtered.length) { const tr = document.createElement('tr'), td = xmppDeviceNode('td', 'meta', mailImageText('Нет записей', 'No entries')); td.colSpan = columns.length; tr.append(td); tbody.append(tr); }
-        counter.textContent = filtered.length ? `${page * 8 + 1}–${Math.min(page * 8 + 8, filtered.length)} / ${filtered.length}` : '0';
-        prev.disabled = page === 0; next.disabled = (page + 1) * 8 >= filtered.length;
-      };
-      search.addEventListener('input', () => { page = 0; draw(); }); section.append(heading, wrap, pager); lists.append(section); draw();
-    };
-    paginatedTable(mailImageText('Пароли устройств', 'Device passwords'),
-      [mailImageText('Устройство', 'Device'), mailImageText('Создан / последний вход', 'Created / last login'), mailImageText('Состояние', 'Status'), mailImageText('Действия', 'Actions')], data.devices, device => {
-        const times = xmppDeviceNode('div', '', date(device.created_at)); times.append(xmppDeviceNode('p', 'meta', date(device.last_used_at)));
-        const live = data.sessions.filter(s => s.credential_id === device.id).length;
-        const label = device.revoked_at ? mailImageText('Отозван', 'Revoked') : live ? mailImageText(`Подключений: ${live}`, `Connections: ${live}`) : device.last_used_at ? mailImageText('Не подключено', 'Disconnected') : mailImageText('Ожидает первого входа', 'Waiting for first login');
-        const action = device.revoked_at ? xmppDeviceNode('span', 'meta', date(device.revoked_at)) : xmppDeviceButton(mailImageText('Отозвать', 'Revoke'), event => perform(xmppDevicesAPI + '/' + encodeURIComponent(device.id), mailImageText(`Отозвать пароль «${device.name}»? Все использующие его соединения отключатся. Вход с ним больше невозможен. Локальная история на устройстве останется.`, `Revoke “${device.name}”? All connections using it will close and it cannot be used again. Local history remains on the device.`), event.currentTarget));
-        return [device.name, times, label, action];
-      }, device => device.name);
-    paginatedTable(mailImageText('Сейчас подключены', 'Connected now'),
-      [mailImageText('Клиент / ресурс', 'Client / resource'), mailImageText('Пароль устройства', 'Device password'), 'IP', mailImageText('Последняя активность', 'Last activity'), mailImageText('Действия', 'Actions')], data.sessions, session =>
-      [session.agent, deviceName(session.credential_id), session.address, date(session.last_seen), xmppDeviceButton(mailImageText('Отключить', 'Disconnect'), event => perform(xmppDevicesAPI + '/sessions/' + encodeURIComponent(session.id), mailImageText('Закрыть это соединение? Клиент сможет подключиться снова. Чтобы запретить вход, отзовите его пароль.', 'Close this connection? The client can reconnect. Revoke its password to prevent login.'), event.currentTarget))], session => [session.agent, session.address, deviceName(session.credential_id)].join(' '));
-    const note = xmppDeviceNode('p', 'meta', mailImageText('Показаны до 100 последних паролей, действующие — первыми. При потере устройства отдельно отзовите его ключ OMEMO в настройках шифрования чата. Пароль доступа и ключ шифрования — разные настройки.', 'Up to 100 recent passwords are shown, active ones first. If a device is lost, also retire its OMEMO key in the chat encryption settings. Access credentials and encryption keys are separate settings.'));
-    card.replaceChildren(header, hint, policy, policyHint, search, status, lists, note);
-  } catch (error) { if (active()) card.replaceChildren(xmppDeviceNode('p', 'msg', xmppDeviceError(error)), xmppDeviceButton(mailImageText('Повторить', 'Retry'), refreshXMPPDevices)); }
-}
-function createXMPPDeviceDialog() {
-  if (document.querySelector('.xmpp-device-dialog')) return;
-  const guard = omemoGuard(), dialog = xmppDeviceNode('dialog', 'mail-source-dialog xmpp-device-dialog');
-  const form = document.createElement('form'), header = document.createElement('header'), title = xmppDeviceNode('h3', 'heading', mailImageText('Пароль для устройства XMPP', 'XMPP device password'));
-  title.id = 'xmpp-device-title'; dialog.setAttribute('aria-labelledby', title.id);
-  header.append(title, xmppDeviceButton(mailImageText('Закрыть', 'Close'), () => dialog.close()));
-  const fields = xmppDeviceNode('div', 'xmpp-device-fields'), label = xmppDeviceNode('label', 'field-label', mailImageText('Название устройства', 'Device name'));
-  const name = document.createElement('input'); name.className = 'field-input'; name.required = true; name.maxLength = 80; name.autocomplete = 'off'; name.placeholder = 'Monal · iPhone'; label.append(name); fields.append(label);
-  const hint = xmppDeviceNode('p', 'meta', mailImageText('Пароль будет показан один раз. Введите его вместо обычного пароля в настройках приложения XMPP. Логин, сервер и порт оставьте прежними. Создание пароля не меняет ключи OMEMO.', 'The password is shown once. Use it instead of your account password in your XMPP app. Keep the username, server and port unchanged. Creating a password does not change OMEMO keys.'));
-  const status = xmppDeviceNode('p', 'msg'); status.setAttribute('role', 'status');
-  const footer = document.createElement('footer'), submit = xmppDeviceNode('button', 'btn-spray', mailImageText('Создать пароль', 'Create password')); submit.type = 'submit'; footer.append(submit);
-  let secretInput;
-  form.onsubmit = async event => {
-    event.preventDefault(); if (!form.reportValidity() || submit.disabled) return; submit.disabled = true;
-    try {
-      const data = await api(xmppDevicesAPI, { method: 'POST', body: JSON.stringify({ name: name.value }), _guard: guard }); guard();
-      if (!dialog.open) { refreshXMPPDevices(); return; }
-      const secretLabel = xmppDeviceNode('label', 'field-label', mailImageText('Сохраните пароль сейчас', 'Save this password now'));
-      secretInput = document.createElement('input'); secretInput.className = 'field-input xmpp-device-secret'; secretInput.readOnly = true; secretInput.autocomplete = 'off'; secretInput.spellcheck = false; secretInput.value = data.password; data.password = ''; secretLabel.append(secretInput); fields.replaceChildren(secretLabel);
-      const copy = xmppDeviceButton(mailImageText('Копировать', 'Copy'), async () => {
-        try { guard(); await navigator.clipboard.writeText(secretInput.value); guard(); if (dialog.open) status.textContent = mailImageText('Пароль скопирован.', 'Password copied.'); }
-        catch { if (dialog.open) { secretInput.focus(); secretInput.select(); status.textContent = mailImageText('Выделите и скопируйте пароль вручную.', 'Select and copy the password manually.'); } }
-      });
-      footer.replaceChildren(copy, xmppDeviceButton(mailImageText('Готово', 'Done'), () => dialog.close(), true));
-      status.textContent = mailImageText('Пароль создан. Подключите клиент и обновите список устройств, чтобы проверить вход.', 'Password created. Connect your client and refresh the device list to verify the login.');
-      refreshXMPPDevices();
-    } catch (error) { try { guard(); if (dialog.open) { status.textContent = xmppDeviceError(error); submit.disabled = false; } } catch {} }
-  };
-  dialog.onclose = () => { if (secretInput) secretInput.value = ''; name.value = ''; dialog.remove(); };
-  form.append(header, fields, hint, status, footer); dialog.append(form); document.body.append(dialog); dialog.showModal(); name.focus();
 }
 // Domain organization chart backed by distribution groups.
 function directoryLabel(ru, en) { return mailImageText(ru, en); }

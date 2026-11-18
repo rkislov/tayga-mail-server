@@ -13,8 +13,8 @@ type bootstrapYAML struct {
 		Hostname string `yaml:"hostname"`
 	} `yaml:"server"`
 	Storage struct {
-		Driver   string `yaml:"driver"`
-		SQLite   struct {
+		Driver string `yaml:"driver"`
+		SQLite struct {
 			Path string `yaml:"path"`
 		} `yaml:"sqlite"`
 		Postgres struct {

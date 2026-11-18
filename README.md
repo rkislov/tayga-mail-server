@@ -19,14 +19,13 @@ See [docs/architecture.md](docs/architecture.md) and `configs/tayga.example.yaml
 
 **План разработки (RU):** [Дорожная карта: порядок работ, зависимости и критерии готовности](docs/roadmap.md).
 
-**Стабильный выпуск [v0.10.10](https://github.com/rkislov/tayga-mail-server/releases/tag/v0.10.10).** На странице выпуска доступны серверные архивы, контрольные суммы и расширение Thunderbird 2.5.0 (XPI).
+**Стабильный выпуск [v0.10.11](https://github.com/rkislov/tayga-mail-server/releases/tag/v0.10.11).** Серверные архивы, контрольные суммы и расширение Thunderbird доступны на странице выпуска.
 
-## Чат и видеозвонки в тестовой сборке
+## Чат и видеозвонки
 
-Эти функции сейчас проверяются в отдельной сборке TMS.
-
-- Чат TMS работает с клиентами Mattermost через совместимый API v4. На iPhone проверены личные сообщения, поиск открытых каналов, вступление в них и просмотр фотографий.
-- Групповой звонок Jitsi можно начать из меню канала или командой `/meet`. Приглашение появляется в канале, встреча открывается в браузере, доступ к ней проверяется по членству в канале.
+- [Mattermost-совместимый чат TMS](docs/mattermost-compatibility.md) поддерживает личные сообщения, открытые и закрытые каналы, поиск и вложения. На iPhone проверены вступление в открытые каналы и полноэкранный просмотр фотографий.
+- [Групповые звонки Jitsi](docs/vks.md) можно начать из меню канала или командой `/meet`. Приглашение публикуется в канале, встреча открывается в браузере.
+- Для чата требуется включить API Mattermost в конфигурации TMS. Для звонков нужен отдельно развёрнутый Jitsi Meet.
 
 ## Quick start
 
@@ -43,7 +42,7 @@ sudo ./tayga-mail -config configs/tayga.example.yaml
 ### Cross-platform release builds
 
 ```bash
-VERSION=0.10.10 ./scripts/crossbuild.sh   # → dist/*.tar.gz|zip + checksums.txt
+VERSION=0.10.11 ./scripts/crossbuild.sh   # → dist/*.tar.gz|zip + checksums.txt
 ```
 
 GitHub Releases: push a `v*` tag; [GoReleaser](https://goreleaser.com) (`.github/workflows/release.yml`) publishes linux/darwin/windows/freebsd amd64+arm64 archives.
@@ -96,7 +95,7 @@ Seed: `admin@example.com` / `changeme`. TLS: `tls.auto_generate` or `scripts/gen
 - User migration IMAP/CalDAV/CardDAV: [docs/migration.md](docs/migration.md)
 - In-app / browser notifications (new mail, upcoming calendar) via SSE `/api/v1/notifications/stream`
 - Certificate authority (УЦ): self-signed / commercial PEM / Let’s Encrypt ACME — [docs/ca.md](docs/ca.md)
-- XMPP (optional C2S) + web Chat; bots via XEP-0114 / HTTP — see [docs/xmpp.md](docs/xmpp.md)
+- XMPP (optional C2S); bots via XEP-0114 / HTTP — see [docs/xmpp.md](docs/xmpp.md)
 - Web UI: floating rounded panels; independent day/night mode under **Appearance**
 - Server configuration: grouped sections, typed modal forms and Russian help for every parameter; bootstrap storage remains read-only
 - Calendar: click a date to open its day; double-click to create an event on that date; invitations are in a separate inbox with a pending badge

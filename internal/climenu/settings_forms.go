@@ -22,6 +22,7 @@ func (m *Menu) editSettingsSection() error {
 		"Логирование",
 		"CoS (классы обслуживания)",
 		"Файлы и офис (Collabora / ONLYOFFICE / Р7)",
+		"Mattermost — сервер / тенант / домен",
 		"Другая секция (JSON)",
 	})
 	switch n {
@@ -42,6 +43,8 @@ func (m *Menu) editSettingsSection() error {
 	case 7:
 		return m.editFilesForm()
 	case 8:
+		return m.editMattermost()
+	case 9:
 		return m.editSettingsJSON()
 	}
 	return nil
@@ -289,7 +292,12 @@ func (m *Menu) editFilesForm() error {
 
 func (m *Menu) editSettingsJSON() error {
 	return m.withHub(func(ctx context.Context, hub *settings.Hub, _ *config.Config, _ storage.Driver) error {
-		sections := settings.EditableSections
+		sections := []string{}
+		for _, section := range settings.EditableSections {
+			if section != "xmpp" {
+				sections = append(sections, section)
+			}
+		}
 		labels := make([]string, len(sections))
 		copy(labels, sections)
 		n := m.ui.Menu("Секция настроек (JSON)", labels)

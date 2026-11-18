@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -19,6 +20,7 @@ import (
 	"github.com/tayga/tms/internal/flowsync"
 	"github.com/tayga/tms/internal/frontend"
 	"github.com/tayga/tms/internal/mailstore"
+	"github.com/tayga/tms/internal/mattermost"
 	"github.com/tayga/tms/internal/migrate"
 	"github.com/tayga/tms/internal/notify"
 	"github.com/tayga/tms/internal/settings"
@@ -31,6 +33,8 @@ import (
 
 // Server exposes health, metrics, auth API, and the embedded Web UI.
 type Server struct {
+	mattermostOnce          sync.Once
+	mattermostAPI           *mattermost.API
 	mailMutationLocks       [128]sync.Mutex
 	fileMu                  sync.Mutex
 	uploadLocks             [64]sync.Mutex
@@ -79,6 +83,46 @@ func (s *Server) cfgLive() *config.Config {
 // Handler builds the HTTP mux (health, auth, DAV, FlowSync, admin UI).
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/vks/", s.handleVKS)
+	mux.HandleFunc("/.well-known/vks/keys/", s.handleVKS)
+	mux.HandleFunc("/api/v1/admin/vks", s.handleVKSSettings)
+	if s.cfgLive().Mattermost.Enabled {
+		s.mattermostOnce.Do(func() {
+			cfg := s.cfgLive()
+			s.mattermostAPI = mattermost.New(s.store, s.authn, s.log, cfg.HTTP.PublicURL)
+			attachmentRoot := cfg.Mailstore.Root
+			if cfg.Storage.Driver == "sqlite" {
+				attachmentRoot = filepath.Dir(cfg.Storage.SQLite.Path)
+			}
+			if err := s.mattermostAPI.SetAttachmentDirectory(filepath.Join(attachmentRoot, ".mattermost-attachments")); err != nil {
+				s.log.Error("Mattermost attachment storage unavailable", "error", err)
+			}
+
+			s.mattermostAPI.SetScopeAuthorizer(s.canManageMattermostScope)
+			if cfg.VKS.PublicURL != "" && cfg.VKS.SigningKeyFile != "" {
+				s.mattermostAPI.SetChannelCallStarter(s.startMattermostChannelCall, s.mattermostChannelCallsAllowed)
+			}
+
+			if cfg.Mattermost.PluginsEnabled {
+				directory := cfg.Mattermost.PluginDirectory
+				if directory == "" {
+					directory = filepath.Join(cfg.Mailstore.Root, "mattermost-plugins")
+				}
+				if err := s.mattermostAPI.EnablePlugins(directory, cfg.HTTP.Admins); err != nil {
+					s.log.Error("Mattermost plugin host startup failed", "error", err)
+				}
+			}
+		})
+		mux.Handle("/api/v4/", s.mattermostAPI)
+		mux.HandleFunc("/plugins/", s.mattermostAPI.ServePluginHTTP)
+		mux.HandleFunc("/mm/", s.mattermostAPI.ServeScopedPluginHTTP)
+		mux.HandleFunc("/hooks/", s.mattermostAPI.ServeIncomingHook)
+	} else {
+		mux.HandleFunc("/api/v4/", func(w http.ResponseWriter, r *http.Request) {
+			writeJSON(w, http.StatusNotFound, map[string]any{"id": "tms.mattermost.disabled", "message": "Mattermost compatibility is disabled", "status_code": http.StatusNotFound})
+		})
+	}
+
 	mux.HandleFunc("/api/v1/calendar/subscriptions", s.handleCalendarSubscriptions)
 	mux.HandleFunc("/healthz", s.handleHealthz)
 	mux.HandleFunc("/readyz", s.handleReadyz)
@@ -173,6 +217,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/admin/backup/restore", s.handleAdminBackupRestore)
 	mux.HandleFunc("/api/v1/admin/dkim/generate", s.handleAdminDKIM)
 	mux.HandleFunc("/api/v1/admin/dkim", s.handleDomainDKIM)
+	mux.HandleFunc("/api/v1/admin/mattermost", s.handleMattermostSettings)
+	mux.HandleFunc("/api/v1/admin/mattermost/", s.handleMattermostSettings)
 	mux.HandleFunc("/api/v1/admin/settings", s.handleAdminSettings)
 	mux.HandleFunc("/api/v1/admin/settings/", s.handleAdminSettings)
 	mux.HandleFunc("/api/v1/admin/bots", s.handleAdminBots)
@@ -197,9 +243,9 @@ func (s *Server) Handler() http.Handler {
 
 	mux.Handle("/", frontend.Handler())
 	if s.tls != nil {
-		return s.tls.HTTPChallengeHandler(mux)
+		return s.tls.HTTPChallengeHandler(s.withVKSProxy(mux))
 	}
-	return mux
+	return s.withVKSProxy(mux)
 }
 
 func (s *Server) Start(ctx context.Context) error {
@@ -214,6 +260,10 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 	}
 	handler := s.Handler()
+	if s.mattermostAPI != nil {
+		s.mattermostAPI.RepairAttachmentImageDimensions(ctx)
+		s.mattermostAPI.StartPush(ctx)
+	}
 	go s.runCalendarSubscriptions(ctx)
 	go s.runCalendarDeliveries(ctx)
 	go s.runTravelJobs(ctx)
@@ -221,6 +271,9 @@ func (s *Server) Start(ctx context.Context) error {
 
 	go func() {
 		<-ctx.Done()
+		if s.mattermostAPI != nil {
+			s.mattermostAPI.Close()
+		}
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		for _, srv := range s.servers {
