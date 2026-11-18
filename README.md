@@ -6,7 +6,7 @@
 Ошибки и предложения принимаются через **Issues**, изменения — через **Pull Requests** из форков. Прямую запись в основной репозиторий и публикацию версий выполняет только владелец `rkislov`.
 <!-- owner-maintenance:end -->
 
-Corporate-class multi-domain / multi-tenant mail server in Go.
+Tayga Mail Server is a self-hosted mail and collaboration server written in Go. It hosts multiple organizations and domains in one installation and provides a web workspace for mail, calendars, contacts, files, and notes. Standard clients connect over SMTP, IMAP, POP3, CalDAV, CardDAV, and WebDAV. FlowSync provides ActiveSync and EWS endpoints for compatible clients, including Outlook.
 
 **Author:** Кислов Роман Сергеевич (Roman Sergeyevich Kislov)  
 **License:** server [Apache License 2.0](LICENSE); web client with OMEMO [GPL-3.0](frontend/LICENSE)
@@ -19,7 +19,14 @@ See [docs/architecture.md](docs/architecture.md) and `configs/tayga.example.yaml
 
 **План разработки (RU):** [Дорожная карта: порядок работ, зависимости и критерии готовности](docs/roadmap.md).
 
-**Выпуск 0.10.8:** [исправления и обновление](docs/release-0.10.8.md); Thunderbird 2.4.0 поставляется отдельным XPI в GitHub Release.
+**Стабильный выпуск [v0.10.10](https://github.com/rkislov/tayga-mail-server/releases/tag/v0.10.10).** На странице выпуска доступны серверные архивы, контрольные суммы и расширение Thunderbird 2.5.0 (XPI).
+
+## Чат и видеозвонки в тестовой сборке
+
+Эти функции сейчас проверяются в отдельной сборке TMS.
+
+- Чат TMS работает с клиентами Mattermost через совместимый API v4. На iPhone проверены личные сообщения, поиск открытых каналов, вступление в них и просмотр фотографий.
+- Групповой звонок Jitsi можно начать из меню канала или командой `/meet`. Приглашение появляется в канале, встреча открывается в браузере, доступ к ней проверяется по членству в канале.
 
 ## Quick start
 
@@ -36,7 +43,7 @@ sudo ./tayga-mail -config configs/tayga.example.yaml
 ### Cross-platform release builds
 
 ```bash
-VERSION=0.9.2 ./scripts/crossbuild.sh   # → dist/*.tar.gz|zip + checksums.txt
+VERSION=0.10.10 ./scripts/crossbuild.sh   # → dist/*.tar.gz|zip + checksums.txt
 ```
 
 GitHub Releases: push a `v*` tag; [GoReleaser](https://goreleaser.com) (`.github/workflows/release.yml`) publishes linux/darwin/windows/freebsd amd64+arm64 archives.
