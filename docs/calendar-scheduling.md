@@ -605,3 +605,66 @@ Unicode/HTML, MIME без изменений, файлы внутри письм
 
 Протокол: [добавление вложений EWS](https://learn.microsoft.com/en-us/exchange/client-developer/exchange-web-services/how-to-add-attachments-by-using-ews-in-exchange),
 [GetAttachment](https://learn.microsoft.com/en-us/exchange/client-developer/web-service-reference/getattachment).
+
+
+## ItemAttachment событий, контактов и задач — следующая версия после 0.10.12
+
+К существующему CalendarItem можно прикрепить структурированный CalendarItem,
+Contact или Task тем же CreateAttachment. В одном запросе допускается смешивать
+их с файлами и Message. GetItem показывает ItemAttachment, GetAttachment
+возвращает соответствующий тип без ItemId и ParentFolderId. Вложенный объект
+не создаёт отдельной встречи, контакта или задачи, не бронирует ресурсы и не
+отправляет письма. Удаление и права участников совпадают с файловыми вложениями.
+
+Поддерживаемые свойства:
+
+- Общие: ItemClass (соответствующий типу), Subject, Body Text/HTML, Sensitivity,
+  Categories. ItemClass добавляется автоматически, HTML хранится без потерь;
+  GetAttachment с BodyType=Text возвращает текстовую проекцию.
+- CalendarItem: UID, Start, End, IsAllDayEvent, Location, LegacyFreeBusyStatus,
+  Organizer, RequiredAttendees, OptionalAttendees, Resources, Recurrence,
+  StartTimeZone/EndTimeZone. Start и End обязательны, конец позже начала.
+  Повторения и зоны используют существующий проверяемый профиль EWS календаря.
+- Contact: DisplayName, GivenName, MiddleName, Surname, Nickname, CompanyName,
+  Department, JobTitle, FileAs, EmailAddresses (EmailAddress1–3), PhoneNumbers
+  (BusinessPhone/2, HomePhone/2, MobilePhone, BusinessFax, HomeFax, Pager,
+  OtherTelephone).
+- Task: StartDate, DueDate, CompleteDate, Status, PercentComplete (0–100),
+  IsComplete, Companies. Противоречивое завершение и срок раньше начала
+  отклоняются. Повторяющиеся задачи остаются за пределами этого профиля.
+
+Свойства EWS сохраняются отдельно от скачиваемого представления. Для веба,
+CalDAV и ActiveSync выдаются ICS (VEVENT/VTODO) или vCard 3.0. Экспорт сохраняет
+основные поля: имя/тему, описание, даты, повторения встречи, адресатов,
+email/телефоны контакта, состояние и процент задачи. Специфичные поля EWS
+остаются в типизированном объекте GetAttachment. Исходный HTML доступен там;
+в переносимом файле описание текстовое. Это не файлы Outlook .msg.
+
+MimeContent для этих трёх типов, вложения внутри них, физические адреса контакта,
+расширенные свойства и другие поля пока отклоняются. Ограничения сообщаются
+ошибкой, неизвестные поля не удаляются молча. Лимит 32 MiB смешанного пакета
+учитывает и скачиваемые байты, и сохранённые свойства XML.
+
+Миграция 075 добавляет ews_item_xml в SQLite/PostgreSQL; прежние FileAttachment
+и ItemAttachment<Message> не меняют тип и содержимое. При откате на 0.10.12
+новые вложенные типы доступны только как скачиваемые файлы. Удалять колонку
+с данными при откате не следует.
+
+Автоприёмка: `TestEWSStructuredItemAttachmentsLifecycle`,
+`TestEWSStructuredItemRejectionIsAtomic`,
+`TestCalendarEmbeddedMigrationKeepsAttachedMail`.
+
+Приёмка Outlook после установки новой сборки:
+
+1. Зафиксировать версию Outlook и режим подключения EWS. Создать тестовую встречу.
+2. Прикрепить событие (включая на весь день/повторение), контакт с двумя email
+   и задачу с датой и состоянием. Сохранить и заново открыть встречу.
+3. Открыть каждый вложенный объект и проверить поля; скачать ICS/vCard,
+   проверить импорт в отдельный тестовый календарь/адресную книгу/список задач.
+4. Проверить чтение участником через его копию встречи. Удалить вложение
+   организатором, обновить оба клиента и проверить отзыв доступа.
+5. Убедиться, что загрузка сама по себе не создала отдельных объектов и не
+   разослала новые приглашения. Проверить обычные файлы и вложенные письма.
+
+Настоящий Outlook и PostgreSQL не отмечаются принятыми по результату SQLite
+автотестов. [Контракт Microsoft ItemAttachment](https://learn.microsoft.com/en-us/exchange/client-developer/web-service-reference/itemattachment).

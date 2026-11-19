@@ -117,7 +117,7 @@ func readCalendarFile(ms *mailstore.Store, file *storage.CalendarAttachment) (me
 	if err != nil || int64(len(data)) != file.Size {
 		return messageAttachment{}, fmt.Errorf("calendar attachment read failed")
 	}
-	return messageAttachment{EWSItemType: file.EWSItemType, Name: file.Filename, ContentType: file.ContentType, Data: data}, nil
+	return messageAttachment{EWSItemType: file.EWSItemType, EWSItemXML: file.EWSItemXML, Name: file.Filename, ContentType: file.ContentType, Data: data}, nil
 }
 
 func calendarDownloadToken(reference string) string {
