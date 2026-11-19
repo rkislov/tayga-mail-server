@@ -31,7 +31,7 @@ import (
 var ErrInvalid = errors.New("invalid plugin bundle or request")
 var pluginID = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,189}$`)
 
-const Version = "10.11.0"
+const Version = "12.0.0"
 
 type Options struct {
 	LoadConfiguration func(string) (map[string]any, error)
@@ -397,7 +397,16 @@ func appError(err error) *model.AppError {
 	if err == nil {
 		return nil
 	}
-	return model.NewAppError("TMSPluginAPI", "tms.plugin.api_error", nil, err.Error(), 500)
+	status := 500
+	switch {
+	case errors.Is(err, storage.ErrNotFound):
+		status = 404
+	case errors.Is(err, chat.ErrForbidden):
+		status = 403
+	case errors.Is(err, ErrInvalid), errors.Is(err, chat.ErrInvalid):
+		status = 400
+	}
+	return model.NewAppError("TMSPluginAPI", "tms.plugin.api_error", nil, err.Error(), status)
 }
 
 func (r *Runtime) Configure(id string, config map[string]any) error {

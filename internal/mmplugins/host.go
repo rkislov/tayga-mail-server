@@ -76,6 +76,7 @@ func (a *hostAPI) GetConfig() *model.Config {
 	c := &model.Config{}
 	c.SetDefaults()
 	c.ServiceSettings.SiteURL = &a.runtime.options.SiteURL
+	c.LogSettings.EnableDiagnostics = new(false)
 	c.PluginSettings.Enable = new(true)
 	c.PluginSettings.EnableUploads = new(true)
 	c.PluginSettings.Directory = &a.runtime.options.Directory
@@ -258,14 +259,17 @@ func (a *hostAPI) user(id string) (*storage.User, error) {
 			continue
 		}
 		u, e := a.runtime.options.Chat.User(context.Background(), t.ID, id)
-		if e == nil {
+		if e == nil && a.userInScope(u) {
 			return u, nil
 		}
-		if !errors.Is(e, storage.ErrNotFound) {
+		if e != nil && !errors.Is(e, storage.ErrNotFound) {
 			return nil, e
 		}
 	}
 	return nil, storage.ErrNotFound
+}
+func (a *hostAPI) userInScope(u *storage.User) bool {
+	return u != nil && u.Enabled && (a.runtime.options.TenantID == "" || u.TenantID == a.runtime.options.TenantID) && (a.runtime.options.DomainID == "" || u.DomainID == a.runtime.options.DomainID)
 }
 func modelUser(u *storage.User) *model.User {
 	return &model.User{Id: chat.ID(u.ID), Username: botUsername(u), Email: u.Email, Nickname: u.DisplayName, Roles: "system_user", Locale: "ru", IsBot: u.AuthSource == "bot", CreateAt: u.CreatedAt.UnixMilli(), UpdateAt: u.CreatedAt.UnixMilli(), Props: model.StringMap{}}
@@ -282,8 +286,8 @@ func (a *hostAPI) GetUserByEmail(email string) (*model.User, *model.AppError) {
 	if err != nil {
 		return nil, appError(err)
 	}
-	if a.runtime.options.TenantID != "" && u.TenantID != a.runtime.options.TenantID {
-		return nil, appError(chat.ErrForbidden)
+	if !a.userInScope(u) {
+		return nil, appError(storage.ErrNotFound)
 	}
 	return modelUser(u), nil
 }
@@ -302,7 +306,7 @@ func (a *hostAPI) GetUserByUsername(username string) (*model.User, *model.AppErr
 		}
 		for _, u := range users {
 			m := modelUser(u)
-			if m.Username == username {
+			if a.userInScope(u) && m.Username == username {
 				return m, nil
 			}
 		}

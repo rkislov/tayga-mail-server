@@ -51,11 +51,11 @@ type Member struct {
 	LastViewedAt, ReadCount int64
 }
 type Event struct {
-	Post                      Post
-	Type                      string
-	Data                      map[string]any
-	UserID, ChannelID, TeamID string
-	OmitUsers                 map[string]bool
+	Post                                Post
+	Type                                string
+	Data                                map[string]any
+	UserID, ChannelID, TeamID, DomainID string
+	OmitUsers                           map[string]bool
 }
 
 type Service struct {
