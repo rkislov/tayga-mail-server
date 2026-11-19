@@ -197,7 +197,7 @@ func (s *Store) calendarMailDownloadLinks(ctx context.Context, tx *sql.Tx, m *Ca
 	if err != nil {
 		return err
 	}
-	rows, err := tx.QueryContext(ctx, s.rebind(`SELECT a.id,a.calendar_object_id,a.user_id,a.filename,a.content_type,a.size,a.storage_path,a.created_at,a.ews_item_type FROM calendar_attachments a JOIN calendar_objects o ON o.id=a.calendar_object_id JOIN calendars c ON c.id=o.calendar_id JOIN users u ON u.id=c.user_id WHERE o.uid=? AND LOWER(u.email)=LOWER(?) ORDER BY a.id`), p.UID, m.From)
+	rows, err := tx.QueryContext(ctx, s.rebind(`SELECT a.id,a.calendar_object_id,a.user_id,a.filename,a.content_type,a.size,a.storage_path,a.created_at,a.ews_item_type,a.ews_item_xml FROM calendar_attachments a JOIN calendar_objects o ON o.id=a.calendar_object_id JOIN calendars c ON c.id=o.calendar_id JOIN users u ON u.id=c.user_id WHERE o.uid=? AND LOWER(u.email)=LOWER(?) ORDER BY a.id`), p.UID, m.From)
 	if err != nil {
 		return err
 	}

@@ -16,8 +16,8 @@ import (
 	"github.com/tayga/tms/internal/storage"
 )
 
-func ewsCalendarAttachmentTag(kind string) string {
-	if kind == "Message" {
+func ewsCalendarAttachmentTag(kind string, properties ...string) string {
+	if kind == "Message" || (len(properties) > 0 && properties[0] != "") {
 		return "ItemAttachment"
 	}
 	return "FileAttachment"

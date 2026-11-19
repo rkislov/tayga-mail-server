@@ -23,6 +23,7 @@ type messageContent struct {
 	SMIME                                      bool
 }
 type messageAttachment struct {
+	EWSItemXML                   string
 	EWSItemType                  string
 	Name, ContentType, ContentID string
 	ContentLocation              string

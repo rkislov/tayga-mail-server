@@ -225,8 +225,8 @@ func (h *ewsHandler) getAttachment(ctx context.Context, u *storage.User, body st
 				out.WriteString(`<m:GetAttachmentResponseMessage ResponseClass="Error"><m:ResponseCode>ErrorInvalidAttachmentId</m:ResponseCode></m:GetAttachmentResponseMessage>`)
 				continue
 			}
-			if a.EWSItemType == "Message" {
-				item, renderErr := ewsAttachedMessageXML(a, reference, body)
+			if a.EWSItemType == "Message" || a.EWSItemXML != "" {
+				item, renderErr := ewsAttachedItemXML(a, reference, body)
 				if renderErr != nil {
 					out.WriteString(`<m:GetAttachmentResponseMessage ResponseClass="Error"><m:ResponseCode>ErrorInvalidAttachmentId</m:ResponseCode></m:GetAttachmentResponseMessage>`)
 					continue

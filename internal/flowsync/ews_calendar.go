@@ -78,7 +78,7 @@ func (h *ewsHandler) calendarItemXML(ctx context.Context, u *storage.User, o *st
 	// Empty collections explicitly clear cached participants/files after removal.
 	b.WriteString(`<t:Attachments>`)
 	for _, f := range files {
-		fmt.Fprintf(&b, `<t:%s><t:AttachmentId Id="%s"/><t:Name>%s</t:Name><t:ContentType>%s</t:ContentType><t:Size>%d</t:Size><t:IsInline>false</t:IsInline></t:%s>`, ewsCalendarAttachmentTag(f.EWSItemType), xmlEscape("calendar:"+o.ID+":"+f.ID), xmlEscape(f.Filename), xmlEscape(f.ContentType), f.Size, ewsCalendarAttachmentTag(f.EWSItemType))
+		fmt.Fprintf(&b, `<t:%s><t:AttachmentId Id="%s"/><t:Name>%s</t:Name><t:ContentType>%s</t:ContentType><t:Size>%d</t:Size><t:IsInline>false</t:IsInline></t:%s>`, ewsCalendarAttachmentTag(f.EWSItemType, f.EWSItemXML), xmlEscape("calendar:"+o.ID+":"+f.ID), xmlEscape(f.Filename), xmlEscape(f.ContentType), f.Size, ewsCalendarAttachmentTag(f.EWSItemType, f.EWSItemXML))
 	}
 	fmt.Fprintf(&b, `</t:Attachments><t:HasAttachments>%t</t:HasAttachments><t:UID>%s</t:UID><t:Start>%s</t:Start><t:End>%s</t:End><t:IsAllDayEvent>%t</t:IsAllDayEvent>`, len(files) > 0, xmlEscape(o.UID), ewsDate(start), ewsDate(end), ev.AllDay)
 	busy := "Busy"

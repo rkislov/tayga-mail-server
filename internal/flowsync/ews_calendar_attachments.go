@@ -74,11 +74,11 @@ func (h *ewsHandler) createCalendarAttachment(ctx context.Context, u *storage.Us
 		}
 		item := node.Name.Local == "ItemAttachment"
 		if item {
-			upload, code, message := parseEWSMessageAttachment(node)
+			upload, code, message := parseEWSItemUpload(node)
 			if code != "" {
 				return reject(code, message)
 			}
-			total += len(upload.data)
+			total += len(upload.data) + len(upload.file.EWSItemXML)
 			if total > maxEWSCalendarAttachmentBytes {
 				return reject("ErrorAttachmentSizeLimitExceeded", "Calendar attachments exceed 32 MiB per request")
 			}
@@ -211,7 +211,7 @@ func (h *ewsHandler) createCalendarAttachment(ctx context.Context, u *storage.Us
 	var response strings.Builder
 	response.WriteString(`<m:CreateAttachmentResponse xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"><m:ResponseMessages>`)
 	for _, upload := range uploads {
-		fmt.Fprintf(&response, `<m:CreateAttachmentResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:Attachments><t:%s><t:AttachmentId Id="%s" RootItemId="%s" RootItemChangeKey="%s"/></t:%s></m:Attachments></m:CreateAttachmentResponseMessage>`, ewsCalendarAttachmentTag(upload.file.EWSItemType), xmlEscape("calendar:"+id+":"+upload.file.ID), xmlEscape(id), xmlEscape(key), ewsCalendarAttachmentTag(upload.file.EWSItemType))
+		fmt.Fprintf(&response, `<m:CreateAttachmentResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:Attachments><t:%s><t:AttachmentId Id="%s" RootItemId="%s" RootItemChangeKey="%s"/></t:%s></m:Attachments></m:CreateAttachmentResponseMessage>`, ewsCalendarAttachmentTag(upload.file.EWSItemType, upload.file.EWSItemXML), xmlEscape("calendar:"+id+":"+upload.file.ID), xmlEscape(id), xmlEscape(key), ewsCalendarAttachmentTag(upload.file.EWSItemType, upload.file.EWSItemXML))
 	}
 	response.WriteString(`</m:ResponseMessages></m:CreateAttachmentResponse>`)
 	return response.String(), nil
