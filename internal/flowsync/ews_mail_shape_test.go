@@ -1,6 +1,7 @@
 package flowsync
 
 import (
+	"context"
 	"encoding/base64"
 	"strings"
 	"testing"
@@ -80,5 +81,36 @@ func TestEWSNativeMalformedMimeStillDownloads(t *testing.T) {
 	got, err := h.batchItems(ctx, user, "GetItem", `<GetItem><ItemShape><BaseShape>IdOnly</BaseShape><IncludeMimeContent>1</IncludeMimeContent></ItemShape><ItemIds><ItemId Id="`+msg.ID+`"/></ItemIds></GetItem>`, h.getItem)
 	if err != nil || !strings.Contains(got, base64.StdEncoding.EncodeToString([]byte(raw))) {
 		t.Fatalf("original cannot be downloaded: %v %s", err, got)
+	}
+	// An invalid outer header exercises recovery before the MIME reader has
+	// returned any fields. Include it in the same batch as the broken body.
+	brokenHeader := []byte("Subject: Legacy message\r\nMalformed header\r\nMessage-ID: <legacy@example.com>\r\n\r\nBody")
+	path, size, err = h.ms.Deliver(user.Email, "INBOX", brokenHeader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy, err := st.InsertMessage(ctx, &storage.Message{MailboxID: inbox.ID, FilePath: path, Size: size, InternalDate: time.Now()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	trace := &requestTrace{}
+	got, err = h.batchItems(context.WithValue(ctx, traceKey{}, trace), user, "GetItem",
+		`<GetItem><ItemShape><BaseShape>IdOnly</BaseShape><AdditionalProperties><FieldURI FieldURI="item:Subject"/><FieldURI FieldURI="message:InternetMessageId"/><FieldURI FieldURI="item:ConversationId"/></AdditionalProperties></ItemShape><ItemIds><ItemId Id="`+msg.ID+`"/><ItemId Id="`+legacy.ID+`"/></ItemIds></GetItem>`, h.getItem)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, err := parseProtocolXML([]byte(got))
+	if err != nil {
+		t.Fatal(err)
+	}
+	responses := doc.find("ResponseMessages").Children
+	if trace.RecoveredMIMEItems != 2 || len(responses) != 2 ||
+		responses[0].value("ResponseCode") != "NoError" ||
+		responses[1].value("ResponseCode") != "NoError" ||
+		responses[0].find("Subject").Text != "Broken MIME" ||
+		responses[1].find("Subject").Text != "Legacy message" ||
+		responses[1].find("InternetMessageId").Text != "<legacy@example.com>" ||
+		responses[1].find("ConversationId") == nil || doc.find("MimeContent") != nil {
+		t.Fatalf("malformed messages failed background GetItem: %s", got)
 	}
 }

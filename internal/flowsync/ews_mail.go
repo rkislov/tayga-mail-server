@@ -2,15 +2,20 @@
 package flowsync
 
 import (
+	"bytes"
+	"cmp"
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
-	"github.com/tayga/tms/internal/mailsearch"
-	"github.com/tayga/tms/internal/storage"
 	"net/mail"
+	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/tayga/tms/internal/mailsearch"
+	"github.com/tayga/tms/internal/storage"
 )
 
 func ewsAddress(field, value string) string {
@@ -79,7 +84,36 @@ func (h *ewsHandler) getMailItem(ctx context.Context, u *storage.User, msg *stor
 		reader.Close()
 	}
 	if err != nil {
-		return "", err
+		var fileErr *os.PathError
+		if errors.As(err, &fileErr) {
+			return "", err
+		}
+		// A malformed MIME part can leave usable headers and body parts. Keep
+		// those fields so clients can synchronize the archived item and still
+		// request the original MIME separately.
+		var headers msgHeaders
+		if raw != nil {
+			headers = parseMsgHeaders(bytes.NewReader(raw))
+		} else {
+			headers = readMsgHeaders(h.ms, msg.FilePath)
+		}
+		content.Subject = cmp.Or(content.Subject, msg.Subject, headers.Subject)
+		content.From = cmp.Or(content.From, headers.From, msg.FromAddr)
+		content.To = cmp.Or(content.To, msg.ToAddr)
+		content.MessageID = cmp.Or(content.MessageID, headers.MessageID, msg.MessageID)
+		content.References = cmp.Or(content.References, headers.References)
+		content.InReplyTo = cmp.Or(content.InReplyTo, headers.InReplyTo)
+		content.ThreadIndex = cmp.Or(content.ThreadIndex, headers.ThreadIndex)
+		content.ThreadTopic = cmp.Or(content.ThreadTopic, headers.ThreadTopic)
+		if content.SentDate.IsZero() {
+			content.SentDate = headers.SentDate
+		}
+		if content.SentDate.IsZero() {
+			content.SentDate, _ = mail.ParseDate(msg.DateHdr)
+		}
+		if trace, ok := ctx.Value(traceKey{}).(*requestTrace); ok {
+			trace.RecoveredMIMEItems++
+		}
 	}
 	body, kind := content.Text, "Text"
 	if content.HTML != "" && extractTag(request, "BodyType") != "Text" {
