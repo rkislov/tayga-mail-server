@@ -1,8 +1,8 @@
-# Tayga, TEGU, CommuniGate Pro и Яндекс 360
+# Совместная работа: Tayga, TEGU, CommuniGate, Яндекс 360, Р7, VK, Астра и MS Exchange
 
 Актуализация: **19 ноября 2026 года**. [Презентация PowerPoint](presentations/tayga-competitors-2026-11-19.pptx).
 
-Основа Tayga: стабильный **v0.10.11** и документация/исходники `main` на коммите [`9e330eb`](https://github.com/rkislov/tayga-mail-server/tree/9e330eb2152635f4c33669e9ac7f1132b78bab70). Изменения после выпуска не приписываются архивам v0.10.11. Незакоммиченная локальная разработка исключена. Предыдущее сравнение с RuPost доступно в истории Git.
+Основа Tayga: стабильный **v0.10.12** и документация/исходники `main` на коммите [`5d4aa39`](https://github.com/rkislov/tayga-mail-server/tree/5d4aa391e9af82a65e557854d87cd8fd2501f132). Изменения после выпуска не приписываются архивам v0.10.12. Незакоммиченная локальная разработка исключена. Астра представлена связкой RuPost + WorksPad. Отдельная платформа «Сфера» не включена по уточнению автора запроса.
 
 Это документальное сравнение, а не общий нагрузочный тест. Возможности конкурентов описаны по материалам производителей. «Не подтверждено» означает отсутствие подтверждения в выбранных источниках, а не отсутствие функции. Версия, клиент и лицензия влияют на результат.
 
@@ -80,11 +80,188 @@ CommuniGate Pro документирует интегрированную поч
 - [Y2 — Яндекс 360 on-premises](https://360.yandex.ru/business/on-premises/)
 - [Y3 — почтовые клиенты Яндекс](https://yandex.ru/support/yandex-360/business/mail/ru/mail-clients/others)
 - [Y4 — тарифы SaaS, прямое чтение недоступно](https://360.yandex.ru/business/tariff/)
-- [A1 — README](https://github.com/rkislov/tayga-mail-server/blob/9e330eb2152635f4c33669e9ac7f1132b78bab70/README.md)
-- [A2 — FlowSync](https://github.com/rkislov/tayga-mail-server/blob/9e330eb2152635f4c33669e9ac7f1132b78bab70/docs/flowsync-compatibility.md)
-- [A3 — дорожная карта и приёмка](https://github.com/rkislov/tayga-mail-server/blob/9e330eb2152635f4c33669e9ac7f1132b78bab70/docs/roadmap.md)
-- [A4 — чат](https://github.com/rkislov/tayga-mail-server/blob/9e330eb2152635f4c33669e9ac7f1132b78bab70/docs/mattermost-compatibility.md)
-- [A5 — Jitsi](https://github.com/rkislov/tayga-mail-server/blob/9e330eb2152635f4c33669e9ac7f1132b78bab70/docs/vks.md)
-- [A6 — файлы и офис](https://github.com/rkislov/tayga-mail-server/blob/9e330eb2152635f4c33669e9ac7f1132b78bab70/docs/files-and-office.md)
-- [A7 — HA](https://github.com/rkislov/tayga-mail-server/blob/9e330eb2152635f4c33669e9ac7f1132b78bab70/docs/ha.md)
-- [A8 — полный backup](https://github.com/rkislov/tayga-mail-server/blob/9e330eb2152635f4c33669e9ac7f1132b78bab70/docs/backup-full.md)
+- [A1 — README](https://github.com/rkislov/tayga-mail-server/blob/5d4aa391e9af82a65e557854d87cd8fd2501f132/README.md)
+- [A2 — FlowSync](https://github.com/rkislov/tayga-mail-server/blob/5d4aa391e9af82a65e557854d87cd8fd2501f132/docs/flowsync-compatibility.md)
+- [A3 — дорожная карта и приёмка](https://github.com/rkislov/tayga-mail-server/blob/5d4aa391e9af82a65e557854d87cd8fd2501f132/docs/roadmap.md)
+- [A4 — чат](https://github.com/rkislov/tayga-mail-server/blob/5d4aa391e9af82a65e557854d87cd8fd2501f132/docs/mattermost-compatibility.md)
+- [A5 — Jitsi](https://github.com/rkislov/tayga-mail-server/blob/5d4aa391e9af82a65e557854d87cd8fd2501f132/docs/vks.md)
+- [A6 — файлы и офис](https://github.com/rkislov/tayga-mail-server/blob/5d4aa391e9af82a65e557854d87cd8fd2501f132/docs/files-and-office.md)
+- [A7 — HA](https://github.com/rkislov/tayga-mail-server/blob/5d4aa391e9af82a65e557854d87cd8fd2501f132/docs/ha.md)
+- [A8 — полный backup](https://github.com/rkislov/tayga-mail-server/blob/5d4aa391e9af82a65e557854d87cd8fd2501f132/docs/backup-full.md)
+
+
+## Расширенный анализ совместной работы
+
+Срез: **19.11.2026**. Для Tayga использованы исходники и документация `main` на `5d4aa39`, стабильный выпуск — 0.10.12. Эталон почты и календарей — **Exchange Online + Outlook**, эталон файлов и соавторства — **Microsoft 365 с SharePoint/OneDrive и Office**. Это разный состав сервисов, а не функции одного Exchange Server. Возможности Exchange Server on-premises и Exchange Online могут различаться.
+
+Календарная синхронизация, доступ к данным из приложения и экспорт в системные приложения телефона рассматриваются раздельно. ICS-подписка не равна двустороннему CalDAV. Получение уведомления не доказывает завершённую синхронизацию. Задачи и заметки зависят от конкретного мобильного клиента даже при наличии серверной коллекции. Android может требовать отдельного DAV-клиента; iOS поддерживает DAV-учётные записи, но это не сертификат совместимости каждого сервера.
+
+«Есть» в матрицах означает реализацию, описанную в исходниках Tayga или документации производителя. Независимой установки всех продуктов на общий стенд не проводилось. «Не подтверждено» означает отсутствие доказательства в выбранных источниках. Приёмка отдельного iPhone не доказывает все версии iOS/Android. SaaS и on-premise поставки не объединяются автоматически. Неподтверждённые сценарии обозначены словами без условных символов.
+
+### Microsoft Exchange как функциональный эталон
+
+**Почта и календари.** Exchange Online + Outlook: общие ящики, права Full Access / Send As, делегирование, занятость и ресурсные ящики.
+
+**Сложные встречи.** Серии и исключения, перенос и отмена одной даты, ответы участников, предложение времени и правила бронирования.
+
+**Документы.** Эталон соавторства: Microsoft 365 с SharePoint / OneDrive и Office. Exchange хранит письма и вложения, офисный диск подключается отдельно.
+
+### Что именно передают протоколы
+
+| Канал | Какие данные | Что проверяем |
+| --- | --- | --- |
+| IMAP + SMTP | Письма, папки, флаги, отправка | Вложения и повтор отправки |
+| CalDAV / CardDAV | События / адресные книги | Создание, правка, удаление в обе стороны |
+| ActiveSync / EWS | Почта, календарь, контакты; задачи и заметки по клиенту | Коллекции, повторы и восстановление связи |
+| WebDAV / API приложений | Файлы / данные приложения | Офлайн-копия, конфликт, дозагрузка |
+
+### Мобильная синхронизация: Exchange и серверы
+
+| Решение | Протокол / клиент | Что синхронизируется | Состояние |
+| --- | --- | --- | --- |
+| Exchange | EAS; Outlook mobile отдельным путём | Почта, события, контакты; EAS Tasks по клиенту | Документация Microsoft; функции клиента различаются |
+| Tayga | FlowSync EAS; CalDAV / CardDAV; Mattermost API | Почта, события, контакты; Tasks / Notes по клиенту; чат отдельно | iPhone: проверенные календарные сценарии и чат; остальная матрица в пилоте |
+| CommuniGate | AirSync / ActiveSync, DAV; MAPI для Outlook ПК | Почта, календарь, контакты; задачи и состав папок по клиенту | Документация производителя; проверка версии телефона |
+| TEGU | IMAP / SMTP, CalDAV / CardDAV; Timon: 2TMTP | Письма, события и контакты; 2TMTP также вложения | Timon web beta / Linux alpha; стабильные iOS / Android не подтверждены |
+
+### Мобильная синхронизация: платформы офиса
+
+| Решение | Протокол / клиент | Что синхронизируется | Состояние |
+| --- | --- | --- | --- |
+| Яндекс 360 | IMAP / SMTP, CalDAV, CardDAV; приложения | Письма, события, контакты; файлы через Диск | Официальные инструкции iOS / Android; SaaS отдельно от on-prem |
+| Р7 КС 2024 | CalDAV; IMAP / SMTP почтового сервера; Р7 Документы | Календарь и почта разными каналами; файлы в мобильном редакторе | CalDAV описан; CardDAV / EAS именно КС 2024 не подтверждены |
+| VK WorkSpace | IMAP / SMTP, CalDAV, CardDAV, WebDAV; суперапп | Письма, события, адресные книги, файлы; чаты в приложении | Протоколы подтверждены для on-prem; состав SaaS проверяется отдельно |
+| Астра: RuPost + WorksPad | WorksPad через шлюз; далее IMAP / SMTP / CalDAV / CardDAV | Почта, shared-календари, контакты, файлы и копии с ПК | iOS / Android в контейнере; экспорт в штатные приложения не подразумевается |
+
+### Tayga: состояние синхронизации
+
+**Почта и адреса.** FlowSync: письма, папки и вложения. GAL — поиск каталога, CardDAV — обмен адресными книгами. IMAP / SMTP — отдельный почтовый путь.
+
+**Календарь.** Двусторонние события, участники, ответы, повторения и исключения реализованы. В документации есть подтверждённый обмен календаря с iPhone.
+
+**Задачи и заметки.** Tasks и Notes реализованы в FlowSync. Наличие коллекции на сервере и её поддержка конкретным приложением телефона проверяются отдельно.
+
+### Tayga: подробный функционал календаря
+
+**Встречи.** Личные и общие календари, права, приглашения, ответы Да / Нет / Возможно, новое время, занятость и помещения.
+
+**Повторения.** Дни, недели, месяцы, годы, интервалы и окончание. Порядковый день недели, последний день месяца, перенос / отмена и ответ на отдельную дату.
+
+**Сохранность события.** Часовые пояса, напоминания, вложения и координаты. Проверка версий, общая транзакция встречи и брони; EWS / EAS / DAV используют общие данные.
+
+### Календарь: базовые сценарии
+
+| Функция | Exchange | Tayga | CommuniGate | TEGU |
+| --- | --- | --- | --- | --- |
+| Общие календари | Права и делегаты | Права календаря | Общие папки / ACL | Делегирование |
+| Приглашения / RSVP | Есть | Есть | Есть | Есть |
+| Повторяющиеся серии | Есть | Расширенные правила | Есть | Есть |
+| Занятость и ресурсы | Ресурсные ящики | Занятость и помещения | Планирование; ресурсы по настройке | Free/busy и несколько ресурсов |
+
+### Календарь: сложные сценарии
+
+| Функция | Exchange | Tayga | CommuniGate | TEGU |
+| --- | --- | --- | --- | --- |
+| Одна дата серии | Правка / отмена | Правка / отмена / RSVP | Клиентский профиль проверить | Детальная матрица не подтверждена |
+| Новое время | Есть | Серия и отдельная дата | Подтверждение сценария нужно | Подтверждение сценария нужно |
+| Секретарь / руководитель | Делегат и права отправки | Права есть; полный профиль в пилоте | MAPI / права; приёмка клиента | Сценарий заявлен |
+| Вложения события | Есть | Файлы и EWS ItemAttachment | Проверка состава клиента | Есть |
+
+### Календарь: офисные платформы
+
+| Функция | Яндекс 360 | Р7 КС 2024 | VK WorkSpace | RuPost + WorksPad |
+| --- | --- | --- | --- | --- |
+| Общие календари | Есть | Уровни прав | Просмотр / правка | Shared-календари |
+| Приглашения / ответы | Есть | Да / Нет / Возможно | Есть | Есть в мобильном календаре |
+| Повторения | Есть | Дни / недели / месяцы / годы | Есть | Повторы и отдельные даты |
+| Помещения / занятость | Переговорки | Совместная занятость; бронь уточнить | Переговорки и занятость | Зависит от RuPost / клиента |
+
+### Календарь: дополнительные возможности
+
+| Функция | Яндекс 360 | Р7 КС 2024 | VK WorkSpace | RuPost + WorksPad |
+| --- | --- | --- | --- | --- |
+| Делегирование | Доступ к календарю | Просмотр / правка / полный доступ | Доступ и передача организатора | Shared; секретарский профиль уточнить |
+| Событие с файлами | Есть | Есть | Есть | WorksPad: вложения |
+| Предложение времени | Сценарий уточнить | Сценарий уточнить | Альтернативное время | Сценарий уточнить |
+| Ссылка на ВКС | Телемост | По составу Р7 Команда | Звонок из события | Интеграция зависит от поставки |
+
+### Файлы: сервер и офисное хранилище
+
+| Функция | Microsoft 365 | Tayga | CommuniGate | TEGU |
+| --- | --- | --- | --- | --- |
+| Файловый слой | SharePoint / OneDrive | Встроенный диск | Файловое хранилище | Отдельный диск не подтверждён |
+| Общий доступ | Права и ссылки | Папки, ACL и ссылки | Общие файлы / WebDAV | Права вложений; диск уточнить |
+| Версии и корзина | Есть | Есть | Версионность не подтверждена | Не подтверждено |
+| Мобильные файлы | OneDrive / Office | Веб / WebDAV-клиент | WebDAV-клиент | Вложения по клиенту |
+
+### Файлы: платформы совместной работы
+
+| Функция | Яндекс 360 | Р7 КС 2024 | VK WorkSpace | RuPost + WorksPad |
+| --- | --- | --- | --- | --- |
+| Хранилище | Диск | Р7 Диск | Личный / корпоративный Диск | Файловые ресурсы + FileBox |
+| Права и ссылки | Есть | Есть | Есть, защита ссылок | Сетевые права, защищённые ссылки |
+| Версии | История / восстановление | Просмотр / откат / копия | Состав истории уточнить | Зависит от источника файлов |
+| Мобильный доступ | Диск и офлайн-файлы | Р7 Документы | Диск в супераппе | Контейнер и синхронизация с ПК |
+
+### Совместные документы: Microsoft и серверы
+
+| Сценарий | Microsoft 365 | Tayga | CommuniGate | TEGU |
+| --- | --- | --- | --- | --- |
+| Редактор | Office + SharePoint / OneDrive | Collabora / ONLYOFFICE / Р7 | Внешний редактор | Не подтверждён |
+| Одновременная правка | Есть | Через офисный сервер | Штатный движок не подтверждён | Не подтверждено |
+| Комментарии / рецензии | Есть в Office | Функции выбранного редактора | По интеграции | Не подтверждено |
+| Состояние интеграции | Документация Microsoft | Collabora: браузерный тест; Р7 / ONLYOFFICE: API-тесты | Нужна спецификация интеграции | Нужна спецификация интеграции |
+
+### Совместные документы: офисные платформы
+
+| Сценарий | Яндекс 360 | Р7 КС 2024 | VK WorkSpace | WorksPad |
+| --- | --- | --- | --- | --- |
+| Одновременная правка | Документы | Быстрый / строгий режим | Документы платформы | Встроенный редактор; соавторство уточнить |
+| Комментарии / правки | Есть | Комментарии и рецензии | Состав редактора уточнить | PDF-аннотации; рецензии уточнить |
+| История / возврат | История версий | Версии и ревизии | По редактору / поставке | Зависит от хранилища |
+| Офлайн на телефоне | По приложению и формату | iOS описан; потом синхронизация | Матрица приложений нужна | Локальные копии в контейнере |
+
+### Р7, VK и Астра: состав решения
+
+**Р7 Корпоративный.** КС 2024: Диск, Почта, Календарь, Контакты, Проекты, Страницы и Формы. Сервер Документов и мобильные редакторы образуют офисный контур.
+
+**VK WorkSpace.** Почта, календарь, диск, документы, мессенджер и ВКС в единой платформе. Есть SaaS и on-prem, а доступность функций зависит от поставки.
+
+**Группа Астра.** RuPost отвечает за почту и groupware; WorksPad — за защищённое мобильное рабочее место и файлы. Astra Linux — ОС, не самостоятельный аналог Exchange.
+
+### Положение относительно эталона Exchange
+
+**Почта и календарь.** Tayga развивает свои EWS / ActiveSync; CommuniGate предлагает AirSync и MAPI Connector. Совпадение названия протокола не заменяет сценарную приёмку.
+
+**Мобильный путь.** Яндекс и VK соединяют приложения с DAV-протоколами. WorksPad делает акцент на контейнере. У Р7 сильнее документный контур; мобильный groupware требует уточнения.
+
+**Совместные документы.** У Microsoft это SharePoint / OneDrive + Office. Tayga подключает редактор; Яндекс, Р7 и VK включают офисные сервисы. Для TEGU и CG нужен отдельный документный контур.
+
+### Приёмка совместной работы и телефона
+
+| Проверка | Действия | Критерий результата |
+| --- | --- | --- |
+| Календарь | Серия, ресурс, перенос одной даты, ответ и отмена | Одинаковый итог в вебе и на двух телефонах |
+| Офлайн и сеть | Сон, смена Wi-Fi, правка без сети, возврат | Нет дублей, потерь и самопроизвольного сброса |
+| Файлы и редактор | Два автора, конфликт, версия, отзыв ссылки | Сохранение и права действуют во всех клиентах |
+| Мобильные коллекции | Письма, события, контакты, задачи, заметки отдельно | Версия ОС / клиента и результат по каждому объекту |
+
+### Источники расширенного раздела
+
+Проверены 19.11.2026. Ссылки ниже поддерживают конкретные блоки анализа; исторические руководства не подменяют проверку актуальной поставки.
+
+**Microsoft — эталон и мобильный обмен:** [Exchange ActiveSync, объекты синхронизации](https://learn.microsoft.com/en-us/Exchange/clients-and-mobile-in-exchange-online/exchange-activesync/exchange-activesync), [мобильный Outlook и собственная технология Microsoft sync](https://learn.microsoft.com/en-us/exchange/clients-and-mobile-in-exchange-online/outlook-for-ios-and-android/outlook-for-ios-and-android), [общие ящики](https://learn.microsoft.com/en-us/exchange/collaboration-exo/shared-mailboxes), [права Full Access / Send As / Send on behalf](https://learn.microsoft.com/en-us/exchange/recipients-in-exchange-online/manage-permissions-for-recipients), [ресурсные ящики и делегирование брони](https://learn.microsoft.com/exchange/recipients-in-exchange-online/manage-resource-mailboxes), [серии и исключения встреч](https://support.microsoft.com/en-us/outlook/best-practices-for-organizations-when-using-the-outlook-calendar), [модель события и предложения нового времени](https://learn.microsoft.com/en-us/graph/api/resources/event?view=graph-rest-1.0), [соавторство документов](https://support.microsoft.com/en-gb/sharepoint/get-started-with-sharepoint/document-collaboration-and-co-authoring), [версии файлов](https://support.microsoft.com/en-us/onedrive/restore-a-previous-version-of-a-file-stored-in-onedrive).
+
+**Tayga — код, календарь, клиентская приёмка и офис:** [календарные сценарии](https://github.com/rkislov/tayga-mail-server/blob/5d4aa391e9af82a65e557854d87cd8fd2501f132/docs/calendar-scheduling.md), [FlowSync](https://github.com/rkislov/tayga-mail-server/blob/5d4aa391e9af82a65e557854d87cd8fd2501f132/docs/flowsync-compatibility.md), [файлы и редакторы](https://github.com/rkislov/tayga-mail-server/blob/5d4aa391e9af82a65e557854d87cd8fd2501f132/docs/files-and-office.md), [дорожная карта с клиентскими проверками](https://github.com/rkislov/tayga-mail-server/blob/5d4aa391e9af82a65e557854d87cd8fd2501f132/docs/roadmap.md). FlowSync — своя реализация EWS и ActiveSync. Формулировки о составе синхронизации не обещают полный набор операций Exchange во всех клиентах.
+
+**CommuniGate — календарь и протоколы:** [календарь: приглашения, повторения и занятость](https://doc.communigatepro.ru/russian/interfaces/webmail/Calendar.html), [AirSync и управление устройствами](https://doc.communigatepro.ru/russian/admin/access/AirSync.html), [состав платформы и файловое хранилище](https://doc.communigatepro.ru/russian/).
+
+**TEGU — календарь и клиентский путь:** [сервер, ресурсы, делегирование и DAV](https://mbk-lab.ru/tegu-enterprise/), [Timon, 2TMTP, стадии клиентов](https://mbk-lab.ru/timon_client/). Указание MDM в описании Timon не превращает планируемый мобильный клиент в выпущенный.
+
+**Яндекс — SaaS и мобильные устройства:** [мобильный календарь и CalDAV](https://www.yandex.com/support/yandex-360/customers/calendar/web/en/sync/sync-mobile), [CardDAV и ограничения контактов телефона](https://yandex.com/support/yandex-360/business/mail/en/web/abook), [календарь, доступы и Телемост](https://360.yandex.kz/business/calendar/), [Документы: правки и версии](https://360.yandex.ru/business/documents/), [офлайн-файлы Диска iOS](https://yandex.ru/support/yandex-360/customers/disk/app/ios/ru/actions/offline), [скачивание и ограничения обратной синхронизации Android](https://www.yandex.ru/support/yandex-360/customers/disk/app/android/ru/actions/download). Офлайн-кеш обновляется из облака, но скачивание и внешнее редактирование файла не означают автоматическую обратную загрузку. Локальный состав сервисов рассматривается по отдельной [странице on-premises](https://360.yandex.ru/business/on-premises/).
+
+**Р7 — состав, календарь, документы:** [текущий КС 2024: 2026.4.14.17766, октябрь 2026](https://support.r7-office.ru/download/corporate-server/), [модуль календаря](https://support.r7-office.ru/corporate-server2024/modules-cs-2024/calendar-cs-2024/modul-kalendar/), [CalDAV и отличие ICS-подключения](https://support.r7-office.ru/organizer/working-with-the-calendar-in-the-organizer/adding-a-calendar-from-the-portal-in-the-organizerdobavlenie-kalendarja-s-port/), [WebDAV КС 2024](https://support.r7-office.ru/corporate-server2024/settings_cs-r7disk/instrukcija-po-podkljucheniju-k-p7-disku-cherez-webdav/), [версии файлов](https://r7-office.ru/about/news/r7-korporativnyy-server-2024-poluchil-svezhee-obnovlenie.html), [быстрый и строгий режимы соавторства](https://support.r7-office.ru/desktop-editors/documens/teamwork-documents/vybor-rezhimov-redaktirovanija/), [возможности совместной работы редактора](https://support.r7-office.ru/wp-content/uploads/2025/08/dokumentacija-r7-ofis.pdf), [мобильные редакторы и WebDAV](https://support.r7-office.ru/mobile_editors/app-apple-ios/general-operations-ios/opening-creating-new-files-and-folders/), [мобильные приложения, включая заявленный офлайн iOS](https://new.r7-office.ru/home/products/mobilnye-prilozheniya.html). Документация отдельных модулей относится к разным версиям; свойства старого КС 2019 не приписываются КС 2024 автоматически.
+
+**VK — on-premises и совместная работа:** [состав платформы](https://www.workspacevk.com/), [суперапп](https://www.workspacevk.com/superapp/), [протоколы, руководство установки 25.4](https://biz.mail.ru/docs/on-premises/mail/installation-guide/mail-installation-guide-25.4.pdf), [CalDAV, руководство календаря 1.23](https://biz.mail.ru/docs/on-premises/mail/calendar-user-guide/calendar-user-guide-1.23.pdf), [CardDAV и адресные книги](https://biz.mail.ru/docs/on-premises/mail/user-guide/mail-address-book/mail-adress-book.pdf), [изменения событий через CalDAV, потоки данных](https://biz.mail.ru/docs/on-premises/mail/architecture/calendar-diagrams/calendar-diagrams.pdf), [занятость, общие календари и переговорки](https://www.workspacevk.com/blog/kak-navesti-poryadok-v-rabochey-pochte-i-kalendare/), [детали календаря и доступность по тарифам](https://www.workspacevk.com/tariffs/). Ссылки на старые PDF фиксируют описанный там функционал, а не текущий номер продукта.
+
+**Группа Астра — RuPost + WorksPad:** [редакции WorksPad: контейнер, почта, shared-календари и FileBox](https://www.workspad.ru/editions/), [материалы Астры: почта, повторения, вложения, отдельные даты и мобильные файлы](https://astra.ru/upload/iblock/720/ek3yk4xpad4k59pge32lcr7bm7ayffnc.pdf), [транспорт до шлюза и RuPost, руководство 2022 года](https://astra.ru/upload/iblock/762/yzz1veuabt3yyn5d10u77961skc3r2ea.pdf), [RuPost в портфеле Астры](https://astra.ru/upload/iblock/55f/pkayear1q4yjksq4c9mt2ldjnv70yq33/Leaflet_RuPost_1125.pdf). HTTPS/WSS относится к клиенту и шлюзу; IMAP/SMTP/DAV — к дальнейшему соединению шлюза с источником. Встроенный мобильный редактор не считается доказательством одновременного соавторства нескольких пользователей.
