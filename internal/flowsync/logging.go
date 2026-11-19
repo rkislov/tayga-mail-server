@@ -37,6 +37,10 @@ func (w *loggedResponse) WriteHeader(status int) {
 	}
 }
 func (w *loggedResponse) Write(p []byte) (int, error) {
+	// Keep the body write explicitly typed, including callers using implicit headers.
+	if w.Header().Get("Content-Type") == "" {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	}
 	if w.status == 0 {
 		w.WriteHeader(200)
 	}
