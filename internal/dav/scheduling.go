@@ -43,6 +43,11 @@ func (w *scheduleWriter) WriteHeader(status int) {
 		return
 	}
 	w.written = true
+	// Protocol responses without an explicit media type must not be sniffed as HTML.
+	if w.Header().Get("Content-Type") == "" {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	}
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	if status >= 200 && status < 300 && (w.request.Method == "GET" || w.request.Method == "HEAD" || w.request.Method == "PUT") {
 		if tag := w.metadata[metadataPath(w.request.URL.Path)]; tag != "" {
 			w.Header().Set("Schedule-Tag", tag)
