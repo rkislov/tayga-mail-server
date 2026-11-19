@@ -134,7 +134,7 @@ func rebase(value, from, to string) string {
 }
 
 func rebaseConfig(c *config.Config, from, to string) {
-	for _, p := range []*string{&c.Storage.SQLite.Path, &c.Mailstore.Root, &c.TLS.CertFile, &c.TLS.KeyFile, &c.TLS.CertsDir, &c.SMTP.DKIM.PrivateKeyFile, &c.ARC.PrivateKeyFile, &c.Log.File} {
+	for _, p := range []*string{&c.Storage.SQLite.Path, &c.Mailstore.Root, &c.TLS.CertFile, &c.TLS.KeyFile, &c.TLS.CertsDir, &c.SMTP.DKIM.PrivateKeyFile, &c.ARC.PrivateKeyFile, &c.Log.File, &c.VKS.SigningKeyFile, &c.VKS.TURNSecretFile, &c.Mattermost.PluginDirectory} {
 		*p = rebase(*p, from, to)
 	}
 }

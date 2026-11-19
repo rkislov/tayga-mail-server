@@ -285,7 +285,7 @@ func validateLayout(ctx context.Context, root, original string, cfg *config.Conf
 	if _, err := relative(root, cfg.Log.File); err != nil {
 		return err
 	}
-	required := []string{cfg.Storage.SQLite.Path, cfg.Mailstore.Root, cfg.TLS.CertFile, cfg.TLS.KeyFile, cfg.TLS.CertsDir, cfg.SMTP.DKIM.PrivateKeyFile, cfg.ARC.PrivateKeyFile}
+	required := []string{cfg.Storage.SQLite.Path, cfg.Mailstore.Root, cfg.TLS.CertFile, cfg.TLS.KeyFile, cfg.TLS.CertsDir, cfg.SMTP.DKIM.PrivateKeyFile, cfg.ARC.PrivateKeyFile, cfg.VKS.SigningKeyFile, cfg.VKS.TURNSecretFile, cfg.Mattermost.PluginDirectory}
 	if cfg.Server.SecretsKey == "" {
 		required = append(required, filepath.Join(filepath.Dir(cfg.Mailstore.Root), "secrets.key"))
 	}
@@ -364,5 +364,5 @@ func validateLayout(ctx context.Context, root, original string, cfg *config.Conf
 			return rowErr
 		}
 	}
-	return nil
+	return validateChatAttachments(ctx, cfg, st)
 }
