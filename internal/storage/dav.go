@@ -448,8 +448,8 @@ func (s *Store) saveCalendarObject(ctx context.Context, o *CalendarObject, mails
 			return nil, ErrUnauthorized
 		}
 		if _, err = tx.ExecContext(ctx, s.rebind(`INSERT INTO calendar_attachments
-			(id,calendar_object_id,user_id,filename,content_type,size,storage_path,created_at)
-			VALUES(?,?,?,?,?,?,?,?)`), file.ID, o.ID, attachmentActorID, file.Filename, file.ContentType, file.Size, file.StoragePath, time.Now().UTC()); err != nil {
+			(id,calendar_object_id,user_id,filename,content_type,size,storage_path,created_at,ews_item_type)
+			VALUES(?,?,?,?,?,?,?,?,?)`), file.ID, o.ID, attachmentActorID, file.Filename, file.ContentType, file.Size, file.StoragePath, time.Now().UTC(), file.EWSItemType); err != nil {
 			return nil, err
 		}
 	}
