@@ -1,0 +1,35 @@
+name: Mattermost plugin acceptance
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'internal/mmplugins/**'
+      - 'internal/mattermost/**'
+      - 'internal/chat/**'
+      - 'scripts/fetch-mattermost-plugin-fixtures.py'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/mattermost-plugins.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  marketplace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Download and verify pinned release bundles
+        run: python3 scripts/fetch-mattermost-plugin-fixtures.py --platform linux-amd64 --output "$RUNNER_TEMP/mmplugins"
+      - name: Accept real plugin lifecycle and commands
+        env:
+          CGO_ENABLED: '0'
+          TMS_TEST_PLUGIN_BUNDLES: ${{ runner.temp }}/mmplugins
+        run: go test ./internal/mmplugins -run TestMarketplacePluginBundles -count=1 -v -timeout 2m

@@ -38,7 +38,7 @@ func (a *hostAPI) GetChannel(id string) (*model.Channel, *model.AppError) {
 	if err != nil {
 		return nil, appError(err)
 	}
-	if a.runtime.options.TenantID != "" && u.TenantID != a.runtime.options.TenantID {
+	if !a.userInScope(u) {
 		return nil, appError(chat.ErrForbidden)
 	}
 	c, err := a.runtime.options.Chat.Channel(context.Background(), u, id)
@@ -122,6 +122,9 @@ func (a *hostAPI) GetPost(id string) (*model.Post, *model.AppError) {
 	return pluginPost(p), nil
 }
 func (a *hostAPI) AddChannelMember(channelID, userID string) (*model.ChannelMember, *model.AppError) {
+	if _, err := a.user(userID); err != nil {
+		return nil, appError(err)
+	}
 	c, e := a.GetChannel(channelID)
 	if e != nil {
 		return nil, e
@@ -136,6 +139,9 @@ func (a *hostAPI) AddChannelMember(channelID, userID string) (*model.ChannelMemb
 	return &model.ChannelMember{ChannelId: channelID, UserId: userID, Roles: "channel_user", SchemeUser: true, NotifyProps: model.StringMap{}}, nil
 }
 func (a *hostAPI) GetDirectChannel(first, second string) (*model.Channel, *model.AppError) {
+	if _, err := a.user(second); err != nil {
+		return nil, appError(err)
+	}
 	u, err := a.user(first)
 	if err != nil {
 		return nil, appError(err)
@@ -190,7 +196,7 @@ func (a *hostAPI) PublishWebSocketEvent(event string, payload map[string]any, b 
 			return
 		}
 	}
-	if err := a.runtime.options.Chat.PublishEvent(chat.Event{Type: "custom_" + a.manifest.Id + "_" + event, Data: payload, UserID: b.UserId, ChannelID: b.ChannelId, TeamID: teamID, OmitUsers: b.OmitUsers}); err != nil {
+	if err := a.runtime.options.Chat.PublishEvent(chat.Event{Type: "custom_" + a.manifest.Id + "_" + event, Data: payload, UserID: b.UserId, ChannelID: b.ChannelId, TeamID: teamID, DomainID: a.runtime.options.DomainID, OmitUsers: b.OmitUsers}); err != nil {
 		a.LogError("plugin event failed", "error", err)
 	}
 }
@@ -218,6 +224,9 @@ func (a *hostAPI) HasPermissionTo(userID string, p *model.Permission) bool {
 	return false
 }
 func (a *hostAPI) HasPermissionToChannel(userID, channelID string, p *model.Permission) bool {
+	if _, e := a.GetChannel(channelID); e != nil {
+		return false
+	}
 	if p == nil {
 		return false
 	}

@@ -157,7 +157,7 @@ func (s *API) serveSocket(ws *websocket.Conn, r *http.Request) {
 			}
 			if ev.Type != "" {
 				id := chat.ID(current.ID)
-				if (ev.UserID != "" && ev.UserID != id) || (ev.TeamID != "" && ev.TeamID != chat.ID(current.TenantID)) || ev.OmitUsers[id] {
+				if (ev.UserID != "" && ev.UserID != id) || (ev.TeamID != "" && ev.TeamID != chat.ID(current.TenantID)) || (ev.DomainID != "" && ev.DomainID != current.DomainID) || ev.OmitUsers[id] {
 					continue
 				}
 				if ev.ChannelID != "" {

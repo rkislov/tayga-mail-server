@@ -23,7 +23,7 @@ import (
 )
 
 // CompatibilityVersion identifies the wire contract, not a full server release.
-const CompatibilityVersion = "10.11.0"
+const CompatibilityVersion = mmplugins.Version
 
 type API struct {
 	startChannelCall    ChannelCallStarter

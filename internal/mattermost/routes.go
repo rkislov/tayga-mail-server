@@ -227,6 +227,32 @@ func (s *API) users(w http.ResponseWriter, r *http.Request, u *storage.User, pat
 }
 func (s *API) teams(w http.ResponseWriter, r *http.Request, u *storage.User, path string) {
 	parts := strings.Split(strings.Trim(path, "/"), "/")
+	if len(parts) >= 3 && parts[1] == "name" && r.Method == http.MethodGet {
+		team, err := s.teamModel(r, u)
+		if err != nil {
+			s.failure(w, err)
+			return
+		}
+		if parts[2] != team["name"] {
+			s.failure(w, storage.ErrNotFound)
+			return
+		}
+		if len(parts) == 3 {
+			write(w, 200, team)
+			return
+		}
+		if len(parts) == 6 && parts[3] == "channels" && parts[4] == "name" {
+			channel, err := s.chat.ChannelByName(r.Context(), u, parts[5])
+			if err != nil {
+				s.failure(w, err)
+				return
+			}
+			write(w, 200, channelModel(channel))
+			return
+		}
+		s.unsupported(w, r)
+		return
+	}
 	if len(parts) < 2 || parts[1] != chat.ID(u.TenantID) {
 		s.failure(w, storage.ErrNotFound)
 		return

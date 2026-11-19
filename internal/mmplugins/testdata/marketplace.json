@@ -1,0 +1,50 @@
+[
+  {
+    "name": "gitlab",
+    "id": "com.github.manland.mattermost-plugin-gitlab",
+    "version": "1.13.1",
+    "release": "v1.13.1",
+    "assets": {
+      "darwin-arm64": {
+        "url": "https://github.com/mattermost/mattermost-plugin-gitlab/releases/download/v1.13.1/mattermost-plugin-gitlab-v1.13.1-darwin-arm64.tar.gz",
+        "sha256": "f6541825888b599cdc87e960730c800152b09f2a5d86b897ce2bc8288102002a"
+      },
+      "linux-amd64": {
+        "url": "https://github.com/mattermost/mattermost-plugin-gitlab/releases/download/v1.13.1/mattermost-plugin-gitlab-v1.13.1-linux-amd64.tar.gz",
+        "sha256": "ad69617bcbf7258637656fbbb00561c2c18d0709cf205dd69194fd4513eb80cf"
+      }
+    }
+  },
+  {
+    "name": "github3",
+    "id": "github",
+    "version": "3.0.0",
+    "release": "v3.0.0",
+    "assets": {
+      "darwin-arm64": {
+        "url": "https://github.com/mattermost/mattermost-plugin-github/releases/download/v3.0.0/mattermost-plugin-github-v3.0.0-darwin-arm64.tar.gz",
+        "sha256": "9390f9b89cd37a769e4e276e8c1d175973ce861b17f411266fbef6357f7c0f10"
+      },
+      "linux-amd64": {
+        "url": "https://github.com/mattermost/mattermost-plugin-github/releases/download/v3.0.0/mattermost-plugin-github-v3.0.0-linux-amd64.tar.gz",
+        "sha256": "300cb0e13ece77a07e02a69b5919eda42f765c3eeee1359109f604e10e75fc1d"
+      }
+    }
+  },
+  {
+    "name": "bigbluebutton",
+    "id": "bigbluebutton",
+    "version": "4.4.0",
+    "release": "v4.5.0",
+    "assets": {
+      "darwin-amd64": {
+        "url": "https://github.com/blindsidenetworks/mattermost-plugin-bigbluebutton/releases/download/v4.5.0/bigbluebutton_darwin_amd64.tar.gz",
+        "sha256": "b7929bbfacfac176da10be326cf0473611dd4609d0626b923a9bdaf8280eeead"
+      },
+      "linux-amd64": {
+        "url": "https://github.com/blindsidenetworks/mattermost-plugin-bigbluebutton/releases/download/v4.5.0/bigbluebutton_linux_amd64.tar.gz",
+        "sha256": "03bd44e535e4e53b1d5cd9d217582c72af446734dd131ffcc1f373779fcc1b75"
+      }
+    }
+  }
+]

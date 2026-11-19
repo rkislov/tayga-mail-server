@@ -2,6 +2,8 @@ package mattermost
 
 import (
 	"encoding/json"
+	"io"
+	"mime"
 	"net/http"
 	"strings"
 	"time"
@@ -166,7 +168,20 @@ func (s *API) ServeIncomingHook(w http.ResponseWriter, r *http.Request) {
 		Attachments []map[string]any `json:"attachments"`
 		Props       map[string]any   `json:"props"`
 	}
-	if !decode(w, r, &payload) {
+	// Redmine and other Slack-compatible senders submit a URL-encoded payload.
+	// Bound the outer form before parsing, then apply the same JSON decoder.
+	request := r
+	mediaType, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if mediaType == "application/x-www-form-urlencoded" {
+		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+		if err := r.ParseForm(); err != nil || len(r.PostForm["payload"]) != 1 {
+			s.failure(w, chat.ErrInvalid)
+			return
+		}
+		request = r.Clone(r.Context())
+		request.Body = io.NopCloser(strings.NewReader(r.PostForm.Get("payload")))
+	}
+	if !decode(w, request, &payload) {
 		return
 	}
 	if payload.Channel != "" && payload.Channel != c.ID && payload.Channel != c.Name && payload.Channel != "#"+c.Name {
