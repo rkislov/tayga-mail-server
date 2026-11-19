@@ -9,7 +9,7 @@
 Tayga Mail Server is a self-hosted mail and collaboration server written in Go. It hosts multiple organizations and domains in one installation and provides a web workspace for mail, calendars, contacts, files, and notes. Standard clients connect over SMTP, IMAP, POP3, CalDAV, CardDAV, and WebDAV. FlowSync provides ActiveSync and EWS endpoints for compatible clients, including Outlook.
 
 **Author:** Кислов Роман Сергеевич (Roman Sergeyevich Kislov)  
-**License:** server [Apache License 2.0](LICENSE); web client with OMEMO [GPL-3.0](frontend/LICENSE)
+**License:** server [Apache License 2.0](LICENSE); web client [GPL-3.0](frontend/LICENSE)
 
 See [docs/architecture.md](docs/architecture.md) and `configs/tayga.example.yaml` (minimal bootstrap YAML). Mail policies and most options are edited in **Admin → Server settings** (`/api/v1/admin/settings`).
 
@@ -71,7 +71,7 @@ Seed: `admin@example.com` / `changeme`. TLS: `tls.auto_generate` or `scripts/gen
 - Files: versioned writes, trash, search, selection, sharing and personal WebDAV `/dav/files/`; external Collabora Online integration — [setup and limits](docs/files-and-office.md).
 - Notes: `/api/v1/notes*` (folders, rich notes, attachments, drawing); folder/note ACL for multi-user edit; FlowSync Notes (type 10) + EWS sticky notes
 - FlowSync — original module by Roman Sergeyevich Kislov, separately licensed under [Apache-2.0](internal/flowsync/LICENSE): ActiveSync `/Microsoft-Server-ActiveSync`, EWS `/EWS/Exchange.asmx`, Autodiscover (POX/JSON) + Mozilla autoconfig
-- Admin: tenant domains, users, УЦ, **XMPP** (C2S / bots), **Server settings** (DB-backed config), monitoring, backup (`/api/v1/admin/*`)
+- Admin: tenant domains, users, УЦ, **Server settings** (DB-backed config), monitoring, backup (`/api/v1/admin/*`)
 - Metrics: `GET /metrics` (Prometheus `tayga_*`)
 - Backup/restore: `./tayga-mail backup|restore -config …` or Admin UI; see [docs/ha.md](docs/ha.md)
 - HA deployment: one active Tayga instance with Pacemaker/fencing and a complete shared or replicated state volume; [single-site and two-site guides](docs/ha.md), including MetroLUN and DRBD options.
@@ -87,7 +87,7 @@ Seed: `admin@example.com` / `changeme`. TLS: `tls.auto_generate` or `scripts/gen
 - DMARC ARC trust: `dmarc.arc_trust` softens fail when ARC `cv=pass`
 - ARC: `arc.enabled` verify/seal (RFC 8617) on inbound MX
 - Quarantine admin: filters, spam/virus meta, preview (`/api/v1/admin/quarantine`)
-- WebAuthn MFA: `/api/v1/auth/webauthn/*` (passkeys; UUID credential/session IDs). Passkeys protect **web sign-in only**: adding a key does not disable password authentication in FlowSync (ActiveSync/EWS), IMAP/SMTP/POP3, DAV, ManageSieve or XMPP. The separate `mfa.require_token_for_mfa_users` policy still requires protocol access tokens for users with enabled **TOTP**.
+- WebAuthn MFA: `/api/v1/auth/webauthn/*` (passkeys; UUID credential/session IDs). Passkeys protect **web sign-in only**: adding a key does not disable password authentication in FlowSync (ActiveSync/EWS), IMAP/SMTP/POP3, DAV or ManageSieve. The separate `mfa.require_token_for_mfa_users` policy still requires protocol access tokens for users with enabled **TOTP**.
 - Account API: `GET /api/v1/me`; admin: `/api/v1/admin/users` (`http.admins`)
 - Web apps: `/api/v1/mail`, `/api/v1/calendar`, `/api/v1/contacts`, `/api/v1/files`, `/api/v1/chat` + embedded UI (ru/en)
 - Archive mailbox (gzip on disk) + FTS mail search — [docs/mail-archive-search.md](docs/mail-archive-search.md) (RU), [architecture.md](docs/architecture.md#archive-mailbox) (EN)
@@ -95,7 +95,6 @@ Seed: `admin@example.com` / `changeme`. TLS: `tls.auto_generate` or `scripts/gen
 - User migration IMAP/CalDAV/CardDAV: [docs/migration.md](docs/migration.md)
 - In-app / browser notifications (new mail, upcoming calendar) via SSE `/api/v1/notifications/stream`
 - Certificate authority (УЦ): self-signed / commercial PEM / Let’s Encrypt ACME — [docs/ca.md](docs/ca.md)
-- XMPP (optional C2S); bots via XEP-0114 / HTTP — see [docs/xmpp.md](docs/xmpp.md)
 - Web UI: floating rounded panels; independent day/night mode under **Appearance**
 - Server configuration: grouped sections, typed modal forms and Russian help for every parameter; bootstrap storage remains read-only
 - Calendar: click a date to open its day; double-click to create an event on that date; invitations are in a separate inbox with a pending badge
@@ -104,6 +103,6 @@ Seed: `admin@example.com` / `changeme`. TLS: `tls.auto_generate` or `scripts/gen
 
 ## License
 
-Copyright © Кислов Роман Сергеевич. Server Go code and FlowSync: Apache License 2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE). Web client (`frontend/src` and generated browser assets): GPL-3.0 — see [frontend/LICENSE](frontend/LICENSE). Third-party assets retain their respective licenses. See [web OMEMO setup and limitations](docs/web-omemo.md).
+Copyright © Кислов Роман Сергеевич. Server Go code and FlowSync: Apache License 2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE). Web client (`frontend/src` and generated browser assets): GPL-3.0 — see [frontend/LICENSE](frontend/LICENSE). Third-party assets retain their respective licenses.
 
 UI backdrop art (tayga / cosmos / city / kalyazin / temple) © Алиса Кислова; `moscow` (Москва-Сити) — generated backdrop.
