@@ -59,6 +59,10 @@ func (w *scheduleWriter) WriteHeader(status int) {
 	w.ResponseWriter.WriteHeader(status)
 }
 func (w *scheduleWriter) Write(p []byte) (int, error) {
+	// Keep the body write explicitly typed, including callers using implicit headers.
+	if w.Header().Get("Content-Type") == "" {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	}
 	if !w.written {
 		w.WriteHeader(200)
 	}
@@ -143,6 +147,10 @@ func calendarScheduling(store storage.Driver, next http.Handler) http.Handler {
 		}
 		w.Header().Del("Content-Length")
 		if capture.code != 207 {
+			// Captured error responses may not have supplied a media type.
+			if writer.Header().Get("Content-Type") == "" {
+				writer.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			}
 			writer.WriteHeader(capture.code)
 			_, _ = writer.Write(capture.body.Bytes())
 			return
