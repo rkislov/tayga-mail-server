@@ -54,11 +54,15 @@ func parseEWSMessageAttachment(n *protocolNode) (ewsCalendarUpload, string, stri
 	if message == nil {
 		return fail("ErrorInvalidAttachmentId", "Only Message item attachments are supported")
 	}
-	data, err := ewsMessageAttachmentMIME(message)
+	clean, properties, err := attachedMessageProperties(message)
+	if err != nil {
+		return fail("ErrorInvalidRequest", "Invalid message extended properties")
+	}
+	data, err := ewsMessageAttachmentMIME(clean)
 	if err != nil {
 		return fail("ErrorInvalidRequest", "Invalid or unsupported attached message properties")
 	}
-	if len(data) > maxEWSCalendarAttachmentBytes {
+	if len(data)+len(properties) > maxEWSCalendarAttachmentBytes {
 		return fail("ErrorAttachmentSizeLimitExceeded", "Attached message exceeds 32 MiB")
 	}
 	if len(data) == 0 {
@@ -70,7 +74,7 @@ func parseEWSMessageAttachment(n *protocolNode) (ewsCalendarUpload, string, stri
 	if !strings.HasSuffix(strings.ToLower(name), ".eml") {
 		name += ".eml"
 	}
-	return ewsCalendarUpload{file: &storage.CalendarAttachment{Filename: name, ContentType: "message/rfc822", EWSItemType: "Message", Size: int64(len(data))}, data: data}, "", ""
+	return ewsCalendarUpload{file: &storage.CalendarAttachment{Filename: name, ContentType: "message/rfc822", EWSItemType: "Message", Size: int64(len(data)), EWSItemXML: properties}, data: data}, "", ""
 }
 
 func ewsMessageAttachmentMIME(n *protocolNode) ([]byte, error) {

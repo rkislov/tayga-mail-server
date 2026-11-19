@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/emersion/go-ical"
 	"github.com/tayga/tms/internal/calutil"
 )
 
@@ -126,6 +127,10 @@ func ewsRecurrenceXML(data string) (string, error) {
 }
 
 func applyEWSRecurrence(data string, edits []ewsCalendarEdit) (string, error) {
+	return applyEWSRecurrenceForItem(data, edits, false)
+}
+
+func applyEWSRecurrenceForItem(data string, edits []ewsCalendarEdit, taskRange bool) (string, error) {
 	for _, edit := range edits {
 		if edit.name != "Recurrence" {
 			continue
@@ -282,6 +287,16 @@ func applyEWSRecurrence(data string, edits []ewsCalendarEdit) (string, error) {
 		raw, err := p.raw(parsed.AllDay)
 		if err != nil {
 			return "", err
+		}
+		if taskRange {
+			cal, component, _, e := calendarComponent(data)
+			if e != nil {
+				return "", e
+			}
+			component.Props.Set(&ical.Prop{Name: "RRULE", Value: raw})
+			var out strings.Builder
+			e = ical.NewEncoder(&out).Encode(cal)
+			return out.String(), e
 		}
 		return calutil.SetClientRecurrence(data, raw)
 	}

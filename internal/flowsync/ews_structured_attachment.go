@@ -72,6 +72,9 @@ func parseEWSItemUpload(n *protocolNode) (ewsCalendarUpload, string, string) {
 	if len(name) > 255 {
 		return fail("Attachment name too long")
 	}
+	if item.Name.Local == "Task" && item.child("Recurrence") != nil && item.child("IsRecurring") == nil {
+		item.Children = append(item.Children, &protocolNode{Name: xml.Name{Space: ewsTypesNS, Local: "IsRecurring"}, Text: "true"})
+	}
 	properties := item.render()
 	if len(data)+len(properties) > maxEWSCalendarAttachmentBytes {
 		return ewsCalendarUpload{}, "ErrorAttachmentSizeLimitExceeded", "Attached item exceeds 32 MiB"
@@ -81,16 +84,19 @@ func parseEWSItemUpload(n *protocolNode) (ewsCalendarUpload, string, string) {
 
 func validateAttachedProperties(n *protocolNode) error {
 	invalid := fmt.Errorf("invalid or unsupported attached %s property", n.Name.Local)
-	allowed := "ItemClass Subject Body Sensitivity Categories "
+	allowed := "ItemClass Subject Body Sensitivity Categories ExtendedProperty "
 	switch n.Name.Local {
 	case "CalendarItem":
 		allowed += "UID Start End IsAllDayEvent Location LegacyFreeBusyStatus RequiredAttendees OptionalAttendees Resources Organizer Recurrence StartTimeZone EndTimeZone"
 	case "Contact":
 		allowed += "DisplayName GivenName MiddleName Surname Nickname CompanyName Department JobTitle FileAs EmailAddresses PhoneNumbers"
 	case "Task":
-		allowed += "StartDate DueDate CompleteDate Status PercentComplete IsComplete Companies"
+		allowed += "StartDate DueDate CompleteDate Status PercentComplete IsComplete Companies Recurrence IsRecurring"
 	default:
 		return invalid
+	}
+	if _, err := attachedExtendedFields(n); err != nil {
+		return err
 	}
 	if len(n.Children) == 0 || len(n.Attr) != 0 {
 		return invalid
@@ -98,7 +104,7 @@ func validateAttachedProperties(n *protocolNode) error {
 	seen := map[string]bool{}
 	for _, f := range n.Children {
 		key := f.Name.Local
-		if seen[key] || !strings.Contains(" "+allowed+" ", " "+key+" ") {
+		if (seen[key] && key != "ExtendedProperty") || !strings.Contains(" "+allowed+" ", " "+key+" ") {
 			return invalid
 		}
 		seen[key] = true
@@ -107,7 +113,15 @@ func validateAttachedProperties(n *protocolNode) error {
 		}
 		f.Name.Space = ewsTypesNS
 		switch key {
+		case "ExtendedProperty":
+			continue
 		case "Recurrence":
+			if n.Name.Local == "Task" {
+				if err := validateAttachedTaskRecurrence(f); err != nil {
+					return err
+				}
+				continue
+			}
 			if err := validateAttachedRecurrence(f); err != nil {
 				return err
 			}
@@ -194,7 +208,7 @@ func validateAttachedProperties(n *protocolNode) error {
 				if _, err := time.Parse(time.RFC3339, f.Text); err != nil {
 					return invalid
 				}
-			case "IsAllDayEvent", "IsComplete":
+			case "IsAllDayEvent", "IsComplete", "IsRecurring":
 				if f.Text != "true" && f.Text != "false" && f.Text != "1" && f.Text != "0" {
 					return invalid
 				}
@@ -239,14 +253,14 @@ func validateAttachedProperties(n *protocolNode) error {
 	if n.child("ItemClass") == nil {
 		n.Children = append(n.Children, &protocolNode{Name: xml.Name{Space: ewsTypesNS, Local: "ItemClass"}, Text: map[string]string{"CalendarItem": "IPM.Appointment", "Contact": "IPM.Contact", "Task": "IPM.Task"}[n.Name.Local]})
 	}
-	order := "ItemClass Subject Sensitivity Body Categories "
+	order := "ItemClass Subject Sensitivity Body Categories ExtendedProperty "
 	switch n.Name.Local {
 	case "CalendarItem":
 		order += "UID Start End IsAllDayEvent LegacyFreeBusyStatus Location Organizer RequiredAttendees OptionalAttendees Resources Recurrence StartTimeZone EndTimeZone"
 	case "Contact":
 		order += "FileAs DisplayName GivenName MiddleName Nickname CompanyName EmailAddresses PhoneNumbers Department JobTitle Surname"
 	case "Task":
-		order += "CompleteDate DueDate IsComplete PercentComplete StartDate Status Companies"
+		order += "CompleteDate DueDate IsComplete IsRecurring PercentComplete Recurrence StartDate Status Companies"
 	}
 	positions := map[string]int{}
 	for i, k := range strings.Fields(order) {
@@ -329,6 +343,11 @@ func exportAttachedProperties(n *protocolNode) ([]byte, string, string, error) {
 		if phones := n.child("PhoneNumbers"); phones != nil {
 			for _, p := range phones.Children {
 				card.AddValue(vcard.FieldTelephone, p.Text)
+			}
+		}
+		for _, f := range n.Children {
+			if f.Name.Local == "ExtendedProperty" {
+				card.AddValue("X-TAYGA-EWS-EXTENDED-PROPERTY", f.render())
 			}
 		}
 		var b strings.Builder
@@ -418,6 +437,18 @@ func exportAttachedProperties(n *protocolNode) ([]byte, string, string, error) {
 			item.Props.Set(p)
 		}
 	}
+	for _, f := range n.Children {
+		if f.Name.Local == "ExtendedProperty" {
+			p := ical.NewProp("X-TAYGA-EWS-EXTENDED-PROPERTY")
+			p.SetText(f.render())
+			item.Props.Add(p)
+		}
+	}
+	if n.Name.Local == "Task" {
+		if err := exportAttachedTaskRecurrence(n, item); err != nil {
+			return nil, "", "", err
+		}
+	}
 	var b strings.Builder
 	err := ical.NewEncoder(&b).Encode(cal)
 	if err != nil {
@@ -441,6 +472,31 @@ func exportAttachedProperties(n *protocolNode) ([]byte, string, string, error) {
 }
 
 func ewsAttachedItemXML(a messageAttachment, reference, request string) (string, error) {
+	if a.EWSItemType == "Message" {
+		raw, err := ewsAttachedMessageXML(a, reference, request)
+		if err != nil || a.EWSItemXML == "" {
+			return raw, err
+		}
+		doc, err := parseProtocolXML([]byte(a.EWSItemXML))
+		if err != nil {
+			return "", err
+		}
+		fields, err := attachedExtendedFields(doc.Children[0])
+		if err != nil {
+			return "", err
+		}
+		var extra strings.Builder
+		for _, f := range fields {
+			extra.WriteString(f.render())
+		}
+		position := strings.Index(raw, "</t:Message>")
+		for _, tag := range []string{"<t:ToRecipients>", "<t:CcRecipients>", "<t:From>", "<t:InternetMessageId>", "<t:References>", "<t:InternetMessageHeaders>"} {
+			if i := strings.Index(raw, tag); i >= 0 && i < position {
+				position = i
+			}
+		}
+		return raw[:position] + extra.String() + raw[position:], nil
+	}
 	if a.EWSItemXML == "" {
 		return ewsAttachedMessageXML(a, reference, request)
 	}

@@ -630,8 +630,8 @@ Contact или Task тем же CreateAttachment. В одном запросе �
   (BusinessPhone/2, HomePhone/2, MobilePhone, BusinessFax, HomeFax, Pager,
   OtherTelephone).
 - Task: StartDate, DueDate, CompleteDate, Status, PercentComplete (0–100),
-  IsComplete, Companies. Противоречивое завершение и срок раньше начала
-  отклоняются. Повторяющиеся задачи остаются за пределами этого профиля.
+  IsComplete, Companies, Recurrence, IsRecurring. Противоречивое завершение и срок
+  раньше начала отклоняются. Расширение повторений описано ниже.
 
 Свойства EWS сохраняются отдельно от скачиваемого представления. Для веба,
 CalDAV и ActiveSync выдаются ICS (VEVENT/VTODO) или vCard 3.0. Экспорт сохраняет
@@ -640,8 +640,9 @@ email/телефоны контакта, состояние и процент з
 остаются в типизированном объекте GetAttachment. Исходный HTML доступен там;
 в переносимом файле описание текстовое. Это не файлы Outlook .msg.
 
-MimeContent для этих трёх типов, вложения внутри них, физические адреса контакта,
-расширенные свойства и другие поля пока отклоняются. Ограничения сообщаются
+MimeContent для этих трёх типов, вложения внутри них, физические адреса контакта
+и другие неописанные поля пока отклоняются. ExtendedProperty поддерживается
+описанным ниже расширением. Ограничения сообщаются
 ошибкой, неизвестные поля не удаляются молча. Лимит 32 MiB смешанного пакета
 учитывает и скачиваемые байты, и сохранённые свойства XML.
 
@@ -668,3 +669,64 @@ MimeContent для этих трёх типов, вложения внутри �
 
 Настоящий Outlook и PostgreSQL не отмечаются принятыми по результату SQLite
 автотестов. [Контракт Microsoft ItemAttachment](https://learn.microsoft.com/en-us/exchange/client-developer/web-service-reference/itemattachment).
+
+
+## Расширенные свойства и повторяющиеся вложенные задачи — main после 0.10.12
+
+Все четыре типа ItemAttachment (Message, CalendarItem, Contact, Task) принимают
+ExtendedProperty. Свойства сохраняются в ews_item_xml и возвращаются через
+GetAttachment, в том числе участнику встречи. Они являются данными вложенного
+объекта: не меняют права, папки, настройки доставки или свойства родительской
+встречи. Для письма исходные MIME-байты остаются неизменными, метаданные хранятся
+отдельно. Новая миграция не требуется: используется колонка из миграции 075.
+
+Поддерживаются формы ExtendedFieldURI:
+
+- PropertyTag + PropertyType (десятичное или шестнадцатеричное значение тега).
+- PropertySetId (GUID) либо DistinguishedPropertySetId + ровно одно из
+  PropertyId / PropertyName + PropertyType.
+
+Типы значений: ApplicationTime, Binary, Boolean, CLSID, Currency, Double, Float,
+Integer, Long, Short, String, SystemTime и определённые EWS массивы этих типов.
+Массив содержит Values/Value, скаляр — Value. Проверяются диапазоны чисел,
+конечность дробных значений, GUID, RFC 3339 даты и base64. Error, Null, Object и
+ObjectArray — служебные типы отчётности EWS, запись их значений отклоняется.
+Максимум 128 свойств на объект, 16 KiB XML на свойство и 1024 значения в массиве;
+общий предел загрузки остаётся 32 MiB. Повтор одного идентификатора, конфликтующие
+атрибуты селектора и неподходящее значение отклоняют весь пакет без частичного
+сохранения. GetAttachment возвращает сохранённые свойства вместе с объектом.
+ICS/vCard содержат копии в X-TAYGA-EWS-EXTENDED-PROPERTY. MIME письма не дополняется
+пользовательскими заголовками; свойства доступны в EWS.
+
+Task/Recurrence поддерживает шесть шаблонов расписания EWS: DailyRecurrence,
+WeeklyRecurrence, AbsoluteMonthlyRecurrence, RelativeMonthlyRecurrence,
+AbsoluteYearlyRecurrence, RelativeYearlyRecurrence; а также DailyRegeneration,
+WeeklyRegeneration, MonthlyRegeneration и YearlyRegeneration. Во всех режимах
+принимаются NoEndRecurrence, EndDateRecurrence и NumberedRecurrence. Проверяются
+интервал (1–99), поля шаблона, начало/конец и количество экземпляров (1–65535).
+При наличии Recurrence IsRecurring возвращается true; явное false отклоняется.
+
+Для обычного расписания VTODO получает RRULE. Дата начала диапазона EWS может
+предшествовать первому подходящему дню недели/месяца. В переносимом VTODO DTSTART
+становится первой реальной датой правила, а DUE смещается с сохранением исходной
+длительности; типизированные EWS-даты и Recurrence сохраняются без этого сдвига.
+StartDate задачи при его наличии должен совпадать с начальной датой диапазона.
+
+Regeneration означает отсчёт от завершения текущей задачи. Его нельзя заменять
+фиксированным RRULE: исходный XML сохраняется в EWS и в поле
+X-TAYGA-EWS-TASK-REGENERATION файла ICS. Внешний клиент без поддержки этого поля
+может импортировать одиночную задачу; автоматическая регенерация при таком
+импорте не заявляется. Само вложение не создаёт серверных задач, экземпляров
+серии, писем или фоновых заданий.
+
+Проверки: TestEWSAttachedExtendedPropertiesRoundTrip (все четыре типа и отзыв
+доступа), TestEWSAttachedExtendedValueTypes, TestEWSAttachedBadExtendedPropertiesRejectBatch,
+TestEWSAttachedTaskRecurrenceRoundTrip (10 шаблонов × 3 диапазона),
+TestEWSAttachedTaskBadRecurrenceIsAtomic. Приёмка в настоящем Outlook ещё открыта.
+В её сценарий добавлены именованная строка/массив, числовой MAPI-тег и бинарное
+свойство, обычная повторяющаяся задача и задача с повтором после завершения:
+сохранить встречу → открыть заново → сверить значения/шаблон → удалить вложение
+и проверить отзыв доступа участника.
+
+Справочники Microsoft: [ExtendedFieldURI](https://learn.microsoft.com/en-us/exchange/client-developer/web-service-reference/extendedfielduri),
+[TaskRecurrenceType](https://learn.microsoft.com/en-us/exchange/client-developer/web-service-reference/recurrence-taskrecurrencetype).
