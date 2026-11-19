@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -36,5 +37,37 @@ func TestRequestLoggingExcludesSecrets(t *testing.T) {
 	}
 	if w.Code != 401 || w.Body.String() != "private response" {
 		t.Fatal("middleware changed response")
+	}
+}
+
+func TestLoggedResponseMediaTypes(t *testing.T) {
+	for _, contentType := range []string{"", "text/xml; charset=utf-8", "application/vnd.ms-sync.wbxml", "application/json"} {
+		for _, explicitStatus := range []bool{false, true} {
+			t.Run(contentType+"/"+strconv.FormatBool(explicitStatus), func(t *testing.T) {
+				body := []byte("<script>alert('request data')</script>\x00\xff")
+				out := httptest.NewRecorder()
+				w := &loggedResponse{ResponseWriter: out}
+				if contentType != "" {
+					w.Header().Set("Content-Type", contentType)
+				}
+				if explicitStatus {
+					w.WriteHeader(http.StatusBadRequest)
+				}
+				if _, err := w.Write(body); err != nil {
+					t.Fatal(err)
+				}
+				wantType := contentType
+				if wantType == "" {
+					wantType = "text/plain; charset=utf-8"
+				}
+				headers := out.Result().Header
+				if headers.Get("Content-Type") != wantType || headers.Get("X-Content-Type-Options") != "nosniff" {
+					t.Fatalf("unsafe or changed response headers: %v", headers)
+				}
+				if !bytes.Equal(out.Body.Bytes(), body) {
+					t.Fatal("protocol bytes changed")
+				}
+			})
+		}
 	}
 }

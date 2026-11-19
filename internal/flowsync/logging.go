@@ -28,6 +28,11 @@ type loggedResponse struct {
 func (w *loggedResponse) WriteHeader(status int) {
 	if w.status == 0 {
 		w.status = status
+		// Protocol responses without an explicit media type must not be sniffed as HTML.
+		if w.Header().Get("Content-Type") == "" {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		}
+		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.ResponseWriter.WriteHeader(status)
 	}
 }
