@@ -19,11 +19,11 @@ See [docs/architecture.md](docs/architecture.md) and `configs/tayga.example.yaml
 
 **План разработки (RU):** [Дорожная карта: порядок работ, зависимости и критерии готовности](docs/roadmap.md).
 
-**Стабильный выпуск [v0.10.11](https://github.com/rkislov/tayga-mail-server/releases/tag/v0.10.11).** Серверные архивы, контрольные суммы и расширение Thunderbird доступны на странице выпуска.
+**Стабильный выпуск [v0.10.12](https://github.com/rkislov/tayga-mail-server/releases/tag/v0.10.12).** Серверные архивы, контрольные суммы и расширение Thunderbird доступны на странице выпуска.
 
 ## Чат и видеозвонки
 
-- [Mattermost-совместимый чат TMS](docs/mattermost-compatibility.md) поддерживает личные сообщения, открытые и закрытые каналы, поиск и вложения. На iPhone проверены вступление в открытые каналы и полноэкранный просмотр фотографий. В `main` целевой контракт обновлён до API 12.0.0; [приёмка плагинов и границы совместимости](docs/mattermost-plugins.md).
+- [Mattermost-совместимый чат TMS](docs/mattermost-compatibility.md) поддерживает личные сообщения, открытые и закрытые каналы, поиск и вложения. На iPhone проверены вступление в открытые каналы и полноэкранный просмотр фотографий. Начиная с 0.10.12 целевой контракт — API 12.0.0; [приёмка плагинов и границы совместимости](docs/mattermost-plugins.md).
 - [Групповые звонки Jitsi](docs/vks.md) можно начать из меню канала или командой `/meet`. Приглашение публикуется в канале, встреча открывается в браузере.
 - Для чата требуется включить API Mattermost в конфигурации TMS. Для звонков нужен отдельно развёрнутый Jitsi Meet.
 
@@ -42,7 +42,7 @@ sudo ./tayga-mail -config configs/tayga.example.yaml
 ### Cross-platform release builds
 
 ```bash
-VERSION=0.10.11 ./scripts/crossbuild.sh   # → dist/*.tar.gz|zip + checksums.txt
+VERSION=0.10.12 ./scripts/crossbuild.sh   # → dist/*.tar.gz|zip + checksums.txt
 ```
 
 GitHub Releases: push a `v*` tag; [GoReleaser](https://goreleaser.com) (`.github/workflows/release.yml`) publishes linux/darwin/windows/freebsd amd64+arm64 archives.

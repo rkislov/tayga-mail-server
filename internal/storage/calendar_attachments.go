@@ -16,6 +16,7 @@ type CalendarAttachment struct {
 	Filename         string
 	ContentType      string
 	Size             int64
+	EWSItemType      string // empty for files; Message for attached RFC 5322 mail
 	StoragePath      string // relative to mailstore calendar-attachments root
 	CreatedAt        time.Time
 }
@@ -62,10 +63,10 @@ func (s *Store) CreateCalendarAttachment(ctx context.Context, a *CalendarAttachm
 		a.ContentType = "application/octet-stream"
 	}
 	q := s.rebind(`INSERT INTO calendar_attachments
-		(id, calendar_object_id, user_id, filename, content_type, size, storage_path, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+		(id, calendar_object_id, user_id, filename, content_type, size, storage_path, created_at, ews_item_type)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	_, err := s.db.ExecContext(ctx, q,
-		a.ID, a.CalendarObjectID, a.UserID, a.Filename, a.ContentType, a.Size, a.StoragePath, a.CreatedAt,
+		a.ID, a.CalendarObjectID, a.UserID, a.Filename, a.ContentType, a.Size, a.StoragePath, a.CreatedAt, a.EWSItemType,
 	)
 	if err != nil {
 		return nil, mapErr(err)
@@ -74,13 +75,13 @@ func (s *Store) CreateCalendarAttachment(ctx context.Context, a *CalendarAttachm
 }
 
 func (s *Store) GetCalendarAttachment(ctx context.Context, id string) (*CalendarAttachment, error) {
-	q := s.rebind(`SELECT id, calendar_object_id, user_id, filename, content_type, size, storage_path, created_at
+	q := s.rebind(`SELECT id, calendar_object_id, user_id, filename, content_type, size, storage_path, created_at, ews_item_type
 		FROM calendar_attachments WHERE id = ?`)
 	return s.scanCalendarAttachment(s.db.QueryRowContext(ctx, q, id))
 }
 
 func (s *Store) ListCalendarAttachments(ctx context.Context, calendarObjectID string) ([]*CalendarAttachment, error) {
-	q := s.rebind(`SELECT id, calendar_object_id, user_id, filename, content_type, size, storage_path, created_at
+	q := s.rebind(`SELECT id, calendar_object_id, user_id, filename, content_type, size, storage_path, created_at, ews_item_type
 		FROM calendar_attachments WHERE calendar_object_id = ? ORDER BY created_at, filename`)
 	rows, err := s.db.QueryContext(ctx, q, calendarObjectID)
 	if err != nil {
@@ -113,7 +114,7 @@ func (s *Store) DeleteCalendarAttachment(ctx context.Context, id string) error {
 
 func (s *Store) scanCalendarAttachment(row interface{ Scan(dest ...any) error }) (*CalendarAttachment, error) {
 	a := &CalendarAttachment{}
-	err := row.Scan(&a.ID, &a.CalendarObjectID, &a.UserID, &a.Filename, &a.ContentType, &a.Size, &a.StoragePath, &a.CreatedAt)
+	err := row.Scan(&a.ID, &a.CalendarObjectID, &a.UserID, &a.Filename, &a.ContentType, &a.Size, &a.StoragePath, &a.CreatedAt, &a.EWSItemType)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
 	}

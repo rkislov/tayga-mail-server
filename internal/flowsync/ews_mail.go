@@ -157,7 +157,26 @@ func (h *ewsHandler) getMailItem(ctx context.Context, u *storage.User, msg *stor
 }
 func (h *ewsHandler) attachment(ctx context.Context, u *storage.User, reference string) (messageAttachment, error) {
 	if strings.HasPrefix(reference, "calendar:") {
-		return readCalendarAttachment(ctx, h.store, h.ms, u, reference)
+		parts := strings.Split(reference, ":")
+		if len(parts) != 4 {
+			return readCalendarAttachment(ctx, h.store, h.ms, u, reference)
+		}
+		a, err := readCalendarAttachment(ctx, h.store, h.ms, u, strings.Join(parts[:3], ":"))
+		if err != nil {
+			return messageAttachment{}, err
+		}
+		i, err := strconv.Atoi(parts[3])
+		if err != nil || i < 0 || a.EWSItemType != "Message" {
+			return messageAttachment{}, storage.ErrNotFound
+		}
+		content, err := parseMessageContent(a.Data)
+		if err != nil {
+			return messageAttachment{}, err
+		}
+		if i >= len(content.Attachments) {
+			return messageAttachment{}, storage.ErrNotFound
+		}
+		return content.Attachments[i], nil
 	}
 	parts := strings.Split(reference, ":")
 	if len(parts) != 2 {
@@ -204,6 +223,15 @@ func (h *ewsHandler) getAttachment(ctx context.Context, u *storage.User, body st
 			a, err := h.attachment(ctx, u, reference)
 			if err != nil {
 				out.WriteString(`<m:GetAttachmentResponseMessage ResponseClass="Error"><m:ResponseCode>ErrorInvalidAttachmentId</m:ResponseCode></m:GetAttachmentResponseMessage>`)
+				continue
+			}
+			if a.EWSItemType == "Message" {
+				item, renderErr := ewsAttachedMessageXML(a, reference, body)
+				if renderErr != nil {
+					out.WriteString(`<m:GetAttachmentResponseMessage ResponseClass="Error"><m:ResponseCode>ErrorInvalidAttachmentId</m:ResponseCode></m:GetAttachmentResponseMessage>`)
+					continue
+				}
+				fmt.Fprintf(&out, `<m:GetAttachmentResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:Attachments><t:ItemAttachment><t:AttachmentId Id="%s"/><t:Name>%s</t:Name><t:ContentType>%s</t:ContentType>%s</t:ItemAttachment></m:Attachments></m:GetAttachmentResponseMessage>`, xmlEscape(reference), xmlEscape(a.Name), xmlEscape(a.ContentType), item)
 				continue
 			}
 			fmt.Fprintf(&out, `<m:GetAttachmentResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:Attachments><t:FileAttachment><t:AttachmentId Id="%s"/><t:Name>%s</t:Name><t:ContentType>%s</t:ContentType><t:Content>%s</t:Content></t:FileAttachment></m:Attachments></m:GetAttachmentResponseMessage>`, xmlEscape(reference), xmlEscape(a.Name), xmlEscape(a.ContentType), base64.StdEncoding.EncodeToString(a.Data))

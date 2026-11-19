@@ -414,7 +414,7 @@ Sync и полный WBXML-цикл ItemOperations. Проверка реаль�
 
 На каждый файл возвращается `CreateAttachmentResponseMessage` с AttachmentId, RootItemId и RootItemChangeKey; последняя версия соответствует GetItem. Файл доступен существующими GetAttachment и ActiveSync ItemOperations, а участникам — через их действующие приглашения. Получатель может добавить личный файл в собственную копию: он не появляется у организатора. Изменение сохраняет исходные повторения, зоны, исключения и напоминания. Загрузка сама не ставит письма в очередь; дальнейшая значимая правка встречи с `SendOnlyToAll` использует обычный путь обновлённых приглашений. Повтор с прежним ключом после успешной загрузки возвращает конфликт без создания второго файла. Без ChangeKey повторный запрос считается новой загрузкой.
 
-Реализованы файловые вложения на существующем календарном событии. ItemAttachment, inline/ContentId, вложения на письмах/задачах/контактах и загрузка файлов внутри CreateItem в этот этап не входят и не подменяются обычным файлом. Удаление добавлено отдельной командой DeleteAttachment, см. ниже. Клиент сначала создаёт CalendarItem, затем вызывает CreateAttachment. Приёмка с настоящим Outlook/iPhone и PostgreSQL выполняется отдельно.
+Реализованы файловые вложения на существующем календарном событии. Профиль ItemAttachment<Message> добавлен в 0.10.12 и описан ниже. Inline/ContentId, вложения на письмах/задачах/контактах и загрузка файлов внутри CreateItem остаются вне этого этапа. Удаление добавлено отдельной командой DeleteAttachment, см. ниже. Клиент сначала создаёт CalendarItem, затем вызывает CreateAttachment. Приёмка с настоящим Outlook/iPhone и PostgreSQL выполняется отдельно.
 
 Проверки `ews_calendar_attachments_test.go`: HTTP SOAP-пакет из двух файлов, бинарные данные и UTF-8 имя, пустой файл, GetAttachment и ActiveSync, видимость у участника и уведомление об изменении, новый ключ GetItem, повтор и параллельные запросы со старым ключом, неверные метаданные/base64 и доступ к чужому событию, отказ второй записи/обновления копии, персональное вложение и сохранение серии. Проверяется загрузка 7 MiB через HTTP (запрос больше прежних 8 MiB) и отклонение файла больше 32 MiB.
 
@@ -547,3 +547,61 @@ PUT/DELETE поддерживают If-Schedule-Tag-Match. Значение пр
 Пройдены go test ./... и целевые go test -race для DAV, storage, FlowSync и httpapi. Новые проверки проходят полный авторизованный Mount/discovery и HTTP-цикл создания → inbox участника → RSVP PUT → REPLY организатора; DATE/временные экземпляры используют общий существующий механизм. Отдельно проверены ответ на дату серии, слияние устаревшего снимка, PROPFIND/REPORT тега, Schedule-Reply, CLIENT-режим, алиас, free/busy и изоляция арендаторов, откат при сбое inbox и второго ответа, конкурентные записи двух соединений, обновление старой БД и каскадное удаление тегов. Фактический backend — SQLite; PostgreSQL DSN в окружении не задан.
 
 Открыты полная обработка входящего iTIP внешних организаторов/ответчиков, SCHEDULE-FORCE-SEND и расширенный SCHEDULE-STATUS, делегирование/расширенные scheduling ACL, изменение default-calendar/transparency и сложные фильтры inbox. Реальная приёмка Thunderbird/Apple Calendar, PostgreSQL и клиентских зон выполняется отдельно. Следующий календарный блок дорожной карты — EWS ItemAttachment.
+
+
+## Вложенное письмо в событии EWS — ItemAttachment (0.10.12)
+
+`CreateAttachment` на существующем CalendarItem принимает `ItemAttachment` с
+вложенным `Message`. Поддерживаются два способа передачи:
+
+- `Message/MimeContent` — base64 полного RFC 5322/MIME письма; байты сохраняются без изменений.
+- Структурированные поля `Subject`, `Body` (Text или HTML), `From`, `ToRecipients`,
+  `CcRecipients`, `DateTimeSent`. Сервер создаёт RFC 5322 письмо UTF-8. Адресаты
+  содержат `Mailbox` с `EmailAddress`, необязательными `Name` и `RoutingType=SMTP`.
+
+MimeContent нельзя смешивать со структурированными полями. Неизвестные и
+повторяющиеся свойства отклоняются. Письмо не отправляется адресатам и не
+создаёт отдельного объекта в почтовом ящике.
+
+```xml
+<m:CreateAttachment>
+  <m:ParentItemId Id="EVENT-ID" ChangeKey="CURRENT-KEY"/>
+  <m:Attachments>
+    <t:ItemAttachment>
+      <t:Name>Письмо к встрече</t:Name>
+      <t:Message>
+        <t:Subject>Повестка</t:Subject>
+        <t:Body BodyType="Text">Материалы для обсуждения</t:Body>
+      </t:Message>
+    </t:ItemAttachment>
+  </m:Attachments>
+</m:CreateAttachment>
+```
+
+Как и у FileAttachment, максимум — 100 вложений и 32 MiB суммарного содержимого
+на запрос. Смешанная загрузка файлов и писем атомарна. ChangeKey защищает от
+повторной загрузки устаревшей версии; создание и удаление обновляют копии события
+и не рассылают приглашения.
+
+GetItem возвращает метаданные ItemAttachment без содержимого письма.
+GetAttachment возвращает Message с темой, телом и адресатами. Для исходных байтов
+нужен `AttachmentShape/IncludeMimeContent=true`; `BodyType=Text` позволяет получить
+текстовый вариант HTML. Файлы внутри MIME-письма имеют собственные идентификаторы
+GetAttachment, но не поддерживают отдельное удаление: удаляется всё письмо.
+DeleteAttachment отзывает также доступ к этим файлам и ссылкам участников.
+
+В CalDAV, ActiveSync и веб-загрузке это скачиваемое `message/rfc822` вложение с
+расширением `.eml`. Тип EWS хранится отдельно: обычный FileAttachment с тем же
+ContentType остаётся файлом. Миграция 074 добавляет признак типа для SQLite и
+PostgreSQL; старые записи остаются FileAttachment.
+
+Границы профиля: вложенные CalendarItem, Contact, Task, произвольные расширенные
+свойства, inline и создание вложений внутри CreateItem пока не реализованы.
+Письмо с MimeContent сохраняет MIME-вложения; вложенные файлы читаются через
+GetAttachment. Клиентская приёмка с настоящим Outlook и PostgreSQL остаётся
+отдельной проверкой. Автотесты: `ews_item_attachment_test.go` — смешанная загрузка,
+Unicode/HTML, MIME без изменений, файлы внутри письма, права владельца/участника,
+удаление и отзыв ссылок, повтор со старым ключом и откат при ошибке записи.
+
+Протокол: [добавление вложений EWS](https://learn.microsoft.com/en-us/exchange/client-developer/exchange-web-services/how-to-add-attachments-by-using-ews-in-exchange),
+[GetAttachment](https://learn.microsoft.com/en-us/exchange/client-developer/web-service-reference/getattachment).

@@ -64,13 +64,28 @@ func (h *ewsHandler) createCalendarAttachment(ctx context.Context, u *storage.Us
 	}
 	nodes := op.child("Attachments")
 	if nodes == nil || len(nodes.Children) == 0 || len(nodes.Children) > 100 {
-		return reject("ErrorInvalidRequest", "Between 1 and 100 file attachments required")
+		return reject("ErrorInvalidRequest", "Between 1 and 100 attachments required")
 	}
 	var uploads []ewsCalendarUpload
 	total := 0
 	for _, node := range nodes.Children {
-		if node.Name.Local != "FileAttachment" {
-			return reject("ErrorInvalidAttachmentId", "Only file attachments on calendar items are supported")
+		if node.Name.Local != "FileAttachment" && node.Name.Local != "ItemAttachment" {
+			return reject("ErrorInvalidAttachmentId", "Unsupported calendar attachment type")
+		}
+		item := node.Name.Local == "ItemAttachment"
+		if item {
+			upload, code, message := parseEWSMessageAttachment(node)
+			if code != "" {
+				return reject(code, message)
+			}
+			total += len(upload.data)
+			if total > maxEWSCalendarAttachmentBytes {
+				return reject("ErrorAttachmentSizeLimitExceeded", "Calendar attachments exceed 32 MiB per request")
+			}
+			upload.file.ID, upload.file.CalendarObjectID, upload.file.UserID = storage.NewID(), id, u.ID
+			upload.file.StoragePath = filepath.ToSlash(filepath.Join(u.ID, id, upload.file.ID))
+			uploads = append(uploads, upload)
+			continue
 		}
 		seen := map[string]bool{}
 		for _, field := range node.Children {
@@ -196,7 +211,7 @@ func (h *ewsHandler) createCalendarAttachment(ctx context.Context, u *storage.Us
 	var response strings.Builder
 	response.WriteString(`<m:CreateAttachmentResponse xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"><m:ResponseMessages>`)
 	for _, upload := range uploads {
-		fmt.Fprintf(&response, `<m:CreateAttachmentResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:Attachments><t:FileAttachment><t:AttachmentId Id="%s" RootItemId="%s" RootItemChangeKey="%s"/></t:FileAttachment></m:Attachments></m:CreateAttachmentResponseMessage>`, xmlEscape("calendar:"+id+":"+upload.file.ID), xmlEscape(id), xmlEscape(key))
+		fmt.Fprintf(&response, `<m:CreateAttachmentResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:Attachments><t:%s><t:AttachmentId Id="%s" RootItemId="%s" RootItemChangeKey="%s"/></t:%s></m:Attachments></m:CreateAttachmentResponseMessage>`, ewsCalendarAttachmentTag(upload.file.EWSItemType), xmlEscape("calendar:"+id+":"+upload.file.ID), xmlEscape(id), xmlEscape(key), ewsCalendarAttachmentTag(upload.file.EWSItemType))
 	}
 	response.WriteString(`</m:ResponseMessages></m:CreateAttachmentResponse>`)
 	return response.String(), nil
