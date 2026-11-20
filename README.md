@@ -1,130 +1,124 @@
-# Tayga Mail Server (TMS)
+# Tayga Mail Server
 
-<!-- owner-maintenance:start -->
-**Автор проекта, изменений и публикаций — Кислов Роман Сергеевич ([@rkislov](https://github.com/rkislov)).**
+**Почта и совместная работа на вашем сервере.**
 
-Ошибки и предложения принимаются через **Issues**, изменения — через **Pull Requests** из форков. Прямую запись в основной репозиторий и публикацию версий выполняет только владелец `rkislov`.
-<!-- owner-maintenance:end -->
+**Русский** · [English](README.en.md)
+[Скачать v1.0.1](https://github.com/rkislov/tayga-mail-server/releases/tag/v1.0.1) · [Установка](docs/setup.md) · [Пользователю](docs/user-guide.md) · [Администратору](docs/admin-guide.md) · [Скриншоты](docs/screenshots/README.md)
 
-Tayga Mail Server is a self-hosted mail and collaboration server written in Go. It hosts multiple organizations and domains in one installation and provides a web workspace for mail, calendars, contacts, files, and notes. Standard clients connect over SMTP, IMAP, POP3, CalDAV, CardDAV, and WebDAV. FlowSync provides ActiveSync and EWS endpoints for compatible clients, including Outlook.
+Tayga Mail Server — открытый сервер корпоративной почты и совместной работы. Он объединяет письма, календари, контакты, задачи, заметки, файлы и чаты в одном веб-пространстве. Организация размещает систему в своей инфраструктуре и управляет доменами, учётными записями, доступом и хранением данных.
 
-**Author:** Кислов Роман Сергеевич (Roman Sergeyevich Kislov)  
-**License:** server and FlowSync [Apache License 2.0](LICENSE)
+![Tayga Mail — почта и чтение письма](docs/screenshots/v1.0.1/mail.png)
 
-See [docs/architecture.md](docs/architecture.md) and `configs/tayga.example.yaml` (minimal bootstrap YAML). Mail policies and most options are edited in **Admin → Server settings** (`/api/v1/admin/settings`).
+## Почему Tayga
 
-**Первоначальная настройка (RU):** [docs/setup.md](docs/setup.md) — bootstrap, seed-админ, DNS, TLS, исходящая почта, чеклист.
+- **Данные под вашим управлением.** Вы выбираете сервер, хранилище, правила доступа и порядок резервного копирования.
+- **Рабочий день в одном окне.** Почта, встречи, документы и обсуждения доступны из общего меню.
+- **Спокойный интерфейс без рекламы.** Светлые панели, мягкие зелёные акценты, рисунки Алисы Кисловой, темы оформления и меню, которое сворачивается до иконок. Интерфейс доступен на русском и английском.
+- **Привычные почтовые клиенты.** Открытые протоколы SMTP, IMAP, POP3 и DAV; FlowSync для поддерживаемых сценариев ActiveSync и EWS.
+- **Несколько организаций в одной установке.** Организации, домены, пользователи, квоты и административные роли управляются централизованно.
+- **Открытый код и понятное развёртывание.** Сервер написан на Go, веб-интерфейс встроен в исполняемый файл. База данных — SQLite или PostgreSQL; дополнительные сервисы подключаются по необходимости.
 
-**Сравнение решений (RU), 20.11.2026:** [Tayga, TEGU, CommuniGate, Яндекс 360, Р7, VK, Астра и MS Exchange](docs/product-comparison.md) · [Презентация PowerPoint](docs/presentations/tayga-competitors-2026-11-20.pptx) · [Матрица Excel: все 8 решений, 54 параметра](docs/presentations/tayga-comparison-matrix-2026-11-20.xlsx).
+## Возможности
 
-**План разработки (RU):** [Дорожная карта: порядок работ, зависимости и критерии готовности](docs/roadmap.md).
+### Почта
 
-**Стабильный выпуск [v1.0.1](https://github.com/rkislov/tayga-mail-server/releases/tag/v1.0.1).** Серверные архивы, контрольные суммы и расширение Thunderbird доступны на странице выпуска.
+Папки, поиск, HTML-письма, вложения, черновики, подписи, отметки и массовые действия. По умолчанию список показывает 25 писем. Правила обработки и автоответ помогают разбирать входящую почту, а делегирование позволяет выдавать отдельные права на работу с ящиком.
 
-## Личное пространство
+На стороне сервера: SMTP/Submission/SMTPS, IMAP/IMAPS, POP3/POP3S, ManageSieve, доменные и почтовые алиасы, группы рассылки, квоты, архивирование, очередь повторной доставки и уведомления о недоставке. Можно подключать внешние ящики по IMAP или POP3.
 
-Новый интерфейс 1.0.0 собран по визуальным макетам: рисунки Алисы Кисловой, мягкие светлые панели, компактное меню и зелёные акценты. Почта, календарь, контакты, задачи, заметки, файлы и Mattermost доступны в одном окне. Меню сворачивается до иконок; рекламных блоков нет.
+[Алиасы](docs/mail-aliases.md) · [Фильтры](docs/setup-filters.md) · [Внешние ящики](docs/external-mail.md) · [Архив и поиск](docs/mail-archive-search.md)
 
-![Почта — список и чтение письма](docs/screenshots/v1.0.1/mail.png)
+### Календари, контакты, задачи и заметки
 
-![Календарь — недельное расписание](docs/screenshots/v1.0.1/calendar-week.png)
+Календарь с видами дня, недели и месяца, приглашениями, повторяющимися встречами и подписками на внешние календари. Контакты и организационный справочник помогают находить коллег. Задачи и заметки хранят рабочие планы, текст и вложения рядом с почтой. CalDAV и CardDAV позволяют подключать совместимые приложения.
 
-![Чаты с аватарами, файлами и меню статуса](docs/screenshots/v1.0.1/chat.png)
+![Недельное расписание Tayga Mail](docs/screenshots/v1.0.1/calendar-week.png)
 
-![Настройки внешнего вида](docs/screenshots/v1.0.0/appearance.png)
+[Календари и приглашения](docs/calendar-scheduling.md) · [Организационный справочник](docs/organization-directory.md)
 
-![Обзор сервера](docs/screenshots/v1.0.0/monitor.png)
+### Файлы и документы
 
-Скриншоты работающего приложения сняты на отдельном локальном стенде с демонстрационными данными. [Все разделы интерфейса](docs/screenshots/README.md) · [Руководство пользователя](docs/user-guide.md) · [Руководство администратора](docs/admin-guide.md) · [Изменения 1.0.1](docs/release-1.0.1.md).
+Личные файлы и общие пространства, папки, поиск, история версий, корзина, права доступа и ссылки для обмена. WebDAV предоставляет доступ из совместимых клиентов. Изображения и PDF можно просматривать в браузере; для редактирования офисных документов подключается внешний Collabora Online, ONLYOFFICE или Р7.
 
-## Идея Tayga
+[Файлы и офисные интеграции](docs/files-and-office.md)
 
-Tayga начиналась как идея собственной замены Microsoft Exchange. Эта основа реализована: свой сервер почты и совместной работы, свои EWS и ActiveSync в FlowSync.
+### Чаты и встречи
 
-Следующая цель — развивать Tayga как самостоятельный продукт, который будет интереснее, проще и функциональнее аналогов. Подробное сравнение функций помогает выбирать направления развития, а открытый код и единый прикладной сервер дают основу для собственной эволюции.
+Встроенный Mattermost-совместимый сервис: личные сообщения, открытые и закрытые каналы, поиск и вложения. В веб-чате есть аватары, статусы присутствия, предпросмотр изображений и значки форматов файлов. Jitsi позволяет переходить из обсуждения к видеовстрече; для звонков нужен отдельно настроенный Jitsi Meet.
 
-## Чат и видеозвонки
+![Чаты Tayga Mail — аватары, статусы и вложения](docs/screenshots/v1.0.1/chat.png)
 
-- [Mattermost-совместимый чат TMS](docs/mattermost-compatibility.md) поддерживает личные сообщения, открытые и закрытые каналы, поиск и вложения. Начиная с 0.10.12 целевой контракт — API 12.0.0; [приёмка плагинов и границы совместимости](docs/mattermost-plugins.md).
-- Видео: **Jitsi / Телемост**. [Групповые звонки Jitsi](docs/vks.md) можно начать из меню канала или командой `/meet`. Приглашение публикуется в канале, встреча открывается в браузере.
-- Для чата требуется включить API Mattermost в конфигурации TMS. Для звонков нужен отдельно развёрнутый Jitsi Meet.
+[Совместимость Mattermost](docs/mattermost-compatibility.md) · [Видеовстречи](docs/vks.md)
 
-## Quick start
+### Защита почты и входа
+
+SPF, DKIM, DMARC и ARC, TLS, политики доставки, ограничения частоты запросов и карантин. Для анализа спама подключается Rspamd, для антивирусной проверки — ClamAV или другой поддерживаемый сканер. Администратор задаёт действия по результатам проверки.
+
+Для входа доступны TOTP и ключи доступа WebAuthn, интеграции LDAP и OIDC. Ключи WebAuthn защищают веб-вход; доступ почтовых клиентов регулируется отдельно. Сертификатами можно управлять через веб-интерфейс, включая выпуск через ACME.
+
+[Настройка защиты и доступа](docs/admin-guide.md) · [Сертификаты](docs/ca.md)
+
+### Администрирование
+
+Веб-консоль объединяет организации, домены, пользователей, классы обслуживания, настройки сервера, мониторинг и сертификаты. В очереди и журнале доставки можно разбирать задержки и отказы; подробности письма показывают связанные события и доступные ответы SMTP.
+
+Для эксплуатации предусмотрены метрики Prometheus, миграция данных, зашифрованные полные резервные копии с проверкой и восстановлением. Сценарии высокой доступности описывают одну активную копию Tayga, управление переключением и общее либо реплицируемое состояние.
+
+![Мониторинг сервера Tayga Mail](docs/screenshots/v1.0.0/monitor.png)
+
+[Журнал доставки](docs/mail-delivery-logs.md) · [Миграция](docs/migration.md) · [Резервные копии](docs/backup-full.md) · [Высокая доступность](docs/ha.md)
+
+## Совместимость и интеграции
+
+- **Почтовые приложения:** SMTP, IMAP, POP3; Autodiscover и Mozilla autoconfig помогают с настройкой.
+- **Календари, контакты и файлы:** CalDAV, CardDAV и WebDAV.
+- **FlowSync:** собственная реализация части ActiveSync и EWS. Поддерживаемые операции и ограничения перечислены в [документе совместимости](docs/flowsync-compatibility.md); полная совместимость с Microsoft Exchange не заявляется.
+- **Thunderbird:** расширение Tayga доступно в [выпуске](https://github.com/rkislov/tayga-mail-server/releases/tag/v1.0.1) и имеет отдельную [инструкцию](extensions/thunderbird-tayga/README.md).
+- **Инфраструктура:** LDAP/OIDC, Prometheus, дополнительное S3/MinIO-хранилище, внешние антиспам, антивирус, офисный редактор и видеосервис.
+
+Набор работающих интеграций зависит от конфигурации. Поддержка Mattermost API и плагинов имеет [опубликованные границы совместимости](docs/mattermost-plugins.md).
+
+## Установка
+
+1. Скачайте архив для своей платформы и контрольные суммы из [GitHub Releases](https://github.com/rkislov/tayga-mail-server/releases/tag/v1.0.1).
+2. Подготовьте домен, DNS, TLS и каталоги данных по [инструкции установки](docs/setup.md).
+3. Создайте конфигурацию на основе [примера](configs/tayga.example.yaml), задайте собственные данные первого администратора и запустите службу.
+4. Откройте веб-интерфейс: основные параметры почты и интеграций находятся в разделе **Администрирование → Сервер**.
+
+В выпуске 1.0.1 доступны архивы для Linux и macOS (amd64/arm64), Windows (amd64/arm64), FreeBSD (amd64). Нативные DEB/RPM-пакеты не входят в этот выпуск.
+
+Пример конфигурации предназначен для первоначальной настройки. Если использованы демонстрационные `admin@example.com` / `changeme`, замените их до открытия доступа к серверу.
+
+### Сборка из исходников
+
+Потребуется версия Go, указанная в [go.mod](go.mod). Собранный веб-интерфейс уже включён в репозиторий.
 
 ```bash
+git clone https://github.com/rkislov/tayga-mail-server.git
+cd tayga-mail-server
 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o tayga-mail ./cmd/tayga
 ./tayga-mail version
-# Standard ports need root (or CAP_NET_BIND_SERVICE); TLS auto-generates self-signed certs when enabled
-sudo ./tayga-mail -config configs/tayga.example.yaml
+./tayga-mail menu -config /path/to/tayga.yaml
 ```
 
-Полный сценарий ввода в эксплуатацию: [docs/setup.md](docs/setup.md).  
-Консоль: `./tayga-mail menu -config …` — [docs/cli-menu.md](docs/cli-menu.md).
+Для изменения интерфейса: `npm --prefix frontend ci` и `npm --prefix frontend run build`. Проверка сервера: `CGO_ENABLED=0 go test ./...`. Подробности — в [архитектуре](docs/architecture.md), [документации фронтенда](frontend/README.md) и [консольном меню](docs/cli-menu.md).
 
-### Cross-platform release builds
+## Документация и развитие
 
-```bash
-VERSION=1.0.1 ./scripts/crossbuild.sh   # → dist/*.tar.gz|zip + checksums.txt
-```
+- [Руководство пользователя](docs/user-guide.md) — повседневная работа со скриншотами.
+- [Руководство администратора](docs/admin-guide.md) — настройка и эксплуатация.
+- [Галерея интерфейса](docs/screenshots/README.md) — пользовательские разделы и администрирование.
+- [Изменения 1.0.1](docs/release-1.0.1.md) и [дорожная карта](docs/roadmap.md).
+- [Сравнение решений](docs/product-comparison.md) — отдельный обзор с указанием даты и источников.
 
-GitHub Releases: push a `v*` tag; [GoReleaser](https://goreleaser.com) (`.github/workflows/release.yml`) publishes linux/darwin/windows/freebsd amd64+arm64 archives.
+Скриншоты сделаны в работающем приложении на демонстрационных данных. Возможности в дорожной карте обозначают планы, а не состав текущего выпуска.
 
-| Service | Address |
-|---------|---------|
-| HTTPS / UI / DAV / FlowSync | `https://127.0.0.1/` (HTTP `:80` redirects) |
-| SMTP MX / submission / SMTPS | `:25` / `:587` / `:465` |
-| IMAP / IMAPS | `:143` / `:993` |
-| POP3 / POP3S | `:110` / `:995` |
-| ManageSieve | `:4190` |
+## Автор и лицензии
 
-Seed: `admin@example.com` / `changeme`. TLS: `tls.auto_generate` or `scripts/gen-dev-certs.sh`.
+<!-- owner-maintenance:start -->
+**Автор проекта — Кислов Роман Сергеевич ([@rkislov](https://github.com/rkislov)).** Сообщения об ошибках и предложения принимаются через [Issues](https://github.com/rkislov/tayga-mail-server/issues), изменения — через Pull Requests из форков. Прямую запись в основной репозиторий и публикацию версий выполняет владелец `rkislov`.
+<!-- owner-maintenance:end -->
 
-- LDAP: hybrid auth; group→admin roles; nested groups; `tayga-mail ldap-sync`
-- Domain and mailbox aliases: admin API and UI, domain-wide address mapping, tenant-scoped mailbox aliases, collision checks and backup/restore — [setup and API](docs/mail-aliases.md).
-- Organization directory: domain department tree backed by nested distribution groups, searchable web UI, deduplicated mail delivery and EWS group lookup/expansion — [setup and scope](docs/organization-directory.md).
-- Quotas: set `users.quota_bytes` (0 = unlimited); SMTP returns `552` when full
-- Auth API: `POST /api/v1/auth/login` → opaque tokens; TOTP MFA; OIDC per-domain
-- IMAP/SMTP: SASL `XOAUTH2` / `OAUTHBEARER` with access tokens from the auth API
-- CalDAV / CardDAV: `/dav/cal/`, `/dav/card/`; `/.well-known/caldav|carddav`
-- Web calendar: independent visibility checkboxes (saved per account in the browser); **Calendar → Settings → iCalendar / CalDAV subscriptions** adds read-only external calendars. Supply a public HTTPS `.ics` feed or a specific CalDAV collection URL, optionally with an app password. The server refreshes subscriptions every 15 minutes and retains the last successful snapshot on failure. Feed URLs and credentials are encrypted using `server.secrets_key` or the persisted `secrets.key` (include that key in backups). RRULE occurrences cover the past year and next two years, including EXDATE and RECURRENCE-ID exceptions; limits: 20 subscriptions per user, 20 MiB per source response, 10,000 displayed events. Subscriptions appear in the web calendar; they are not republished as local DAV collections. Redirects and private-network sources are not followed.
-- External mail: scheduled IMAP/IMAPS and POP3/POP3S collection into personal folders — [configuration](docs/external-mail.md).
-- SMTP delivery diagnostics: queue-correlated commands and server replies — [mail logs](docs/mail-delivery-logs.md).
-- Electronic tickets → personal calendar: background recognition, user review, explicit timezones and replay protection — [setup and limits](docs/travel-tickets.md).
-- Files: versioned writes, trash, search, selection, sharing and personal WebDAV `/dav/files/`; external Collabora Online integration — [setup and limits](docs/files-and-office.md).
-- Notes: `/api/v1/notes*` (folders, rich notes, attachments, drawing); folder/note ACL for multi-user edit; FlowSync Notes (type 10) + EWS sticky notes
-- FlowSync — original module by Roman Sergeyevich Kislov, separately licensed under [Apache-2.0](internal/flowsync/LICENSE): ActiveSync `/Microsoft-Server-ActiveSync`, EWS `/EWS/Exchange.asmx`, Autodiscover (POX/JSON) + Mozilla autoconfig
-- Admin: tenant domains, users, УЦ, **Server settings** (DB-backed config), monitoring, backup (`/api/v1/admin/*`)
-- Metrics: `GET /metrics` (Prometheus `tayga_*`)
-- Backup/restore: `./tayga-mail backup|restore -config …` or Admin UI; see [docs/ha.md](docs/ha.md)
-- HA deployment: one active Tayga instance with Pacemaker/fencing and a complete shared or replicated state volume; [single-site and two-site guides](docs/ha.md), including MetroLUN and DRBD options.
-- Outbound: `smtp.relay` / `smtp.outbound_direct` + optional `smtp.dkim` for authenticated external recipients
-- MTA-STS / TLS-RPT / DANE: `smtp.mta_sts` (+ `publish`), `smtp.tls_rpt`, `smtp.dane` TLSA on direct MX
-- SMTP rate limits: `smtp.rate_limit.per_ip` / `per_user`
-- Outbound queue + DSN: `smtp.queue` retries failed remote delivery; bounces local senders; admin `/api/v1/admin/outbound`
-- Object store: optional S3/MinIO write-through for maildir (`mailstore.object_store`); `tayga-mail sync-objects` to reconcile
-- Virus scan: `scan.enabled` with ClamAV / exec / ICAP → reject, quarantine folder, or tag headers
-- Spam: `spam.enabled` Rspamd `/checkv2` → reject / greylist / tag / Junk quarantine; admin `/api/v1/admin/quarantine`
-- Inbound auth: optional DB-backed `greylist`; then `helo` → `iprev` → `spf` → `dkim_verify` → ARC → `dmarc` on MX
-- DMARC rua/ruf: aggregate XML (`report.enabled`) and AFRF failure reports (`report.failure`)
-- DMARC ARC trust: `dmarc.arc_trust` softens fail when ARC `cv=pass`
-- ARC: `arc.enabled` verify/seal (RFC 8617) on inbound MX
-- Quarantine admin: filters, spam/virus meta, preview (`/api/v1/admin/quarantine`)
-- WebAuthn MFA: `/api/v1/auth/webauthn/*` (passkeys; UUID credential/session IDs). Passkeys protect **web sign-in only**: adding a key does not disable password authentication in FlowSync (ActiveSync/EWS), IMAP/SMTP/POP3, DAV or ManageSieve. The separate `mfa.require_token_for_mfa_users` policy still requires protocol access tokens for users with enabled **TOTP**.
-- Account API: `GET /api/v1/me`; admin: `/api/v1/admin/users` (`http.admins`)
-- Web apps: `/api/v1/mail`, `/api/v1/calendar`, `/api/v1/contacts`, `/api/v1/files`, `/api/v1/chat` + embedded UI (ru/en)
-- Archive mailbox (gzip on disk) + FTS mail search — [docs/mail-archive-search.md](docs/mail-archive-search.md) (RU), [architecture.md](docs/architecture.md#archive-mailbox) (EN)
-- Initial server setup (RU): [docs/setup.md](docs/setup.md)
-- User migration IMAP/CalDAV/CardDAV: [docs/migration.md](docs/migration.md)
-- In-app / browser notifications (new mail, upcoming calendar) via SSE `/api/v1/notifications/stream`
-- Certificate authority (УЦ): self-signed / commercial PEM / Let’s Encrypt ACME — [docs/ca.md](docs/ca.md)
-- Web UI: floating rounded panels; independent day/night mode under **Appearance**
-- Server configuration: grouped sections, typed modal forms and Russian help for every parameter; bootstrap storage remains read-only
-- Calendar: click a date to open its day; double-click to create an event on that date; invitations are in a separate inbox with a pending badge
-- UI screenshots: [docs/screenshots/](docs/screenshots/)
-- IDs: all entity PKs/FKs are UUIDs (fresh DB required after integer-ID builds)
+Сервер и FlowSync — [Apache License 2.0](LICENSE); исходный код веб-интерфейса — [GPL-3.0](frontend/LICENSE). Условия сторонних компонентов указаны в [NOTICE](NOTICE) и соответствующих файлах лицензий.
 
-## License
-
-Copyright © Кислов Роман Сергеевич. Server Go code and FlowSync: Apache License 2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE). Third-party assets retain their respective licenses.
-
-UI backdrop art (tayga / cosmos / city / kalyazin / temple) © Алиса Кислова; `moscow` (Москва-Сити) — generated backdrop.
+Рисунки для фонов интерфейса — **Алиса Кислова**. Состав и авторство изображений приведены в [описании фонов](assets/wallpapers/README.md).
