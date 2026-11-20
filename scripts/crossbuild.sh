@@ -19,7 +19,7 @@ trap 'rm -rf "$PACKAGE_STAGE"' EXIT
 mkdir -p "$PACKAGE_STAGE/configs" "$PACKAGE_STAGE/deploy/systemd" "$PACKAGE_STAGE/docs"
 cp internal/flowsync/LICENSE "$PACKAGE_STAGE/docs/FlowSync-LICENSE"
 cp internal/flowsync/NOTICE "$PACKAGE_STAGE/docs/FlowSync-NOTICE"
-cp LICENSE NOTICE README.md "$PACKAGE_STAGE/"
+cp LICENSE NOTICE README.md README.en.md "$PACKAGE_STAGE/"
 cp configs/tayga.example.yaml "$PACKAGE_STAGE/configs/"
 cp deploy/systemd/tayga.service "$PACKAGE_STAGE/deploy/systemd/"
 cp docs/setup.md docs/migration.md docs/setup-filters.md docs/release-*.md docs/web-omemo.md docs/flowsync-compatibility.md docs/flowsync-debug.md docs/xmpp-compatibility-plan.md docs/files-and-office.md docs/external-mail.md docs/mail-delivery-logs.md docs/travel-tickets.md docs/calendar-scheduling.md docs/roadmap.md "$PACKAGE_STAGE/docs/"
@@ -56,10 +56,10 @@ for t in "${targets[@]}"; do
   CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" go build -trimpath -ldflags="$LDFLAGS" \
     -o "${PACKAGE_STAGE}/tayga-mail${ext}" ./cmd/tayga
   if [[ "$goos" == "windows" ]]; then
-    (cd "$PACKAGE_STAGE" && zip -qr "${OUT}/${name}.zip" "tayga-mail${ext}" LICENSE NOTICE README.md configs/tayga.example.yaml deploy docs frontend)
+    (cd "$PACKAGE_STAGE" && zip -qr "${OUT}/${name}.zip" "tayga-mail${ext}" LICENSE NOTICE README.md README.en.md configs/tayga.example.yaml deploy docs frontend)
     archives+=("${name}.zip")
   else
-    COPYFILE_DISABLE=1 tar --no-xattrs -czf "${OUT}/${name}.tar.gz" -C "$PACKAGE_STAGE" tayga-mail LICENSE NOTICE README.md configs/tayga.example.yaml deploy docs frontend
+    COPYFILE_DISABLE=1 tar --no-xattrs -czf "${OUT}/${name}.tar.gz" -C "$PACKAGE_STAGE" tayga-mail LICENSE NOTICE README.md README.en.md configs/tayga.example.yaml deploy docs frontend
     archives+=("${name}.tar.gz")
   fi
   rm -f "${PACKAGE_STAGE}/tayga-mail${ext}"

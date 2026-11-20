@@ -3,7 +3,7 @@
 **Почта и совместная работа на вашем сервере.**
 
 **Русский** · [English](README.en.md)
-[Скачать v1.0.1](https://github.com/rkislov/tayga-mail-server/releases/tag/v1.0.1) · [Установка](docs/setup.md) · [Пользователю](docs/user-guide.md) · [Администратору](docs/admin-guide.md) · [Скриншоты](docs/screenshots/README.md)
+[Скачать v1.0.2](https://github.com/rkislov/tayga-mail-server/releases/tag/v1.0.2) · [Установка](docs/setup.md) · [Пользователю](docs/user-guide.md) · [Администратору](docs/admin-guide.md) · [Скриншоты](docs/screenshots/README.md)
 
 Tayga Mail Server — открытый сервер корпоративной почты и совместной работы. Он объединяет письма, календари, контакты, задачи, заметки, файлы и чаты в одном веб-пространстве. Организация размещает систему в своей инфраструктуре и управляет доменами, учётными записями, доступом и хранением данных.
 
@@ -73,19 +73,19 @@ SPF, DKIM, DMARC и ARC, TLS, политики доставки, огранич�
 - **Почтовые приложения:** SMTP, IMAP, POP3; Autodiscover и Mozilla autoconfig помогают с настройкой.
 - **Календари, контакты и файлы:** CalDAV, CardDAV и WebDAV.
 - **FlowSync:** собственная реализация части ActiveSync и EWS. Поддерживаемые операции и ограничения перечислены в [документе совместимости](docs/flowsync-compatibility.md); полная совместимость с Microsoft Exchange не заявляется.
-- **Thunderbird:** расширение Tayga доступно в [выпуске](https://github.com/rkislov/tayga-mail-server/releases/tag/v1.0.1) и имеет отдельную [инструкцию](extensions/thunderbird-tayga/README.md).
+- **Thunderbird:** расширение Tayga доступно в [выпуске](https://github.com/rkislov/tayga-mail-server/releases/tag/v1.0.2) и имеет отдельную [инструкцию](extensions/thunderbird-tayga/README.md).
 - **Инфраструктура:** LDAP/OIDC, Prometheus, дополнительное S3/MinIO-хранилище, внешние антиспам, антивирус, офисный редактор и видеосервис.
 
 Набор работающих интеграций зависит от конфигурации. Поддержка Mattermost API и плагинов имеет [опубликованные границы совместимости](docs/mattermost-plugins.md).
 
 ## Установка
 
-1. Скачайте архив для своей платформы и контрольные суммы из [GitHub Releases](https://github.com/rkislov/tayga-mail-server/releases/tag/v1.0.1).
+1. Скачайте архив для своей платформы и контрольные суммы из [GitHub Releases](https://github.com/rkislov/tayga-mail-server/releases/tag/v1.0.2).
 2. Подготовьте домен, DNS, TLS и каталоги данных по [инструкции установки](docs/setup.md).
 3. Создайте конфигурацию на основе [примера](configs/tayga.example.yaml), задайте собственные данные первого администратора и запустите службу.
 4. Откройте веб-интерфейс: основные параметры почты и интеграций находятся в разделе **Администрирование → Сервер**.
 
-В выпуске 1.0.1 доступны архивы для Linux и macOS (amd64/arm64), Windows (amd64/arm64), FreeBSD (amd64). Нативные DEB/RPM-пакеты не входят в этот выпуск.
+В выпуске 1.0.2 доступны архивы для Linux и macOS (amd64/arm64), Windows (amd64/arm64), FreeBSD (amd64). Нативные DEB/RPM-пакеты не входят в этот выпуск.
 
 Пример конфигурации предназначен для первоначальной настройки. Если использованы демонстрационные `admin@example.com` / `changeme`, замените их до открытия доступа к серверу.
 
@@ -108,7 +108,7 @@ CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o tayga-mail ./cmd/tayga
 - [Руководство пользователя](docs/user-guide.md) — повседневная работа со скриншотами.
 - [Руководство администратора](docs/admin-guide.md) — настройка и эксплуатация.
 - [Галерея интерфейса](docs/screenshots/README.md) — пользовательские разделы и администрирование.
-- [Изменения 1.0.1](docs/release-1.0.1.md) и [дорожная карта](docs/roadmap.md).
+- [Изменения 1.0.2](docs/release-1.0.2.md) и [дорожная карта](docs/roadmap.md).
 - [Сравнение решений](docs/product-comparison.md) — отдельный обзор с указанием даты и источников.
 
 Скриншоты сделаны в работающем приложении на демонстрационных данных. Возможности в дорожной карте обозначают планы, а не состав текущего выпуска.
