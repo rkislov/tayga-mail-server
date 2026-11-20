@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"testing"
 
 	"github.com/tayga/tms/internal/storage"
@@ -11,6 +12,12 @@ func TestFileRootsRejectPathIdentities(t *testing.T) {
 	s := &Server{}
 	for _, owner := range []string{"", ".", "..", "../outside", "a/b", `a\b`, storage.NewID() + "/../outside", storage.NewID() + "\x00"} {
 		t.Run(owner, func(t *testing.T) {
+			if _, err := s.createSpaceRestorePlan(context.Background(), storage.NewID(), storage.NewID(), owner, "full", ""); err != errPathEscape {
+				t.Fatalf("checkpoint identity: %v", err)
+			}
+			if _, err := s.createSpaceRestorePlan(context.Background(), storage.NewID(), owner, storage.NewID(), "full", ""); err != errPathEscape {
+				t.Fatalf("space identity: %v", err)
+			}
 			if _, err := s.filesRoot(owner); err != errPathEscape {
 				t.Fatalf("filesRoot: %v", err)
 			}

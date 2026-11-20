@@ -203,7 +203,7 @@ func (s *Server) handleFileUploads(w http.ResponseWriter, r *http.Request) {
 	}
 	parts := strings.Split(strings.TrimPrefix(suffix, "/"), "/")
 	id := parts[0]
-	if len(id) != 36 || strings.ContainsAny(id, `/\.`) || len(parts) > 2 {
+	if !storage.ValidFileSpaceID(id) || len(parts) > 2 {
 		fileError(w, os.ErrNotExist)
 		return
 	}

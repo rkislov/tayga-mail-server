@@ -48,7 +48,20 @@ func (s *Server) fileStateRoot(owner, kind string) (string, error) {
 		return "", errPathEscape
 	}
 	switch kind {
-	case "versions", "trash", "uploads", "resumable", "activity", "cleanup", "retention":
+	case "versions":
+		kind = "versions"
+	case "trash":
+		kind = "trash"
+	case "uploads":
+		kind = "uploads"
+	case "resumable":
+		kind = "resumable"
+	case "activity":
+		kind = "activity"
+	case "cleanup":
+		kind = "cleanup"
+	case "retention":
+		kind = "retention"
 	default:
 		return "", errPathEscape
 	}

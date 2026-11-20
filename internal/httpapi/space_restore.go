@@ -113,6 +113,9 @@ func spaceSnapshotFingerprint(point *spaceCheckpoint) string {
 	return hex.EncodeToString(hash[:])
 }
 func (s *Server) createSpaceRestorePlan(ctx context.Context, actor, space, checkpoint, mode, path string) (*spaceRestorePlan, error) {
+	if !storage.ValidFileSpaceID(space) || !storage.ValidFileSpaceID(checkpoint) {
+		return nil, errPathEscape
+	}
 	if mode != "full" && mode != "folder" {
 		return nil, storage.ErrFileSpaceInvalid
 	}
