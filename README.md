@@ -9,13 +9,13 @@
 Tayga Mail Server is a self-hosted mail and collaboration server written in Go. It hosts multiple organizations and domains in one installation and provides a web workspace for mail, calendars, contacts, files, and notes. Standard clients connect over SMTP, IMAP, POP3, CalDAV, CardDAV, and WebDAV. FlowSync provides ActiveSync and EWS endpoints for compatible clients, including Outlook.
 
 **Author:** Кислов Роман Сергеевич (Roman Sergeyevich Kislov)  
-**License:** server [Apache License 2.0](LICENSE); web client [GPL-3.0](frontend/LICENSE)
+**License:** server and FlowSync [Apache License 2.0](LICENSE)
 
 See [docs/architecture.md](docs/architecture.md) and `configs/tayga.example.yaml` (minimal bootstrap YAML). Mail policies and most options are edited in **Admin → Server settings** (`/api/v1/admin/settings`).
 
 **Первоначальная настройка (RU):** [docs/setup.md](docs/setup.md) — bootstrap, seed-админ, DNS, TLS, исходящая почта, чеклист.
 
-**Сравнение решений (RU), 19.11.2026:** [Tayga, TEGU, CommuniGate, Яндекс 360, Р7, VK, Астра и MS Exchange](docs/product-comparison.md) · [Презентация PowerPoint](docs/presentations/tayga-competitors-2026-11-19.pptx).
+**Сравнение решений (RU), 20.11.2026:** [Tayga, TEGU, CommuniGate, Яндекс 360, Р7, VK, Астра и MS Exchange](docs/product-comparison.md) · [Презентация PowerPoint](docs/presentations/tayga-competitors-2026-11-20.pptx) · [Матрица Excel: все 8 решений, 55 параметров](docs/presentations/tayga-comparison-matrix-2026-11-20.xlsx).
 
 **План разработки (RU):** [Дорожная карта: порядок работ, зависимости и критерии готовности](docs/roadmap.md).
 
@@ -23,8 +23,8 @@ See [docs/architecture.md](docs/architecture.md) and `configs/tayga.example.yaml
 
 ## Чат и видеозвонки
 
-- [Mattermost-совместимый чат TMS](docs/mattermost-compatibility.md) поддерживает личные сообщения, открытые и закрытые каналы, поиск и вложения. На iPhone проверены вступление в открытые каналы и полноэкранный просмотр фотографий. Начиная с 0.10.12 целевой контракт — API 12.0.0; [приёмка плагинов и границы совместимости](docs/mattermost-plugins.md).
-- [Групповые звонки Jitsi](docs/vks.md) можно начать из меню канала или командой `/meet`. Приглашение публикуется в канале, встреча открывается в браузере.
+- [Mattermost-совместимый чат TMS](docs/mattermost-compatibility.md) поддерживает личные сообщения, открытые и закрытые каналы, поиск и вложения. Начиная с 0.10.12 целевой контракт — API 12.0.0; [приёмка плагинов и границы совместимости](docs/mattermost-plugins.md).
+- Видео: **Jitsi / Телемост**. [Групповые звонки Jitsi](docs/vks.md) можно начать из меню канала или командой `/meet`. Приглашение публикуется в канале, встреча открывается в браузере.
 - Для чата требуется включить API Mattermost в конфигурации TMS. Для звонков нужен отдельно развёрнутый Jitsi Meet.
 
 ## Quick start
@@ -103,6 +103,6 @@ Seed: `admin@example.com` / `changeme`. TLS: `tls.auto_generate` or `scripts/gen
 
 ## License
 
-Copyright © Кислов Роман Сергеевич. Server Go code and FlowSync: Apache License 2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE). Web client (`frontend/src` and generated browser assets): GPL-3.0 — see [frontend/LICENSE](frontend/LICENSE). Third-party assets retain their respective licenses.
+Copyright © Кислов Роман Сергеевич. Server Go code and FlowSync: Apache License 2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE). Third-party assets retain their respective licenses.
 
 UI backdrop art (tayga / cosmos / city / kalyazin / temple) © Алиса Кислова; `moscow` (Москва-Сити) — generated backdrop.
