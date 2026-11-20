@@ -2,7 +2,10 @@ package httpapi
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
+	"github.com/tayga/tms/internal/storage"
 	"io"
 	"mime"
 	"net/http"
@@ -16,6 +19,10 @@ func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request) {
 	au, err := s.userFromBearer(r)
 	if err != nil {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	if strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/v1/files"), "/") == "card" {
+		s.handleFileCard(w, r, au)
 		return
 	}
 	if strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/v1/files"), "/") == "access" {
@@ -166,8 +173,20 @@ func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
-		if err := os.MkdirAll(abs, 0o750); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		s.fileMu.Lock()
+		if ownerID != au.ID && !s.fileAccessAllowed(r, ownerID, au.ID, req.Path, true) {
+			s.fileMu.Unlock()
+			fileError(w, os.ErrPermission)
+			return
+		}
+		_, existing := os.Stat(abs)
+		err = os.MkdirAll(abs, 0750)
+		if err == nil && os.IsNotExist(existing) {
+			s.recordFileActivity(ownerID, req.Path, "folder_created", []fileActor{{ID: au.ID, Source: "web"}})
+		}
+		s.fileMu.Unlock()
+		if err != nil {
+			fileError(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"status": "created", "path": cleanRel(req.Path)})
@@ -188,9 +207,14 @@ func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.fileMu.Lock()
+		if ownerID != au.ID && !s.fileAccessAllowed(r, ownerID, au.ID, rel, true) {
+			s.fileMu.Unlock()
+			fileError(w, os.ErrPermission)
+			return
+		}
 		release, err := s.claimFileWrite(ownerID, rel, "")
 		if err == nil {
-			_, err = s.trashFile(ownerID, rel)
+			_, err = s.trashFile(ownerID, rel, fileActor{ID: au.ID, Source: "web"})
 			release()
 		}
 		s.fileMu.Unlock()
@@ -232,12 +256,17 @@ func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.fileMu.Lock()
+		if ownerID != au.ID && (!s.fileAccessAllowed(r, ownerID, au.ID, req.From, true) || !s.fileAccessAllowed(r, ownerID, au.ID, req.To, true)) {
+			s.fileMu.Unlock()
+			fileError(w, os.ErrPermission)
+			return
+		}
 		release, err := s.claimFileWrite(ownerID, req.From, "")
 		if err == nil {
 			var releaseTo func()
 			releaseTo, err = s.claimFileWrite(ownerID, req.To, "")
 			if err == nil {
-				err = s.moveFile(ownerID, req.From, req.To)
+				err = s.moveFile(ownerID, req.From, req.To, fileActor{ID: au.ID, Source: "web"})
 				releaseTo()
 			}
 			release()
@@ -255,12 +284,20 @@ func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) filesRoot(userID string) (string, error) {
+	if !storage.ValidFileSpaceID(userID) {
+		return "", errPathEscape
+	}
+	if s.spaceIsBlocked(userID) {
+		return "", errSpaceRecoveryPending
+	}
 	root := filepath.Join(s.ms.Root, "files", userID)
 	if err := os.MkdirAll(root, 0o750); err != nil {
 		return "", err
 	}
-	if err := os.MkdirAll(filepath.Join(root, "chat"), 0o750); err != nil {
-		return "", err
+	if _, e := s.store.GetFileSpace(context.Background(), userID); errors.Is(e, storage.ErrNotFound) {
+		if err := os.MkdirAll(filepath.Join(root, "chat"), 0750); err != nil {
+			return "", err
+		}
 	}
 	return root, nil
 }

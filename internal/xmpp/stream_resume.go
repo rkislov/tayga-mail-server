@@ -206,6 +206,9 @@ func (s *Session) resumeStoredStream(token string, n uint32, fail func(string) e
 	if s.srv.log != nil {
 		s.srv.log.Info("xmpp stream resumed", "user_id", s.user.ID, "resource", s.JID.Resource, "replayed_stanzas", replayed)
 	}
+	if s.srv.log != nil {
+		s.srv.log.Info("xmpp stream resumed", "user_id", s.user.ID, "resource", s.JID.Resource, "replayed_stanzas", replayed)
+	}
 	// These are new deliveries, so they receive fresh outgoing sequence numbers.
 	return s.srv.flushOffline(context.Background(), s.user.ID, s.SendRaw)
 }

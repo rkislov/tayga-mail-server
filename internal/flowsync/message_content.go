@@ -14,13 +14,13 @@ import (
 )
 
 type messageContent struct {
-	ThreadIndex, ThreadTopic                   string
-	MessageID, References, InReplyTo           string
-	Subject, From, To, Cc, ReplyTo, Text, HTML string
-	SentDate                                   time.Time
-	Attachments                                []messageAttachment
-	MIME                                       []byte
-	SMIME                                      bool
+	ThreadIndex, ThreadTopic                           string
+	MessageID, References, InReplyTo                   string
+	Subject, From, Sender, To, Cc, ReplyTo, Text, HTML string
+	SentDate                                           time.Time
+	Attachments                                        []messageAttachment
+	MIME                                               []byte
+	SMIME                                              bool
 }
 type messageAttachment struct {
 	EWSItemXML                   string
@@ -68,6 +68,7 @@ func readMessageContent(source io.Reader, raw []byte, metadataOnly bool) (messag
 	out.SMIME = media == "application/pkcs7-mime" || media == "application/x-pkcs7-mime" || (media == "multipart/signed" && strings.Contains(params["protocol"], "pkcs7-signature"))
 	out.Subject = mailsearch.DecodeHeader(r.Header.Get("Subject"))
 	out.From = mailsearch.DecodeHeader(r.Header.Get("From"))
+	out.Sender = mailsearch.DecodeHeader(r.Header.Get("Sender"))
 	out.To = mailsearch.DecodeHeader(r.Header.Get("To"))
 	out.Cc = mailsearch.DecodeHeader(r.Header.Get("Cc"))
 	out.ReplyTo = mailsearch.DecodeHeader(r.Header.Get("Reply-To"))

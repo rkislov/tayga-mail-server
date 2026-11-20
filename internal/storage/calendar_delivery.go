@@ -19,6 +19,7 @@ type CalendarMail struct {
 type CalendarDelivery struct {
 	ID, Sender, Recipient, RecipientUserID, Subject, State, LeaseToken string
 	TargetMailbox                                                      string
+	Kind, OriginJSON                                                   string
 	Data                                                               []byte
 	Attempts                                                           int
 	CreatedAt                                                          int64
@@ -78,6 +79,18 @@ func (s *Store) queueCalendarMail(ctx context.Context, tx *sql.Tx, mails []Calen
 		if err != nil {
 			return err
 		}
+		if actorID, _ := ctx.Value(calendarActorKey{}).(string); actorID != "" {
+			var actorEmail string
+			if err = tx.QueryRowContext(ctx, s.rebind(`SELECT email FROM users WHERE id=? AND enabled=TRUE`), actorID).Scan(&actorEmail); err != nil {
+				return err
+			}
+			if !strings.EqualFold(actorEmail, m.From) {
+				m.ICS, err = calutil.WithSchedulingActor(m.ICS, m.From, actorEmail)
+				if err != nil {
+					return err
+				}
+			}
+		}
 		// Booking resources receive calendar objects, not invitation mail.
 		if m.Method == "REQUEST" || m.Method == "CANCEL" {
 			var n int
@@ -88,7 +101,7 @@ func (s *Store) queueCalendarMail(ctx context.Context, tx *sql.Tx, mails []Calen
 				continue
 			}
 		}
-		if options.SaveCopy && (m.Method == "REQUEST" || m.Method == "CANCEL") {
+		if options.SaveCopy && (m.Method == "REQUEST" || m.Method == "CANCEL" || m.Method == "REPLY" || m.Method == "COUNTER") {
 			key := m.From + "\x00" + m.Method + "\x00" + m.Subject + "\x00" + m.Text + "\x00" + m.ICS
 			index, found := groups[key]
 			if !found {
@@ -115,6 +128,13 @@ func (s *Store) queueCalendarMail(ctx context.Context, tx *sql.Tx, mails []Calen
 		}
 
 		raw := calutil.IMIPMessage(m.From, m.FromName, m.To, m.Subject, m.Text, m.ICS, m.Method, id, now)
+		raw, err = s.calendarActorMailTx(ctx, tx, m.From, raw)
+		if err != nil {
+			return err
+		}
+		if err = s.queueEWSMeetingCopies(ctx, tx, m, userID, raw, now); err != nil {
+			return err
+		}
 		_, err = tx.ExecContext(ctx, s.rebind(`INSERT INTO calendar_deliveries(id,sender,recipient,recipient_user_id,subject,data,next_attempt,created_at) VALUES(?,?,?,?,?,?,?,?)`), id, m.From, m.To, userID, m.Subject, raw, now.UnixMilli(), now.UnixNano())
 		if err != nil {
 			return err
@@ -133,7 +153,7 @@ func (s *Store) queueCalendarMail(ctx context.Context, tx *sql.Tx, mails []Calen
 func (s *Store) ClaimCalendarDelivery(ctx context.Context) (*CalendarDelivery, error) {
 	now := time.Now().UnixMilli()
 	job := &CalendarDelivery{}
-	err := s.db.QueryRowContext(ctx, s.rebind(`SELECT id,sender,recipient,recipient_user_id,subject,data,state,attempts,created_at,target_mailbox FROM calendar_deliveries WHERE state<>'done' AND next_attempt<=? AND lease_until<=? ORDER BY created_at,id LIMIT 1`), now, now).Scan(&job.ID, &job.Sender, &job.Recipient, &job.RecipientUserID, &job.Subject, &job.Data, &job.State, &job.Attempts, &job.CreatedAt, &job.TargetMailbox)
+	err := s.db.QueryRowContext(ctx, s.rebind(`SELECT id,sender,recipient,recipient_user_id,subject,data,state,attempts,created_at,target_mailbox,kind,origin_json FROM calendar_deliveries WHERE (kind<>'welcome' OR EXISTS (SELECT 1 FROM users WHERE users.id=calendar_deliveries.welcome_user_id AND users.enabled=TRUE)) AND state<>'done' AND next_attempt<=? AND lease_until<=? ORDER BY created_at,id LIMIT 1`), now, now).Scan(&job.ID, &job.Sender, &job.Recipient, &job.RecipientUserID, &job.Subject, &job.Data, &job.State, &job.Attempts, &job.CreatedAt, &job.TargetMailbox, &job.Kind, &job.OriginJSON)
 	if err != nil {
 		return nil, mapErr(err)
 	}
@@ -172,6 +192,21 @@ func (s *Store) RetryCalendarDelivery(ctx context.Context, job *CalendarDelivery
 // local mailbox and records the receipt. Deletion of that message/outbound row
 // afterwards does not cause the job to send it again.
 func (s *Store) CommitCalendarDelivery(ctx context.Context, job *CalendarDelivery, message *Message) error {
+	return s.commitLocalOrRemoteDelivery(ctx, job, message, nil)
+}
+
+// CommitWelcomeDelivery fences filesystem publication inside the SQL receipt
+// transaction. A worker whose lease expired cannot create an orphan copy after
+// another worker committed and the user moved the delivered message.
+// build must perform filesystem work only: it must not call storage methods.
+func (s *Store) CommitWelcomeDelivery(ctx context.Context, job *CalendarDelivery, build func() (*Message, error)) error {
+	if job.Kind != "welcome" || build == nil {
+		return ErrUnauthorized
+	}
+	return s.commitLocalOrRemoteDelivery(ctx, job, nil, build)
+}
+
+func (s *Store) commitLocalOrRemoteDelivery(ctx context.Context, job *CalendarDelivery, message *Message, build func() (*Message, error)) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -188,16 +223,28 @@ func (s *Store) CommitCalendarDelivery(ctx context.Context, job *CalendarDeliver
 	if n != 1 {
 		return ErrCalendarConflict
 	}
-	var target, recipientUserID string
-	if err = tx.QueryRowContext(ctx, s.rebind(`SELECT target_mailbox,recipient_user_id FROM calendar_deliveries WHERE id=?`), job.ID).Scan(&target, &recipientUserID); err != nil {
+	var target, recipientUserID, kind string
+	if err = tx.QueryRowContext(ctx, s.rebind(`SELECT target_mailbox,recipient_user_id,kind FROM calendar_deliveries WHERE id=?`), job.ID).Scan(&target, &recipientUserID, &kind); err != nil {
 		return err
 	}
 	jobTarget := job.TargetMailbox
 	if jobTarget == "" {
 		jobTarget = "INBOX"
 	}
+	if kind == "welcome" && (recipientUserID == "" || job.RecipientUserID == "" || target != "INBOX") {
+		return ErrUnauthorized
+	}
 	if target != jobTarget || recipientUserID != job.RecipientUserID || target == "Sent" && recipientUserID == "" {
 		return ErrUnauthorized
+	}
+	if build != nil {
+		if kind != "welcome" {
+			return ErrUnauthorized
+		}
+		message, err = build()
+		if err != nil {
+			return err
+		}
 	}
 	if job.RecipientUserID != "" {
 		if message == nil {
@@ -253,6 +300,7 @@ func (s *Store) DeleteCalendarObjectWithMail(ctx context.Context, o *CalendarObj
 }
 
 func (s *Store) deleteCalendarObject(ctx context.Context, o *CalendarObject, mails []CalendarMail, actorID string) error {
+	ctx = withCalendarActor(ctx, actorID)
 	tx, err := s.beginCalendarWrite(ctx)
 	if err != nil {
 		return err

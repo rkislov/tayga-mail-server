@@ -37,7 +37,8 @@ type uploadChunk struct {
 	SHA256 string `json:"sha256"`
 }
 type uploadRecord struct {
-	Chunks []uploadChunk `json:"chunks"`
+	SpaceGeneration int64         `json:"space_generation"`
+	Chunks          []uploadChunk `json:"chunks"`
 	resumableUpload
 	ExpectedETag string `json:"expected_etag"`
 }
@@ -179,7 +180,12 @@ func (s *Server) handleFileUploads(w http.ResponseWriter, r *http.Request) {
 			fileError(w, errPathEscape)
 			return
 		}
-		u := uploadRecord{resumableUpload: resumableUpload{ID: storage.NewID(), Owner: owner, Path: cleanRel(req.Path), Size: req.Size, Expires: time.Now().UTC().Add(uploadLifetime)}, ExpectedETag: fileETag(info)}
+		generation, _, generationErr := s.spaceWriteGeneration(owner)
+		if generationErr != nil {
+			fileError(w, generationErr)
+			return
+		}
+		u := uploadRecord{SpaceGeneration: generation, resumableUpload: resumableUpload{ID: storage.NewID(), Owner: owner, Path: cleanRel(req.Path), Size: req.Size, Expires: time.Now().UTC().Add(uploadLifetime)}, ExpectedETag: fileETag(info)}
 		dir := filepath.Join(root, u.ID)
 		if e = os.Mkdir(dir, 0700); e == nil {
 			e = os.WriteFile(filepath.Join(dir, "content"), nil, 0640)
@@ -197,7 +203,7 @@ func (s *Server) handleFileUploads(w http.ResponseWriter, r *http.Request) {
 	}
 	parts := strings.Split(strings.TrimPrefix(suffix, "/"), "/")
 	id := parts[0]
-	if len(id) != 36 || strings.ContainsAny(id, `/\.`) || len(parts) > 2 {
+	if !storage.ValidFileSpaceID(id) || len(parts) > 2 {
 		fileError(w, os.ErrNotExist)
 		return
 	}
@@ -239,6 +245,15 @@ func (s *Server) handleFileUploads(w http.ResponseWriter, r *http.Request) {
 		}
 		s.fileMu.Lock()
 		defer s.fileMu.Unlock()
+		generation, _, generationErr := s.spaceWriteGeneration(u.Owner)
+		if generationErr != nil {
+			fileError(w, generationErr)
+			return
+		}
+		if generation != u.SpaceGeneration {
+			fileError(w, errFileConflict)
+			return
+		}
 		// Revalidate after acquiring the same lock used by ACL/move/trash changes.
 		if u.Owner != au.ID && !s.fileAccessAllowed(r, u.Owner, au.ID, u.Path, true) {
 			writeJSON(w, 403, map[string]string{"error": "file access denied"})
@@ -277,7 +292,7 @@ func (s *Server) handleFileUploads(w http.ResponseWriter, r *http.Request) {
 			link := filepath.Join(dir, "commit")
 			_ = os.Remove(link)
 			if e = os.Link(content, link); e == nil {
-				_, e = s.commitFile(u.Owner, u.Path, link, u.ExpectedETag)
+				_, e = s.commitFile(u.Owner, u.Path, link, u.ExpectedETag, s.requestFileActor(r))
 			}
 			_ = os.Remove(link)
 			if e != nil {
@@ -391,6 +406,8 @@ func (s *Server) cleanExpiredUploads(ctx context.Context) {
 }
 func (s *Server) runUploadCleanup(ctx context.Context) {
 	s.cleanExpiredUploads(ctx)
+	s.cleanFileRetention(ctx)
+	s.cleanSpaceRecoveryPlans(ctx)
 	ticker := time.NewTicker(time.Hour)
 	defer ticker.Stop()
 	for {
@@ -399,6 +416,8 @@ func (s *Server) runUploadCleanup(ctx context.Context) {
 			return
 		case <-ticker.C:
 			s.cleanExpiredUploads(ctx)
+			s.cleanFileRetention(ctx)
+			s.cleanSpaceRecoveryPlans(ctx)
 		}
 	}
 }

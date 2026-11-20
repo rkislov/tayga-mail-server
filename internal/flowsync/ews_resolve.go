@@ -16,9 +16,42 @@ func (h *ewsHandler) resolveEWSFolder(ctx context.Context, u *storage.User, body
 	if distinguished == "" {
 		distinguished = "inbox"
 	}
-	// Explicit mailbox delegation must never silently fall back to the caller.
-	if email := extractTag(body, "EmailAddress"); email != "" && !strings.EqualFold(email, u.Email) {
-		return "", storage.ErrUnauthorized
+	principal := u
+	doc, err := parseProtocolXML([]byte(body))
+	if err != nil {
+		return "", err
+	}
+	if folder := doc.find("DistinguishedFolderId"); folder != nil {
+		if mailbox := folder.child("Mailbox"); mailbox != nil {
+			principal, err = h.delegatedMailbox(ctx, u, mailbox.value("EmailAddress"))
+			if err != nil {
+				return "", err
+			}
+		}
+	}
+	if principal.ID != u.ID {
+		if distinguished == "root" || distinguished == "msgfolderroot" {
+			return "root:" + principal.ID, nil
+		}
+		if distinguished == "calendar" {
+			cal, err := h.store.GetCalendarByName(ctx, principal.ID, "default")
+			if err != nil {
+				return "", err
+			}
+			if _, err = h.ewsCalendar(ctx, u.ID, cal.ID, false); err != nil {
+				return "", err
+			}
+			return cal.ID, nil
+		}
+		name, ok := map[string]string{"inbox": "INBOX", "sentitems": "Sent", "deleteditems": "Trash", "drafts": "Drafts", "junkemail": "Junk", "outbox": "Outbox"}[distinguished]
+		if !ok {
+			return "", storage.ErrUnauthorized
+		}
+		mb, err := h.store.GetMailbox(ctx, principal.ID, name)
+		if err != nil {
+			return "", err
+		}
+		return mb.ID, nil
 	}
 	if _, ok := ewsSystemFolders[distinguished]; ok {
 		return systemFolderID(u.ID, distinguished), nil

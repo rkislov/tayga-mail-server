@@ -52,8 +52,13 @@ func (h *ewsHandler) createCalendarAttachment(ctx context.Context, u *storage.Us
 	if err != nil {
 		return reject("ErrorItemNotFound", "Calendar item not found")
 	}
-	if err = h.ensureCalendarOwned(ctx, u.ID, object.CalendarID); err != nil {
+	cal, err := h.ewsCalendarObject(ctx, u.ID, object, true)
+	if err != nil {
 		return reject("ErrorAccessDenied", "Calendar owner required")
+	}
+	principal, err := h.calendarPrincipal(ctx, u, cal.ID)
+	if err != nil || principal.ID != cal.UserID {
+		return reject("ErrorAccessDenied", "Calendar principal required")
 	}
 	files, err := h.store.ListCalendarEventAttachments(ctx, id)
 	if err != nil {
@@ -134,7 +139,7 @@ func (h *ewsHandler) createCalendarAttachment(ctx context.Context, u *storage.Us
 		}
 		fileID := storage.NewID()
 		// File names are metadata only; generated identifiers form the disk path.
-		file := &storage.CalendarAttachment{ID: fileID, CalendarObjectID: id, UserID: u.ID, Filename: name, ContentType: ct, Size: int64(len(data)), StoragePath: filepath.ToSlash(filepath.Join(u.ID, id, fileID))}
+		file := &storage.CalendarAttachment{ID: fileID, CalendarObjectID: id, UserID: principal.ID, Filename: name, ContentType: ct, Size: int64(len(data)), StoragePath: filepath.ToSlash(filepath.Join(principal.ID, id, fileID))}
 		uploads = append(uploads, ewsCalendarUpload{file, data})
 	}
 	parsed, err := calutil.ParseICS(object.Data)

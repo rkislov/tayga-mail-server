@@ -32,6 +32,7 @@ async function openFileHistory(kind,path='') {
         actions.querySelectorAll('button').forEach(b=>b.disabled=true);
         try{await api('/api/v1/files/library/'+(remove?kind:'restore'),{method:remove?'DELETE':'POST',body:JSON.stringify({id:item.id,kind})});await load();await refreshFiles()}catch(error){view.status.textContent=libraryMessage(error);actions.querySelectorAll('button').forEach(b=>b.disabled=false)}
       };
+      if(kind==='versions')actions.append(fileAction(item.protected?mailImageText('Снять защиту','Unprotect'):mailImageText('Защитить версию','Protect version'),async()=>{try{await api('/api/v1/files/library/protection',{method:'PATCH',body:JSON.stringify({id:item.id,protected:!item.protected})});await load()}catch(error){view.status.textContent=libraryMessage(error)}}));
       actions.append(fileAction(mailImageText('Восстановить','Restore'),()=>act(false),'reply'));actions.append(fileAction(mailImageText('Удалить навсегда','Delete permanently'),()=>act(true),'delete'));row.append(name,date,size,actions);tbody.append(row);
 	  if(kind==='versions'&&!item.is_dir&&/\.(docx|doc|odt|rtf|txt|md|csv|xlsx|ods|pptx|odp|pdf)$/i.test(item.path))actions.prepend(fileAction(mailImageText('Сравнить','Compare'),()=>openFileComparison(item.path,item.id)));
     }
@@ -58,7 +59,7 @@ function mountFileReaderActions(entry) {
   let versions=$('btn-files-versions'),office=$('btn-files-office');
   if(!versions){versions=fileAction(mailImageText('История версий','Version history'),()=>{});versions.id='btn-files-versions';$('btn-files-download').after(versions)}
   if(!office){office=fileAction(mailImageText('Открыть в офисе','Open in office'),()=>{});office.id='btn-files-office';$('btn-files-download').after(office)}
-  versions.hidden=entry.is_dir||!!filesState.ownerID;versions.onclick=()=>openFileHistory('versions',joinPath(filesState.path,entry.name));
+  versions.hidden=entry.is_dir||(!!filesState.ownerID&&!(filesState.spaceID===filesState.ownerID&&filesState.spaceRights==='manage'));versions.onclick=()=>openFileHistory('versions',joinPath(filesState.path,entry.name));
   office.hidden=entry.is_dir||!(/\.(odt|ods|odp|odg|docx?|xlsx?|pptx?|rtf|csv|txt)$/i.test(entry.name));office.onclick=()=>openOfficeDocument(joinPath(filesState.path,entry.name),entry.name);
 	let template=$('btn-file-use-template');
 	if(!template){template=fileAction(mailImageText('Использовать как шаблон','Use as template'),()=>{});template.id='btn-file-use-template';office.after(template);}
@@ -114,9 +115,45 @@ async function trashSelectedFiles(){
   try{for(const name of names){if(filesState.ownerID!==owner||filesState.path!==path)throw new Error(mailImageText('Папка изменилась; операция остановлена.','Folder changed; operation stopped.'));await api('/api/v1/files?path='+encodeURIComponent(joinPath(path,name)),{method:'DELETE'});fileBrowser.selected.delete(name);moved++}setMsg($('files-msg'),mailImageText('В корзине: ','Moved to trash: ')+moved)}catch(error){setMsg($('files-msg'),libraryMessage(error),'err')}finally{await refreshFiles();updateFileSelection()}
 }
 async function openFileSearch(){
-  const v=fileLibraryDialog(mailImageText('Поиск во всех моих файлах','Search all my files'));const form=document.createElement('form'),query=document.createElement('input'),submit=fileAction(mailImageText('Найти','Search'),()=>{});submit.type='submit';query.type='search';query.required=true;query.maxLength=256;query.className='field-input';query.placeholder=mailImageText('Имя файла или папки','File or folder name');query.setAttribute('aria-label',query.placeholder);query.value=$('files-search')?.value||'';form.className='file-library-search';form.append(query,submit);const results=document.createElement('div'),nav=document.createElement('div');nav.className='file-library-nav';v.body.append(form,results,nav);let page=1,seq=0;
-  const search=async()=>{const id=++seq;if(!query.value.trim())return;v.status.textContent=mailImageText('Поиск…','Searching…');try{const data=await api('/api/v1/files/library/search?q='+encodeURIComponent(query.value)+'&page='+page);if(id!==seq||!v.dialog.open)return;results.replaceChildren();for(const entry of data.entries||[]){const row=fileAction(entry.path,async()=>{filesState.ownerID='';filesState.listTarget='';filesState.sharedRoot='';filesState.path=entry.is_dir?entry.path:entry.path.split('/').slice(0,-1).join('/');filesState.selected=null;v.dialog.close();await refreshFiles();if(!entry.is_dir)selectFileEntry(entry.name)});row.className='file-search-result';results.append(row)}v.status.textContent=data.truncated?mailImageText('Просмотрено 100 000 элементов. Уточните запрос или папку.','Scanned 100,000 entries. Narrow your query or folder.'):mailImageText('Найдено: ','Found: ')+data.total;const prev=fileAction('‹',()=>{page--;search()}),next=fileAction('›',()=>{page++;search()}),label=document.createElement('span');label.textContent=String(page);prev.disabled=page<=1;next.disabled=page*data.page_size>=data.total;nav.replaceChildren(prev,label,next)}catch(error){v.status.textContent=libraryMessage(error)}};form.onsubmit=event=>{event.preventDefault();page=1;search()};if(query.value)await search();else query.focus();
+ const v=fileLibraryDialog(mailImageText('Поиск файлов и документов','Search files and documents')),identity=state.email;
+ const alive=()=>v.dialog.open&&state.email===identity;
+ const timer=setInterval(()=>{if(state.email!==identity)v.dialog.close()},500);
+ let abort=null;v.dialog.addEventListener('close',()=>{clearInterval(timer);abort?.abort()},{once:true});
+ const form=document.createElement('form');form.className='file-card-form';
+ const query=document.createElement('input');query.type='search';query.required=true;query.maxLength=256;query.className='field-input';query.placeholder=mailImageText('Имя или фраза из документа','Name or phrase from a document');query.setAttribute('aria-label',query.placeholder);query.value=$('files-search')?.value||'';
+ const mode=document.createElement('select');mode.className='field-input';mode.setAttribute('aria-label',mailImageText('Где искать','Search in'));
+ for(const [value,ru,en] of [['all','Имена и содержимое PDF/DOCX','Names and PDF/DOCX contents'],['content','Содержимое PDF/DOCX','PDF/DOCX contents'],['name','Только имена','Names only']])mode.add(new Option(mailImageText(ru,en),value));
+ const scope=document.createElement('select');scope.className='field-input';scope.setAttribute('aria-label',mailImageText('Область поиска','Search scope'));
+ scope.add(new Option(mailImageText('Мои и доступные мне файлы','My files and shared with me'),'accessible'));scope.add(new Option(mailImageText('Только мои файлы','Only my files'),'own'));
+ const currentPath=filesState.ownerID?'':filesState.path;if(currentPath)scope.add(new Option(mailImageText('Текущая папка: ','Current folder: ')+currentPath,'folder'));
+ const submit=fileAction(mailImageText('Найти','Search'),()=>{});submit.type='submit';form.append(query,mode,scope,submit);
+ const note=document.createElement('p');note.className='meta';note.textContent=mailImageText('Поиск фразы без учёта регистра в текущих документах. PDF нужен текстовый слой; OCR сканов не выполняется. Корзина и старые версии исключены.','Case-insensitive phrase search in current documents. PDFs need a text layer; scanned images are not OCR processed. Trash and old versions are excluded.');
+ const warnings=document.createElement('p');warnings.className='meta';warnings.setAttribute('aria-label',mailImageText('Ограничения поиска','Search limitations'));
+ const results=document.createElement('div'),nav=document.createElement('div');nav.className='file-library-nav';v.body.append(form,note,warnings,results,nav);let page=1,seq=0;
+ const search=async()=>{
+  const id=++seq;abort?.abort();abort=new AbortController();if(!query.value.trim())return;
+  results.replaceChildren();nav.replaceChildren();warnings.textContent='';v.status.textContent=mailImageText('Поиск…','Searching…');
+  try{
+   const data=await api('/api/v1/files/library/search?q='+encodeURIComponent(query.value)+'&mode='+mode.value+'&scope='+(scope.value==='folder'?'own':scope.value)+(scope.value==='folder'?'&path='+encodeURIComponent(currentPath):'')+'&page='+page,{signal:abort.signal});if(id!==seq||!alive())return;
+   for(const entry of data.entries||[]){
+    const card=document.createElement('section');card.className='file-content-search-result';
+    const open=fileAction(entry.path,async()=>{if(!alive())return;filesState.ownerID=entry.shared?entry.owner_id:'';filesState.spaceID=entry.space?entry.owner_id:'';filesState.spaceName=entry.space?entry.owner_email:'';filesState.spaceRights=entry.space_rights||'';filesState.sharedRoot=entry.shared?entry.path:'';filesState.sharedRights=entry.rights||'read';filesState.listTarget=entry.shared&&!entry.is_dir?entry.path:'';filesState.path=entry.is_dir?entry.path:entry.path.split('/').slice(0,-1).join('/');filesState.selected=null;v.dialog.close();await refreshFiles();if(typeof updateCreateButton==='function')updateCreateButton('files');if(!entry.is_dir)selectFileEntry(entry.name)});open.className='file-search-result';card.append(open);
+    if(entry.shared){const owner=document.createElement('p');owner.className='meta';owner.textContent=mailImageText('Общий файл · ','Shared file · ')+entry.owner_email;card.append(owner)}
+    if(entry.snippet){const snippet=document.createElement('p');snippet.className='file-content-snippet';const match=document.createElement('mark');match.textContent=entry.snippet.match;snippet.append(document.createTextNode(entry.snippet.before),match,document.createTextNode(entry.snippet.after));card.append(snippet)}
+    results.append(card);
+   }
+   const messages=[];
+   if(data.truncated)messages.push(mailImageText('Поиск ограничен временем или объёмом. Результаты неполные; сузьте область поиска.','Search reached its time or size limit. Results are partial; narrow the scope.'));
+   if(data.skipped_documents)messages.push(mailImageText('Не удалось прочитать документов: ','Unreadable documents: ')+data.skipped_documents);
+   if(data.empty_documents)messages.push(mailImageText('Документов без извлечённого текста: ','Documents without extracted text: ')+data.empty_documents);
+   if(mode.value!=='name'&&data.pdf_search_available===false)messages.push(mailImageText('Поиск PDF недоступен: на сервере нужен pdftotext из Poppler. DOCX продолжают участвовать в поиске.','PDF search is unavailable: the server needs Poppler pdftotext. DOCX search remains available.'));
+   warnings.textContent=messages.join(' · ');v.status.textContent=mailImageText('Найдено: ','Found: ')+data.total;
+   const prev=fileAction('‹',()=>{page--;void search()}),next=fileAction('›',()=>{page++;void search()}),label=document.createElement('span');label.textContent=String(page);prev.setAttribute('aria-label',mailImageText('Предыдущая страница','Previous page'));next.setAttribute('aria-label',mailImageText('Следующая страница','Next page'));prev.disabled=page<=1;next.disabled=page*data.page_size>=data.total;nav.replaceChildren(prev,label,next);
+  }catch(error){if(id===seq&&alive()&&error.name!=='AbortError')v.status.textContent=libraryMessage(error)}
+ };
+ form.onsubmit=event=>{event.preventDefault();page=1;void search()};mode.onchange=scope.onchange=()=>{page=1;if(query.value.trim())void search()};if(query.value)await search();else query.focus();
 }
+
 function mountFileLibrary(){
   const toolbar=document.createElement('div');toolbar.className='file-browser-tools';const search=document.createElement('input');search.id='files-search';search.type='search';search.className='field-input';search.placeholder=mailImageText('Поиск в папке','Search this folder');search.setAttribute('aria-label',search.placeholder);let timer;search.oninput=()=>{clearTimeout(timer);fileBrowser.page=0;timer=setTimeout(refreshFiles,200)};
   const global=fileAction(mailImageText('Искать везде','Search all'),openFileSearch);global.id='btn-files-search-all';toolbar.append(search,global);$('files-upload-panel').before(toolbar);

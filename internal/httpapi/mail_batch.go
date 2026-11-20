@@ -74,25 +74,43 @@ func (s *Server) moveWebMessage(ctx context.Context, au *authUser, msg *storage.
 }
 
 func (s *Server) deleteWebMessage(ctx context.Context, au *authUser, msg *storage.Message, mb *storage.Mailbox) (string, error) {
+	destination := ""
+	status := "deleted"
 	if !strings.EqualFold(mb.Name, "Trash") {
-		trash, err := s.ensureMailFolder(ctx, au, "Trash")
+		owner, err := s.store.GetUserByID(ctx, mb.UserID)
 		if err != nil {
 			return "", err
 		}
-		_, err = s.store.MoveMessageContent(ctx, msg, trash.ID, msg.FilePath, msg.Size, msg.Archived)
-		return "trashed", err // A failed move must never fall through to permanent deletion.
+		path, err := s.ms.EnsureFolder(owner.Email, "Trash")
+		if err != nil {
+			return "", err
+		}
+		trash, err := s.store.EnsureMailbox(ctx, owner.ID, "Trash", path)
+		if err != nil {
+			return "", err
+		}
+		destination = trash.ID
+		status = "trashed"
 	}
-	if err := s.store.DeleteMessage(ctx, msg.ID); err != nil {
+	moved, err := s.store.DisposeMessages(ctx, au.ID, []string{msg.ID}, destination, mb.UserID)
+	if err != nil {
 		return "", err
 	}
-	if err := s.ms.Delete(msg.FilePath); err != nil {
-		s.log.Warn("mail deleted content cleanup failed", "message_id", msg.ID, "error", err)
+	if len(moved) == 0 {
+		return "", storage.ErrUnauthorized
 	}
-	return "deleted", nil
+	if destination == "" && s.ms != nil {
+		if err = s.ms.Delete(msg.FilePath); err != nil {
+			s.log.Warn("mail deleted content cleanup failed", "message_id", msg.ID, "error", err)
+		}
+	}
+	return status, nil
 }
 
 func mailError(err error) (int, string) {
 	switch {
+	case errors.Is(err, storage.ErrUnauthorized):
+		return 403, "message_access_denied"
 	case errors.Is(err, storage.ErrNotFound):
 		return 404, "message_not_found"
 	case errors.Is(err, storage.ErrMessageChanged):

@@ -217,8 +217,8 @@ func (s *Store) UpdateMessageHeaders(ctx context.Context, messageID, subject, fr
 }
 
 // MoveMessage assigns a new UID in dstMailboxID and updates mailbox_id (FlowSync MoveItems).
-func (s *Store) MoveMessage(ctx context.Context, messageID, dstMailboxID string) (*Message, error) {
-	return s.moveMessage(ctx, messageID, dstMailboxID, nil, "", 0, false)
+func (s *Store) MoveMessage(ctx context.Context, messageID, dstMailboxID string, actor ...string) (*Message, error) {
+	return s.moveMessage(ctx, messageID, dstMailboxID, nil, "", 0, false, actor...)
 }
 
 // MoveMessageContent commits the folder, UID and newly written content together.
@@ -228,7 +228,7 @@ func (s *Store) MoveMessageContent(ctx context.Context, before *Message, dstMail
 	return s.moveMessage(ctx, before.ID, dstMailboxID, before, filePath, size, archived)
 }
 
-func (s *Store) moveMessage(ctx context.Context, messageID, dstMailboxID string, before *Message, filePath string, size int64, archived bool) (*Message, error) {
+func (s *Store) moveMessage(ctx context.Context, messageID, dstMailboxID string, before *Message, filePath string, size int64, archived bool, actor ...string) (*Message, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -241,6 +241,14 @@ func (s *Store) moveMessage(ctx context.Context, messageID, dstMailboxID string,
 	msg, err := s.scanMessage(tx.QueryRowContext(ctx, s.rebind(query), messageID))
 	if err != nil {
 		return nil, err
+	}
+	if len(actor) > 0 {
+		if err = s.mailboxRightTx(ctx, tx, actor[0], msg.MailboxID, "t"); err != nil {
+			return nil, err
+		}
+		if err = s.mailboxRightTx(ctx, tx, actor[0], dstMailboxID, "i"); err != nil {
+			return nil, err
+		}
 	}
 	if before != nil && (msg.FilePath != before.FilePath || msg.MailboxID != before.MailboxID) {
 		return nil, ErrMessageChanged

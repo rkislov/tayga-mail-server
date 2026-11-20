@@ -26,6 +26,11 @@ func (s *Server) calendarAccessible(r *http.Request, au *authUser, calendarID st
 	}
 	for _, c := range shared {
 		if c.ID == calendarID {
+			if grant, e := s.store.GetMailboxDelegate(r.Context(), c.UserID, au.ID); e == nil && (grant.CanManageCalendar || c.Name == "default" && grant.EWSCalendarPermission == "Editor") && c.Name != "personal" {
+				if owner, e := s.store.GetUserByID(r.Context(), c.UserID); e == nil {
+					c.DelegateOrganizerEmail = owner.Email
+				}
+			}
 			return c, nil
 		}
 	}
@@ -96,7 +101,7 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 					continue
 				}
 				out = append(out, map[string]any{
-					"id": c.ID, "name": c.Name, "display_name": c.DisplayName, "description": c.Description, "color": c.Color,
+					"id": c.ID, "name": c.Name, "display_name": c.DisplayName + " · " + calendarOwnerLabel(s, r, c.UserID), "owner_id": c.UserID, "description": c.Description, "color": c.Color,
 					"busy_only": c.Name == "personal", "shared": true, "owned": false, "writable": calendarCanWrite(s, r, au, c.ID), "deletable": false,
 				})
 			}
@@ -344,7 +349,7 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			previous = &parsed.Event
-			if parsed.Organizer.Email != "" && !strings.EqualFold(parsed.Organizer.Email, au.Email) {
+			if parsed.Organizer.Email != "" && !calendarActsAsOrganizer(parsed.Organizer.Email, cal, au) {
 				writeJSON(w, 403, map[string]string{"error": "only the organizer can update a meeting"})
 				return
 			}
@@ -363,7 +368,11 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, 400, map[string]string{"error": "end must be after start"})
 			return
 		}
-		user, err := s.store.GetUserByID(r.Context(), au.ID)
+		principalID := au.ID
+		if cal.DelegateOrganizerEmail != "" {
+			principalID = cal.UserID
+		}
+		user, err := s.store.GetUserByID(r.Context(), principalID)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "user lookup failed"})
 			return
@@ -621,13 +630,47 @@ func (s *Server) handleCalendarInvitesList(w http.ResponseWriter, r *http.Reques
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+	grants, err := s.store.ListDelegationsFor(r.Context(), au.ID)
+	if err != nil {
+		writeJSON(w, 503, map[string]string{"error": "delegation lookup unavailable"})
+		return
+	}
+	actor, err := s.store.GetUserByID(r.Context(), au.ID)
+	if err != nil {
+		writeJSON(w, 503, map[string]string{"error": "user lookup unavailable"})
+		return
+	}
+	for _, grant := range grants {
+		if !grant.CanRespondInvites && grant.EWSCalendarPermission != "Editor" {
+			continue
+		}
+		owner, err := s.store.GetUserByID(r.Context(), grant.OwnerID)
+		if err != nil || !owner.Enabled || owner.TenantID != actor.TenantID {
+			continue
+		}
+		delegated, err := s.store.ListCalendarInvitesForUser(r.Context(), owner.ID, pending)
+		if err != nil {
+			writeJSON(w, 503, map[string]string{"error": "invitation lookup unavailable"})
+			return
+		}
+		for _, inv := range delegated {
+			o, e := s.store.GetCalendarObjectByID(r.Context(), inv.CalendarObjectID)
+			if e != nil {
+				continue
+			}
+			c, e := s.calendarAccessible(r, au, o.CalendarID)
+			if e == nil && c.Name != "personal" && c.UserID == owner.ID && (grant.CanRespondInvites || c.Name == "default" && grant.EWSCalendarPermission == "Editor") {
+				invites = append(invites, inv)
+			}
+		}
+	}
 	out := make([]map[string]any, 0, len(invites))
 	for _, inv := range invites {
 		item := map[string]any{
 			"id": inv.ID, "event_uid": inv.EventUID, "calendar_object_id": inv.CalendarObjectID,
 			"summary": inv.Summary, "partstat": inv.PartStat, "attendee_email": inv.AttendeeEmail,
-			"organizer_user_id": inv.OrganizerUserID,
-			"created_at":        inv.CreatedAt.UTC().Format(time.RFC3339),
+			"organizer_user_id": inv.OrganizerUserID, "delegated": inv.AttendeeUserID != au.ID,
+			"created_at": inv.CreatedAt.UTC().Format(time.RFC3339),
 		}
 		if inv.ProposedStart != nil {
 			item["proposed_start"] = inv.ProposedStart.UTC().Format(time.RFC3339)
@@ -666,6 +709,21 @@ func (s *Server) handleCalendarInvitesList(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		writeJSON(w, 500, map[string]string{"error": "cannot load calendar proposals"})
 		return
+	}
+	for _, grant := range grants {
+		if !grant.CanManageCalendar && grant.EWSCalendarPermission != "Editor" {
+			continue
+		}
+		delegated, err := s.store.ListCalendarProposals(r.Context(), grant.OwnerID)
+		if err != nil {
+			writeJSON(w, 503, map[string]string{"error": "proposal lookup unavailable"})
+			return
+		}
+		for _, p := range delegated {
+			if c, err := s.calendarAccessible(r, au, p.Object.CalendarID); err == nil && c.DelegateOrganizerEmail != "" {
+				proposals = append(proposals, p)
+			}
+		}
 	}
 	proposalJSON := make([]map[string]any, 0, len(proposals))
 	for _, proposal := range proposals {
@@ -760,8 +818,11 @@ func (s *Server) handleCalendarInviteReply(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if inv.AttendeeUserID != au.ID {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
-		return
+		grant, e := s.store.GetMailboxDelegate(r.Context(), inv.AttendeeUserID, au.ID)
+		if e != nil || (!grant.CanRespondInvites && grant.EWSCalendarPermission != "Editor") {
+			writeJSON(w, 403, map[string]string{"error": "forbidden"})
+			return
+		}
 	}
 	var req struct {
 		Action       string          `json:"action"` // accept|decline|tentative|counter
@@ -911,7 +972,7 @@ func parseFlexibleTime(s string) *time.Time {
 func calendarEventJSON(o *storage.CalendarObject, ev calutil.ParseResult, cal *storage.Calendar, au *authUser) map[string]any {
 	item := eventToJSON(o, ev)
 	item["recurrence"] = calutil.ReadRecurrence(o.Data)
-	item["recurrence_organizer"] = ev.Organizer.Email == "" || strings.EqualFold(ev.Organizer.Email, au.Email)
+	item["recurrence_organizer"] = ev.Organizer.Email == "" || calendarActsAsOrganizer(ev.Organizer.Email, cal, au)
 	if cal.Name == "personal" && cal.UserID != au.ID {
 		for _, key := range []string{"description", "location", "geo", "attendees", "organizer", "recurrence", "recurrence_organizer"} {
 			delete(item, key)

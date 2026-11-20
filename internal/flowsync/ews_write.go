@@ -28,6 +28,12 @@ func (h *ewsHandler) createItem(ctx context.Context, u *storage.User, body strin
 	if parseErr != nil {
 		return "", parseErr
 	}
+	if items := doc.find("Items"); items != nil && len(items.Children) == 1 {
+		switch items.Children[0].Name.Local {
+		case "AcceptItem", "TentativelyAcceptItem", "DeclineItem":
+			return h.respondEWSMeeting(ctx, u, doc.find("CreateItem"), items.Children[0])
+		}
+	}
 	if items := doc.find("Items"); items != nil && len(items.Children) > 0 && items.Children[0].Name.Local == "Message" && !strings.Contains(body, "IPM.StickyNote") {
 		return h.createMailItem(ctx, u, body)
 	}
@@ -35,6 +41,14 @@ func (h *ewsHandler) createItem(ctx context.Context, u *storage.User, body strin
 	folderID := extractAttr(body, "ParentFolderId", "Id")
 	if folderID == "" {
 		folderID = extractAttr(body, "FolderId", "Id")
+	}
+
+	if saved := doc.find("SavedItemFolderId"); saved != nil {
+		var err error
+		folderID, err = h.resolveEWSFolder(ctx, u, saved.render())
+		if err != nil {
+			return ewsFault("ErrorAccessDenied", "Folder unavailable"), nil
+		}
 	}
 
 	if doc.find("CalendarItem") != nil {
@@ -45,7 +59,7 @@ func (h *ewsHandler) createItem(ctx context.Context, u *storage.User, body strin
 			}
 			folderID = cal.ID
 		}
-		if _, err := h.store.GetCalendarByID(ctx, u.ID, folderID); err != nil {
+		if _, err := h.ewsCalendar(ctx, u.ID, folderID, true); err != nil {
 			return ewsFault("ErrorInvalidFolderId", err.Error()), nil
 		}
 		return h.createCalendarItem(ctx, u, body, folderID)
@@ -146,7 +160,7 @@ func (h *ewsHandler) updateItem(ctx context.Context, u *storage.User, body strin
 	}
 
 	if o, err := h.store.GetCalendarObjectByID(ctx, id); err == nil {
-		if err := h.ensureCalendarOwned(ctx, u.ID, o.CalendarID); err != nil {
+		if err := h.calendarObjectWrite(ctx, u.ID, o); err != nil {
 			return ewsFault("ErrorAccessDenied", "forbidden"), nil
 		}
 		files, err := h.store.ListCalendarEventAttachments(ctx, o.ID)
@@ -228,7 +242,7 @@ func (h *ewsHandler) updateItem(ctx context.Context, u *storage.User, body strin
 	}
 
 	if msg, err := h.store.GetMessageByID(ctx, id); err == nil {
-		if err := h.ensureMailboxOwned(ctx, u.ID, msg.MailboxID); err != nil {
+		if err := h.mailboxRight(ctx, u.ID, msg.MailboxID, "r"); err != nil {
 			return ewsFault("ErrorAccessDenied", "forbidden"), nil
 		}
 		return h.updateMailMetadata(ctx, u, msg, body)
@@ -267,7 +281,7 @@ func (h *ewsHandler) deleteItem(ctx context.Context, u *storage.User, body strin
 	}
 
 	if o, err := h.store.GetCalendarObjectByID(ctx, id); err == nil {
-		if err := h.ensureCalendarOwned(ctx, u.ID, o.CalendarID); err != nil {
+		if err := h.calendarObjectWrite(ctx, u.ID, o); err != nil {
 			return ewsFault("ErrorAccessDenied", "forbidden"), nil
 		}
 		files, err := h.store.ListCalendarEventAttachments(ctx, o.ID)
@@ -302,14 +316,15 @@ func (h *ewsHandler) deleteItem(ctx context.Context, u *storage.User, body strin
 		return ewsDeleteResponse(), nil
 	}
 	if msg, err := h.store.GetMessageByID(ctx, id); err == nil {
-		if err := h.ensureMailboxOwned(ctx, u.ID, msg.MailboxID); err != nil {
-			return ewsFault("ErrorAccessDenied", "forbidden"), nil
+		if err = h.mailboxRight(ctx, u.ID, msg.MailboxID, "t"); err != nil {
+			return ewsFault("ErrorAccessDenied", "Mailbox management permission required"), nil
 		}
-		if err := h.store.DeleteMessage(ctx, msg.ID); err != nil {
+		if err = h.store.DeleteMessage(ctx, id); err != nil {
 			return "", err
 		}
 		return ewsDeleteResponse(), nil
 	}
+
 	if n, err := h.store.GetNoteItemByID(ctx, id); err == nil {
 		rights, err := h.store.NoteRightsForUser(ctx, n.ID, u.ID)
 		if err != nil || rights != "write" {

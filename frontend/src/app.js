@@ -240,6 +240,8 @@ function renderThemeGallery(active) {
     btn.addEventListener("click", () => applyTheme(key));
     gallery.appendChild(btn);
   });
+  const more=document.createElement('details');more.className='workspace-other-backgrounds';const title=document.createElement('summary');title.textContent=lang==='en'?'More backgrounds':'Другие фоны';const grid=document.createElement('div');grid.className='workspace-other-background-grid';more.append(title,grid);
+  gallery.querySelectorAll('.theme-tile').forEach(button=>{if(!['tayga','cosmos','city','teriberka'].includes(button.dataset.theme))grid.append(button)});if(grid.children.length){more.open=!!grid.querySelector('.is-active');gallery.append(more)}
 }
 
 function normalizeThemeKey(name) {
@@ -288,7 +290,7 @@ function updateNavUser(email, isAdmin) {
   const emailEl = $("nav-user-email");
   const roleEl = $("nav-user-role");
   if (avatar) avatar.textContent = accountInitials(state.me?.email===mail ? state.me.display_name : "", mail);
-  if (emailEl) { emailEl.textContent = String(state.me?.email === mail ? state.me.display_name || "" : "").trim() || mail || "—"; emailEl.title = mail; }
+  if (emailEl) { const name = String(state.me?.email === mail ? state.me.display_name || "" : "").trim() || mail || "—"; emailEl.textContent = document.documentElement.classList.contains("workspace-v1") && !name.includes("@") ? name.split(" ")[0] : name; emailEl.title = mail; }
   if (roleEl) {
     const key = isAdmin ? "role_admin" : "role_user";
     roleEl.setAttribute("data-i18n", key);
@@ -307,11 +309,11 @@ function applyColorMode(mode) {
 }
 document.querySelectorAll(".color-mode-switch button").forEach(button => button.addEventListener("click",()=>applyColorMode(button.dataset.colorMode)));
 systemColorMode.addEventListener("change",()=>{if(localStorage.getItem("tayga.colorMode")==="auto")applyColorMode("auto");});
-applyColorMode(localStorage.getItem("tayga.colorMode") || "auto");
+applyColorMode(localStorage.getItem("tayga.colorMode") || "light");
 $("color-mode-select")?.addEventListener("change",event=>applyColorMode(event.target.value));
 
 (function initTheme() {
-  const saved = localStorage.getItem("tayga.theme") || "random";
+  const saved = localStorage.getItem("tayga.theme") || "tayga";
   applyTheme(saved, {persist: false});
   document.getElementById("theme-select")?.addEventListener("change", (e) => {
     applyTheme(e.target.value);
@@ -324,7 +326,7 @@ const APPS = [
   "monitor", "outbound", "antispam", "maillog", "tenants", "tls", "xmpp", "mattermost", "vks", "server", "cos",
 ];
 
-const mailState = { mailboxID: "", messageID: "", mailboxes: [], order: [], searchQ: "", offset: 0, pageSize: 50, request: 0, sort: "date", sortOrder: "desc", filter: "all" };
+const mailState = { mailboxID: "", messageID: "", mailboxes: [], order: [], searchQ: "", offset: 0, pageSize: 25, request: 0, sort: "date", sortOrder: "desc", filter: "all" };
 const calState = {
   showPast: false,
   hiddenCalendars: new Set(),
@@ -336,7 +338,7 @@ const calState = {
   events: [],
   month: new Date(),
   selectedDay: "",
-  view: "month",
+  view: "week",
   dayClickTimer: null,
   attendees: [],
   invites: [],
@@ -396,9 +398,10 @@ function setNavOpen(open) {
   const nav = $("app-nav");
   const backdrop = $("nav-backdrop");
   if (!shell) return;
+  if (window.matchMedia("(min-width: 901px)").matches) open = false;
   shell.classList.toggle("nav-open", open);
   if (btn) btn.setAttribute("aria-expanded", open ? "true" : "false");
-  if (nav) nav.setAttribute("aria-hidden", open ? "false" : "true");
+  if (nav) nav.setAttribute("aria-hidden", open || window.matchMedia("(min-width: 901px)").matches ? "false" : "true");
   if (backdrop) backdrop.hidden = !open;
   document.body.style.overflow = open ? "hidden" : "";
 }
@@ -423,7 +426,7 @@ function showApp(name) {
   const migrationPane=$("app-migration");
   if (migrationPane) {
     if (!migrationPane._originalParent) migrationPane._originalParent=migrationPane.parentElement;
-    (app === "profile" ? $("app-profile") : migrationPane._originalParent).append(migrationPane);
+    (app === "profile" ? ($("workspace-profile-extra") || document.querySelector("#app-profile .workspace-settings-content") || $("app-profile")) : migrationPane._originalParent).append(migrationPane);
     migrationPane.classList.toggle("hidden", !["profile","migration"].includes(app));
     migrationPersonal = app === "profile";
     if (migrationPersonal) { migrationTargetID=""; refreshMigration(); }
@@ -791,27 +794,41 @@ function formatUptime(seconds) {
 }
 
 let monitorRequest = 0;
-function renderTimeChart(host, key, series, unit='', supplied=null, range=null) {
- if(!host)return;
- const samples=supplied||[];
- if(!samples.length){host.textContent='История пока не накоплена. Сервер сохраняет метрики раз в минуту.';return}
- const w=640,h=210,left=60,right=18,top=16,bottom=36;
- const max=Math.max(1,...samples.flatMap(sample=>sample.values.filter(value=>Number.isFinite(value))));
- const start=range?.from||samples[0].time,end=range?.to||samples.at(-1).time,span=Math.max(end-start,60000);
- const colors=['#36866b','#598ad5','#d48331','#b466b1','#bc5353','#70838d'];let svg='';
- for(let i=0;i<=4;i++){const v=max*i/4,y=h-bottom-(h-top-bottom)*i/4;svg+=svgEl('line',{x1:left,x2:w-right,y1:y,y2:y,stroke:'currentColor',opacity:0.12})+svgEl('text',{x:left-8,y:y+4,'text-anchor':'end',fill:'currentColor','font-size':11},escapeHtml(fmtNum(v)))}
- for(let i=0;i<3;i++){const x=left+(w-left-right)*i/2;svg+=svgEl('text',{x,y:h-10,'text-anchor':i===0?'start':i===2?'end':'middle',fill:'currentColor','font-size':11},escapeHtml(new Date(start+(end-start)*i/2).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})))}
- series.forEach((item,index)=>{let points=[];const flush=()=>{if(points.length)svg+=svgEl('polyline',{points:points.join(' '),fill:'none',stroke:colors[index%colors.length],'stroke-width':2.5});points=[]};let previous=null,last=null;for(const sample of samples){const value=sample.values[index];if(!Number.isFinite(value)){flush();previous=sample;continue}if(previous&&(sample.time-previous.time>150000||sample.boot!==previous.boot))flush();last=[left+(sample.time-start)/span*(w-left-right),h-bottom-value/max*(h-top-bottom)];points.push(last.join(','));previous=sample}flush();if(last)svg+=svgEl('circle',{cx:last[0],cy:last[1],r:3,fill:colors[index%colors.length]})});
- host.innerHTML=`<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${escapeHtml(series.map(item=>item.label).join(', '))}"><title>${escapeHtml(unit)}</title>${svg}</svg><div class="chart-legend">${series.map((item,i)=>`<span><i style="background:${colors[i%colors.length]}"></i>${escapeHtml(item.label)}: ${Number.isFinite(item.value)?escapeHtml(fmtNum(item.value)):'—'}</span>`).join('')}</div><p class="meta">${escapeHtml(unit)} · ${samples.length} наблюдений · с ${escapeHtml(new Date(samples[0].time).toLocaleString())}</p>`;
+// Monotone Hermite interpolation passes through samples without introducing peaks.
+function workspaceChartPath(points) {
+ if(!points.length)return '';
+ if(points.length===1)return `M${points[0][0]},${points[0][1]}`;
+ const slopes=points.slice(1).map((p,i)=>(p[1]-points[i][1])/(p[0]-points[i][0]||1));
+ const tangents=points.map((p,i)=>i===0?slopes[0]:i===points.length-1?slopes.at(-1):slopes[i-1]*slopes[i]<=0?0:2*slopes[i-1]*slopes[i]/(slopes[i-1]+slopes[i]));
+ for(let i=0;i<slopes.length;i++){if(!slopes[i]){tangents[i]=tangents[i+1]=0;continue}const a=tangents[i]/slopes[i],b=tangents[i+1]/slopes[i],norm=a*a+b*b;if(norm>9){const scale=3/Math.sqrt(norm);tangents[i]=scale*a*slopes[i];tangents[i+1]=scale*b*slopes[i]}}
+ const f=n=>Number(n.toFixed(2));let path=`M${f(points[0][0])},${f(points[0][1])}`;
+ for(let i=1;i<points.length;i++){const a=points[i-1],b=points[i],step=(b[0]-a[0])/3;path+=` C${f(a[0]+step)},${f(a[1]+tangents[i-1]*step)} ${f(b[0]-step)},${f(b[1]-tangents[i]*step)} ${f(b[0])},${f(b[1])}`}
+ return path;
+}
+function renderTimeChart(host,key,series,unit='',supplied=null,range=null){
+ if(!host)return;const samples=(supplied||[]).filter(s=>Number.isFinite(s.time));
+ if(!samples.length){host.innerHTML='<p class="workspace-chart-empty">'+mailImageText('История пока не накоплена. Метрики сохраняются раз в минуту.','No history yet. Metrics are saved every minute.')+'</p>';return}
+ const w=680,h=236,left=48,right=16,top=18,bottom=32,plotW=w-left-right,plotH=h-top-bottom,baseline=h-bottom;
+ const rawMax=Math.max(1,...samples.flatMap(s=>s.values.filter(v=>Number.isFinite(v))));const roughStep=rawMax*1.12/4,power=10**Math.floor(Math.log10(roughStep));const step=([1,2,2.5,5,10].find(v=>v*power>=roughStep)||10)*power,max=Math.ceil(rawMax*1.06/step)*step;
+ const from=Number.isFinite(range?.from)?range.from:samples[0].time,to=Number.isFinite(range?.to)?range.to:samples.at(-1).time,span=Math.max(to-from,60000);
+ const colors=['#628548','#cfaa65','#8fa17c','#8aa29a','#b78f78','#a4a87e'];let grid='',lines='',defs='';
+ const number=v=>new Intl.NumberFormat(lang==='en'?'en-GB':'ru-RU',{maximumFractionDigits:Math.abs(v)<1?2:1}).format(v);
+ for(let i=0;i<=4;i++){const y=baseline-plotH*i/4;grid+=`<line x1="${left}" x2="${w-right}" y1="${y}" y2="${y}" class="workspace-chart-grid"/><text x="${left-10}" y="${y+3}" text-anchor="end" class="workspace-chart-tick">${escapeHtml(number(max*i/4))}</text>`}
+ for(let i=0;i<5;i++){const x=left+plotW*i/4;grid+=`<text x="${x}" y="${h-8}" text-anchor="${i===0?'start':i===4?'end':'middle'}" class="workspace-chart-tick">${escapeHtml(new Date(from+(to-from)*i/4).toLocaleTimeString(lang==='en'?'en-GB':'ru-RU',{hour:'2-digit',minute:'2-digit'}))}</text>`}
+ const order=series.map((_,i)=>i).reverse();for(const index of order){const color=colors[index%colors.length],id='chart-'+(host.id||key).replace(/[^a-zA-Z0-9_-]/g,'')+'-'+index;defs+=`<linearGradient id="${id}" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="${color}" stop-opacity="${index===0?.3:.12}"/><stop offset="100%" stop-color="${color}" stop-opacity=".025"/></linearGradient>`;
+  let points=[],previous=null,last=null;const flush=()=>{if(!points.length)return;const path=workspaceChartPath(points);if(points.length>1)lines+=`<path d="${path} L${points.at(-1)[0]},${baseline} L${points[0][0]},${baseline} Z" fill="url(#${id})" class="workspace-chart-area"/>`;lines+=`<path d="${path}" fill="none" stroke="${color}" stroke-width="${index===0?2.2:1.5}" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`;points=[]};
+  for(const sample of samples){const value=sample.values[index];if(!Number.isFinite(value)){flush();previous=sample;continue}if(previous&&(sample.time-previous.time>150000||sample.boot!==previous.boot))flush();const p=[left+(sample.time-from)/span*plotW,baseline-value/max*plotH];if(points.length&&p[0]<=points.at(-1)[0])flush();points.push(p);last={point:p,value,time:sample.time};previous=sample}flush();if(last)lines+=`<circle cx="${last.point[0]}" cy="${last.point[1]}" r="3" fill="${color}" stroke="var(--work-panel)" stroke-width="1.4"><title>${escapeHtml(series[index].label+': '+number(last.value)+' · '+new Date(last.time).toLocaleString())}</title></circle>`;
+ }
+ const caption=mailImageText('Данные сервера','Server data')+' · '+unit;host.innerHTML=`<div class="workspace-chart-caption"><span>${escapeHtml(unit)}</span><span>${escapeHtml(mailImageText('Наблюдений: ','Samples: ')+samples.length)}</span></div><svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${escapeHtml(series.map(s=>s.label).join(', '))}"><title>${escapeHtml(caption)}</title><desc>${escapeHtml(mailImageText('Пробелы означают отсутствие наблюдений. Плавные линии проходят через фактические значения.','Gaps indicate missing samples. Smooth lines pass through the observed values.'))}</desc><defs>${defs}</defs>${grid}${lines}</svg><div class="chart-legend">${series.map((s,i)=>`<span><i style="background:${colors[i%colors.length]}"></i>${escapeHtml(s.label)}<strong>${Number.isFinite(s.value)?escapeHtml(number(s.value)):'—'}</strong></span>`).join('')}</div>`;
 }
 function renderMonitorHistory(history){
  const server=history.server||[],tenant=history.tenant||[];
  const draw=(id,key,rows,definitions,unit)=>{const points=rows.map(row=>({time:row.at,boot:row.boot,values:definitions.map(item=>{const value=row.values[item.key];return typeof value==='number'?value/(item.divisor||1):null})}));const series=definitions.map((item,i)=>({label:item.label,value:points.at(-1)?.values[i]}));renderTimeChart($(id),key,series,unit,points,history)};
  const combined=tenant.map(row=>({...row,values:{...row.values}})),byTime=new Map(combined.map(row=>[row.at,row]));for(const row of server){let point=byTime.get(row.at);if(!point){point={...row,values:{}};combined.push(point)}point.values.server_messages=row.values.messages;point.values.server_bytes=row.values.bytes}combined.sort((a,b)=>a.at-b.at);
- draw('chart-bars','messages',combined,[{key:'messages',label:'Тенант'},...(history.global?[{key:'server_messages',label:'Сервер'}]:[])],'Сохранённые письма');
- draw('chart-storage','storage',combined,[{key:'bytes',label:'Тенант',divisor:1048576},...(history.global?[{key:'server_bytes',label:'Сервер',divisor:1048576}]:[])],'МиБ');
+ draw('chart-bars','messages',combined,[{key:'messages',label:'Организация'},...(history.global?[{key:'server_messages',label:'Сервер'}]:[])],'Сохранённые письма');
+ draw('chart-storage','storage',combined,[{key:'bytes',label:'Организация',divisor:1048576},...(history.global?[{key:'server_bytes',label:'Сервер',divisor:1048576}]:[])],'МиБ');
  if(!history.global){for(const id of ['chart-runtime','chart-sparklines','chart-network','protection-stats'])$(id).textContent='Метрики сервера доступны глобальному администратору.';return}
- draw('chart-runtime','runtime',server,[{key:'queue',label:'В очереди'},{key:'goroutines',label:'Горутины'}],'Количество');
+ draw('chart-runtime','runtime',server,[{key:'goroutines',label:'Горутины'},{key:'queue',label:'В очереди'}],'Количество');
  draw('chart-sparklines','heap',server,[{key:'heap',label:'Память',divisor:1048576}],'МиБ');
  const keys=[...new Set(server.flatMap(row=>Object.keys(row.values).filter(key=>key.startsWith('network.'))))].sort();
  const rates=server.map((row,i)=>{const old=server[i-1],seconds=old?(row.at-old.at)/1000:0,values={};for(const key of keys){if(old&&old.boot===row.boot&&seconds>0&&seconds<=150&&typeof row.values[key]==='number'&&typeof old.values[key]==='number'&&row.values[key]>=old.values[key])values[key]=(row.values[key]-old.values[key])/seconds/1024}return {...row,values}});
@@ -2378,6 +2395,7 @@ function showToast(ev) {
 
 function openNotifyHref(href) {
   if (!href) return;
+  if (href === "files") { showApp("files"); openReceivedDocuments(); return; }
   if (href === "tasks") { showApp("tasks"); return; }
   if (href === "chat") { showApp("chat"); return; }
   if(href.startsWith("chat?peer=")){showApp("chat");openChatPeer(decodeURIComponent(href.slice(10)));return;}
@@ -2399,7 +2417,7 @@ function startNotifyLive() {
     updatePushButton();
   }).catch(() => {});
   const notificationRoute = new URL(location.href).searchParams.get('notification');
-  if (['mail','calendar','chat','tasks'].includes(notificationRoute)) {
+  if (['mail','calendar','chat','tasks','files'].includes(notificationRoute)) {
     const url = new URL(location.href); url.searchParams.delete('notification'); history.replaceState(null,'',url);
     setTimeout(() => openNotifyHref(notificationRoute), 0);
   }
@@ -2415,6 +2433,7 @@ function startNotifyLive() {
       notifyState.seen.add(event.id);
       if (notifyState.seen.size > 200) notifyState.seen.delete(notifyState.seen.values().next().value);
       showToast(event);
+      if(event.kind==='files'&&!$('app-files')?.classList.contains('hidden'))refreshFiles();
       if (event.kind === 'task' && !$('app-tasks')?.classList.contains('hidden')) refreshTasks();
     } catch (_) {}
   });
@@ -2627,7 +2646,7 @@ $("btn-passkey-add").addEventListener("click", async () => {
 function mailFolderLabel(mb) {
   const role = mb.role || (["inbox", "sent", "drafts", "trash", "junk", "archive"].includes(mb.name?.toLowerCase()) ? mb.name.toLowerCase() : "");
   const name = role ? t("mail_folder_" + role) : mb.name;
-  return name + (mb.shared ? " · " + t("mail_shared") : "");
+  return name + (mb.shared ? " · " + (mb.owner_email || t("mail_shared")) : "");
 }
 function sortMailFolders(folders) {
   const rank = id => { const i = mailState.order.indexOf(id); return i < 0 ? 100000 : i; };
@@ -2718,8 +2737,8 @@ async function refreshMail() {
     list.innerHTML = mailState.mailboxes.map((mb) => `
       <li>
         <button type="button" class="folder-btn${mb.id === mailState.mailboxID ? " is-active" : ""}" data-mb="${escapeHtml(mb.id)}">
-          <span>${escapeHtml(mailFolderLabel(mb))}</span>
-          <span class="meta">${mb.unread ? mb.unread + " · " : ""}${mb.messages || 0}</span>
+          <span class="workspace-folder-icon" aria-hidden="true">${workspaceFolderIcon(mb)}</span><span>${escapeHtml(mailFolderLabel(mb))}</span>
+          <span class="workspace-folder-count" ${mb.unread ? "" : "hidden"}>${mb.unread || ""}</span>
         </button>
       </li>`).join("") || `<li class="meta">${t("empty_mailbox")}</li>`;
     list.querySelectorAll("[data-mb]").forEach((btn) => {
@@ -2812,9 +2831,9 @@ async function refreshMailMessages() {
       ].filter(Boolean).join("");
       return `<li data-mail-color="${escapeHtml(mailMessageColor(m))}">
         <button type="button" class="msg-item${!m.seen ? " unread" : ""}${m.id === mailState.messageID ? " is-active" : ""}${q ? " is-search" : ""}" data-msg="${escapeHtml(m.id)}" data-mailbox="${escapeHtml(m.mailbox_id || "")}" title="${escapeHtml((m.mailbox_name ? m.mailbox_name + " · " : "") + (m.from || ""))}">
-          <span class="msg-flag" aria-hidden="true"></span>
+          <span class="msg-flag" aria-hidden="true"></span><span class="mail-list-avatar" aria-hidden="true">${escapeHtml(accountInitials(mailFromDisplay(m.from), m.from))}</span>
           <span class="msg-from">${escapeHtml(mailFromDisplay(m.from))}</span>
-          <span class="msg-subject">${escapeHtml(m.subject || "(no subject)")}${m.snippet ? `<span class="msg-snippet meta"> — ${escapeHtml(m.snippet)}</span>` : ""}</span>
+          <span class="msg-subject">${escapeHtml(m.subject || "(no subject)")}${m.snippet ? `<span class="msg-snippet meta">${escapeHtml(m.snippet)}</span>` : ""}</span>
           <span class="msg-date">${dateBits}</span>
         </button>
       </li>`;
@@ -2856,7 +2875,7 @@ function showMailReader(msg) {
   reader.classList.remove("hidden");
   setMobilePane("read");
   $("mail-subject").textContent = msg.subject || "(no subject)";
-  if ($("mail-from")) $("mail-from").textContent = msg.from || "—";
+  if ($("mail-from")) $("mail-from").textContent = msg.sender ? mailImageText(msg.sender+" от имени "+msg.from,msg.sender+" on behalf of "+msg.from) : msg.from || "—";
   renderSenderAvatar(msg.from);
   if ($("mail-to")) $("mail-to").textContent = msg.to || "—";
   if ($("mail-date")) $("mail-date").textContent = mailDateFull(msg.date || msg.internal_date);
@@ -2870,7 +2889,10 @@ function showMailReader(msg) {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "btn-secondary btn-sm";
-      button.textContent = attachment.filename + " · " + fmtBytes(attachment.size);
+      button.className = "workspace-attachment-card";
+      const icon=document.createElement("span");icon.className="workspace-attachment-type";icon.textContent=(attachment.filename.split('.').pop()||'FILE').slice(0,4).toUpperCase();
+      const info=document.createElement("span");info.className="workspace-attachment-info";const name=document.createElement("strong");name.textContent=attachment.filename;const size=document.createElement("small");size.textContent=fmtBytes(attachment.size);info.append(name,size);button.append(icon,info);
+      button.setAttribute("aria-label",mailImageText("Открыть вложение: ","Open attachment: ")+attachment.filename);
       button.addEventListener("click", () => openDocumentPreview({
         url: "/api/v1/mail/messages/" + encodeURIComponent(msg.id) + "/attachments/" + encodeURIComponent(attachment.id),
         name: attachment.filename, size: attachment.size
@@ -2903,14 +2925,14 @@ function showMailReader(msg) {
       policy.content = "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data:" + (externalImages ? " https: http:" : "") + "; font-src data:; form-action 'none'; base-uri 'none'";
       documentHTML.head.prepend(policy);
       const styles = documentHTML.createElement("style");
-      styles.textContent = "html{overflow-x:auto!important}body{margin:12px!important;font:15px/1.5 sans-serif;overflow-wrap:anywhere;white-space:normal!important}body *{box-sizing:border-box;max-width:100%!important}img,video{height:auto!important}table{table-layout:auto}pre{white-space:pre-wrap!important;overflow-wrap:anywhere}body{min-width:0!important;width:auto!important}";
+      styles.textContent = "html{overflow-x:auto!important}body{margin:0!important;font:14px/1.65 Arial,Helvetica,sans-serif;overflow-wrap:anywhere;white-space:normal!important}body *{box-sizing:border-box;max-width:100%!important}img,video{height:auto!important}table{table-layout:auto}pre{white-space:pre-wrap!important;overflow-wrap:anywhere}body{min-width:0!important;width:auto!important}";
       documentHTML.head.append(styles);
       frame.srcdoc = "<!doctype html>" + documentHTML.documentElement.outerHTML;
     };
     const sender = msg.sender_email || "";
     const allowed = mailImagePreferences.mode === "always" || !!sender && (mailImagePreferences.senders || []).includes(sender);
     render(allowed);
-    if (!allowed) {
+    if (!allowed && /<img[^>]+src=[\"\']?https?:/i.test(msg.html || "")) {
       const choices = document.createElement("div"); choices.className = "mail-image-controls";
       const status = document.createElement("span");status.className = "meta";status.textContent = mailImageText("Внешние изображения заблокированы", "External images are blocked");
       choices.append(status);
@@ -2936,6 +2958,7 @@ function showMailReader(msg) {
     text.textContent = msg.text || "";
     body.append(text);
   }
+  const attachmentCards=body.querySelector(".mail-attachments");if(attachmentCards)body.append(attachmentCards);
 }
 
 async function openMailMessage(id) {
@@ -2985,10 +3008,16 @@ $("btn-mail-archive")?.addEventListener("click", async () => {
   }
 });
 function composeBodyEl() {
+  if (typeof composeRichEditor !== "undefined" && composeRichEditor) return composeRichEditor.ui.getEditableElement();
   return $("compose-body");
 }
 
 function setComposeBody(htmlOrText, asHTML) {
+  const plain = document.createElement('div');
+  if (!asHTML) for (const line of String(htmlOrText || '').split('\n')) { const p = document.createElement('p'); p.textContent = line; plain.append(p); }
+  const editorHTML = asHTML ? (htmlOrText || '') : plain.innerHTML;
+  if (typeof composeRichPendingHTML !== 'undefined') composeRichPendingHTML = editorHTML;
+  if (typeof composeRichEditor !== 'undefined' && composeRichEditor) { composeRichEditor.setData(editorHTML); composeRichPendingHTML = null; return; }
   const el = composeBodyEl();
   if (!el) return;
   if (el.isContentEditable) {
@@ -3008,18 +3037,23 @@ function setComposeBody(htmlOrText, asHTML) {
 }
 
 function getComposeHTML() {
+  if (typeof composeRichEditor !== 'undefined' && composeRichEditor) return composeRichEditor.getData();
   const el = composeBodyEl();
   if (!el) return "";
   if (el.isContentEditable) return (el.innerHTML || "").trim();
   return "";
 }
 
+function mutateComposeHTML(update) {
+  const fragment = document.createElement('div'); fragment.innerHTML = getComposeHTML();
+  update(fragment); setComposeBody(fragment.innerHTML, true);
+}
 function getComposeText() {
   const el = composeBodyEl();
   if (!el) return "";
-  if (el.isContentEditable) {
+  if (el.tagName !== "TEXTAREA") {
     const tmp = document.createElement("div");
-    tmp.innerHTML = el.innerHTML || "";
+    tmp.innerHTML = getComposeHTML();
     tmp.querySelectorAll("a[href]").forEach(link=>{if(link.textContent!==link.getAttribute("href"))link.append(document.createTextNode(" ("+link.getAttribute("href")+")"))});
     tmp.querySelectorAll("br").forEach((br) => br.replaceWith("\n"));
     tmp.querySelectorAll("div, p, li, blockquote").forEach((n) => {
@@ -3035,13 +3069,13 @@ let composeSenderEpoch=0;
 async function loadComposeSenders(preferred='') {
  const select=$('compose-from');if(!select)return;
  const epoch=++composeSenderEpoch,userID=state.me?.id,primary=state.me?.email||'';
- const add=address=>{const option=document.createElement('option');option.value=address;option.textContent=address;select.append(option)};
+ const add=(address,mode='send_as')=>{const option=document.createElement('option');option.value=address;option.dataset.senderMode=mode;option.textContent=mode==='on_behalf'?mailImageText(state.me.email+' от имени '+address,state.me.email+' on behalf of '+address):address;select.append(option)};
  select.replaceChildren();if(primary)add(primary);select.disabled=true;renderComposeAttachments();
  try{
   const data=await api('/api/v1/mail/senders');
   if(epoch!==composeSenderEpoch||state.me?.id!==userID)return;
-  select.replaceChildren();for(const address of data.addresses||[])add(address);
-  select.value=(data.addresses||[]).includes(preferred)?preferred:(data.default||primary);
+  select.replaceChildren();if(data.identities){for(const identity of data.identities)add(identity.email,identity.mode);}else{for(const address of data.addresses||[])add(address);}
+  const preferredOption=[...select.options].find(option=>option.value===preferred);select.selectedIndex=preferredOption?preferredOption.index:0;
  }catch(error){if(epoch===composeSenderEpoch&&state.me?.id===userID)setMsg($('compose-msg'),mailImageText('Не удалось загрузить адреса отправителя. Повторно откройте окно письма.','Could not load sender addresses. Reopen the compose window.'),'err');}
  finally{if(epoch===composeSenderEpoch&&state.me?.id===userID)select.disabled=false;renderComposeAttachments();}
 }
@@ -3057,11 +3091,12 @@ function openCompose({ to = "", cc = "", from = "", subject = "", body = "", bod
   if (bodyHTML) setComposeBody(bodyHTML, true);
   else setComposeBody(body, false);
   const signatureEnabled=to||body||bodyHTML?signatureState.replies:signatureState.new_messages;
-  if(signatureEnabled&&signatureState.text) {const block=document.createElement("div");block.dataset.mailSignature="true";block.style.whiteSpace="pre-wrap";block.textContent="\n-- \n"+signatureState.text;const surface=composeBodyEl();if(body||bodyHTML)surface.prepend(block);else surface.append(block);}
+  if(signatureEnabled&&signatureState.text) {const block=document.createElement("p");block.dataset.mailSignature="true";for(const line of ("-- \n"+signatureState.text).split("\n")){if(block.childNodes.length)block.append(document.createElement("br"));block.append(document.createTextNode(line));}mutateComposeHTML(surface=>{if(body||bodyHTML)surface.prepend(block);else surface.append(block);});}
   const surface = composeBodyEl();
   if (surface?.dataset) surface.dataset.placeholder = t("body");
   setMsg($("compose-msg"), "");
   loadComposeSenders(from);
+  if (typeof ensureComposeRichEditor === "function") ensureComposeRichEditor().catch(()=>{});
   surface?.focus?.();
 }
 
@@ -3092,6 +3127,7 @@ $("compose-backdrop")?.addEventListener("click", (e) => {
   if (e.target === $("compose-backdrop")) $("compose-backdrop").classList.add("hidden");
 });
 $("btn-compose-send")?.addEventListener("click", async () => {
+  if (typeof mailEditorPending === "function" && (composeRichEditorBoot || mailEditorPending(composeRichEditor))) return;
   if (composeAttachments.sending || $("compose-from")?.disabled || composeAttachments.entries.some(item=>item.status!=="ready")) return;
   composeAttachments.sending = true;
   renderComposeAttachments();
@@ -3103,6 +3139,7 @@ $("btn-compose-send")?.addEventListener("click", async () => {
     const attachments = composeAttachments.entries.filter(item=>!item.share).map(item=>item.ref);
     const payload = {
       from: $("compose-from")?.value || state.me?.email || "",
+      sender_mode: $("compose-from")?.selectedOptions[0]?.dataset.senderMode || "send_as",
       to,
       cc: ($("compose-cc")?.value || "").split(/[,;]/).map(value=>value.trim()).filter(Boolean),
       subject: $("compose-subject").value,
@@ -3565,6 +3602,12 @@ function shiftCalMonth(delta) {
     renderCalMonth();
     loadCalEvents();
     return;
+  }
+  if (calState.view === "week") {
+    const day = new Date((calState.selectedDay || calDayKey(new Date())) + "T12:00");
+    day.setDate(day.getDate() + delta * 7);
+    calState.selectedDay = calDayKey(day); calState.month = calMonthStart(day);
+    renderCalMonth(); renderCalEventLog(); loadCalEvents(); return;
   }
   const m = calMonthStart(calState.month);
   calState.month = new Date(m.getFullYear(), m.getMonth() + delta, 1);
@@ -4308,11 +4351,11 @@ function renderContactCards(){
  contactState.page=Math.max(0,Math.min(contactState.page,Math.ceil(cards.length/contactState.pageSize)-1));
  const start=contactState.page*contactState.pageSize,visible=cards.slice(start,start+contactState.pageSize);
  let toolbar=$('contact-list-actions');if(!toolbar){toolbar=document.createElement('div');toolbar.id='contact-list-actions';toolbar.className='contact-list-actions';list.before(toolbar)}
- toolbar.replaceChildren();const select=document.createElement('input');select.type='checkbox';select.title=mailImageText('Выбрать все на странице','Select page');select.setAttribute('aria-label',select.title);select.checked=visible.length>0&&visible.every(c=>contactState.selected.has(c.id));select.indeterminate=visible.some(c=>contactState.selected.has(c.id))&&!select.checked;select.onchange=()=>{visible.forEach(c=>select.checked?contactState.selected.add(c.id):contactState.selected.delete(c.id));renderContactCards()};
+ toolbar.replaceChildren();toolbar.classList.toggle('has-selection',contactState.selected.size>0);const select=document.createElement('input');select.type='checkbox';select.title=mailImageText('Выбрать все на странице','Select page');select.setAttribute('aria-label',select.title);select.checked=visible.length>0&&visible.every(c=>contactState.selected.has(c.id));select.indeterminate=visible.some(c=>contactState.selected.has(c.id))&&!select.checked;select.onchange=()=>{visible.forEach(c=>select.checked?contactState.selected.add(c.id):contactState.selected.delete(c.id));renderContactCards()};
  const count=document.createElement('span');count.textContent=mailImageText('Выбрано: ','Selected: ')+contactState.selected.size;toolbar.append(select,count);
  for(const [action,label] of [['export',mailImageText('Экспорт vCard','Export vCard')],['delete',t('delete')]]){const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.innerHTML=designIcon(action==='export'?'download':'delete');button.title=label;button.setAttribute('aria-label',label);button.classList.add('contact-bulk-icon');button.disabled=!contactState.selected.size||(action==='delete'&&readonly);button.onclick=()=>contactBulkAction(action);toolbar.append(button)}
  const pages=document.createElement('div');pages.className='contact-pagination';const prev=document.createElement('button'),next=document.createElement('button'),range=document.createElement('span'),size=document.createElement('select');prev.textContent='‹';next.textContent='›';prev.title=mailImageText('Предыдущая страница','Previous page');next.title=mailImageText('Следующая страница','Next page');for(const button of [prev,next]){button.type='button';button.className='btn-secondary btn-sm';button.setAttribute('aria-label',button.title)}prev.disabled=!contactState.page;next.disabled=start+visible.length>=cards.length;prev.onclick=()=>{contactState.page--;renderContactCards()};next.onclick=()=>{contactState.page++;renderContactCards()};range.textContent=(visible.length?start+1:0)+'–'+(start+visible.length)+' / '+cards.length;size.className='field-input field-input-sm';size.setAttribute('aria-label',mailImageText('Контактов на странице','Contacts per page'));for(const n of [25,50,100]){const option=document.createElement('option');option.value=n;option.textContent=n+' '+mailImageText('на странице','per page');size.append(option)}size.value=contactState.pageSize;size.onchange=()=>{contactState.pageSize=Number(size.value);contactState.page=0;renderContactCards()};pages.append(prev,range,next,size);toolbar.append(pages);
- list.innerHTML=visible.map(c=>`<li class="contact-select-row"><input type="checkbox" data-select-card="${escapeHtml(c.id)}" aria-label="${escapeHtml(mailImageText('Выбрать: ','Select: ')+(contactDisplayName(c)||c.email||''))}" ${contactState.selected.has(c.id)?'checked':''}><button type="button" class="msg-item contact-item${c.id===contactState.cardID?' is-active':''}" data-card="${escapeHtml(c.id)}"><span class="msg-from">${escapeHtml(contactDisplayName(c)||'—')}</span><span class="msg-subject">${escapeHtml(c.email||'—')}</span><span class="msg-date">${escapeHtml(c.tel||'—')}</span></button></li>`).join('')||`<li class="meta msg-empty">${escapeHtml(t('empty_contacts'))}</li>`;
+ list.innerHTML=visible.map(c=>`<li class="contact-select-row"><input type="checkbox" data-select-card="${escapeHtml(c.id)}" aria-label="${escapeHtml(mailImageText('Выбрать: ','Select: ')+(contactDisplayName(c)||c.email||''))}" ${contactState.selected.has(c.id)?'checked':''}><button type="button" class="msg-item contact-item${c.id===contactState.cardID?' is-active':''}" data-card="${escapeHtml(c.id)}"><span class="workspace-contact-avatar" aria-hidden="true">${escapeHtml(accountInitials(contactDisplayName(c)||c.email||'?'))}</span><span class="msg-from">${escapeHtml(contactDisplayName(c)||'—')}</span><span class="msg-subject">${escapeHtml(c.email||'—')}</span><span class="msg-date">${escapeHtml(c.tel||'—')}</span></button></li>`).join('')||`<li class="meta msg-empty">${escapeHtml(t('empty_contacts'))}</li>`;
  list.querySelectorAll('[data-card]').forEach(button=>button.onclick=()=>openContactCard(button.dataset.card));list.querySelectorAll('[data-select-card]').forEach(input=>input.onchange=()=>{input.checked?contactState.selected.add(input.dataset.selectCard):contactState.selected.delete(input.dataset.selectCard);renderContactCards()});
 }
 async function contactBulkAction(action){
@@ -4416,7 +4459,7 @@ function showFileReader(entry) {
   let preview=$('btn-files-preview');
   if(!preview){preview=document.createElement('button');preview.id='btn-files-preview';preview.type='button';preview.className='btn-secondary btn-sm';$('btn-files-download').after(preview);}
   preview.textContent=mailImageText('Просмотр','Preview');preview.hidden=entry.is_dir||!documentPreviewType(entry.name);
-  let share=$('btn-files-share');if(!share){share=document.createElement('button');share.id='btn-files-share';share.type='button';share.className='btn-secondary btn-sm';$('btn-files-download').after(share);}share.hidden=!!filesState.ownerID;share.textContent=mailImageText('Доступ','Share');share.onclick=()=>openFileAccess(joinPath(filesState.path,entry.name));
+  let share=$('btn-files-share');if(!share){share=document.createElement('button');share.id='btn-files-share';share.type='button';share.className='btn-secondary btn-sm';$('btn-files-download').after(share);}share.hidden=false;share.textContent=mailImageText('Карточка','Details');share.onclick=()=>openFileCard(joinPath(filesState.path,entry.name),filesState.ownerID);
   preview.onclick=()=>openDocumentPreview({url:'/api/v1/files/content?path='+encodeURIComponent(joinPath(filesState.path,entry.name))+(filesState.ownerID?'&owner_id='+encodeURIComponent(filesState.ownerID):''),name:entry.name,size:entry.size});
   mountFileReaderActions(entry);
 }
@@ -4615,7 +4658,7 @@ function filesGoUp() {
 async function refreshFiles() {
   const list = $("files-list");
   if (!list) return;
-  if ($("files-path")) $("files-path").textContent = "/" + (filesState.path || "");
+  if ($("files-path")) $("files-path").textContent = (filesState.spaceID&&filesState.spaceID===filesState.ownerID?filesState.spaceName+" /":"/") + (filesState.path || "");
   $("btn-files-up")?.classList.toggle("hidden", !filesState.path||!!filesState.listTarget||(filesState.ownerID&&filesState.path===filesState.sharedRoot));
   try {
     const requested=filesState.listTarget||filesState.path;const q = requested ? "?path=" + encodeURIComponent(requested) : "";
@@ -5709,7 +5752,7 @@ function addChatInlinePreview(container,attachment,button) {
   const response=await fetch(url.href,{credentials:'omit',referrerPolicy:'no-referrer'});if(!response.ok)throw Error('unavailable');
   const blob=await boundedPreviewBlob(response,16*1024*1024);if(!preview.isConnected)return;
   if(type.startsWith('image/')){const objectURL=URL.createObjectURL(new Blob([blob],{type}));const image=document.createElement('img');image.alt=attachment.name;image.onload=()=>URL.revokeObjectURL(objectURL);image.onerror=()=>{URL.revokeObjectURL(objectURL);preview.remove()};image.src=objectURL;preview.replaceChildren(image)}
-  else if(type==='application/pdf'){const pdfjs=await import('/assets/pdfjs/pdf.mjs');pdfjs.GlobalWorkerOptions.workerSrc='/assets/pdfjs/pdf.worker.mjs';const pdf=await pdfjs.getDocument({data:new Uint8Array(await blob.arrayBuffer()),isEvalSupported:false}).promise;try{const page=await pdf.getPage(1);const original=page.getViewport({scale:1});const viewport=page.getViewport({scale:Math.min(1,280/original.width,320/original.height)});const canvas=document.createElement('canvas');canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;if(preview.isConnected)preview.replaceChildren(canvas)}finally{await pdf.destroy()}}
+  else if(type==='application/pdf'){const pdfjs=await import('/assets/pdfjs/pdf.mjs');pdfjs.GlobalWorkerOptions.workerSrc='/assets/pdfjs/pdf.worker.mjs';const loading=pdfjs.getDocument({data:new Uint8Array(await blob.arrayBuffer()),isEvalSupported:false}),pdf=await loading.promise;try{const page=await pdf.getPage(1);const original=page.getViewport({scale:1});const viewport=page.getViewport({scale:Math.min(1,280/original.width,320/original.height)});const canvas=document.createElement('canvas');canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;if(preview.isConnected)preview.replaceChildren(canvas)}finally{await loading.destroy()}}
  }catch{preview.remove()}};
  const observer=new IntersectionObserver(entries=>{if(entries.some(e=>e.isIntersecting)){observer.disconnect();load()}},{rootMargin:'100px'});observer.observe(preview);
 }

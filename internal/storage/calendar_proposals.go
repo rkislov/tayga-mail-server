@@ -88,6 +88,7 @@ func (s *Store) ListCalendarProposals(ctx context.Context, userID string) ([]*Ca
 // DecideCalendarProposal commits a decision and (on acceptance) the new
 // organizer version together. Replays and stale proposals cannot move it twice.
 func (s *Store) DecideCalendarProposal(ctx context.Context, userID, inviteID, objectID, revision, etag string, accept bool) (*CalendarProposal, error) {
+	ctx = withCalendarActor(ctx, userID)
 	if revision == "" || etag == "" {
 		return nil, ErrCalendarConflict
 	}
@@ -106,7 +107,10 @@ func (s *Store) DecideCalendarProposal(ctx context.Context, userID, inviteID, ob
 		return nil, err
 	}
 	if inv.OrganizerUserID != userID {
-		return nil, ErrUnauthorized
+		if err := s.calendarOrganizerDelegateTx(ctx, tx, userID, inv.OrganizerUserID, objectID); err != nil {
+			return nil, err
+		}
+		userID = inv.OrganizerUserID
 	}
 	if inv.ProposedStart == nil || inv.ProposedEnd == nil || !inv.ProposedEnd.After(*inv.ProposedStart) || inv.UpdatedAt.UTC().Format(time.RFC3339Nano) != revision {
 		return nil, ErrCalendarConflict

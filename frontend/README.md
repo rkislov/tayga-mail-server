@@ -12,16 +12,25 @@ App shell: mail / calendar / contacts / files + settings & admin. i18n ru|en
 тайга, космос, город, колязин, храм на Нерли, москва-сити (`tayga.theme`).
 Backdrop art © Алиса Кислова (except moscow) · Apache-2.0.
 
-`npm run build` concatenates `src/i18n.js` + `src/app.js` + `src/admin-config.js` into the embedded bundle.
+`npm run build` builds the local editor and assets, compiles Tailwind and concatenates the application modules into the embedded bundle.
 Edit `internal/frontend/dist/index.html` for markup (not copied by `npm run build`).
 
-## Responsive panes
+## Personal space 1.0.0
 
-| Breakpoint | Behavior |
-|------------|----------|
-| default | 3-column mail/cal/contacts; 2-column files |
-| ≤1100px | narrower columns |
-| ≤900px | master-detail: list **or** reader (`pane-mode-list` / `pane-mode-read`); «К списку» back control |
+`src/workspace.css` is the new component stylesheet. `personal-space.js` mounts the
+forest header and navigation; `workspace-views.js` composes user workspaces and
+`workspace-admin.js` composes administrative tables and detail panes. Existing
+controllers own data and actions. `workspace-locale.js` translates presentation
+labels without translating user content.
+
+Desktop navigation can collapse to a persistent 64px icon rail. At widths up to
+900px it becomes a drawer, and list/reader panes are shown sequentially. The
+application supports light/dark/system modes, backgrounds, accents, and list
+density. The mail list defaults to 25 entries.
+
+The canonical tree symbol is `assets/tayga-tree.svg`; `build-brand.cjs` copies it
+for the shared header/login symbol and favicon. Build output also includes local
+CKEditor, PDF.js, and their licenses; no remote font service is required.
 
 ## Related
 
@@ -56,3 +65,11 @@ Run `node scripts/check-calendar-files-theme.mjs` against a disposable seeded in
 Notes use a bounded document editor, separate bullet/numbered/checklist controls and compact attachment cards. Enter adds a checklist item; Enter on an empty item returns to text. Checkbox state, mixed paragraphs/lists, formatting and drawing references survive server round trips. Autosave requests run serially and use the latest ETag; failed/conflicting saves keep local edits. Switching notes flushes edits first. Uploading or removing attachments refreshes only the attachment list. Downloads use authenticated requests, and drawing opens in its own modal.
 
 `node scripts/check-notes-editor.mjs` exercises real note persistence, list entry and checkbox state, concurrent saving/uploads, attachment downloads/deletion, long desktop/mobile documents and failed-save retention. Use a disposable seeded server; the script creates and deletes a test note.
+
+## Rich mail editor
+
+Welcome mail and ordinary compose share a locally hosted CKEditor 5 build pinned in `package.json`. `build-mail-editor.cjs` copies the self-contained browser module, stylesheet, Russian translation and license texts into embedded assets. The GPL configuration retains CKEditor attribution and uses no CDN or premium plugins. `src/rich-mail-editor.js` provides the shared setup and photo adapter. Photo files are resized/re-encoded locally, embedded in versioned welcome HTML and converted to CID MIME parts by the server when sending normal mail. See [welcome mail](../docs/welcome-mail.md) for limits and API behavior.
+
+Browser checks: `node scripts/check-welcome-editor.mjs`, `node scripts/check-rich-mail-compose.mjs`. Both load the actual bundled editor and use disposable mocked API state; they do not send external mail.
+
+Делегирование почты и календаря: [права, сценарий секретаря и протокольные границы](../docs/delegation.md). Браузерная проверка `node scripts/check-delegation.mjs` покрывает оба режима отправки, изменение/отзыв прав и мобильное окно на мок API.

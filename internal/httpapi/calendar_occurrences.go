@@ -20,7 +20,7 @@ func occurrenceJSON(o *storage.CalendarObject, instance calutil.Occurrence, cal 
 		item["recurrence_id"] = instance.RecurrenceID
 	}
 	master, _ := calutil.ParseICS(o.Data)
-	item["occurrence_organizer"] = master.Organizer.Email == "" || strings.EqualFold(master.Organizer.Email, au.Email)
+	item["occurrence_organizer"] = master.Organizer.Email == "" || calendarActsAsOrganizer(master.Organizer.Email, cal, au)
 	return item
 }
 
@@ -84,7 +84,7 @@ func (s *Server) handleCalendarOccurrence(w http.ResponseWriter, r *http.Request
 		writeJSON(w, 409, map[string]string{"error": "invalid stored event"})
 		return
 	}
-	if p.Organizer.Email != "" && !strings.EqualFold(p.Organizer.Email, au.Email) {
+	if p.Organizer.Email != "" && !calendarActsAsOrganizer(p.Organizer.Email, cal, au) {
 		writeJSON(w, 403, map[string]string{"error": "only the organizer can change a meeting occurrence"})
 		return
 	}

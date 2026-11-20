@@ -314,7 +314,11 @@ func (h *ewsHandler) createCalendarItem(ctx context.Context, u *storage.User, bo
 	if err != nil {
 		return ewsOperationError("CreateItem", "ErrorInvalidPropertySet", err.Error()), nil
 	}
-	event, err := applyEWSCalendarEdits(calutil.Event{UID: storage.NewID(), Organizer: calutil.Attendee{Email: u.Email, Name: u.DisplayName}}, edits, u, true)
+	principal, err := h.calendarPrincipal(ctx, u, folder)
+	if err != nil {
+		return ewsOperationError("CreateItem", "ErrorAccessDenied", "Calendar write denied"), nil
+	}
+	event, err := applyEWSCalendarEdits(calutil.Event{UID: storage.NewID(), Organizer: calutil.Attendee{Email: principal.Email, Name: principal.DisplayName}}, edits, principal, true)
 	if errors.Is(err, storage.ErrUnauthorized) {
 		return ewsOperationError("CreateItem", "ErrorAccessDenied", "Calendar organizer must be the authenticated user"), nil
 	}

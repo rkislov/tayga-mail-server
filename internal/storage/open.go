@@ -155,6 +155,12 @@ func migrate(ctx context.Context, db *sql.DB, dialect Dialect) error {
 			"073_chat_file_disk.sqlite.sql",
 			"074_calendar_item_attachments.sqlite.sql",
 			"075_calendar_embedded_items.sqlite.sql",
+			"076_welcome_templates.sqlite.sql",
+			"077_welcome_delivery.sqlite.sql",
+			"078_file_spaces.sqlite.sql",
+			"079_space_recovery.sqlite.sql",
+			"080_secretary_delegation.sqlite.sql",
+			"081_ews_delegates.sqlite.sql",
 		}
 	case DialectPostgres:
 		files = []string{
@@ -233,6 +239,12 @@ func migrate(ctx context.Context, db *sql.DB, dialect Dialect) error {
 			"073_chat_file_disk.postgres.sql",
 			"074_calendar_item_attachments.postgres.sql",
 			"075_calendar_embedded_items.postgres.sql",
+			"076_welcome_templates.postgres.sql",
+			"077_welcome_delivery.postgres.sql",
+			"078_file_spaces.postgres.sql",
+			"079_space_recovery.postgres.sql",
+			"080_secretary_delegation.postgres.sql",
+			"081_ews_delegates.postgres.sql",
 		}
 	default:
 		return fmt.Errorf("unsupported dialect")
@@ -297,6 +309,37 @@ func execScript(ctx context.Context, db execer, script string) error {
 }
 
 func splitSQL(script string) []string {
+	out := []string{}
+	var chunk strings.Builder
+	block := false
+	flush := func() {
+		if block {
+			statement := strings.TrimSpace(chunk.String())
+			if statement != "" {
+				out = append(out, statement)
+			}
+		} else {
+			out = append(out, splitSimpleSQL(chunk.String())...)
+		}
+		chunk.Reset()
+	}
+	for _, line := range strings.Split(script, "\n") {
+		switch strings.TrimSpace(line) {
+		case "-- +goose StatementBegin":
+			flush()
+			block = true
+		case "-- +goose StatementEnd":
+			flush()
+			block = false
+		default:
+			chunk.WriteString(line)
+			chunk.WriteByte('\n')
+		}
+	}
+	flush()
+	return out
+}
+func splitSimpleSQL(script string) []string {
 	parts := strings.Split(script, ";")
 	out := make([]string, 0, len(parts))
 	for _, p := range parts {

@@ -233,8 +233,7 @@ func (s *Server) handleWOPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user, err := s.store.GetUserByID(r.Context(), session.User)
-	owner, ownerErr := s.store.GetUserByID(r.Context(), session.Owner)
-	if err != nil || ownerErr != nil || user == nil || owner == nil || !user.Enabled || !owner.Enabled {
+	if err != nil || user == nil || !user.Enabled || !s.fileOwnerActive(r.Context(), session.Owner) {
 		http.Error(w, "unauthorized", 401)
 		return
 	}
@@ -306,7 +305,7 @@ func (s *Server) handleWOPI(w http.ResponseWriter, r *http.Request) {
 			fileError(w, err)
 			return
 		}
-		defer os.Remove(temp)
+		defer s.removeFileStage(temp)
 		s.fileMu.Lock()
 		defer s.fileMu.Unlock()
 		// Permissions may have been revoked while a large document was uploading.
@@ -350,7 +349,7 @@ func (s *Server) handleWOPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		defer release()
-		etag, err := s.commitFile(session.Owner, session.Path, temp, fileETag(info))
+		etag, err := s.commitFile(session.Owner, session.Path, temp, fileETag(info), fileActor{ID: session.User, Source: "collabora"})
 		if err != nil {
 			w.Header().Set("X-WOPI-Lock", lock.Value)
 			fileError(w, err)

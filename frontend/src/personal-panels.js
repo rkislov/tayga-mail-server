@@ -1,0 +1,53 @@
+/* Layout composition for the approved personal-space screens. Uses the existing APIs and forms. */
+(() => {
+ const words=workspaceWords;
+ const main=document.querySelector('.workspace-main');
+ // Writing stays inside the same workspace, keeping navigation and the forest visible.
+ const compose=$('compose-backdrop');main.append(compose);$('compose-panel').setAttribute('aria-modal','false');
+ const close=document.createElement('button');close.type='button';close.className='btn-secondary workspace-compose-back';close.innerHTML=designIcon('back');close.setAttribute('aria-label',words('Вернуться к почте','Back to mail'));close.onclick=()=>$('btn-compose-close').click();$('compose-title').before(close);
+ // The month remains a working mini-calendar beside the week schedule.
+ const calendar=$('app-calendar'), month=$('cal-month'), monthHome=month.parentElement;
+ const mini=document.createElement('div');mini.className='workspace-mini-calendar';calendar.querySelector('.mail-folders .pane-head').after(mini);
+ const week=document.createElement('section');week.id='workspace-week';week.className='workspace-week';week.setAttribute('aria-label',words('Расписание недели','Week schedule'));month.after(week);
+ const views=document.createElement('div');views.className='workspace-view-tabs';views.setAttribute('role','group');views.setAttribute('aria-label',words('Вид календаря','Calendar view'));
+ for(const [value,ru,en] of [['week','Неделя','Week'],['month','Месяц','Month'],['day','День','Day']]){const b=document.createElement('button');b.type='button';b.dataset.view=value;b.textContent=words(ru,en);b.onclick=()=>{calState.view=value;if(!calState.selectedDay)calState.selectedDay=calDayKey(new Date());renderCalMonth()};views.append(b)}
+ calendar.querySelector('.cal-month-toolbar').after(views);
+ const originalMonth=renderCalMonth, originalDay=renderCalDay;
+ renderCalMonth=function(){originalMonth();renderWeek()};
+ renderCalDay=function(){originalDay();if(calState.view==='week'){$('cal-day-view').classList.add('hidden');month.classList.remove('hidden')}if(week)week.hidden=calState.view!=='week'};
+ function renderWeek(){
+  const weekly=calState.view==='week';calendar.classList.toggle('workspace-calendar-week',weekly);week.hidden=!weekly;
+  views.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.view===calState.view)));
+  if(!weekly){if(month.parentElement!==monthHome)week.before(month);return}
+  if(month.parentElement!==mini)mini.append(month);month.classList.remove('hidden');
+  const anchor=new Date((calState.selectedDay||calDayKey(new Date()))+'T12:00');const monday=new Date(anchor);monday.setDate(anchor.getDate()-(anchor.getDay()+6)%7);
+  const days=Array.from({length:7},(_,i)=>{const d=new Date(monday);d.setDate(d.getDate()+i);return d});
+  $('cal-month-label').textContent=days[0].toLocaleDateString(calLocale(),{day:'numeric'})+' — '+days[6].toLocaleDateString(calLocale(),{day:'numeric',month:'long',year:'numeric'});
+  week.innerHTML='<div class="workspace-week-head"><span></span>'+days.map(d=>'<button type="button" data-week-day="'+calDayKey(d)+'" class="'+(calDayKey(d)===calDayKey(new Date())?'is-today':'')+'">'+escapeHtml(d.toLocaleDateString(calLocale(),{weekday:'short',day:'numeric'}))+'</button>').join('')+'</div><div class="workspace-week-scroll"><div class="workspace-week-body"><div class="workspace-week-hours">'+Array.from({length:24},(_,h)=>'<span>'+String(h).padStart(2,'0')+':00</span>').join('')+'</div>'+days.map(d=>{
+   const key=calDayKey(d);const events=calState.events.filter(e=>calEventOccursOnDay(e,key));
+   const timed=events.filter(e=>!e.all_day).map(e=>{const a=new Date(e.start),z=new Date(e.end||e.start);return {e,start:Math.max(0,a<new Date(key+'T00:00')?0:a.getHours()*60+a.getMinutes()),end:Math.min(1440,z>=new Date(key+'T23:59:59')?1440:z.getHours()*60+z.getMinutes())}}).sort((a,b)=>a.start-b.start);
+   const lanes=[];for(const x of timed){let lane=lanes.findIndex(end=>end<=x.start);if(lane<0)lane=lanes.length;lanes[lane]=x.end;x.lane=lane}const columns=Math.max(1,lanes.length);
+   return '<div class="workspace-week-day" data-schedule-day="'+key+'">'+events.filter(e=>e.all_day).map(e=>'<button type="button" class="workspace-week-event is-all-day" data-week-event="'+escapeHtml(e.id)+'" title="'+escapeHtml(calendarEventLabel(e))+'">'+escapeHtml(calendarEventLabel(e))+'</button>').join('')+timed.map(({e,start,end,lane})=>'<button type="button" class="workspace-week-event" data-week-event="'+escapeHtml(e.id)+'" style="top:'+start/60*56+'px;height:'+Math.max(30,(end-start)/60*56)+'px;left:calc('+lane/columns*100+'% + 2px);width:calc('+100/columns+'% - 4px);--event-color:'+calendarEventColor(e)+'" title="'+escapeHtml(calendarEventLabel(e)+' · '+fmtCalTime(e.start)+' — '+fmtCalTime(e.end))+'"><strong>'+escapeHtml(calendarEventLabel(e))+'</strong><small>'+escapeHtml(fmtCalTime(e.start)+' — '+fmtCalTime(e.end))+'</small></button>').join('')+'</div>';
+  }).join('')+'</div></div>';
+  week.querySelectorAll('[data-week-event]').forEach(b=>b.onclick=()=>openCalEvent(b.dataset.weekEvent));week.querySelectorAll('[data-week-day]').forEach(b=>b.onclick=()=>{selectCalDay(b.dataset.weekDay);openCalDay(b.dataset.weekDay);renderWeek()});
+  week.querySelectorAll('[data-schedule-day]').forEach(el=>el.ondblclick=e=>{if(!e.target.closest('button'))startNewCalEvent(el.dataset.scheduleDay)});
+  week.querySelector('.workspace-week-scroll').scrollTop=8*56;
+ }
+ // Tasks use a list and a persistent detail pane. The existing editor handles changes.
+ const tasks=$('app-tasks'),taskList=document.createElement('div'),taskDetail=document.createElement('aside');taskList.className='workspace-task-list';taskDetail.className='workspace-task-detail';taskDetail.setAttribute('aria-label',words('Подробности задачи','Task details'));
+ while(tasks.firstChild)taskList.append(tasks.firstChild);tasks.append(taskList,taskDetail);let selectedTask='';
+ function selectTask(id){const task=taskRows.find(x=>x.id===id);if(!task){taskDetail.innerHTML='<p class="empty-state">'+escapeHtml(t('tasks_empty'))+'</p>';return}selectedTask=id;taskDetail.innerHTML='<div class="pane-head"><span>'+escapeHtml(words('Задача','Task'))+'</span><button type="button" class="btn-secondary" data-task-detail-edit>'+escapeHtml(t('edit'))+'</button></div><h2>'+escapeHtml(task.title)+'</h2><p class="workspace-task-body">'+escapeHtml(task.body||'')+'</p><dl><div><dt>'+escapeHtml(t('task_due'))+'</dt><dd>'+escapeHtml(task.due?new Date(task.due).toLocaleDateString(calLocale(),{day:'numeric',month:'long'}):'—')+'</dd></div><div><dt>'+escapeHtml(t('task_status'))+'</dt><dd><span class="workspace-status">'+escapeHtml(t('task_status_'+taskStatus(task)))+'</span></dd></div><div><dt>'+escapeHtml(t('task_percent'))+'</dt><dd>'+Number(task.percent_complete??(task.completed?100:0))+'%</dd></div></dl><p class="meta">'+escapeHtml(taskPeople(task))+'</p>';
+  taskDetail.querySelector('[data-task-detail-edit]').onclick=()=>editTask(task);if(!task.completed&&task.can_update!==false&&!task.recurring){const button=document.createElement('button');button.type='button';button.className='btn-secondary workspace-complete-task';button.textContent='✓ '+t('task_complete');button.onclick=()=>{$('tasks-list').querySelector('[data-task-toggle="'+CSS.escape(task.id)+'"]')?.click()};taskDetail.append(button)}
+  tasks.querySelectorAll('.task-row').forEach(row=>row.classList.toggle('is-active',row.querySelector('[data-task-edit]')?.dataset.taskEdit===id));
+ }
+ new MutationObserver(()=>{tasks.querySelectorAll('[data-task-edit]').forEach(b=>b.onclick=()=>selectTask(b.dataset.taskEdit));selectTask(taskRows.some(t=>t.id===selectedTask)?selectedTask:taskRows[0]?.id)}).observe($('tasks-list'),{childList:true});
+ // Settings use a secondary menu inside a single white workspace.
+ const settingPages=['profile','appearance','filters','language'];
+ for(const app of settingPages){const page=$('app-'+app);if(!page)continue;const content=document.createElement('div');content.className='workspace-settings-content';while(page.firstChild)content.append(page.firstChild);const menu=document.createElement('aside');menu.className='workspace-settings-menu';const title=document.createElement('h2');title.textContent=words('Настройки','Settings');menu.append(title);
+  for(const [target,ru,en,icon] of [['profile','Профиль и безопасность','Profile & security','user'],['appearance','Внешний вид','Appearance','settings'],['filters','Почтовые фильтры','Mail filters','filter'],['language','Язык интерфейса','Language','globe']]){const button=document.createElement('button');button.type='button';button.className='workspace-settings-link'+(target===app?' is-active':'');button.innerHTML=workspaceIcon(target==='profile'?'contacts':target==='language'?'language':target==='filters'?'filter':'appearance')+'<span>'+words(ru,en)+'</span>';button.onclick=()=>showApp(target);if(target===app)button.setAttribute('aria-current','page');menu.append(button)}page.append(menu,content);page.classList.add('workspace-settings-page');}
+ // Contact details are a profile card, with real mail/edit actions.
+ const avatar=document.createElement('div');avatar.className='workspace-contact-avatar workspace-contact-avatar-large';$('contact-subject').before(avatar);const actions=document.createElement('div');actions.className='workspace-contact-actions';const write=document.createElement('button');write.type='button';write.className='btn-spray';write.textContent=words('Написать','Write');write.onclick=()=>{const c=contactState.cards.find(c=>c.id===contactState.cardID);if(c?.email)openCompose({to:c.email})};actions.append(write);$('contact-reader').append(actions);
+ new MutationObserver(()=>{avatar.textContent=accountInitials($('contact-subject').textContent);write.disabled=!$('contact-read-email').textContent.trim()}).observe($('contact-subject'),{childList:true});
+ const create=$('btn-contact-new');if(create){create.innerHTML=designIcon('plus')+'<span>'+words('Новый контакт','New contact')+'</span>';document.querySelector('#app-contacts .mail-list-toolbar').prepend(create)}
+ const pagination=()=>{const p=$('mail-pagination'),pane=document.querySelector('#app-mail .mail-list-pane');if(p&&p.parentElement!==pane)pane.append(p)};pagination();
+})();

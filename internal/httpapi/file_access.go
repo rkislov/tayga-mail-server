@@ -13,6 +13,22 @@ func (s *Server) fileAccessAllowed(r *http.Request, owner, grantee, path string,
 }
 
 func (s *Server) fileAccessAllowedContext(ctx context.Context, owner, grantee, path string, write bool) bool {
+	if s.spaceIsBlocked(owner) {
+		return false
+	}
+	if space, e := s.store.GetFileSpace(ctx, owner); e == nil {
+		rights, e := s.store.FileSpaceRights(ctx, owner, grantee)
+		if e != nil {
+			return false
+		}
+		if rights != "" && (!write || rights == "write" || rights == "manage") {
+			return true
+		}
+		user, e := s.store.GetUserByID(ctx, grantee)
+		if e != nil || !user.Enabled || user.TenantID != space.TenantID {
+			return false
+		}
+	}
 	grants, err := s.store.ListFileAccess(ctx, owner, grantee)
 	if err != nil {
 		return false
@@ -44,8 +60,16 @@ func (s *Server) fileAccessAllowedContext(ctx context.Context, owner, grantee, p
 	return false
 }
 func (s *Server) handleFileAccess(w http.ResponseWriter, r *http.Request, au *authUser) {
+	ownerID := au.ID
+	if requested := r.URL.Query().Get("owner_id"); requested != "" && requested != au.ID {
+		if !s.fileCanManage(r.Context(), requested, au.ID) {
+			writeJSON(w, 403, map[string]string{"error": "space management required"})
+			return
+		}
+		ownerID = requested
+	}
 	if r.Method == http.MethodGet {
-		owner, grantee := au.ID, ""
+		owner, grantee := ownerID, ""
 		if r.URL.Query().Get("shared") == "1" {
 			owner, grantee = "", au.ID
 		}
@@ -83,7 +107,7 @@ func (s *Server) handleFileAccess(w http.ResponseWriter, r *http.Request, au *au
 		writeJSON(w, 400, map[string]string{"error": "invalid json"})
 		return
 	}
-	root, err := s.filesRoot(au.ID)
+	root, err := s.filesRoot(ownerID)
 	if err != nil {
 		writeJSON(w, 500, map[string]string{"error": "files unavailable"})
 		return
@@ -109,20 +133,57 @@ func (s *Server) handleFileAccess(w http.ResponseWriter, r *http.Request, au *au
 			writeJSON(w, 404, map[string]string{"error": "user not found"})
 			return
 		}
+		if space, e := s.store.GetFileSpace(r.Context(), ownerID); e == nil && space.TenantID != user.TenantID {
+			writeJSON(w, 400, map[string]string{"error": "recipient must belong to space tenant"})
+			return
+		}
 		if user.ID == au.ID {
 			writeJSON(w, 400, map[string]string{"error": "owner already has access"})
 			return
 		}
 		s.fileMu.Lock()
-		err = s.store.SetFileAccess(r.Context(), au.ID, path, user.ID, req.Rights)
+		if !s.requireFileManagement(w, r, ownerID) {
+			s.fileMu.Unlock()
+			return
+		}
+		if _, err = os.Stat(abs); err == nil {
+			err = s.store.SetFileAccess(r.Context(), ownerID, path, user.ID, req.Rights)
+		}
+		if err == nil {
+			s.recordFileEvent(ownerID, fileActivityEvent{Path: path, Action: "access_changed", Actor: fileActor{ID: au.ID, Source: "web"}, Subject: user.Email, Rights: req.Rights})
+		}
 		s.fileMu.Unlock()
 		if err != nil {
 			writeJSON(w, 500, map[string]string{"error": "cannot save access"})
 			return
 		}
 	case http.MethodDelete:
+		if req.GranteeID == "" {
+			writeJSON(w, 400, map[string]string{"error": "grantee_id required"})
+			return
+		}
 		s.fileMu.Lock()
-		err = s.store.DeleteFileAccess(r.Context(), au.ID, path, req.GranteeID)
+		if !s.requireFileManagement(w, r, ownerID) {
+			s.fileMu.Unlock()
+			return
+		}
+		existing, e := s.store.ListFileAccess(r.Context(), ownerID, req.GranteeID)
+		err = e
+		if err == nil {
+			err = s.store.DeleteFileAccess(r.Context(), ownerID, path, req.GranteeID)
+		}
+		if err == nil {
+			for _, g := range existing {
+				if g.Path == path {
+					subject := req.GranteeID
+					if u, e := s.store.GetUserByID(r.Context(), req.GranteeID); e == nil {
+						subject = u.Email
+					}
+					s.recordFileEvent(ownerID, fileActivityEvent{Path: path, Action: "access_revoked", Actor: fileActor{ID: au.ID, Source: "web"}, Subject: subject})
+					break
+				}
+			}
+		}
 		s.fileMu.Unlock()
 		if err != nil {
 			writeJSON(w, 500, map[string]string{"error": "cannot revoke access"})

@@ -21,6 +21,13 @@ var (
 
 // Driver is the storage abstraction shared by protocol handlers.
 type Driver interface {
+	CommitWelcomeDelivery(context.Context, *CalendarDelivery, func() (*Message, error)) error
+	WelcomeDeliveryStats(context.Context, string, string) (WelcomeDeliveryStats, error)
+	GetWelcomeTemplate(context.Context, string, string) (*WelcomeTemplate, error)
+	ChangeWelcomeTemplate(context.Context, string, string, string, WelcomeChange) (*WelcomeTemplate, error)
+	ListWelcomeTemplates(context.Context, string) ([]WelcomeTemplate, error)
+	ImportWelcomeTemplate(context.Context, WelcomeTemplate) error
+
 	EnsureXMPPSCRAMSalt(context.Context, string) (string, error)
 	XMPPSCRAMKeys(context.Context, string) (string, []XMPPSCRAMKey, error)
 	ActiveXMPPDevicePasswords(context.Context, string) ([]XMPPDevicePassword, error)
@@ -61,7 +68,7 @@ type Driver interface {
 
 	EWSMailMetadata(context.Context, string) (string, error)
 	EWSMailboxMetadata(context.Context, string) (map[string]string, error)
-	UpdateEWSMailMetadata(context.Context, string, string, string) error
+	UpdateEWSMailMetadata(context.Context, string, string, string, ...string) error
 	SaveMetricSample(context.Context, string, MetricSample) error
 	MetricHistory(context.Context, string, int64) ([]MetricSample, error)
 	PruneMetricHistory(context.Context, int64) error
@@ -126,6 +133,16 @@ type Driver interface {
 	ListDomainAdminDomains(ctx context.Context, userID string) ([]string, error)
 	UserAdministersDomain(ctx context.Context, userID, domainID string) (bool, error)
 
+	ListFileSpaceIDs(ctx context.Context) ([]string, error)
+	SnapshotFileSpace(ctx context.Context, id string) (*FileSpaceSnapshot, error)
+	ValidateFileSpaceSnapshot(ctx context.Context, snapshot *FileSpaceSnapshot) error
+	RestoreFileSpaceSnapshot(ctx context.Context, snapshot *FileSpaceSnapshot, operation string) error
+	FileSpaceRestoreCommitted(ctx context.Context, operation string) (bool, error)
+	GetFileSpace(ctx context.Context, id string) (*FileSpace, error)
+	ListFileSpaces(ctx context.Context, userID string) ([]*FileSpace, error)
+	FileSpaceRights(ctx context.Context, id, userID string) (string, error)
+	SaveFileSpace(ctx context.Context, actor string, space *FileSpace) (*FileSpace, error)
+
 	SetFileAccess(ctx context.Context, ownerID, path, granteeID, rights string) error
 	DeleteFileAccess(ctx context.Context, ownerID, path, granteeID string) error
 	ListFileAccess(ctx context.Context, ownerID, granteeID string) ([]FileAccess, error)
@@ -137,7 +154,7 @@ type Driver interface {
 	DeleteFileShare(ctx context.Context, userID, id string) error
 	IncrementFileShareDownload(ctx context.Context, id string) error
 
-	UpsertMailboxDelegate(ctx context.Context, d *MailboxDelegate) error
+	UpsertMailboxDelegate(ctx context.Context, d *MailboxDelegate, mode ...string) error
 	ListMailboxDelegates(ctx context.Context, ownerID string) ([]*MailboxDelegate, error)
 	ListDelegationsFor(ctx context.Context, delegateID string) ([]*MailboxDelegate, error)
 	GetMailboxDelegate(ctx context.Context, ownerID, delegateID string) (*MailboxDelegate, error)
@@ -203,10 +220,10 @@ type Driver interface {
 	UpsertMessageSearch(ctx context.Context, messageID, subject, fromAddr, toAddr, body string) error
 	DeleteMessageSearch(ctx context.Context, messageID string) error
 	SearchMessages(ctx context.Context, userID, mailboxID, fromFilter, toFilter, subjectFilter, ftsQuery string, limit int, options ...MessageSearchOptions) ([]SearchHit, error)
-	MoveMessage(ctx context.Context, messageID, dstMailboxID string) (*Message, error)
+	MoveMessage(ctx context.Context, messageID, dstMailboxID string, actor ...string) (*Message, error)
 	MoveMessageContent(ctx context.Context, before *Message, dstMailboxID, filePath string, size int64, archived bool) (*Message, error)
 	DeleteMessage(ctx context.Context, messageID string) error
-	DisposeMessages(ctx context.Context, userID string, ids []string, destinationID string) ([]*Message, error)
+	DisposeMessages(ctx context.Context, userID string, ids []string, destinationID string, principal ...string) ([]*Message, error)
 	ExpungeMailbox(ctx context.Context, mailboxID string) ([]*Message, error)
 
 	GetInboxRules(ctx context.Context, userID string) (InboxRuleSet, error)
@@ -432,11 +449,18 @@ type FileShare struct {
 }
 
 type MailboxDelegate struct {
-	OwnerID         string
-	DelegateID      string
-	CanRead         bool
-	CanSendAs       bool
-	CanSendOnBehalf bool
+	EWSInboxPermission    string
+	EWSCalendarPermission string
+	EWSReceiveMeetings    bool
+	OwnerID               string
+	DelegateID            string
+	CanManageMail         bool
+	CanRead               bool
+	CanSendAs             bool
+	CanSendOnBehalf       bool
+	CanReadCalendar       bool
+	CanManageCalendar     bool
+	CanRespondInvites     bool
 }
 
 type MailboxACLEntry struct {

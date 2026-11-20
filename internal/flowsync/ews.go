@@ -83,6 +83,8 @@ func (h *ewsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch op {
 	case "GetUserAvailabilityRequest":
 		soap, err = h.availabilityEWS(r.Context(), u, string(body))
+	case "GetDelegate", "AddDelegate", "UpdateDelegate", "RemoveDelegate":
+		soap, err = h.delegatesEWS(r.Context(), u, op, string(body))
 	case "GetInboxRules", "UpdateInboxRules":
 		soap, err = h.inboxRulesEWS(r.Context(), u, op, string(body))
 	case "ResolveNames", "GetRoomLists", "GetRooms", "ExpandDL":
@@ -188,6 +190,22 @@ func (h *ewsHandler) findFolder(ctx context.Context, u *storage.User) (string, e
 	if err != nil {
 		return "", err
 	}
+	sharedMail, err := h.store.ListSharedMailboxes(ctx, u.ID)
+	if err != nil {
+		return "", err
+	}
+	mbs = append(mbs, sharedMail...)
+	sharedCalendars, err := h.store.ListSharedCalendars(ctx, u.ID)
+	if err != nil {
+		return "", err
+	}
+	for _, cal := range sharedCalendars {
+		if cal.Name != "personal" {
+			if _, e := h.ewsCalendar(ctx, u.ID, cal.ID, false); e == nil {
+				cals = append(cals, cal)
+			}
+		}
+	}
 	abs, err := h.store.ListAddressBooks(ctx, u.ID)
 	if err != nil {
 		return "", err
@@ -200,12 +218,31 @@ func (h *ewsHandler) findFolder(ctx context.Context, u *storage.User) (string, e
 	var b strings.Builder
 	b.WriteString(`<m:FindFolderResponse xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types">`)
 	b.WriteString(`<m:ResponseMessages><m:FindFolderResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:RootFolder IncludesLastItemInRange="true"><t:Folders>`)
+	owners := map[string]bool{}
+	for _, mb := range sharedMail {
+		owners[mb.UserID] = true
+	}
+	for _, cal := range sharedCalendars {
+		if cal.Name != "personal" {
+			owners[cal.UserID] = true
+		}
+	}
+	for ownerID := range owners {
+		if ownerID == u.ID {
+			continue
+		}
+		owner, e := h.store.GetUserByID(ctx, ownerID)
+		if e != nil {
+			return "", e
+		}
+		fmt.Fprintf(&b, `<t:Folder><t:FolderId Id="root:%s"/><t:ParentFolderId Id="root:%s"/><t:DisplayName>%s</t:DisplayName><t:FolderClass>IPF.Note</t:FolderClass><t:TotalCount>0</t:TotalCount></t:Folder>`, xmlEscape(ownerID), xmlEscape(u.ID), xmlEscape(owner.Email))
+	}
 	for _, mb := range mbs {
 		parent := "root:" + u.ID
 		displayName := mb.Name
 		if cut := strings.LastIndex(mb.Name, "/"); cut > 0 {
 			for _, candidate := range mbs {
-				if candidate.Name == mb.Name[:cut] {
+				if candidate.UserID == mb.UserID && candidate.Name == mb.Name[:cut] {
 					parent = candidate.ID
 					displayName = mb.Name[cut+1:]
 					break
@@ -223,7 +260,7 @@ func (h *ewsHandler) findFolder(ctx context.Context, u *storage.User) (string, e
 			}
 		}
 		for _, child := range mbs {
-			if strings.HasPrefix(child.Name, mb.Name+"/") && !strings.Contains(strings.TrimPrefix(child.Name, mb.Name+"/"), "/") {
+			if child.UserID == mb.UserID && strings.HasPrefix(child.Name, mb.Name+"/") && !strings.Contains(strings.TrimPrefix(child.Name, mb.Name+"/"), "/") {
 				children++
 			}
 		}
@@ -233,7 +270,7 @@ func (h *ewsHandler) findFolder(ctx context.Context, u *storage.User) (string, e
 	for _, cal := range cals {
 		name := calendarClientName(ctx, cal)
 		fmt.Fprintf(&b, `<t:CalendarFolder><t:FolderId Id="%s" ChangeKey="0"/><t:ParentFolderId Id="%s"/><t:DisplayName>%s</t:DisplayName><t:FolderClass>IPF.Appointment</t:FolderClass><t:TotalCount>0</t:TotalCount></t:CalendarFolder>`,
-			xmlEscape(cal.ID), xmlEscape("root:"+u.ID), xmlEscape(name))
+			xmlEscape(cal.ID), xmlEscape("root:"+cal.UserID), xmlEscape(name))
 	}
 	for _, ab := range abs {
 		name := ab.DisplayName
@@ -286,7 +323,7 @@ func (h *ewsHandler) findItem(ctx context.Context, u *storage.User, body string)
 	if systemFolderName(u, folderID) != "" {
 		return emptyEWSItems(), nil
 	}
-	if cal, err := h.store.GetCalendarByID(ctx, u.ID, folderID); err == nil {
+	if cal, err := h.ewsCalendar(ctx, u.ID, folderID, false); err == nil {
 		return h.findCalendarItems(ctx, u, cal.ID, body)
 	}
 	if ab, err := h.store.GetAddressBookByID(ctx, u.ID, folderID); err == nil {
@@ -299,7 +336,7 @@ func (h *ewsHandler) findItem(ctx context.Context, u *storage.User, body string)
 }
 
 func (h *ewsHandler) findMailItems(ctx context.Context, u *storage.User, mailboxID string, requests ...string) (string, error) {
-	if err := h.ensureMailboxOwned(ctx, u.ID, mailboxID); err != nil {
+	if err := h.mailboxRight(ctx, u.ID, mailboxID, "r"); err != nil {
 		return ewsFault("ErrorAccessDenied", "forbidden"), nil
 	}
 	msgs, err := h.store.ListMessages(ctx, mailboxID)
@@ -371,6 +408,9 @@ func (h *ewsHandler) findCalendarItems(ctx context.Context, u *storage.User, cal
 	b.WriteString(`<m:ResponseMessages><m:FindItemResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:RootFolder><t:Items>`)
 	count := 0
 	for _, o := range objs {
+		if _, err := h.ewsCalendarObject(ctx, u.ID, o, false); err != nil {
+			continue
+		}
 		if view != nil {
 			occurrences, err := calutil.ExpandOccurrences(o.Data, *from, *to)
 			if err != nil {
@@ -464,19 +504,15 @@ func (h *ewsHandler) getItem(ctx context.Context, u *storage.User, body string) 
 		return h.getMailItem(ctx, u, msg, body)
 	}
 
-	cals, _ := h.store.ListCalendars(ctx, u.ID)
-	for _, cal := range cals {
-		objs, _ := h.store.ListCalendarObjects(ctx, cal.ID)
-		for _, o := range objs {
-			if o.ID != id {
-				continue
-			}
-			item, err := h.calendarItemXML(ctx, u, o, true)
-			if err != nil {
-				return "", err
-			}
-			return ewsNotificationSuccess("GetItem", "<m:Items>"+taygaRawItem(item, body, "TaygaICalendar", o.Data)+"</m:Items>"), nil
+	if o, err := h.store.GetCalendarObjectByID(ctx, id); err == nil {
+		if _, err := h.ewsCalendarObject(ctx, u.ID, o, false); err != nil {
+			return ewsFault("ErrorAccessDenied", "forbidden"), nil
 		}
+		item, err := h.calendarItemXML(ctx, u, o, true)
+		if err != nil {
+			return "", err
+		}
+		return ewsNotificationSuccess("GetItem", "<m:Items>"+taygaRawItem(item, body, "TaygaICalendar", o.Data)+"</m:Items>"), nil
 	}
 	abs, _ := h.store.ListAddressBooks(ctx, u.ID)
 	for _, ab := range abs {
@@ -511,7 +547,7 @@ func (h *ewsHandler) syncFolderItems(ctx context.Context, u *storage.User, body 
 	fmt.Fprintf(&b, `<m:SyncState>%s</m:SyncState><m:IncludesLastItemInRange>true</m:IncludesLastItemInRange>`, xmlEscape(syncState))
 	b.WriteString(`<m:Changes>`)
 
-	if cal, err := h.store.GetCalendarByID(ctx, u.ID, folderID); err == nil {
+	if cal, err := h.ewsCalendar(ctx, u.ID, folderID, false); err == nil {
 		objs, err := h.store.ListCalendarObjects(ctx, cal.ID)
 		if err != nil {
 			return "", err
@@ -539,7 +575,7 @@ func (h *ewsHandler) syncFolderItems(ctx context.Context, u *storage.User, body 
 				xmlEscape(n.ID), xmlEscape(n.ETag))
 		}
 	} else {
-		if err := h.ensureMailboxOwned(ctx, u.ID, folderID); err != nil {
+		if err := h.mailboxRight(ctx, u.ID, folderID, "r"); err != nil {
 			return ewsFault("ErrorAccessDenied", "forbidden"), nil
 		}
 		msgs, err := h.store.ListMessages(ctx, folderID)

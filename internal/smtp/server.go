@@ -576,7 +576,7 @@ func (s *session) Mail(from string, opts *gosmtp.MailOptions) (result error) {
 		}
 	}
 	if s.user != nil && from != "" {
-		allowed, err := s.backend.store.CanSendFrom(context.Background(), s.user.ID, normalizeAddr(from))
+		allowed, err := storage.CanSubmitFrom(context.Background(), s.backend.store, s.user.ID, normalizeAddr(from))
 		if err != nil {
 			return &gosmtp.SMTPError{Code: 451, EnhancedCode: gosmtp.EnhancedCode{4, 3, 0}, Message: "Sender lookup unavailable"}
 		}
@@ -679,13 +679,16 @@ func (s *session) Data(r io.Reader) (result error) {
 			if address == "" {
 				continue
 			}
-			allowed, e := s.backend.store.CanSendFrom(ctx, s.user.ID, normalizeAddr(address))
+			allowed, e := storage.CanSubmitFrom(ctx, s.backend.store, s.user.ID, normalizeAddr(address))
 			if e != nil {
 				return &gosmtp.SMTPError{Code: 451, EnhancedCode: gosmtp.EnhancedCode{4, 3, 0}, Message: "Sender lookup unavailable"}
 			}
 			if !allowed {
 				return &gosmtp.SMTPError{Code: 553, EnhancedCode: gosmtp.EnhancedCode{5, 7, 1}, Message: "Sender address is not authorized"}
 			}
+		}
+		if err := storage.AuthorizeMessageSender(ctx, s.backend.store, s.user, message.Header); err != nil {
+			return &gosmtp.SMTPError{Code: 553, Message: "Sender identity is not authorized"}
 		}
 		signingFrom = from[0].Address
 	}

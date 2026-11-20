@@ -23,10 +23,12 @@ cp LICENSE NOTICE README.md "$PACKAGE_STAGE/"
 cp configs/tayga.example.yaml "$PACKAGE_STAGE/configs/"
 cp deploy/systemd/tayga.service "$PACKAGE_STAGE/deploy/systemd/"
 cp docs/setup.md docs/migration.md docs/setup-filters.md docs/release-*.md docs/web-omemo.md docs/flowsync-compatibility.md docs/flowsync-debug.md docs/xmpp-compatibility-plan.md docs/files-and-office.md docs/external-mail.md docs/mail-delivery-logs.md docs/travel-tickets.md docs/calendar-scheduling.md docs/roadmap.md "$PACKAGE_STAGE/docs/"
-cp docs/xmpp*.md "$PACKAGE_STAGE/docs/"
+cp docs/*.md "$PACKAGE_STAGE/docs/"
+cp -R docs/screenshots "$PACKAGE_STAGE/docs/"
+cp deploy/systemd/update-binary.sh "$PACKAGE_STAGE/deploy/systemd/"
 mkdir -p "$PACKAGE_STAGE/frontend"
-cp frontend/LICENSE frontend/package*.json frontend/build-*.cjs "$PACKAGE_STAGE/frontend/"
-cp -R frontend/src "$PACKAGE_STAGE/frontend/"
+cp frontend/LICENSE frontend/README.md frontend/package*.json frontend/build-*.cjs "$PACKAGE_STAGE/frontend/"
+cp -R frontend/src frontend/assets "$PACKAGE_STAGE/frontend/"
 cp internal/frontend/dist/assets/libomemo-LICENSE.txt "$PACKAGE_STAGE/docs/"
 archives=()
 
@@ -57,7 +59,7 @@ for t in "${targets[@]}"; do
     (cd "$PACKAGE_STAGE" && zip -qr "${OUT}/${name}.zip" "tayga-mail${ext}" LICENSE NOTICE README.md configs/tayga.example.yaml deploy docs frontend)
     archives+=("${name}.zip")
   else
-    COPYFILE_DISABLE=1 tar -czf "${OUT}/${name}.tar.gz" -C "$PACKAGE_STAGE" tayga-mail LICENSE NOTICE README.md configs/tayga.example.yaml deploy docs frontend
+    COPYFILE_DISABLE=1 tar --no-xattrs -czf "${OUT}/${name}.tar.gz" -C "$PACKAGE_STAGE" tayga-mail LICENSE NOTICE README.md configs/tayga.example.yaml deploy docs frontend
     archives+=("${name}.tar.gz")
   fi
   rm -f "${PACKAGE_STAGE}/tayga-mail${ext}"

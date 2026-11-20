@@ -128,6 +128,12 @@ func decodeCalendarTimezone(value, preferred string, year int) (string, error) {
 	if err != nil || len(data) != 172 {
 		return "", fmt.Errorf("invalid calendar timezone")
 	}
+	// No daylight transitions: an unused iOS daylight bias has no meaning.
+	if binary.LittleEndian.Uint16(data[70:72]) == 0 && binary.LittleEndian.Uint16(data[154:156]) == 0 {
+		for i := 168; i < 172; i++ {
+			data[i] = 0
+		}
+	}
 	candidates := []string{preferred, zoneName(data[4:68]), zoneName(data[88:152]), "UTC"}
 	var rest []string
 	for _, zone := range windowsZones {

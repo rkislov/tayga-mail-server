@@ -6,6 +6,11 @@ Licensed under the Apache License, Version 2.0.
 
 UI backdrop / wallpaper artwork (tayga, cosmos) © Алиса Кислова.
 
+The web frontend includes CKEditor 5, Copyright CKSource Holding sp. z o.o.
+Distributed under GPL-2.0-or-later; the embedded assets/ckeditor5/COPYING.GPL
+and frontend package manifest/lock identify the bundled component and version.
+The Tayga frontend source is distributed under frontend/LICENSE.
+
 PDF previews include PDF.js, Copyright Mozilla Foundation.
 Licensed under Apache License 2.0; its license is distributed in embedded assets/pdfjs/LICENSE.
 

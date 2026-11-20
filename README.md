@@ -19,7 +19,21 @@ See [docs/architecture.md](docs/architecture.md) and `configs/tayga.example.yaml
 
 **План разработки (RU):** [Дорожная карта: порядок работ, зависимости и критерии готовности](docs/roadmap.md).
 
-**Стабильный выпуск [v0.10.12](https://github.com/rkislov/tayga-mail-server/releases/tag/v0.10.12).** Серверные архивы, контрольные суммы и расширение Thunderbird доступны на странице выпуска.
+**Стабильный выпуск [v1.0.0](https://github.com/rkislov/tayga-mail-server/releases/tag/v1.0.0).** Серверные архивы, контрольные суммы и расширение Thunderbird доступны на странице выпуска.
+
+## Личное пространство
+
+Новый интерфейс 1.0.0 собран по визуальным макетам: рисунки Алисы Кисловой, мягкие светлые панели, компактное меню и зелёные акценты. Почта, календарь, контакты, задачи, заметки, файлы и Mattermost доступны в одном окне. Меню сворачивается до иконок; рекламных блоков нет.
+
+![Почта — список и чтение письма](docs/screenshots/v1.0.0/mail.png)
+
+![Календарь — недельное расписание](docs/screenshots/v1.0.0/calendar.png)
+
+![Настройки внешнего вида](docs/screenshots/v1.0.0/appearance.png)
+
+![Обзор сервера](docs/screenshots/v1.0.0/monitor.png)
+
+Скриншоты работающего приложения сняты на отдельном локальном стенде с демонстрационными данными. [Все разделы интерфейса](docs/screenshots/README.md) · [Руководство пользователя](docs/user-guide.md) · [Руководство администратора](docs/admin-guide.md) · [Изменения 1.0.0](docs/release-1.0.0.md).
 
 ## Идея Tayga
 
@@ -48,7 +62,7 @@ sudo ./tayga-mail -config configs/tayga.example.yaml
 ### Cross-platform release builds
 
 ```bash
-VERSION=0.10.12 ./scripts/crossbuild.sh   # → dist/*.tar.gz|zip + checksums.txt
+VERSION=1.0.0 ./scripts/crossbuild.sh   # → dist/*.tar.gz|zip + checksums.txt
 ```
 
 GitHub Releases: push a `v*` tag; [GoReleaser](https://goreleaser.com) (`.github/workflows/release.yml`) publishes linux/darwin/windows/freebsd amd64+arm64 archives.

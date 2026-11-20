@@ -80,15 +80,17 @@ func (s *Store) changeCalendarSeries(ctx context.Context, userID, objectID, etag
 // Used by proposal decisions so the move, resources, copies, mail and decision
 // share the same transaction and calendar writer lock.
 func (s *Store) changeCalendarSeriesTx(ctx context.Context, tx *sql.Tx, userID, objectID, etag, rid string, change calutil.OccurrenceChange, rule *calutil.RecurrenceRule) (*CalendarObject, error) {
-	var email, name string
-	if err := tx.QueryRowContext(ctx, s.rebind(`SELECT email, display_name FROM users WHERE id=? AND enabled=TRUE`), userID).Scan(&email, &name); err != nil {
-		return nil, ErrUnauthorized
-	}
-	q := `SELECT o.id, o.calendar_id, o.uid, o.href_name, o.etag, o.data, o.size, o.component, o.dtstart, o.dtend, o.updated_at
-	 FROM calendar_objects o JOIN calendars c ON c.id=o.calendar_id WHERE o.id=? AND
-	 (c.user_id=? OR (c.name<>'personal' AND EXISTS (SELECT 1 FROM calendar_acl a WHERE a.calendar_id=c.id AND a.grantee_user_id=? AND a.rights='write')))`
-	source, err := s.scanCalObject(tx.QueryRowContext(ctx, s.rebind(q), objectID, userID, userID))
+	ctx = withCalendarActor(ctx, userID)
+	q := `SELECT o.id, o.calendar_id, o.uid, o.href_name, o.etag, o.data, o.size, o.component, o.dtstart, o.dtend, o.updated_at FROM calendar_objects o WHERE o.id=?`
+	source, err := s.scanCalObject(tx.QueryRowContext(ctx, s.rebind(q), objectID))
 	if err != nil {
+		return nil, err
+	}
+	email, name, err := s.calendarWriterTx(ctx, tx, userID, source.CalendarID)
+	if err != nil {
+		return nil, err
+	}
+	if err = tx.QueryRowContext(ctx, s.rebind(`SELECT id FROM users WHERE LOWER(email)=LOWER(?)`), email).Scan(&userID); err != nil {
 		return nil, err
 	}
 	p, err := calutil.ParseICS(source.Data)

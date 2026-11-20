@@ -1,3 +1,35 @@
+# Интерфейс Tayga Mail
+
+## Личное пространство 1.0.0
+
+Актуальные скриншоты работающего приложения. Изображения сняты на отдельной локальной установке с демонстрационными данными example.com. Публикуемые изображения не являются сгенерированными макетами и не содержат данных рабочего сервера.
+
+- [Вход](v1.0.0/login.png)
+- [Почта](v1.0.0/mail.png), [меню до иконок](v1.0.0/mail-compact.png), [создание письма](v1.0.0/compose.png)
+- [Календарь](v1.0.0/calendar.png), [контакты](v1.0.0/contacts.png), [задачи](v1.0.0/tasks.png)
+- [Заметки](v1.0.0/notes.png), [файлы](v1.0.0/files.png), [Mattermost](v1.0.0/chat.png)
+- [Профиль](v1.0.0/profile.png), [внешний вид](v1.0.0/appearance.png), [язык](v1.0.0/language.png), [почтовые фильтры](v1.0.0/filters.png)
+- [Обзор сервера](v1.0.0/monitor.png), [очередь](v1.0.0/outbound.png), [журнал доставки](v1.0.0/maillog.png), [антиспам](v1.0.0/antispam.png)
+- [Организации](v1.0.0/tenants.png), [домены](v1.0.0/domains.png), [пользователи](v1.0.0/users.png), [сертификаты](v1.0.0/tls.png)
+- [Администрирование Mattermost](v1.0.0/mattermost.png), [сервер](v1.0.0/server.png), [форма SMTP](v1.0.0/server-smtp.png), [CoS](v1.0.0/cos.png), [миграция](v1.0.0/migration.png)
+- [Мобильная почта](v1.0.0/mobile-mail.png), [мобильное меню](v1.0.0/mobile-navigation.png), [тёмный режим](v1.0.0/mail-dark.png)
+
+![Почта](v1.0.0/mail.png)
+
+![Календарь](v1.0.0/calendar.png)
+
+![Обзор сервера](v1.0.0/monitor.png)
+
+[Руководство пользователя](../user-guide.md) · [Руководство администратора](../admin-guide.md).
+
+Снять галерею повторно на отдельном тестовом сервере. Требуются Node.js, установленный `playwright-core` и Chromium/Chrome (путь можно задать через `CHROME_PATH`). Учётную запись стенда задают `TMS_EMAIL` и `TMS_PASSWORD`:
+
+```sh
+TMS_URL=http://127.0.0.1:18080 TMS_CAPTURE_SCREENSHOTS=1 node scripts/check-personal-space.mjs
+```
+
+## Предыдущие версии интерфейса
+
 # Скриншоты Tayga Mail
 
 Коллекция показывает интерфейс с парящими панелями, скруглёнными краями и дневным/ночным режимом.
