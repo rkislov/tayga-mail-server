@@ -217,6 +217,9 @@ func recoveryEntries(ctx context.Context, root string) ([]recoveryEntry, error) 
 // Called with fileMu held. Managed content is immutable; mutable journals are
 // copied while writers are stopped. Network streaming never holds fileMu.
 func (s *Server) captureSpaceCheckpoint(ctx context.Context, space, label string, automatic bool) (*spaceCheckpoint, error) {
+	if !storage.ValidFileSpaceID(space) {
+		return nil, errPathEscape
+	}
 	state, err := s.store.SnapshotFileSpace(ctx, space)
 	if err != nil {
 		return nil, err
@@ -313,6 +316,9 @@ func readCheckpointFile(path string) (*spaceCheckpoint, error) {
 	return &point, nil
 }
 func (s *Server) listSpaceCheckpoints(space string) ([]spaceCheckpointInfo, error) {
+	if !storage.ValidFileSpaceID(space) {
+		return nil, errPathEscape
+	}
 	dirs, err := os.ReadDir(s.checkpointRoot(space))
 	if os.IsNotExist(err) {
 		return []spaceCheckpointInfo{}, nil

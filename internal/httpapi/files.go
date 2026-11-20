@@ -284,6 +284,9 @@ func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) filesRoot(userID string) (string, error) {
+	if !storage.ValidFileSpaceID(userID) {
+		return "", errPathEscape
+	}
 	if s.spaceIsBlocked(userID) {
 		return "", errSpaceRecoveryPending
 	}

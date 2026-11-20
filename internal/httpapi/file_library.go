@@ -44,7 +44,12 @@ func fileETag(info os.FileInfo) string {
 // Metadata and upload staging stay outside the user-visible tree and all DAV,
 // shared-link and ZIP views. Back up file-state together with files.
 func (s *Server) fileStateRoot(owner, kind string) (string, error) {
-	if owner == "" || strings.ContainsAny(owner, `/\`) {
+	if !storage.ValidFileSpaceID(owner) {
+		return "", errPathEscape
+	}
+	switch kind {
+	case "versions", "trash", "uploads", "resumable", "activity", "cleanup", "retention":
+	default:
 		return "", errPathEscape
 	}
 	root := filepath.Join(s.ms.Root, "file-state", owner, kind)
@@ -139,7 +144,7 @@ func (s *Server) rewriteRevision(owner string, rev fileRevision) error {
 
 func (s *Server) revision(owner, kind, id string) (fileRevision, string, error) {
 	var rev fileRevision
-	if len(id) != 36 || strings.ContainsAny(id, `/\.`) {
+	if !storage.ValidFileSpaceID(id) {
 		return rev, "", os.ErrNotExist
 	}
 	root, err := s.fileStateRoot(owner, kind)

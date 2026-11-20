@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"path"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -105,21 +106,14 @@ func (s *Store) SnapshotFileSpace(ctx context.Context, id string) (*FileSpaceSna
 func validSpaceSnapshotPath(value string) bool {
 	return value != "" && value != "." && value != ".." && !strings.HasPrefix(value, "/") && !strings.HasPrefix(value, "../") && !strings.ContainsAny(value, "\\\x00") && path.Clean(value) == value
 }
+
+// Match the entire UUID so directory identities cannot become path components.
+var fileSpaceIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
 func ValidFileSpaceID(id string) bool {
-	if len(id) != 36 {
-		return false
-	}
-	for i, r := range id {
-		if i == 8 || i == 13 || i == 18 || i == 23 {
-			if r != '-' {
-				return false
-			}
-		} else if !(r >= '0' && r <= '9' || r >= 'a' && r <= 'f') {
-			return false
-		}
-	}
-	return true
+	return fileSpaceIDPattern.MatchString(id)
 }
+
 func validateSpaceSnapshotShape(v *FileSpaceSnapshot) error {
 	if v == nil || v.Space == nil {
 		return ErrFileSpaceInvalid

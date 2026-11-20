@@ -56,6 +56,9 @@ func (s *Server) spaceReadLock(space string) *sync.RWMutex {
 	return value.(*sync.RWMutex)
 }
 func (s *Server) stageSpaceCheckpoint(ctx context.Context, space, label, root string) (*spaceCheckpoint, error) {
+	if !storage.ValidFileSpaceID(space) {
+		return nil, errPathEscape
+	}
 	state, err := s.store.SnapshotFileSpace(ctx, space)
 	if err != nil {
 		return nil, err
