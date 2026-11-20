@@ -19,6 +19,7 @@ import (
 	"github.com/tayga/tms/internal/flowsync"
 	"github.com/tayga/tms/internal/frontend"
 	"github.com/tayga/tms/internal/mailstore"
+	"github.com/tayga/tms/internal/mattermost"
 	"github.com/tayga/tms/internal/migrate"
 	"github.com/tayga/tms/internal/notify"
 	"github.com/tayga/tms/internal/settings"
@@ -31,10 +32,23 @@ import (
 
 // Server exposes health, metrics, auth API, and the embedded Web UI.
 type Server struct {
+	spaceRecoverySuppressed map[string]bool
+	spaceRecoveryBlocked    sync.Map
+	spaceCheckpointErrors   map[string]string
+	spaceCheckpointReaders  map[string]int
+	spaceRecoveryViews      sync.Map
+	spaceRecoveryOnce       sync.Once
+	spaceRecoveryError      error
+	spaceDownloadTickets    map[string]spaceDownloadTicket
+	fileSearchMu            sync.Mutex
+	fileSearchCache         map[string]fileSearchCacheEntry
+	fileRequestUploads      map[string]int
+	fileActivities          map[string]*fileActivityState
 	fileMu                  sync.Mutex
 	uploadLocks             [64]sync.Mutex
 	fileDAVLocks            map[string]*fileLockSystem
 	officeSessions          map[string]officeSession
+	fileComparisons         map[string]fileCompareSession
 	calendarSubscriptionsMu sync.Mutex
 	flowSubmit              flowsync.SubmitFunc
 	log                     *slog.Logger
@@ -76,7 +90,17 @@ func (s *Server) cfgLive() *config.Config {
 
 // Handler builds the HTTP mux (health, auth, DAV, FlowSync, admin UI).
 func (s *Server) Handler() http.Handler {
+	if err := s.initializeSpaceRecovery(context.Background()); err != nil {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Error(w, "Space recovery requires attention", 503) })
+	}
 	mux := http.NewServeMux()
+	if s.cfgLive().Mattermost.Enabled {
+		mux.Handle("/api/v4/", mattermost.New(s.store, s.authn, s.log, s.cfgLive().HTTP.PublicURL))
+	} else {
+		mux.HandleFunc("/api/v4/", func(w http.ResponseWriter, r *http.Request) {
+			writeJSON(w, http.StatusNotFound, map[string]any{"id": "tms.mattermost.disabled", "message": "Mattermost compatibility is disabled", "status_code": http.StatusNotFound})
+		})
+	}
 	mux.HandleFunc("/api/v1/calendar/subscriptions", s.handleCalendarSubscriptions)
 	mux.HandleFunc("/healthz", s.handleHealthz)
 	mux.HandleFunc("/readyz", s.handleReadyz)
@@ -98,6 +122,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/auth/oidc/", s.handleOIDCRoutes)
 	mux.HandleFunc("/api/v1/me", s.handleMe)
 	mux.HandleFunc("/api/v1/me/avatar", s.handleAvatar)
+	mux.HandleFunc("/api/v1/me/branding", s.handleBranding)
+	mux.HandleFunc("/api/v1/admin/branding/", s.handleAdminBranding)
+	mux.HandleFunc("/api/v1/admin/welcome/", s.handleAdminWelcome)
 	mux.HandleFunc("/api/v1/me/password", s.handleChangePassword)
 	mux.HandleFunc("/api/v1/mail/signature", s.handleSignature)
 	mux.HandleFunc("/api/v1/travel", s.handleTravel)
@@ -119,18 +146,27 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/chat-upload/", s.handleChatUploadPut)
 	mux.HandleFunc("/chat-download/", s.handleChatDownload)
 	mux.HandleFunc("/api/v1/chat/upload", s.handleChatUploadSlot)
+	mux.HandleFunc("/api/v1/files/space-recovery/", s.handleSpaceRecoveryGlobal)
+	mux.HandleFunc("/api/v1/files/spaces", s.handleFileSpaces)
+	mux.HandleFunc("/api/v1/files/spaces/", s.handleFileSpaces)
+	mux.HandleFunc("/dav/spaces/", s.handleFileDAV)
 	mux.HandleFunc("/api/v1/files/shares", s.handleFileShares)
 	mux.HandleFunc("/api/v1/files/shares/", s.handleFileShares)
 	mux.HandleFunc("/api/v1/files/", s.handleFiles)
 	mux.HandleFunc("/api/v1/files", s.handleFiles)
 	mux.HandleFunc("/dav/files/", s.handleFileDAV)
+	mux.HandleFunc("/dav/shared/", s.handleFileDAV)
 	mux.HandleFunc("/api/v1/files/library/", s.handleFileLibrary)
 	mux.HandleFunc("/api/v1/files/uploads", s.handleFileUploads)
 	mux.HandleFunc("/api/v1/files/uploads/", s.handleFileUploads)
 	mux.HandleFunc("/api/v1/files/office", s.handleOfficeSession)
+	mux.HandleFunc("/api/v1/files/templates", s.handleFileTemplates)
 	mux.HandleFunc("/wopi/files/", s.handleWOPI)
+	mux.HandleFunc("/office/document/", s.handleDocumentServer)
+	mux.HandleFunc("/office/compare/", s.handleOfficeComparison)
 	mux.HandleFunc("/calendar/public/", s.handlePublicCalendar)
 	mux.HandleFunc("/s/", s.handlePublicShare)
+	mux.HandleFunc("/file-request-assets/", s.handleFileRequestAsset)
 	mux.HandleFunc("/api/v1/sieve/scripts", s.handleSieveScripts)
 	mux.HandleFunc("/api/v1/sieve/scripts/", s.handleSieveScripts)
 	mux.HandleFunc("/api/v1/admin/service-classes", s.handleAdminCoS)
@@ -180,17 +216,21 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/notifications", s.handleNotifications)
 	mux.HandleFunc("/api/v1/notifications/", s.handleNotifications)
 
+	mux.HandleFunc(storage.CalendarDownloadPath, s.handleCalendarDownload)
 	dav.Mount(mux, s.store, s.authn)
 	flowsync.Mount(mux, s.cfg, s.log, s.store, s.authn, s.ms, s.flowSubmit)
 
 	mux.Handle("/", frontend.Handler())
 	if s.tls != nil {
-		return s.tls.HTTPChallengeHandler(mux)
+		return s.tls.HTTPChallengeHandler(s.spaceRecoveryReadIsolation(mux))
 	}
-	return mux
+	return s.spaceRecoveryReadIsolation(mux)
 }
 
 func (s *Server) Start(ctx context.Context) error {
+	if err := s.initializeSpaceRecovery(ctx); err != nil {
+		return err
+	}
 	var tlsCfg *tls.Config
 	if s.tls != nil {
 		tlsCfg = s.tls.HTTPConfig()

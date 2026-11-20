@@ -178,9 +178,9 @@ func (s *Server) handleChatUploadPut(w http.ResponseWriter, r *http.Request) {
 		fileError(w, err)
 		return
 	}
-	defer os.Remove(temp)
+	defer s.removeFileStage(temp)
 	s.fileMu.Lock()
-	_, err = s.commitFile(record.UserID, record.Path, temp, "")
+	_, err = s.commitFile(record.UserID, record.Path, temp, "", fileActor{ID: record.UserID, Source: "chat"})
 	s.fileMu.Unlock()
 	if err != nil {
 		fileError(w, err)

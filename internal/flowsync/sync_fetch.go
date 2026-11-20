@@ -160,7 +160,7 @@ func (h *easHandler) fetchSyncItems(ctx context.Context, u *storage.User, kind c
 		}
 		body, bodyType, size, truncated := preferredBody(content, contextPreferences(ctx))
 		full := renderMailSyncXML("", collectionID, []syncAdd{{
-			ServerID: id, Subject: content.Subject, From: content.From, To: content.To,
+			ServerID: id, Subject: content.Subject, From: content.From, To: content.To, MeetingXML: easMeetingMail(ctx, content, u.Email),
 			NativeBodyType: content.nativeBodyType(),
 			Date:           msg.InternalDate.UTC().Format("2006-01-02T15:04:05.000Z"),
 			Read:           storage.HasFlag(msg.Flags, `\Seen`), Body: body, BodyType: bodyType,

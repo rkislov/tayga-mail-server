@@ -26,6 +26,11 @@ func (s *Server) calendarAccessible(r *http.Request, au *authUser, calendarID st
 	}
 	for _, c := range shared {
 		if c.ID == calendarID {
+			if grant, e := s.store.GetMailboxDelegate(r.Context(), c.UserID, au.ID); e == nil && (grant.CanManageCalendar || c.Name == "default" && grant.EWSCalendarPermission == "Editor") && c.Name != "personal" {
+				if owner, e := s.store.GetUserByID(r.Context(), c.UserID); e == nil {
+					c.DelegateOrganizerEmail = owner.Email
+				}
+			}
 			return c, nil
 		}
 	}
@@ -96,7 +101,7 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 					continue
 				}
 				out = append(out, map[string]any{
-					"id": c.ID, "name": c.Name, "display_name": c.DisplayName, "description": c.Description, "color": c.Color,
+					"id": c.ID, "name": c.Name, "display_name": c.DisplayName + " · " + calendarOwnerLabel(s, r, c.UserID), "owner_id": c.UserID, "description": c.Description, "color": c.Color,
 					"busy_only": c.Name == "personal", "shared": true, "owned": false, "writable": calendarCanWrite(s, r, au, c.ID), "deletable": false,
 				})
 			}
@@ -233,6 +238,32 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			item = occurrenceJSON(o, instance, cal, au)
+			if calendarCanRespond(s, r, au, cal) && !strings.EqualFold(instance.Status, "CANCELLED") && !strings.EqualFold(ev.Status, "CANCELLED") {
+				invites, err := s.store.ListCalendarInvitesByEventUID(r.Context(), o.UID)
+				if err != nil {
+					writeJSON(w, 500, map[string]string{"error": "cannot load invitation"})
+					return
+				}
+				for _, invite := range invites {
+					if invite.AttendeeUserID == cal.UserID && invite.CalendarObjectID == o.ID {
+						item["occurrence_invite_id"] = invite.ID
+						for _, attendee := range instance.Attendees {
+							if strings.EqualFold(attendee.Email, invite.AttendeeEmail) {
+								item["occurrence_partstat"] = attendee.PartStat
+							}
+						}
+						proposal, err := s.store.GetCalendarOccurrenceProposal(r.Context(), invite.ID, rid)
+						if err != nil && err != storage.ErrNotFound {
+							writeJSON(w, 500, map[string]string{"error": "cannot load occurrence proposal"})
+							return
+						}
+						if proposal != nil && proposal.Sequence == instance.Sequence && instance.Start != nil && instance.End != nil && proposal.OriginalStart.Equal(*instance.Start) && proposal.OriginalEnd.Equal(*instance.End) {
+							item["occurrence_proposed_start"] = proposal.ProposedStart
+							item["occurrence_proposed_end"] = proposal.ProposedEnd
+						}
+					}
+				}
+			}
 		}
 		if cal.Name == "personal" && cal.UserID != au.ID {
 			item["ics"], _ = calutil.BusyOnlyICS(o.Data, o.ID)
@@ -318,7 +349,7 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			previous = &parsed.Event
-			if parsed.Organizer.Email != "" && !strings.EqualFold(parsed.Organizer.Email, au.Email) {
+			if parsed.Organizer.Email != "" && !calendarActsAsOrganizer(parsed.Organizer.Email, cal, au) {
 				writeJSON(w, 403, map[string]string{"error": "only the organizer can update a meeting"})
 				return
 			}
@@ -337,7 +368,11 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, 400, map[string]string{"error": "end must be after start"})
 			return
 		}
-		user, err := s.store.GetUserByID(r.Context(), au.ID)
+		principalID := au.ID
+		if cal.DelegateOrganizerEmail != "" {
+			principalID = cal.UserID
+		}
+		user, err := s.store.GetUserByID(r.Context(), principalID)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "user lookup failed"})
 			return
@@ -370,6 +405,14 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 			}
 			seenAtt[email] = struct{}{}
 			name := strings.TrimSpace(a.Name)
+			role := "REQ-PARTICIPANT"
+			if previous != nil {
+				for _, attendee := range previous.Attendees {
+					if strings.EqualFold(attendee.Email, email) && attendee.Role != "" {
+						role = attendee.Role
+					}
+				}
+			}
 			cutype := "INDIVIDUAL"
 			partstat := "NEEDS-ACTION"
 			rsvp := true
@@ -389,7 +432,7 @@ func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
 			}
 			ev.Attendees = append(ev.Attendees, calutil.Attendee{
 				Email: email, Name: name,
-				PartStat: partstat, RSVP: rsvp, Role: "REQ-PARTICIPANT", CUType: cutype,
+				PartStat: partstat, RSVP: rsvp, Role: role, CUType: cutype,
 			})
 		}
 		var ics string
@@ -508,6 +551,7 @@ func eventToJSON(o *storage.CalendarObject, ev calutil.ParseResult) map[string]a
 	for _, a := range ev.Attendees {
 		atts = append(atts, map[string]any{
 			"email": a.Email, "name": a.Name, "partstat": a.PartStat, "role": a.Role,
+			"kind": strings.ToLower(a.CUType),
 		})
 	}
 	if len(atts) > 0 {
@@ -586,13 +630,47 @@ func (s *Server) handleCalendarInvitesList(w http.ResponseWriter, r *http.Reques
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+	grants, err := s.store.ListDelegationsFor(r.Context(), au.ID)
+	if err != nil {
+		writeJSON(w, 503, map[string]string{"error": "delegation lookup unavailable"})
+		return
+	}
+	actor, err := s.store.GetUserByID(r.Context(), au.ID)
+	if err != nil {
+		writeJSON(w, 503, map[string]string{"error": "user lookup unavailable"})
+		return
+	}
+	for _, grant := range grants {
+		if !grant.CanRespondInvites && grant.EWSCalendarPermission != "Editor" {
+			continue
+		}
+		owner, err := s.store.GetUserByID(r.Context(), grant.OwnerID)
+		if err != nil || !owner.Enabled || owner.TenantID != actor.TenantID {
+			continue
+		}
+		delegated, err := s.store.ListCalendarInvitesForUser(r.Context(), owner.ID, pending)
+		if err != nil {
+			writeJSON(w, 503, map[string]string{"error": "invitation lookup unavailable"})
+			return
+		}
+		for _, inv := range delegated {
+			o, e := s.store.GetCalendarObjectByID(r.Context(), inv.CalendarObjectID)
+			if e != nil {
+				continue
+			}
+			c, e := s.calendarAccessible(r, au, o.CalendarID)
+			if e == nil && c.Name != "personal" && c.UserID == owner.ID && (grant.CanRespondInvites || c.Name == "default" && grant.EWSCalendarPermission == "Editor") {
+				invites = append(invites, inv)
+			}
+		}
+	}
 	out := make([]map[string]any, 0, len(invites))
 	for _, inv := range invites {
 		item := map[string]any{
 			"id": inv.ID, "event_uid": inv.EventUID, "calendar_object_id": inv.CalendarObjectID,
 			"summary": inv.Summary, "partstat": inv.PartStat, "attendee_email": inv.AttendeeEmail,
-			"organizer_user_id": inv.OrganizerUserID,
-			"created_at":        inv.CreatedAt.UTC().Format(time.RFC3339),
+			"organizer_user_id": inv.OrganizerUserID, "delegated": inv.AttendeeUserID != au.ID,
+			"created_at": inv.CreatedAt.UTC().Format(time.RFC3339),
 		}
 		if inv.ProposedStart != nil {
 			item["proposed_start"] = inv.ProposedStart.UTC().Format(time.RFC3339)
@@ -600,10 +678,16 @@ func (s *Server) handleCalendarInvitesList(w http.ResponseWriter, r *http.Reques
 		if inv.ProposedEnd != nil {
 			item["proposed_end"] = inv.ProposedEnd.UTC().Format(time.RFC3339)
 		}
+		item["can_reply"] = false
 		if inv.CalendarObjectID != "" {
 			if o, err := s.store.GetCalendarObjectByID(r.Context(), inv.CalendarObjectID); err == nil {
 				ev, _ := calutil.ParseICS(o.Data)
 				item["etag"] = o.ETag
+				item["cancelled"] = strings.EqualFold(ev.Status, "CANCELLED")
+				item["recurring"] = strings.Contains(strings.ToUpper(o.Data), "RRULE:") || strings.Contains(strings.ToUpper(o.Data), "RDATE:")
+				item["all_day"] = ev.AllDay
+				item["location"] = ev.Location
+				item["can_reply"] = !strings.EqualFold(ev.Status, "CANCELLED")
 				if o.DTStart != nil {
 					item["start"] = o.DTStart.UTC().Format(time.RFC3339)
 				} else if ev.Start != nil {
@@ -626,6 +710,21 @@ func (s *Server) handleCalendarInvitesList(w http.ResponseWriter, r *http.Reques
 		writeJSON(w, 500, map[string]string{"error": "cannot load calendar proposals"})
 		return
 	}
+	for _, grant := range grants {
+		if !grant.CanManageCalendar && grant.EWSCalendarPermission != "Editor" {
+			continue
+		}
+		delegated, err := s.store.ListCalendarProposals(r.Context(), grant.OwnerID)
+		if err != nil {
+			writeJSON(w, 503, map[string]string{"error": "proposal lookup unavailable"})
+			return
+		}
+		for _, p := range delegated {
+			if c, err := s.calendarAccessible(r, au, p.Object.CalendarID); err == nil && c.DelegateOrganizerEmail != "" {
+				proposals = append(proposals, p)
+			}
+		}
+	}
 	proposalJSON := make([]map[string]any, 0, len(proposals))
 	for _, proposal := range proposals {
 		inv, o := proposal.Invite, proposal.Object
@@ -636,21 +735,73 @@ func (s *Server) handleCalendarInvitesList(w http.ResponseWriter, r *http.Reques
 			"recurring": strings.Contains(strings.ToUpper(o.Data), "RRULE:") || strings.Contains(strings.ToUpper(o.Data), "RDATE:"),
 		})
 	}
+	occurrenceProposals, err := s.store.ListCalendarOccurrenceProposals(r.Context(), au.ID)
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": "cannot load occurrence proposals"})
+		return
+	}
+	for _, grant := range grants {
+		if !grant.CanManageCalendar && grant.EWSCalendarPermission != "Editor" {
+			continue
+		}
+		delegated, err := s.store.ListCalendarOccurrenceProposals(r.Context(), grant.OwnerID)
+		if err != nil {
+			writeJSON(w, 503, map[string]string{"error": "proposal lookup unavailable"})
+			return
+		}
+		for _, p := range delegated {
+			if c, err := s.calendarAccessible(r, au, p.Object.CalendarID); err == nil && c.DelegateOrganizerEmail != "" {
+				occurrenceProposals = append(occurrenceProposals, p)
+			}
+		}
+	}
+	for _, proposal := range occurrenceProposals {
+		instance, err := calutil.GetOccurrence(proposal.Object.Data, proposal.RecurrenceID)
+		if err != nil {
+			continue
+		}
+		proposalJSON = append(proposalJSON, map[string]any{
+			"id": proposal.InviteID, "key": proposal.InviteID + "@" + proposal.RecurrenceID, "recurrence_id": proposal.RecurrenceID,
+			"event_id": proposal.ObjectID, "etag": proposal.Object.ETag, "revision": proposal.Revision,
+			"summary": instance.Summary, "attendee": proposal.Invite.AttendeeEmail, "start": instance.Start, "end": instance.End,
+			"proposed_start": proposal.ProposedStart, "proposed_end": proposal.ProposedEnd, "recurring": true,
+		})
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"invites": out, "proposals": proposalJSON})
 }
 
 func (s *Server) handleCalendarProposalDecision(w http.ResponseWriter, r *http.Request, au *authUser, inviteID string) {
 	var req struct {
-		Action   string `json:"action"`
-		EventID  string `json:"event_id"`
-		Revision string `json:"revision"`
-		ETag     string `json:"etag"`
+		Action       string          `json:"action"`
+		EventID      string          `json:"event_id"`
+		Revision     string          `json:"revision"`
+		ETag         string          `json:"etag"`
+		RecurrenceID json.RawMessage `json:"recurrence_id"`
 	}
 	if json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&req) != nil || (req.Action != "accept" && req.Action != "decline") || req.EventID == "" || req.Revision == "" || req.ETag == "" {
 		writeJSON(w, 400, map[string]string{"error": "action, event_id, revision and etag required"})
 		return
 	}
-	decision, err := s.store.DecideCalendarProposal(r.Context(), au.ID, inviteID, req.EventID, req.Revision, req.ETag, req.Action == "accept")
+	rid := ""
+	if len(req.RecurrenceID) > 0 && (json.Unmarshal(req.RecurrenceID, &rid) != nil || rid == "") {
+		writeJSON(w, 400, map[string]string{"error": "non-empty recurrence_id required"})
+		return
+	}
+	var object *storage.CalendarObject
+	var err error
+	if rid != "" {
+		var decision *storage.CalendarOccurrenceProposal
+		decision, err = s.store.DecideCalendarOccurrenceProposal(r.Context(), au.ID, inviteID, req.EventID, rid, req.Revision, req.ETag, req.Action == "accept")
+		if err == nil {
+			object = decision.Object
+		}
+	} else {
+		var decision *storage.CalendarProposal
+		decision, err = s.store.DecideCalendarProposal(r.Context(), au.ID, inviteID, req.EventID, req.Revision, req.ETag, req.Action == "accept")
+		if err == nil {
+			object = decision.Object
+		}
+	}
 	if writeCalendarBookingError(w, err) {
 		return
 	}
@@ -668,7 +819,11 @@ func (s *Server) handleCalendarProposalDecision(w http.ResponseWriter, r *http.R
 		writeJSON(w, status, map[string]string{"error": "proposal changed or is no longer available; refresh the calendar"})
 		return
 	}
-	writeJSON(w, 200, map[string]string{"id": inviteID, "event_id": decision.Object.ID, "action": req.Action})
+	result := map[string]string{"id": inviteID, "event_id": object.ID, "action": req.Action}
+	if rid != "" {
+		result["recurrence_id"] = rid
+	}
+	writeJSON(w, 200, result)
 }
 
 func (s *Server) handleCalendarInviteReply(w http.ResponseWriter, r *http.Request, au *authUser, inviteID string) {
@@ -678,21 +833,36 @@ func (s *Server) handleCalendarInviteReply(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if inv.AttendeeUserID != au.ID {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
-		return
+		grant, e := s.store.GetMailboxDelegate(r.Context(), inv.AttendeeUserID, au.ID)
+		if e != nil || (!grant.CanRespondInvites && grant.EWSCalendarPermission != "Editor") {
+			writeJSON(w, 403, map[string]string{"error": "forbidden"})
+			return
+		}
 	}
 	var req struct {
-		Action  string `json:"action"` // accept|decline|tentative|counter
-		Start   string `json:"start"`
-		End     string `json:"end"`
-		Comment string `json:"comment"`
-		ETag    string `json:"etag"`
+		Action       string          `json:"action"` // accept|decline|tentative|counter
+		Start        string          `json:"start"`
+		End          string          `json:"end"`
+		Comment      string          `json:"comment"`
+		ETag         string          `json:"etag"`
+		RecurrenceID json.RawMessage `json:"recurrence_id"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	d := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	d.DisallowUnknownFields()
+	if err := d.Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
 		return
 	}
 	action := strings.ToLower(strings.TrimSpace(req.Action))
+	rid := ""
+	if len(req.RecurrenceID) > 0 && (json.Unmarshal(req.RecurrenceID, &rid) != nil || rid == "") {
+		writeJSON(w, 400, map[string]string{"error": "non-empty recurrence_id required"})
+		return
+	}
+	if rid != "" && req.ETag == "" {
+		writeJSON(w, 400, map[string]string{"error": "occurrence response requires etag"})
+		return
+	}
 	partstat := ""
 	switch action {
 	case "accept":
@@ -715,8 +885,20 @@ func (s *Server) handleCalendarInviteReply(w http.ResponseWriter, r *http.Reques
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "counter requires end after start"})
 			return
 		}
+		if rid != "" && proposedEnd.Sub(*proposedStart) > 31*24*time.Hour {
+			writeJSON(w, 400, map[string]string{"error": "occurrence proposal duration must not exceed 31 days"})
+			return
+		}
 	}
-	inv, err = s.store.ReplyCalendarInvite(r.Context(), au.ID, inv.ID, partstat, proposedStart, proposedEnd, req.ETag, req.Comment)
+	if rid != "" {
+		if action == "counter" {
+			inv, err = s.store.ProposeCalendarOccurrence(r.Context(), au.ID, inv.ID, rid, req.ETag, *proposedStart, *proposedEnd, req.Comment)
+		} else {
+			inv, err = s.store.ReplyCalendarOccurrence(r.Context(), au.ID, inv.ID, rid, partstat, req.ETag, true, req.Comment)
+		}
+	} else {
+		inv, err = s.store.ReplyCalendarInvite(r.Context(), au.ID, inv.ID, partstat, proposedStart, proposedEnd, req.ETag, req.Comment)
+	}
 	if err != nil {
 		status := http.StatusConflict
 		if err != storage.ErrCalendarConflict && err != storage.ErrNotFound && err != storage.ErrUnauthorized {
@@ -731,6 +913,14 @@ func (s *Server) handleCalendarInviteReply(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	if rid != "" {
+		if action == "counter" {
+			writeJSON(w, 200, map[string]any{"id": inv.ID, "action": action, "recurrence_id": rid, "series_partstat": inv.PartStat, "proposed_start": proposedStart, "proposed_end": proposedEnd})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"id": inv.ID, "partstat": partstat, "action": action, "recurrence_id": rid, "series_partstat": inv.PartStat})
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"id": inv.ID, "partstat": inv.PartStat, "action": action})
 }
 
@@ -797,7 +987,7 @@ func parseFlexibleTime(s string) *time.Time {
 func calendarEventJSON(o *storage.CalendarObject, ev calutil.ParseResult, cal *storage.Calendar, au *authUser) map[string]any {
 	item := eventToJSON(o, ev)
 	item["recurrence"] = calutil.ReadRecurrence(o.Data)
-	item["recurrence_organizer"] = ev.Organizer.Email == "" || strings.EqualFold(ev.Organizer.Email, au.Email)
+	item["recurrence_organizer"] = ev.Organizer.Email == "" || calendarActsAsOrganizer(ev.Organizer.Email, cal, au)
 	if cal.Name == "personal" && cal.UserID != au.ID {
 		for _, key := range []string{"description", "location", "geo", "attendees", "organizer", "recurrence", "recurrence_organizer"} {
 			delete(item, key)

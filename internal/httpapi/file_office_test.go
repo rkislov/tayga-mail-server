@@ -26,7 +26,7 @@ func mockOffice(t *testing.T, f *fileFixture) {
 			http.NotFound(w, r)
 			return
 		}
-		fmt.Fprintf(w, `<wopi-discovery><net-zone><app name="writer"><action name="edit" ext="odt" urlsrc="%s/browser/editor?&amp;&lt;lang=UI_LLCC&amp;&gt;"/><action name="view" ext="odt" urlsrc="%s/browser/editor?"/></app></net-zone></wopi-discovery>`, base, base)
+		fmt.Fprintf(w, `<wopi-discovery><net-zone><app name="writer"><action name="edit" ext="odt" urlsrc="%s/browser/editor?&amp;&lt;lang=UI_LLCC&amp;&gt;"/><action name="view" ext="odt" urlsrc="%s/browser/editor?"/><action name="edit" ext="docx" urlsrc="%s/browser/editor?"/></app></net-zone></wopi-discovery>`, base, base, base)
 	}))
 	base = demo.URL
 	t.Cleanup(demo.Close)

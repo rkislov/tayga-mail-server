@@ -10,6 +10,7 @@ import (
 	"net/mail"
 	"strconv"
 	"strings"
+	"time"
 )
 
 func ewsAddress(field, value string) string {
@@ -25,8 +26,18 @@ func ewsAddress(field, value string) string {
 	fmt.Fprintf(&out, "</t:%s>", field)
 	return out.String()
 }
+
+// DateTimeSent is the message's RFC 5322 Date, not its import/receipt time.
+// Native EWS clients use this property to populate the message-list Date column.
+func ewsMailSentDate(sent, received time.Time) string {
+	if sent.IsZero() {
+		sent = received
+	}
+	return sent.UTC().Format("2006-01-02T15:04:05Z")
+}
+
 func (h *ewsHandler) getMailItem(ctx context.Context, u *storage.User, msg *storage.Message, request string) (string, error) {
-	if err := h.ensureMailboxOwned(ctx, u.ID, msg.MailboxID); err != nil {
+	if err := h.mailboxRight(ctx, u.ID, msg.MailboxID, "r"); err != nil {
 		return ewsFault("ErrorAccessDenied", "forbidden"), nil
 	}
 	if h.ms == nil {
@@ -65,15 +76,36 @@ func (h *ewsHandler) getMailItem(ctx context.Context, u *storage.User, msg *stor
 		}
 		out.WriteString(`</t:Attachments>`)
 	}
-	fmt.Fprintf(&out, `<t:DateTimeReceived>%s</t:DateTimeReceived><t:Size>%d</t:Size>%s<t:HasAttachments>%t</t:HasAttachments>%s%s`, msg.InternalDate.UTC().Format("2006-01-02T15:04:05Z"), msg.Size, early, len(content.Attachments) > 0, extended, flag)
+	fmt.Fprintf(&out, `<t:DateTimeSent>%s</t:DateTimeSent><t:DateTimeReceived>%s</t:DateTimeReceived><t:Size>%d</t:Size>%s<t:HasAttachments>%t</t:HasAttachments>%s%s`, ewsMailSentDate(content.SentDate, msg.InternalDate), msg.InternalDate.UTC().Format("2006-01-02T15:04:05Z"), msg.Size, early, len(content.Attachments) > 0, extended, flag)
+	out.WriteString(ewsMailThreadFields(content.MessageID, content.References, content.InReplyTo))
 	out.WriteString(ewsAddress("ToRecipients", content.To))
 	out.WriteString(ewsAddress("CcRecipients", content.Cc))
 	out.WriteString(ewsAddress("From", content.From))
+	out.WriteString(ewsAddress("Sender", content.Sender))
 	fmt.Fprintf(&out, `<t:IsRead>%t</t:IsRead>`, storage.HasFlag(msg.Flags, `\Seen`))
 	out.WriteString(`</t:Message></m:Items></m:GetItemResponseMessage></m:ResponseMessages></m:GetItemResponse>`)
 	return out.String(), nil
 }
 func (h *ewsHandler) attachment(ctx context.Context, u *storage.User, reference string) (messageAttachment, error) {
+	if strings.HasPrefix(reference, "calendar:") {
+		parts := strings.Split(reference, ":")
+		if len(parts) != 3 {
+			return messageAttachment{}, storage.ErrNotFound
+		}
+		object, err := h.store.GetCalendarObjectByID(ctx, parts[1])
+		if err != nil {
+			return messageAttachment{}, err
+		}
+		cal, err := h.ewsCalendarObject(ctx, u.ID, object, false)
+		if err != nil {
+			return messageAttachment{}, err
+		}
+		owner, err := h.store.GetUserByID(ctx, cal.UserID)
+		if err != nil {
+			return messageAttachment{}, err
+		}
+		return readCalendarAttachment(ctx, h.store, h.ms, owner, reference)
+	}
 	parts := strings.Split(reference, ":")
 	if len(parts) != 2 {
 		return messageAttachment{}, storage.ErrNotFound
@@ -86,7 +118,7 @@ func (h *ewsHandler) attachment(ctx context.Context, u *storage.User, reference 
 	if err != nil {
 		return messageAttachment{}, err
 	}
-	if err = h.ensureMailboxOwned(ctx, u.ID, msg.MailboxID); err != nil {
+	if err = h.mailboxRight(ctx, u.ID, msg.MailboxID, "r"); err != nil {
 		return messageAttachment{}, err
 	}
 	if h.ms == nil {

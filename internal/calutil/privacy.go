@@ -40,3 +40,23 @@ func BusyOnlyICS(data, uid string) (string, error) {
 	err = ical.NewEncoder(&buf).Encode(cal)
 	return buf.String(), err
 }
+
+// A private detached instance makes the whole resource private for delegate
+// transport reads: returning the master MIME would otherwise leak the override.
+func HasPrivateEvents(data string) bool {
+	cal, err := ical.NewDecoder(strings.NewReader(data)).Decode()
+	if err != nil {
+		return true
+	}
+	for _, component := range cal.Children {
+		if component.Name != "VEVENT" {
+			continue
+		}
+		for _, prop := range component.Props["CLASS"] {
+			if strings.EqualFold(prop.Value, "PRIVATE") || strings.EqualFold(prop.Value, "CONFIDENTIAL") {
+				return true
+			}
+		}
+	}
+	return false
+}

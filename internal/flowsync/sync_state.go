@@ -221,6 +221,9 @@ func (h *easHandler) syncOne(ctx context.Context, u *storage.User, dev *storage.
 		return result, err
 	}
 	// The key is validated before accepting any client changes.
+	if kind == kindNotes {
+		ctx = context.WithValue(ctx, noteStateKey{}, &noteWriteState{Snapshot: state, Written: map[string]storage.NoteItem{}})
+	}
 	ctx = context.WithValue(ctx, taskDeviceKey{}, dev.ID)
 	writes := h.applyWritebacks(context.WithValue(ctx, deleteMovesKey{}, request.value("DeletesAsMoves") != "0"), u, kind, id, parseXMLClientOps(request.render()))
 	fetches, err := h.fetchSyncItems(ctx, u, kind, id, request)
@@ -232,6 +235,20 @@ func (h *easHandler) syncOne(ctx context.Context, u *storage.User, dev *storage.
 		// A successful Add response already supplies the server ID. Including
 		// it again as a server Add would create a duplicate on some clients.
 		acknowledgeTaskAdds(writes, &state)
+	}
+	if kind == kindNotes {
+		if state.Items == nil {
+			state.Items = map[string]string{}
+		}
+		// Acknowledge the exact revision written by this client, including send-only
+		// Sync. Re-reading here could accidentally acknowledge a concurrent edit.
+		for id, n := range ctx.Value(noteStateKey{}).(*noteWriteState).Written {
+			hash, err := noteSnapshotHash(&n, state.itemPreferences())
+			if err != nil {
+				return "", err
+			}
+			state.Items[id] = hash
+		}
 	}
 	if kind == kindCalendar {
 		if state.Items == nil {

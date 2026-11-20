@@ -165,3 +165,63 @@ func TestCalendarRecurrenceProtectsPrivacyAndResources(t *testing.T) {
 		t.Fatal("private recurrence disclosed")
 	}
 }
+
+func TestCalendarOrdinalRecurrenceAndRoomConflict(t *testing.T) {
+	f := newFileFixture(t)
+	ctx := context.Background()
+	owner, _ := f.s.store.GetUserByID(ctx, f.users[0])
+	cal, _ := f.s.store.EnsureCalendar(ctx, owner.ID, "default", "Calendar")
+	path := "/api/v1/calendar/calendars/" + cal.ID + "/events"
+	request := `{"summary":"Third Tuesday","start":"2026-10-20T10:00:00Z","end":"2026-10-20T11:00:00Z","recurrence":{"frequency":"MONTHLY","interval":1,"weekdays":["TU"],"week_ordinal":3,"count":3},"attendees":[{"email":"reader@example.com"}]}`
+	for _, invalid := range []string{
+		strings.Replace(request, `"week_ordinal":3`, `"week_ordinal":6`, 1),
+		strings.Replace(request, `"weekdays":["TU"]`, `"weekdays":["MO"]`, 1),
+		strings.Replace(request, `"week_ordinal":3`, `"month_day":-1`, 1),
+	} {
+		f.call(0, "POST", path, invalid, 400)
+	}
+	objects, _ := f.s.store.ListCalendarObjects(ctx, cal.ID)
+	if len(objects) != 0 {
+		t.Fatal("invalid pattern saved an event")
+	}
+	f.call(0, "POST", path, request, 200)
+	objects, _ = f.s.store.ListCalendarObjects(ctx, cal.ID)
+	source := objects[0]
+	body, _ := json.Marshal(map[string]any{"etag": source.ETag, "rule": calutil.RecurrenceRule{Frequency: "MONTHLY", Interval: 1, Weekdays: []string{"TU"}, WeekOrdinal: 3, Count: 4}})
+	updatePath := "/api/v1/calendar/events/" + source.ID + "/recurrence"
+	f.call(0, "PUT", updatePath, string(body), 200)
+	f.call(0, "PUT", updatePath, string(body), 409)
+	invites, _ := f.s.store.ListCalendarInvitesForUser(ctx, f.users[1], false)
+	copy, err := f.s.store.GetCalendarObjectByID(ctx, invites[0].CalendarObjectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, _ = f.s.store.GetCalendarObjectByID(ctx, source.ID)
+	for _, object := range []*storage.CalendarObject{source, copy} {
+		info := calutil.ReadRecurrence(object.Data)
+		if !info.Editable || info.Rule.WeekOrdinal != 3 || info.Rule.Count != 4 {
+			t.Fatalf("%+v", info)
+		}
+		items, err := calutil.ExpandOccurrences(object.Data, time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), time.Date(2027, 2, 1, 0, 0, 0, 0, time.UTC))
+		if err != nil || len(items) != 4 {
+			t.Fatalf("%d %v", len(items), err)
+		}
+		for i, want := range []string{"2026-10-20", "2026-11-17", "2026-12-15", "2027-01-19"} {
+			if items[i].Start.Format("2006-01-02") != want {
+				t.Fatalf("wrong date: %v", items[i].Start)
+			}
+		}
+	}
+	room, err := f.s.store.CreateCalendarResource(ctx, &storage.CalendarResource{DomainID: owner.DomainID, LocalPart: "ordinal-room", DisplayName: "Room", Kind: "room", AutoAccept: true, Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	busy := fmt.Sprintf(`{"summary":"Already booked","start":"2026-11-17T10:00:00Z","end":"2026-11-17T11:00:00Z","attendees":[{"email":%q}]}`, room.Email)
+	f.call(0, "POST", path, busy, 200)
+	withRoom := strings.Replace(request, `reader@example.com`, room.Email, 1)
+	f.call(0, "POST", path, withRoom, 409)
+	objects, _ = f.s.store.ListCalendarObjects(ctx, cal.ID)
+	if len(objects) != 2 {
+		t.Fatal("conflicting ordinal series partially saved")
+	}
+}

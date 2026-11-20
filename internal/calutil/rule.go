@@ -9,14 +9,16 @@ import (
 	"github.com/emersion/go-ical"
 )
 
-// RecurrenceRule is the deliberately small, lossless subset exposed by the web
+// RecurrenceRule is the lossless subset exposed by the web
 // editor. Until is an inclusive date in the DTSTART timezone, not browser UTC.
 type RecurrenceRule struct {
-	Frequency string   `json:"frequency"`
-	Interval  int      `json:"interval"`
-	Weekdays  []string `json:"weekdays,omitempty"`
-	Count     int      `json:"count,omitempty"`
-	Until     string   `json:"until,omitempty"`
+	Frequency   string   `json:"frequency"`
+	Interval    int      `json:"interval"`
+	Weekdays    []string `json:"weekdays,omitempty"`
+	MonthDay    int      `json:"month_day,omitempty"`    // 1–31 or -1 (last day)
+	WeekOrdinal int      `json:"week_ordinal,omitempty"` // 1–5 or -1, with one weekday
+	Count       int      `json:"count,omitempty"`
+	Until       string   `json:"until,omitempty"`
 }
 
 type RecurrenceInfo struct {
@@ -49,7 +51,7 @@ func buildRule(rule RecurrenceRule, master *ical.Component) (string, error) {
 		return "", err
 	}
 	if rule.Frequency == "" {
-		if rule.Count != 0 || rule.Until != "" || len(rule.Weekdays) != 0 || rule.Interval > 1 || rule.Interval < 0 {
+		if rule.Count != 0 || rule.Until != "" || len(rule.Weekdays) != 0 || rule.MonthDay != 0 || rule.WeekOrdinal != 0 || rule.Interval > 1 || rule.Interval < 0 {
 			return "", fmt.Errorf("non-recurring event cannot have recurrence options")
 		}
 		return "", nil
@@ -65,8 +67,23 @@ func buildRule(rule RecurrenceRule, master *ical.Component) (string, error) {
 	if rule.Count < 0 || rule.Count > 1000 || rule.Count > 0 && rule.Until != "" {
 		return "", fmt.Errorf("choose either a count of 1–1000 or an end date")
 	}
-	if len(rule.Weekdays) > 0 && rule.Frequency != "WEEKLY" {
-		return "", fmt.Errorf("weekdays require a weekly recurrence")
+	calendarPattern := rule.Frequency == "MONTHLY" || rule.Frequency == "YEARLY"
+	if !calendarPattern && (rule.MonthDay != 0 || rule.WeekOrdinal != 0) {
+		return "", fmt.Errorf("calendar pattern requires monthly or yearly recurrence")
+	}
+	if rule.MonthDay != 0 && (rule.MonthDay < -1 || rule.MonthDay > 31 || rule.WeekOrdinal != 0) {
+		return "", fmt.Errorf("choose a month day from 1–31 or the last day, or an ordinal weekday")
+	}
+	if rule.WeekOrdinal != 0 && (rule.WeekOrdinal < -1 || rule.WeekOrdinal > 5 || len(rule.Weekdays) != 1) {
+		return "", fmt.Errorf("choose a weekday and an ordinal from 1–5 or last")
+	}
+	if len(rule.Weekdays) > 0 && rule.Frequency != "WEEKLY" && (!calendarPattern || rule.WeekOrdinal == 0) {
+		return "", fmt.Errorf("weekdays require weekly recurrence or an ordinal calendar pattern")
+	}
+	for _, day := range rule.Weekdays {
+		if len(day) != 2 || !strings.Contains(",SU,MO,TU,WE,TH,FR,SA,", ","+day+",") {
+			return "", fmt.Errorf("invalid weekday")
+		}
 	}
 	parts := []string{"FREQ=" + rule.Frequency, "INTERVAL=" + strconv.Itoa(rule.Interval)}
 	if rule.Frequency == "WEEKLY" {
@@ -90,6 +107,34 @@ func buildRule(rule RecurrenceRule, master *ical.Component) (string, error) {
 			}
 		}
 		parts = append(parts, "BYDAY="+strings.Join(ordered, ","), "WKST=MO")
+	}
+	if calendarPattern {
+		if rule.MonthDay != 0 {
+			day := rule.MonthDay
+			if day == -1 {
+				day = time.Date(start.Year(), start.Month()+1, 0, 0, 0, 0, 0, start.Location()).Day()
+			}
+			if start.Day() != day {
+				return "", fmt.Errorf("recurrence pattern must include the first event's date")
+			}
+			parts = append(parts, "BYMONTHDAY="+strconv.Itoa(rule.MonthDay))
+		}
+		if rule.WeekOrdinal != 0 {
+			matches := rule.Weekdays[0] == weekdays[start.Weekday()]
+			if rule.WeekOrdinal == -1 {
+				matches = matches && start.AddDate(0, 0, 7).Month() != start.Month()
+			} else {
+				matches = matches && (start.Day()-1)/7+1 == rule.WeekOrdinal
+			}
+			if !matches {
+				return "", fmt.Errorf("recurrence pattern must include the first event's date")
+			}
+			parts = append(parts, "BYDAY="+strconv.Itoa(rule.WeekOrdinal)+rule.Weekdays[0])
+		}
+		if rule.Frequency == "YEARLY" && (rule.MonthDay != 0 || rule.WeekOrdinal != 0) {
+			// Explicit day selectors expand across the year without BYMONTH.
+			parts = append(parts, "BYMONTH="+strconv.Itoa(int(start.Month())))
+		}
 	}
 	if rule.Count > 0 {
 		parts = append(parts, "COUNT="+strconv.Itoa(rule.Count))
@@ -159,6 +204,7 @@ func ReadRecurrence(data string) RecurrenceInfo {
 		return info
 	}
 	seen := map[string]bool{}
+	month, position := 0, 0
 	for _, part := range strings.Split(p.Value, ";") {
 		kv := strings.SplitN(part, "=", 2)
 		if len(kv) != 2 || seen[kv[0]] {
@@ -172,6 +218,25 @@ func ReadRecurrence(data string) RecurrenceInfo {
 			info.Rule.Interval, err = strconv.Atoi(kv[1])
 		case "BYDAY":
 			info.Rule.Weekdays = strings.Split(kv[1], ",")
+			if len(info.Rule.Weekdays) == 1 && len(kv[1]) > 2 {
+				info.Rule.WeekOrdinal, err = strconv.Atoi(kv[1][:len(kv[1])-2])
+				info.Rule.Weekdays[0] = kv[1][len(kv[1])-2:]
+				if info.Rule.WeekOrdinal == 0 {
+					return info
+				}
+			}
+		case "BYMONTHDAY":
+			info.Rule.MonthDay, err = strconv.Atoi(kv[1])
+			if info.Rule.MonthDay == 0 {
+				return info
+			}
+		case "BYMONTH":
+			month, err = strconv.Atoi(kv[1])
+		case "BYSETPOS":
+			position, err = strconv.Atoi(kv[1])
+			if position == 0 {
+				return info
+			}
 		case "WKST":
 			if kv[1] != "MO" {
 				return info
@@ -209,6 +274,18 @@ func ReadRecurrence(data string) RecurrenceInfo {
 	}
 	if !seen["FREQ"] || seen["COUNT"] && seen["UNTIL"] {
 		return info
+	}
+	if seen["BYMONTH"] && (info.Rule.Frequency != "YEARLY" || month != int(start.Month())) {
+		return info
+	}
+	if seen["BYSETPOS"] {
+		if info.Rule.WeekOrdinal != 0 || len(info.Rule.Weekdays) != 1 || info.Rule.Frequency != "MONTHLY" && info.Rule.Frequency != "YEARLY" {
+			return info
+		}
+		info.Rule.WeekOrdinal = position
+	}
+	if info.Rule.Frequency == "YEARLY" && (info.Rule.WeekOrdinal != 0 || info.Rule.MonthDay != 0) && !seen["BYMONTH"] {
+		return info // selector spans the year; do not turn it into a month rule
 	}
 	if _, err = buildRule(info.Rule, master); err != nil {
 		return info

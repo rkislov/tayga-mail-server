@@ -9,7 +9,9 @@ const html = await readFile(new URL('internal/frontend/dist/index.html', root), 
 const markupStart = html.indexOf('<div id="cal-invites-backdrop"');
 const markup = html.slice(markupStart, html.indexOf('</section>', markupStart) + '</section>'.length) + '</div>';
 const helpers = app.slice(app.indexOf('function localInputToISO('), app.indexOf('function calEventDayKey('));
+const partstatHelper = app.slice(app.indexOf('function partstatLabel('), app.indexOf('function renderCalAttendeeChips('));
 const controller = app.slice(app.indexOf('async function refreshCalInvites('), app.indexOf('function shiftCalMonth('));
+const inboxFilterBindings = app.slice(app.indexOf("$('cal-inbox-filters')?.addEventListener"), app.indexOf('$("btn-cal-invites")?.addEventListener'));
 const recurrenceSource=await readFile(new URL('frontend/src/calendar-recurrence.js',root),'utf8');
 const bookingErrorHelper=recurrenceSource.slice(recurrenceSource.indexOf('function calendarRecurrenceError('),recurrenceSource.indexOf("$('btn-cal-recurrence')"));
 const browser = await chromium.launch({executablePath:process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true});
@@ -31,18 +33,21 @@ try {
     const state = {me:{id:"reader"}};
     const calState = {invites:[invite],highlightInvite:''};
     window.requests = []; window.prompts = []; window.answers = []; window.rejectReply = false;
-    window.proposals = []; window.confirmResult = true;
+    window.proposals = []; window.confirmResult = true; window.confirmTexts=[];
     const askPrompt = async (title, options) => { window.prompts.push(options.value); return window.answers.shift(); };
-    const askConfirm = async () => { if(window.switchUser) state.me={id:'another'}; return window.confirmResult; };
+    const askConfirm = async text => { window.confirmTexts.push(text);if(window.switchUser) state.me={id:'another'}; return window.confirmResult; };
     const api = async (path, options) => {
-      if(!options?.method) return {invites:[invite],proposals:window.proposals};
+      if(!options?.method) { window.lastInboxPath=path; return {invites:window.inboxInvites || [invite],proposals:window.proposals}; }
       window.requests.push({path,body:JSON.parse(options.body)});
       await new Promise(resolve => setTimeout(resolve,20));
       if(window.rejectReply) throw new Error('event changed; refresh');
-      if(path.endsWith('/decision')) window.proposals=[];
+      if(path.endsWith('/decision')){
+        const body=JSON.parse(options.body),id=decodeURIComponent(path.split('/').at(-2));
+        window.proposals=window.proposals.filter(p=>p.id!==id || (p.recurrence_id || '')!==(body.recurrence_id || ''));
+      }
       return {};
     };
-  ` + helpers + bookingErrorHelper + controller});
+  ` + helpers + partstatHelper + bookingErrorHelper + controller + inboxFilterBindings});
   await page.evaluate(() => refreshCalInvites());
   await page.evaluate(async () => {
     window.answers = ['2026-10-20T15:00', '2026-10-20T16:00'];
@@ -94,12 +99,62 @@ try {
   assert.equal(decisions[1].body.etag,'"version8"');
   assert.equal(await page.locator('[data-proposal-act]').count(),0);
   assert.match(await page.textContent('#cal-invite-msg'),/Время изменено/);
+  // Proposals for two dates of the same invite have distinct keys and scopes.
+  await page.evaluate(async()=>{
+    window.proposals=['2026-10-26T09:00:00Z','2026-11-02T09:00:00Z'].map((rid,i)=>({id:'same-invite',key:'same-invite@'+rid,recurrence_id:rid,event_id:'event',revision:'revision-'+i,etag:'v9',summary:'Отдельное повторение',attendee:'reader@example.com',start:rid,end:rid,proposed_start:'2026-11-03T12:00:00Z',proposed_end:'2026-11-03T13:00:00Z',recurring:true}));
+    await refreshCalInvites();
+  });
+  assert.equal(await page.locator('.cal-proposal-item').count(),2);
+  assert.match(await page.locator('.cal-proposal-item').first().textContent(),/только это повторение/);
+  assert.doesNotMatch(await page.locator('.cal-proposal-item').first().textContent(),/основное время серии/);
+  for(const width of [1440,390]){
+    await page.setViewportSize({width,height:900});
+    await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+    assert.equal(await page.locator('#cal-invites-dialog').count(),1);
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+    await page.screenshot({path:'/tmp/tayga-calendar-occurrence-proposals-'+width+'.png'});
+  }
+  await page.locator('[data-proposal-act=accept][data-key="same-invite@2026-11-02T09:00:00Z"]').click();
+  await page.waitForFunction(()=>!calInviteReplyBusy);
+  const instanceDecision=await page.evaluate(()=>window.requests.at(-1));
+  assert.equal(instanceDecision.body.recurrence_id,'2026-11-02T09:00:00Z');assert.equal(instanceDecision.body.revision,'revision-1');
+  assert.match(await page.evaluate(()=>window.confirmTexts.at(-1)),/только это повторение/);
+  assert.equal(await page.locator('.cal-proposal-item').count(),1);
+  // Inbox retains answered/cancelled events while pending shows actionable invitations only.
+  await page.evaluate(async () => {
+    window.proposals = [];
+    window.inboxInvites = [
+      {...invite, id:'pending', partstat:'NEEDS-ACTION', can_reply:true},
+      {...invite, id:'accepted', partstat:'ACCEPTED', can_reply:true, location:'Комната А'},
+      {...invite, id:'cancelled', partstat:'DECLINED', cancelled:true, can_reply:false},
+    ];
+    calState.inboxFilter = 'pending';
+    await refreshCalInvites();
+  });
+  assert.equal(await page.evaluate(() => window.lastInboxPath), '/api/v1/calendar/invites?all=1');
+  assert.equal(await page.locator('[data-invite]').count(),1);
+  assert.equal(await page.locator('[data-invite="pending"]').count(),1);
+  await page.locator('[data-inbox-filter=history]').click();
+  await page.waitForFunction(() => document.querySelector('[data-inbox-filter=history]').getAttribute('aria-pressed') === 'true');
+  assert.equal(await page.locator('[data-invite]').count(),2);
+  assert.equal(await page.locator('[data-invite="cancelled"] [data-inv-act]').count(),0);
+  assert.equal(await page.locator('[data-invite="accepted"] [data-inv-act]').count(),4);
+  assert.match(await page.locator('[data-invite="accepted"]').textContent(),/Комната А/);
+  await page.locator('[data-inbox-filter=all]').click();
+  await page.waitForFunction(() => document.querySelectorAll('[data-invite]').length === 3);
+  assert.equal(await page.locator('[data-invite]').count(),3);
+  for (const width of [1440,390]) {
+    await page.setViewportSize({width,height:900});
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth>innerWidth), false);
+    await page.screenshot({path:'/tmp/tayga-calendar-inbox-'+width+'.png'});
+  }
+  const decisionCount=await page.evaluate(()=>window.requests.length);
   await page.evaluate(async () => {
     calState.proposals = [{id:'switch',proposed_start:'2026-10-20T12:00:00Z',proposed_end:'2026-10-20T13:00:00Z'}];
     window.switchUser = true;
     await decideCalProposal('switch','accept');
   });
-  assert.equal(await page.evaluate(() => window.requests.length),2,'must not decide after account switch');
+  assert.equal(await page.evaluate(() => window.requests.length),decisionCount,'must not decide after account switch');
   assert.deepEqual(errors,[]);
   console.log('Calendar replies and organizer decisions: timezone, stale version, double submit, cancellation, retry and 1440/390px layout passed.');
 } finally { await browser.close(); }

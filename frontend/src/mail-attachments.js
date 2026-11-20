@@ -9,8 +9,10 @@ function resetComposeAttachments() {
   renderComposeAttachments();
 }
 function renderComposeAttachments() {
-  const items=composeAttachments.entries, busy=composeAttachments.sending||!!composeAttachments.preparing;
-  const send=$('btn-compose-send');if(send)send.disabled=busy||items.some(item=>item.status!=='ready');
+  const editorBusy=typeof mailEditorPending==='function'&&(!!composeRichEditorBoot||mailEditorPending(composeRichEditor));
+  const items=composeAttachments.entries, busy=composeAttachments.sending||!!composeAttachments.preparing||editorBusy;
+  if(typeof composeRichEditor!=='undefined'&&composeRichEditor){if(composeAttachments.sending)composeRichEditor.enableReadOnlyMode('sending');else composeRichEditor.disableReadOnlyMode('sending');}
+  const send=$('btn-compose-send');if(send)send.disabled=busy||editorBusy||!!$('compose-from')?.disabled||items.some(item=>item.status!=='ready');
   if($('compose-attach'))$('compose-attach').disabled=composeAttachments.sending;
   const list=$('compose-uploads');if(!list)return;list.replaceChildren();list.hidden=!items.length;
   for(const item of items){
@@ -25,13 +27,14 @@ function renderComposeAttachments() {
     const actions=document.createElement('div');actions.className='compose-upload-actions';
     if(item.status==='error'){const retry=document.createElement('button');retry.type='button';retry.className='btn-secondary btn-sm';retry.textContent=mailImageText('Повторить','Retry');retry.disabled=busy;retry.onclick=()=>queueComposeUpload(item);actions.append(retry)}
     const remove=document.createElement('button');remove.type='button';remove.className='btn-secondary btn-sm';remove.textContent='×';remove.title=mailImageText('Убрать из письма','Remove from message');remove.setAttribute('aria-label',remove.title+' '+item.file.name);remove.disabled=busy;
-    remove.onclick=()=>{item.controller?.abort();composeAttachments.entries=composeAttachments.entries.filter(value=>value!==item);composeBodyEl()?.querySelector('[data-upload-link="'+item.id+'"]')?.remove();renderComposeAttachments()};actions.append(remove);row.append(content,actions);list.append(row);
+    remove.onclick=()=>{item.controller?.abort();composeAttachments.entries=composeAttachments.entries.filter(value=>value!==item);mutateComposeHTML(body=>body.querySelector('[data-upload-link="'+item.id+'"]')?.remove());renderComposeAttachments()};actions.append(remove);row.append(content,actions);list.append(row);
   }
 }
 function addComposeFileLink(item){
-  const body=composeBodyEl();if(body.querySelector('[data-upload-link="'+item.id+'"]'))return;
+  if(typeof mailEditorPending==='function'&&mailEditorPending(composeRichEditor))return;
+  const body=document.createElement('div');body.innerHTML=getComposeHTML();if(body.querySelector('[data-upload-link="'+item.id+'"]'))return;
   const paragraph=document.createElement('p');paragraph.dataset.uploadLink=item.id;
-  const link=document.createElement('a');link.href=item.share.url;link.textContent=item.file.name;paragraph.append(link,document.createTextNode(' ('+fmtBytes(item.file.size)+') — '+mailImageText('ссылка до ','link expires ')+new Date(item.share.expires_at).toLocaleDateString()));body.append(paragraph);
+  const link=document.createElement('a');link.href=item.share.url;link.textContent=item.file.name;paragraph.append(link,document.createTextNode(' ('+fmtBytes(item.file.size)+') — '+mailImageText('ссылка до ','link expires ')+new Date(item.share.expires_at).toLocaleDateString()));body.append(paragraph);setComposeBody(body.innerHTML,true);
 }
 async function prepareComposeAttachments() {
   if(composeAttachments.preparing)return composeAttachments.preparing;

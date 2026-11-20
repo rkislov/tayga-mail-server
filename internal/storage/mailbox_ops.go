@@ -217,7 +217,7 @@ func (s *Store) UpdateMessageHeaders(ctx context.Context, messageID, subject, fr
 }
 
 // MoveMessage assigns a new UID in dstMailboxID and updates mailbox_id (FlowSync MoveItems).
-func (s *Store) MoveMessage(ctx context.Context, messageID, dstMailboxID string) (*Message, error) {
+func (s *Store) MoveMessage(ctx context.Context, messageID, dstMailboxID string, actor ...string) (*Message, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -227,6 +227,14 @@ func (s *Store) MoveMessage(ctx context.Context, messageID, dstMailboxID string)
 	msg, err := s.scanMessage(tx.QueryRowContext(ctx, s.rebind(`SELECT `+msgCols+` FROM messages WHERE id = ?`), messageID))
 	if err != nil {
 		return nil, err
+	}
+	if len(actor) > 0 {
+		if err = s.mailboxRightTx(ctx, tx, actor[0], msg.MailboxID, "t"); err != nil {
+			return nil, err
+		}
+		if err = s.mailboxRightTx(ctx, tx, actor[0], dstMailboxID, "i"); err != nil {
+			return nil, err
+		}
 	}
 	if msg.MailboxID == dstMailboxID {
 		return msg, nil

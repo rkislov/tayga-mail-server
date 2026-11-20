@@ -46,7 +46,13 @@ func (s *Store) DeleteCalendarMeeting(ctx context.Context, actorID string, o *Ca
 
 // Recheck access inside the transaction, including shared calendar writes.
 func (s *Store) calendarWriterTx(ctx context.Context, tx *sql.Tx, actorID, calendarID string) (email, name string, err error) {
-	err = tx.QueryRowContext(ctx, s.rebind(`SELECT u.email,u.display_name FROM users u JOIN calendars c ON c.id=? WHERE u.id=? AND u.enabled=TRUE AND (c.user_id=u.id OR (c.name<>'personal' AND EXISTS (SELECT 1 FROM calendar_acl a WHERE a.calendar_id=c.id AND a.grantee_user_id=u.id AND a.rights='write')))`), calendarID, actorID).Scan(&email, &name)
+	err = tx.QueryRowContext(ctx, s.rebind(`SELECT
+ CASE WHEN (d.can_manage_calendar OR (d.ews_calendar_permission='Editor' AND c.name='default')) AND c.name<>'personal' THEN owner.email ELSE actor.email END,
+ CASE WHEN (d.can_manage_calendar OR (d.ews_calendar_permission='Editor' AND c.name='default')) AND c.name<>'personal' THEN owner.display_name ELSE actor.display_name END
+ FROM calendars c JOIN users owner ON owner.id=c.user_id JOIN users actor ON actor.id=?
+ LEFT JOIN mailbox_delegates d ON d.owner_id=owner.id AND d.delegate_id=actor.id AND owner.tenant_id=actor.tenant_id AND owner.enabled=TRUE
+ WHERE c.id=? AND actor.enabled=TRUE AND (c.user_id=actor.id OR (c.name<>'personal' AND
+ (d.can_manage_calendar OR (d.ews_calendar_permission='Editor' AND c.name='default') OR EXISTS (SELECT 1 FROM calendar_acl a WHERE a.calendar_id=c.id AND a.grantee_user_id=actor.id AND a.rights='write'))))`), actorID, calendarID).Scan(&email, &name)
 	if err == sql.ErrNoRows {
 		err = ErrUnauthorized
 	}
@@ -67,6 +73,18 @@ func (s *Store) calendarRecipientTx(ctx context.Context, tx *sql.Tx, email strin
 	at := strings.LastIndex(email, "@")
 	if at < 1 {
 		return "", fmt.Errorf("invalid calendar recipient")
+	}
+	domainName := strings.ToLower(email[at+1:])
+	if normalized, e := NormalizeAliasDomain(domainName); e == nil {
+		domainName = normalized
+	}
+	var canonical string
+	err = tx.QueryRowContext(ctx, s.rebind(`SELECT d.name FROM domain_aliases a JOIN domains d ON d.id=a.domain_id WHERE a.name=?`), domainName).Scan(&canonical)
+	if err == nil {
+		return s.calendarRecipientTx(ctx, tx, email[:at]+"@"+canonical)
+	}
+	if err != sql.ErrNoRows {
+		return "", err
 	}
 	err = tx.QueryRowContext(ctx, s.rebind(`SELECT a.user_id FROM aliases a JOIN domains d ON d.id=a.domain_id WHERE LOWER(d.name)=LOWER(?) AND LOWER(a.local_part)=LOWER(?)`), email[at+1:], email[:at]).Scan(&id)
 	if err == sql.ErrNoRows {
@@ -126,8 +144,13 @@ func (s *Store) newParticipantCopyTx(ctx context.Context, tx *sql.Tx, userID, or
 }
 
 func (s *Store) syncCalendarMeetingTx(ctx context.Context, tx *sql.Tx, actorID string, source *CalendarObject, previous string) ([]CalendarMail, error) {
+	ctx = withCalendarActor(ctx, actorID)
 	email, name, err := s.calendarWriterTx(ctx, tx, actorID, source.CalendarID)
 	if err != nil {
+		return nil, err
+	}
+	// Invitation ownership follows the organizer principal, not the secretary.
+	if err = tx.QueryRowContext(ctx, s.rebind(`SELECT id FROM users WHERE LOWER(email)=LOWER(?)`), email).Scan(&actorID); err != nil {
 		return nil, err
 	}
 	p, err := calutil.ParseICS(source.Data)
@@ -331,5 +354,5 @@ func (s *Store) syncCalendarMeetingTx(ctx context.Context, tx *sql.Tx, actorID s
 		}
 		mails = append(mails, cancellations...)
 	}
-	return mails, nil
+	return filterChangedCalendarMail(ctx, mails, source.Data, previous)
 }

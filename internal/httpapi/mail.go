@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"mime"
+	"github.com/tayga/tms/internal/mailcompose"
 	"net/http"
 	"net/mail"
 	"sort"
@@ -29,6 +29,43 @@ func (s *Server) handleMail(w http.ResponseWriter, r *http.Request) {
 	parts := splitPath(path)
 
 	switch {
+	case r.Method == http.MethodGet && path == "senders":
+		addresses, err := s.store.SenderAddresses(r.Context(), au.ID)
+		if err != nil {
+			writeJSON(w, 503, map[string]string{"error": "sender lookup unavailable"})
+			return
+		}
+		identities := make([]map[string]string, 0, len(addresses))
+		for _, address := range addresses {
+			identities = append(identities, map[string]string{"email": address, "mode": "send_as"})
+		}
+		actor, err := s.store.GetUserByID(r.Context(), au.ID)
+		if err != nil {
+			writeJSON(w, 503, map[string]string{"error": "sender lookup unavailable"})
+			return
+		}
+		grants, err := s.store.ListDelegationsFor(r.Context(), au.ID)
+		if err != nil {
+			writeJSON(w, 503, map[string]string{"error": "sender lookup unavailable"})
+			return
+		}
+		for _, grant := range grants {
+			if !grant.CanSendOnBehalf {
+				continue
+			}
+			owner, err := s.store.GetUserByID(r.Context(), grant.OwnerID)
+			if err != nil {
+				if errors.Is(err, storage.ErrNotFound) || errors.Is(err, storage.ErrUnauthorized) {
+					continue
+				}
+				writeJSON(w, 503, map[string]string{"error": "sender lookup unavailable"})
+				return
+			}
+			if owner.Enabled && owner.TenantID == actor.TenantID && owner.AuthSource != "resource" {
+				identities = append(identities, map[string]string{"email": owner.Email, "mode": "on_behalf"})
+			}
+		}
+		writeJSON(w, 200, map[string]any{"addresses": addresses, "identities": identities, "default": au.Email})
 	case r.Method == http.MethodGet && path == "limits":
 		s.mailAttachmentLimits(w, r, au)
 	case r.Method == http.MethodPost && path == "attachments":
@@ -130,7 +167,7 @@ func (s *Server) mailListMailboxes(w http.ResponseWriter, r *http.Request, au *a
 			name = mb.Name + " (shared)"
 		}
 		out = append(out, map[string]any{
-			"id": mb.ID, "name": name, "messages": len(msgs), "unread": unread, "shared": shared, "owner_id": mb.UserID, "role": storage.SystemMailboxRole(mb.Name), "system": storage.SystemMailboxRole(mb.Name) != "",
+			"id": mb.ID, "name": name, "messages": len(msgs), "unread": unread, "shared": shared, "can_manage": s.mailboxAllows(r, au, mb, "t"), "owner_id": mb.UserID, "owner_email": calendarOwnerLabel(s, r, mb.UserID), "role": storage.SystemMailboxRole(mb.Name), "system": storage.SystemMailboxRole(mb.Name) != "",
 		})
 	}
 	for _, mb := range mbs {
@@ -256,6 +293,7 @@ func (s *Server) mailListMessages(w http.ResponseWriter, r *http.Request, au *au
 		end = len(msgs)
 	}
 	slice := msgs[offset:end]
+	canManage := s.mailboxAllows(r, au, mb, "t")
 	out := make([]map[string]any, 0, len(slice))
 	for _, m := range slice {
 		subject, from, to, date := mailsearch.DecodeHeader(m.Subject), mailsearch.DecodeHeader(m.FromAddr), mailsearch.DecodeHeader(m.ToAddr), m.DateHdr
@@ -274,7 +312,7 @@ func (s *Server) mailListMessages(w http.ResponseWriter, r *http.Request, au *au
 			subject = "(no subject)"
 		}
 		out = append(out, map[string]any{
-			"id": m.ID, "uid": m.UID, "mailbox_id": m.MailboxID,
+			"id": m.ID, "uid": m.UID, "mailbox_id": m.MailboxID, "owner_id": mb.UserID, "can_manage": canManage,
 			"size": m.Size, "flags": m.Flags, "color": messageColor(m.Flags),
 			"internal_date":   m.InternalDate.UTC().Format(time.RFC3339),
 			"message_id":      m.MessageID,
@@ -293,7 +331,7 @@ func (s *Server) mailListMessages(w http.ResponseWriter, r *http.Request, au *au
 }
 
 func (s *Server) mailGetMessage(w http.ResponseWriter, r *http.Request, au *authUser, messageID string) {
-	msg, _, code := s.messageOwned(r, au, messageID)
+	msg, mb, code := s.messageOwned(r, au, messageID)
 	if code != 0 {
 		writeJSON(w, code, map[string]string{"error": http.StatusText(code)})
 		return
@@ -308,7 +346,38 @@ func (s *Server) mailGetMessage(w http.ResponseWriter, r *http.Request, au *auth
 	if address, e := mail.ParseAddress(parsed.From); e == nil {
 		senderEmail = strings.ToLower(address.Address)
 	}
-	replyTo, replyCC := replyRecipients(parsed, au.Email)
+	senderAddresses, err := s.store.SenderAddresses(r.Context(), au.ID)
+	if err != nil {
+		writeJSON(w, 503, map[string]string{"error": "sender lookup unavailable"})
+		return
+	}
+	replyTo, replyCC := replyRecipients(parsed, au.Email, senderAddresses...)
+	replyFrom := au.Email
+	own := map[string]bool{}
+	for _, address := range senderAddresses {
+		own[address] = true
+	}
+	for _, header := range []string{parsed.To, parsed.Cc} {
+		addresses, _ := mail.ParseAddressList(header)
+		for _, address := range addresses {
+			if own[strings.ToLower(address.Address)] {
+				replyFrom = strings.ToLower(address.Address)
+				break
+			}
+		}
+		if replyFrom != au.Email {
+			break
+		}
+	}
+	// Replies opened in a delegated mailbox retain that mailbox's identity,
+	// including grants that allow only Send on behalf.
+	if mb.UserID != au.ID {
+		if grant, err := s.store.GetMailboxDelegate(r.Context(), mb.UserID, au.ID); err == nil && (grant.CanSendAs || grant.CanSendOnBehalf) {
+			if owner, err := s.store.GetUserByID(r.Context(), mb.UserID); err == nil {
+				replyFrom = owner.Email
+			}
+		}
+	}
 	// mark seen
 	if !strings.Contains(strings.ToUpper(msg.Flags), `\SEEN`) {
 		flags := storage.NormalizeFlags(append(storage.ParseFlags(msg.Flags), `\Seen`))
@@ -316,14 +385,16 @@ func (s *Server) mailGetMessage(w http.ResponseWriter, r *http.Request, au *auth
 		msg.Flags = flags
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"id": msg.ID, "mailbox_id": msg.MailboxID, "uid": msg.UID,
+		"id": msg.ID, "mailbox_id": msg.MailboxID, "uid": msg.UID, "owner_id": mb.UserID, "can_manage": s.mailboxAllows(r, au, mb, "t"),
 		"size": msg.Size, "flags": msg.Flags, "color": messageColor(msg.Flags),
 		"internal_date": msg.InternalDate.UTC().Format(time.RFC3339),
 		"message_id":    msg.MessageID,
 		"subject":       parsed.Subject,
 		"from":          parsed.From,
+		"sender":        parsed.Sender,
 		"sender_email":  senderEmail,
 		"reply_to":      parsed.ReplyTo,
+		"reply_from":    replyFrom,
 		"reply_all_to":  replyTo,
 		"reply_all_cc":  replyCC,
 		"to":            parsed.To,
@@ -336,7 +407,7 @@ func (s *Server) mailGetMessage(w http.ResponseWriter, r *http.Request, au *auth
 }
 
 func (s *Server) mailPatchMessage(w http.ResponseWriter, r *http.Request, au *authUser, messageID string) {
-	msg, _, code := s.messageOwned(r, au, messageID)
+	msg, mb, code := s.messageOwned(r, au, messageID)
 	if code != 0 {
 		writeJSON(w, code, map[string]string{"error": http.StatusText(code)})
 		return
@@ -351,6 +422,10 @@ func (s *Server) mailPatchMessage(w http.ResponseWriter, r *http.Request, au *au
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+		return
+	}
+	if !s.mailboxAllows(r, au, mb, "w") && (req.Flags != nil || len(req.Add) > 0 || len(req.Remove) > 0 || req.Flagged != nil || req.Color != nil) {
+		writeJSON(w, 403, map[string]string{"error": "message management permission required"})
 		return
 	}
 	flags := storage.ParseFlags(msg.Flags)
@@ -402,9 +477,13 @@ func removeFlag(flags []string, want string) []string {
 }
 
 func (s *Server) mailMoveMessage(w http.ResponseWriter, r *http.Request, au *authUser, messageID string) {
-	msg, _, code := s.messageOwned(r, au, messageID)
+	msg, mb, code := s.messageOwned(r, au, messageID)
 	if code != 0 {
 		writeJSON(w, code, map[string]string{"error": http.StatusText(code)})
+		return
+	}
+	if !s.mailboxAllows(r, au, mb, "t") {
+		writeJSON(w, 403, map[string]string{"error": "message management permission required"})
 		return
 	}
 	var req struct {
@@ -417,6 +496,15 @@ func (s *Server) mailMoveMessage(w http.ResponseWriter, r *http.Request, au *aut
 	dst, code := s.mailboxOwned(r, au, req.MailboxID)
 	if code != 0 {
 		writeJSON(w, code, map[string]string{"error": http.StatusText(code)})
+		return
+	}
+	if !s.mailboxAllows(r, au, dst, "i") {
+		writeJSON(w, 403, map[string]string{"error": "destination write permission required"})
+		return
+	}
+	destinationOwner, err := s.store.GetUserByID(r.Context(), dst.UserID)
+	if err != nil {
+		writeJSON(w, 503, map[string]string{"error": "owner lookup unavailable"})
 		return
 	}
 	if strings.EqualFold(dst.Name, "Archive") {
@@ -434,7 +522,7 @@ func (s *Server) mailMoveMessage(w http.ResponseWriter, r *http.Request, au *aut
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "read failed"})
 			return
 		}
-		newRel, size, _, err := s.ms.UnarchiveToFolder(au.Email, msg.FilePath, dst.Name)
+		newRel, size, _, err := s.ms.UnarchiveToFolder(destinationOwner.Email, msg.FilePath, dst.Name)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
@@ -459,13 +547,22 @@ func (s *Server) mailMoveMessage(w http.ResponseWriter, r *http.Request, au *aut
 }
 
 func (s *Server) mailArchiveMessage(w http.ResponseWriter, r *http.Request, au *authUser, messageID string) {
-	msg, _, code := s.messageOwned(r, au, messageID)
+	msg, mb, code := s.messageOwned(r, au, messageID)
 	if code != 0 {
 		writeJSON(w, code, map[string]string{"error": http.StatusText(code)})
 		return
 	}
-	archPath, _ := s.ms.EnsureFolder(au.Email, "Archive")
-	archMB, err := s.store.EnsureMailbox(r.Context(), au.ID, "Archive", archPath)
+	if !s.mailboxAllows(r, au, mb, "t") {
+		writeJSON(w, 403, map[string]string{"error": "message management permission required"})
+		return
+	}
+	owner, err := s.store.GetUserByID(r.Context(), mb.UserID)
+	if err != nil {
+		writeJSON(w, 503, map[string]string{"error": "owner lookup unavailable"})
+		return
+	}
+	archPath, _ := s.ms.EnsureFolder(owner.Email, "Archive")
+	archMB, err := s.store.EnsureMailbox(r.Context(), owner.ID, "Archive", archPath)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -481,7 +578,11 @@ func (s *Server) mailArchiveMessage(w http.ResponseWriter, r *http.Request, au *
 }
 
 func (s *Server) doArchiveMessage(ctx context.Context, au *authUser, msg *storage.Message, archMB *storage.Mailbox) error {
-	newRel, size, raw, err := s.ms.MoveToArchive(au.Email, msg.FilePath)
+	owner, err := s.store.GetUserByID(ctx, archMB.UserID)
+	if err != nil {
+		return err
+	}
+	newRel, size, raw, err := s.ms.MoveToArchive(owner.Email, msg.FilePath)
 	if err != nil {
 		return err
 	}
@@ -524,15 +625,27 @@ func (s *Server) mailSearch(w http.ResponseWriter, r *http.Request, au *authUser
 	if hasMore {
 		hits = hits[:limit]
 	}
+	mailboxes := map[string]*storage.Mailbox{}
+	management := map[string]bool{}
 	out := make([]map[string]any, 0, len(hits))
 	for _, h := range hits {
 		m := h.Message
+		mb := mailboxes[m.MailboxID]
+		if mb == nil {
+			var code int
+			mb, code = s.mailboxOwned(r, au, m.MailboxID)
+			if code != 0 {
+				continue
+			}
+			mailboxes[m.MailboxID] = mb
+			management[m.MailboxID] = s.mailboxAllows(r, au, mb, "t")
+		}
 		subj := mailsearch.DecodeHeader(m.Subject)
 		if subj == "" {
 			subj = "(no subject)"
 		}
 		out = append(out, map[string]any{
-			"id": m.ID, "uid": m.UID, "mailbox_id": m.MailboxID,
+			"id": m.ID, "uid": m.UID, "mailbox_id": m.MailboxID, "owner_id": mb.UserID, "can_manage": management[m.MailboxID],
 			"mailbox_name": h.MailboxName,
 			"size":         m.Size, "flags": m.Flags,
 			"internal_date":   m.InternalDate.UTC().Format(time.RFC3339),
@@ -557,11 +670,20 @@ func (s *Server) mailDeleteMessage(w http.ResponseWriter, r *http.Request, au *a
 		writeJSON(w, code, map[string]string{"error": http.StatusText(code)})
 		return
 	}
+	if !s.mailboxAllows(r, au, mb, "t") {
+		writeJSON(w, 403, map[string]string{"error": "message management permission required"})
+		return
+	}
+	owner, err := s.store.GetUserByID(r.Context(), mb.UserID)
+	if err != nil {
+		writeJSON(w, 503, map[string]string{"error": "owner lookup unavailable"})
+		return
+	}
 	// Prefer move to Trash unless already there.
 	if !strings.EqualFold(mb.Name, "Trash") {
-		root := s.ms.UserRoot(au.Email)
-		trashPath, _ := s.ms.EnsureFolder(au.Email, "Trash")
-		trash, err := s.store.EnsureMailbox(r.Context(), au.ID, "Trash", trashPath)
+		root := s.ms.UserRoot(owner.Email)
+		trashPath, _ := s.ms.EnsureFolder(owner.Email, "Trash")
+		trash, err := s.store.EnsureMailbox(r.Context(), owner.ID, "Trash", trashPath)
 		if err == nil && trash.ID != mb.ID {
 			if _, err := s.store.MoveMessage(r.Context(), msg.ID, trash.ID); err == nil {
 				writeJSON(w, http.StatusOK, map[string]string{"status": "trashed"})
@@ -582,6 +704,8 @@ func (s *Server) mailDeleteMessage(w http.ResponseWriter, r *http.Request, au *a
 
 func (s *Server) mailSend(w http.ResponseWriter, r *http.Request, au *authUser) {
 	var req struct {
+		From        string               `json:"from"`
+		SenderMode  string               `json:"sender_mode"`
 		To          []string             `json:"to"`
 		Cc          []string             `json:"cc"`
 		Bcc         []string             `json:"bcc"`
@@ -606,8 +730,39 @@ func (s *Server) mailSend(w http.ResponseWriter, r *http.Request, au *authUser) 
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "user lookup failed"})
 		return
 	}
+	from := strings.ToLower(strings.TrimSpace(req.From))
+	if from == "" {
+		from = user.Email
+	}
+	parsedFrom, parseErr := mail.ParseAddress(from)
+	if parseErr != nil || parsedFrom.Address != from {
+		writeJSON(w, 400, map[string]string{"error": "invalid sender address"})
+		return
+	}
+	owner, err := storage.AuthorizeMailSender(r.Context(), s.store, user.ID, from, req.SenderMode)
+	if err != nil && !errors.Is(err, storage.ErrUnauthorized) && !errors.Is(err, storage.ErrNotFound) {
+		writeJSON(w, 503, map[string]string{"error": "sender lookup unavailable"})
+		return
+	}
+	if err != nil {
+		writeJSON(w, 403, map[string]string{"error": "sender address is not authorized"})
+		return
+	}
 	msgid := fmt.Sprintf("<%d.%s@tayga>", time.Now().UnixNano(), strings.ReplaceAll(au.ID, "-", "")[:8])
-	raw := buildOutgoingMIME(user.Email, user.DisplayName, to, cc, bcc, req.Subject, req.Text, req.HTML, msgid)
+	inlineHTML, inlineImages, err := prepareInlineMailImages(req.HTML)
+	if err != nil {
+		writeJSON(w, 400, map[string]string{"error": err.Error()})
+		return
+	}
+	raw := buildOutgoingMIME(from, owner.DisplayName, to, cc, bcc, req.Subject, req.Text, inlineHTML, msgid)
+	if req.SenderMode == "on_behalf" {
+		raw = append([]byte("Sender: "+(&mail.Address{Name: user.DisplayName, Address: user.Email}).String()+"\r\n"), raw...)
+	}
+	raw, err = attachInlineMailImages(raw, inlineImages)
+	if err != nil {
+		writeJSON(w, 400, map[string]string{"error": err.Error()})
+		return
+	}
 
 	files, err := s.resolveOutgoingFiles(au.ID, req.Attachments)
 	if err == nil {
@@ -646,6 +801,14 @@ func (s *Server) mailSend(w http.ResponseWriter, r *http.Request, au *authUser) 
 				}
 			}
 		} else if errors.Is(err, storage.ErrNotFound) {
+			if _, lookupErr := s.store.ResolveMailDomain(r.Context(), storage.DomainOfEmail(addr)); lookupErr == nil {
+				writeJSON(w, 400, map[string]string{"error": "local recipient not found"})
+				return
+			} else if !errors.Is(lookupErr, storage.ErrNotFound) {
+				writeJSON(w, 503, map[string]string{"error": "recipient lookup unavailable"})
+				return
+			}
+
 			if !seen["remote:"+addr] {
 				remote = append(remote, addr)
 				seen["remote:"+addr] = true
@@ -662,32 +825,41 @@ func (s *Server) mailSend(w http.ResponseWriter, r *http.Request, au *authUser) 
 		}
 	}
 
-	// Save copy to Sent
-	sentPath, _ := s.ms.EnsureFolder(user.Email, "Sent")
-	sentMB, err := s.store.EnsureMailbox(r.Context(), user.ID, "Sent", sentPath)
-	if err == nil {
-		if rel, size, derr := s.ms.Deliver(user.Email, "Sent", raw); derr == nil {
-			sm := &storage.Message{
-				MailboxID: sentMB.ID, Size: size, Flags: `\Seen`,
-				InternalDate: time.Now().UTC(), FilePath: rel, MessageID: msgid,
-			}
-			mailsearch.ApplyHeaders(sm, raw)
-			if inserted, ierr := s.store.InsertMessage(r.Context(), sm); ierr == nil {
-				_ = mailsearch.Index(r.Context(), s.store, inserted.ID, raw)
+	// Both the authenticated sender and mailbox owner retain a Sent copy.
+	sentOwners := []*storage.User{user}
+	if owner.ID != user.ID {
+		sentOwners = append(sentOwners, owner)
+	}
+	for _, sentOwner := range sentOwners {
+		sentPath, _ := s.ms.EnsureFolder(sentOwner.Email, "Sent")
+		sentMB, err := s.store.EnsureMailbox(r.Context(), sentOwner.ID, "Sent", sentPath)
+		if err == nil {
+			if rel, size, derr := s.ms.Deliver(sentOwner.Email, "Sent", raw); derr == nil {
+				sm := &storage.Message{
+					MailboxID: sentMB.ID, Size: size, Flags: `\Seen`,
+					InternalDate: time.Now().UTC(), FilePath: rel, MessageID: msgid,
+				}
+				mailsearch.ApplyHeaders(sm, raw)
+				if inserted, ierr := s.store.InsertMessage(r.Context(), sm); ierr == nil {
+					_ = mailsearch.Index(r.Context(), s.store, inserted.ID, raw)
+				}
 			}
 		}
+
 	}
 
+	logUser := *user
+	logUser.Email = from
 	for _, rcpt := range local {
 		ru, err := s.store.ResolveRecipient(r.Context(), rcpt)
 		if err != nil {
-			s.writeMailLog(r.Context(), user, "failed", "inbound", rcpt, msgid, int64(len(raw)), err.Error())
+			s.writeMailLog(r.Context(), &logUser, "failed", "inbound", rcpt, msgid, int64(len(raw)), err.Error())
 			continue
 		}
 		root := s.ms.UserRoot(ru.Email)
 		mb, err := s.store.EnsureMailbox(r.Context(), ru.ID, "INBOX", root)
 		if err != nil {
-			s.writeMailLog(r.Context(), user, "failed", "inbound", rcpt, msgid, int64(len(raw)), err.Error())
+			s.writeMailLog(r.Context(), &logUser, "failed", "inbound", rcpt, msgid, int64(len(raw)), err.Error())
 			continue
 		}
 		if rel, size, derr := s.ms.Deliver(ru.Email, "INBOX", raw); derr == nil {
@@ -699,27 +871,27 @@ func (s *Server) mailSend(w http.ResponseWriter, r *http.Request, au *authUser) 
 			if inserted, ierr := s.store.InsertMessage(r.Context(), im); ierr == nil {
 				_ = mailsearch.Index(r.Context(), s.store, inserted.ID, raw)
 				if s.notify != nil {
-					s.notify.PublishMail(ru.ID, "INBOX", req.Subject, user.Email)
+					s.notify.PublishMail(ru.ID, "INBOX", req.Subject, from)
 				}
 			}
-			s.writeMailLog(r.Context(), user, "delivered", "inbound", rcpt, msgid, size, "web")
+			s.writeMailLog(r.Context(), &logUser, "delivered", "inbound", rcpt, msgid, size, "web")
 		} else {
-			s.writeMailLog(r.Context(), user, "failed", "inbound", rcpt, msgid, int64(len(raw)), derr.Error())
+			s.writeMailLog(r.Context(), &logUser, "failed", "inbound", rcpt, msgid, int64(len(raw)), derr.Error())
 		}
 	}
 	for _, rcpt := range remote {
 		_, err := s.store.EnqueueOutbound(r.Context(), &storage.OutboundItem{
-			EnvelopeFrom: user.Email,
+			EnvelopeFrom: from,
 			EnvelopeTo:   rcpt,
 			MessageID:    msgid,
 			Data:         raw,
 			MaxAttempts:  8,
 		})
 		if err != nil {
-			s.writeMailLog(r.Context(), user, "failed", "outbound", rcpt, msgid, int64(len(raw)), err.Error())
+			s.writeMailLog(r.Context(), &logUser, "failed", "outbound", rcpt, msgid, int64(len(raw)), err.Error())
 			continue
 		}
-		s.writeMailLog(r.Context(), user, "queued", "outbound", rcpt, msgid, int64(len(raw)), "web")
+		s.writeMailLog(r.Context(), &logUser, "queued", "outbound", rcpt, msgid, int64(len(raw)), "web")
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status": "accepted", "message_id": msgid,
@@ -743,7 +915,7 @@ func (s *Server) writeMailLog(ctx context.Context, user *storage.User, event, di
 		domain = storage.DomainOfEmail(from)
 	}
 	if tenantID == "" && domain != "" {
-		if d, err := s.store.GetDomainByName(ctx, domain); err == nil && d != nil {
+		if d, err := s.store.ResolveMailDomain(ctx, domain); err == nil && d != nil {
 			tenantID = d.TenantID
 		}
 	}
@@ -802,8 +974,8 @@ func (s *Server) parseMsgHeaders(filePath string) msgHdr {
 }
 
 type parsedMsg struct {
-	Subject, From, To, Cc, Date, Text, HTML, ReplyTo string
-	Attachments                                      []mailAttachment
+	Subject, From, Sender, To, Cc, Date, Text, HTML, ReplyTo string
+	Attachments                                              []mailAttachment
 }
 
 func normalizeAddrs(in []string) []string {
@@ -822,34 +994,5 @@ func normalizeAddrs(in []string) []string {
 }
 
 func buildOutgoingMIME(fromEmail, fromName string, to, cc, bcc []string, subject, text, html, msgid string) []byte {
-	var b strings.Builder
-	from := fromEmail
-	if fromName != "" {
-		from = (&mail.Address{Name: strings.NewReplacer("\r", "", "\n", "").Replace(fromName), Address: fromEmail}).String()
-	}
-	fmt.Fprintf(&b, "From: %s\r\n", from)
-	fmt.Fprintf(&b, "To: %s\r\n", strings.Join(to, ", "))
-	if len(cc) > 0 {
-		fmt.Fprintf(&b, "Cc: %s\r\n", strings.Join(cc, ", "))
-	}
-	// Bcc belongs only to the envelope, never to the delivered headers.
-	subject = strings.NewReplacer("\r", "", "\n", "").Replace(subject)
-	fmt.Fprintf(&b, "Subject: %s\r\n", mime.QEncoding.Encode("utf-8", subject))
-	fmt.Fprintf(&b, "Date: %s\r\n", time.Now().UTC().Format(time.RFC1123Z))
-	fmt.Fprintf(&b, "Message-ID: %s\r\n", msgid)
-	fmt.Fprintf(&b, "MIME-Version: 1.0\r\n")
-	if html != "" && text != "" {
-		boundary := "tayga-" + strconv.FormatInt(time.Now().UnixNano(), 36)
-		fmt.Fprintf(&b, "Content-Type: multipart/alternative; boundary=\"%s\"\r\n\r\n", boundary)
-		fmt.Fprintf(&b, "--%s\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n%s\r\n", boundary, text)
-		fmt.Fprintf(&b, "--%s\r\nContent-Type: text/html; charset=utf-8\r\n\r\n%s\r\n", boundary, html)
-		fmt.Fprintf(&b, "--%s--\r\n", boundary)
-	} else if html != "" {
-		b.WriteString("Content-Type: text/html; charset=utf-8\r\n\r\n")
-		b.WriteString(html)
-	} else {
-		b.WriteString("Content-Type: text/plain; charset=utf-8\r\n\r\n")
-		b.WriteString(text)
-	}
-	return []byte(b.String())
+	return mailcompose.BuildMessage(fromEmail, fromName, to, cc, bcc, subject, text, html, msgid)
 }

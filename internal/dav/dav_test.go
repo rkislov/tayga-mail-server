@@ -65,6 +65,23 @@ func TestCalDAVPropFindPrincipal(t *testing.T) {
 	if !bytes.Contains(w.Body.Bytes(), []byte("/dav/cal/u@ex.com/")) {
 		t.Fatalf("missing principal in response: %s", w.Body.String())
 	}
+	discovery := `<d:propfind xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav"><d:prop><c:schedule-inbox-URL/><c:schedule-outbox-URL/><c:calendar-user-address-set/></d:prop></d:propfind>`
+	req = httptest.NewRequest("PROPFIND", "/dav/cal/u@ex.com/", strings.NewReader(discovery))
+	req.Header.Set("Content-Type", "application/xml")
+	req.Header.Set("Depth", "0")
+	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("u@ex.com:secret")))
+	w = httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	if w.Code != 207 || !strings.Contains(w.Body.String(), "/dav/cal/u@ex.com/inbox/") || strings.Contains(w.Body.String(), "404") {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	req = httptest.NewRequest("PROPFIND", "/dav/cal/u@ex.com/inbox/", strings.NewReader(discovery))
+	w = httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	if w.Code != 401 {
+		t.Fatal("unauthenticated inbox", w.Code)
+	}
+
 }
 
 func TestWellKnownRedirect(t *testing.T) {

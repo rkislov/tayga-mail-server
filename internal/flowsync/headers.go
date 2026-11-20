@@ -6,16 +6,20 @@ package flowsync
 import (
 	"bufio"
 	"bytes"
+	"net/mail"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/tayga/tms/internal/mailsearch"
 	"github.com/tayga/tms/internal/mailstore"
 )
 
 type msgHeaders struct {
-	Subject string
-	From    string
+	MessageID, References, InReplyTo string
+	Subject                          string
+	From                             string
+	SentDate                         time.Time
 }
 
 func readMsgHeaders(ms *mailstore.Store, filePath string) msgHeaders {
@@ -42,6 +46,14 @@ func readMsgHeaders(ms *mailstore.Store, filePath string) msgHeaders {
 			}
 		case "from":
 			h.From = mailsearch.DecodeHeader(v)
+		case "message-id":
+			h.MessageID = v
+		case "references":
+			h.References = v
+		case "in-reply-to":
+			h.InReplyTo = v
+		case "date":
+			h.SentDate, _ = mail.ParseDate(v)
 		}
 	}
 	for sc.Scan() {

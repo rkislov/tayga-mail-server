@@ -1,153 +1,91 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024-2026 Кислов Роман Сергеевич.
 package flowsync
 
 import (
 	"context"
-	"encoding/xml"
 	"fmt"
 	"github.com/tayga/tms/internal/storage"
-	"io"
 	"strings"
 )
 
-// Resolve only folders enumerated for the authenticated user, never a global ID.
+// Resolve each mailbox-qualified reference independently; a batch can contain
+// folders from different principals. Folder IDs never bypass access checks.
 func (h *ewsHandler) getFolder(ctx context.Context, u *storage.User, body string) (string, error) {
-	if email := extractTag(body, "EmailAddress"); email != "" && !strings.EqualFold(email, u.Email) {
-		return ewsOperationError("GetFolder", "ErrorAccessDenied", "Mailbox delegation is not supported"), nil
-	}
 	listing, err := h.findFolder(ctx, u)
 	if err != nil {
 		return "", err
 	}
-	type folder struct {
-		Kind  xml.Name
-		Inner string `xml:",innerxml"`
-		ID    struct {
-			Value string `xml:"Id,attr"`
-		} `xml:"FolderId"`
-		Name string `xml:"DisplayName"`
+	doc, err := parseProtocolXML([]byte(listing))
+	if err != nil {
+		return "", err
 	}
-	folders := map[string]folder{}
-	decoder := xml.NewDecoder(strings.NewReader(listing))
-	for {
-		token, e := decoder.Token()
-		if e == io.EOF {
-			break
-		}
-		if e != nil {
-			return "", e
-		}
-		if start, ok := token.(xml.StartElement); ok && (start.Name.Local == "Folder" || start.Name.Local == "CalendarFolder" || start.Name.Local == "ContactsFolder" || start.Name.Local == "TasksFolder") {
-			var f folder
-			f.Kind = start.Name
-			if e = decoder.DecodeElement(&f, &start); e != nil {
-				return "", e
-			}
-			folders[f.ID.Value] = f
-		}
+	folders := map[string]*protocolNode{}
+	for _, f := range doc.find("Folders").Children {
+		folders[nodeAttr(f.child("FolderId"), "Id")] = f
 	}
-	for name := range ewsSystemFolders {
-		raw := systemFolderXML(u, name)
-		if name == "tasks" || name == "todosearch" {
-			var err error
-			raw, err = h.taskFolderXML(ctx, u, name)
-			if err != nil {
-				return "", err
-			}
-		}
-		decoder := xml.NewDecoder(strings.NewReader(raw))
-		startToken, e := decoder.Token()
-		if e != nil {
-			return "", e
-		}
-		start := startToken.(xml.StartElement)
-		var f folder
-		f.Kind = start.Name
-		if e = decoder.DecodeElement(&f, &start); e != nil {
-			return "", e
-		}
-		folders[f.ID.Value] = f
+	request, err := parseProtocolXML([]byte(body))
+	if err != nil {
+		return "", err
 	}
-	aliases := map[string]string{"inbox": "INBOX", "sentitems": "Sent", "deleteditems": "Trash", "drafts": "Drafts", "junkemail": "Junk", "outbox": "Outbox"}
+	group := request.find("FolderIds")
+	if group == nil {
+		group = request.find("GetFolder")
+	}
+	if group == nil || len(group.Children) == 0 || len(group.Children) > 512 {
+		return ewsOperationError("GetFolder", "ErrorInvalidRequest", "FolderIds required"), nil
+	}
 	var out strings.Builder
-	out.WriteString(`<m:GetFolderResponse xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"><m:ResponseMessages>`)
-	decoder = xml.NewDecoder(strings.NewReader(body))
-	count := 0
-	for {
-		token, e := decoder.Token()
-		if e == io.EOF {
-			break
-		}
-		if e != nil {
-			return "", e
-		}
-		start, ok := token.(xml.StartElement)
-		if !ok || (start.Name.Local != "FolderId" && start.Name.Local != "DistinguishedFolderId") {
+	for _, ref := range group.Children {
+		if ref.Name.Local != "FolderId" && ref.Name.Local != "DistinguishedFolderId" {
+			out.WriteString(folderWriteMessage("GetFolder", "ErrorInvalidFolderId", "Invalid folder reference", ""))
 			continue
 		}
-		id := ""
-		for _, a := range start.Attr {
-			if a.Name.Local == "Id" {
-				id = a.Value
+		id, err := h.resolveEWSFolder(ctx, u, ref.render())
+		f := folders[id]
+		if err == nil && id == "root:"+u.ID {
+			f = &protocolNode{}
+			raw := fmt.Sprintf(`<t:Folder><t:FolderId Id="%s"/><t:DisplayName>Mailbox</t:DisplayName><t:ChildFolderCount>%d</t:ChildFolderCount></t:Folder>`, xmlEscape(id), len(folders))
+			parsed, _ := parseProtocolXML([]byte(raw))
+			f = parsed.Children[0]
+		}
+		if err == nil && systemFolderName(u, id) != "" && f == nil {
+			raw := systemFolderXML(u, systemFolderName(u, id))
+			parsed, e := parseProtocolXML([]byte(raw))
+			if e == nil {
+				f = parsed.Children[0]
 			}
 		}
-		count++
-		var f folder
-		found := false
-		if start.Name.Local == "FolderId" {
-			f, found = folders[id]
-			if id == "root:"+u.ID {
-				f.Kind.Local = "Folder"
-				f.Inner = fmt.Sprintf(`<t:FolderId Id="%s"/><t:DisplayName>Mailbox</t:DisplayName><t:ChildFolderCount>%d</t:ChildFolderCount>`, xmlEscape(id), len(folders))
-				found = true
-			}
-		} else {
-			if _, ok := ewsSystemFolders[id]; ok {
-				f, found = folders[systemFolderID(u.ID, id)]
-			} else if id == "msgfolderroot" || id == "root" {
-				f.Kind.Local = "Folder"
-				f.Inner = fmt.Sprintf(`<t:FolderId Id="%s" ChangeKey="0"/><t:DisplayName>Mailbox</t:DisplayName><t:TotalCount>0</t:TotalCount><t:ChildFolderCount>%d</t:ChildFolderCount>`, xmlEscape("root:"+u.ID), len(folders))
-				found = true
-			} else if name, ok := aliases[id]; ok {
-				for _, candidate := range folders {
-					if strings.EqualFold(candidate.Name, name) {
-						f = candidate
-						found = true
-						break
-					}
-				}
-			} else {
-				defaultID := ""
-				switch id {
-				case "notes":
-					n, e := h.store.EnsureNoteFolder(ctx, u.ID, "notes", "Notes")
-					if e == nil {
-						defaultID = n.ID
-					}
-				case "calendar":
-					c, e := h.store.GetCalendarByName(ctx, u.ID, "default")
-					if e == nil {
-						defaultID = c.ID
-					}
-				case "contacts":
-					a, e := h.store.GetAddressBookByName(ctx, u.ID, "default")
-					if e == nil {
-						defaultID = a.ID
-					}
-				}
-				f, found = folders[defaultID]
-			}
+		if err != nil || f == nil {
+			out.WriteString(folderWriteMessage("GetFolder", "ErrorFolderNotFound", "Folder unavailable", ""))
+			continue
 		}
-		if found {
-			fmt.Fprintf(&out, `<m:GetFolderResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:Folders><t:%s>%s</t:%s></m:Folders></m:GetFolderResponseMessage>`, f.Kind.Local, f.Inner, f.Kind.Local)
+		if taygaRequested(body, "TaygaSyncVersion") { // keep extension metadata local to this response
+			raw := ewsTypeNodeXML(f)
+			at := strings.LastIndex(raw, "</")
+			if at >= 0 {
+				raw = raw[:at] + taygaProperty("TaygaSyncVersion", "1") + raw[at:]
+			}
+			out.WriteString(`<m:GetFolderResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:Folders>` + raw + `</m:Folders></m:GetFolderResponseMessage>`)
 		} else {
-			fmt.Fprintf(&out, `<m:GetFolderResponseMessage ResponseClass="Error"><m:MessageText>Folder unavailable: %s</m:MessageText><m:ResponseCode>ErrorFolderNotFound</m:ResponseCode></m:GetFolderResponseMessage>`, xmlEscape(id))
+			out.WriteString(`<m:GetFolderResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:Folders>` + ewsTypeNodeXML(f) + `</m:Folders></m:GetFolderResponseMessage>`)
 		}
 	}
-	if count == 0 {
-		out.WriteString(`<m:GetFolderResponseMessage ResponseClass="Error"><m:ResponseCode>ErrorInvalidRequest</m:ResponseCode></m:GetFolderResponseMessage>`)
+	return `<m:GetFolderResponse` + ewsNamespaces + `><m:ResponseMessages>` + out.String() + `</m:ResponseMessages></m:GetFolderResponse>`, nil
+}
+
+// Keep stable EWS prefixes on serialized type elements, including legacy clients
+// that inspect qualified XML names rather than namespace-expanded names.
+func ewsTypeNodeXML(n *protocolNode) string {
+	var out strings.Builder
+	fmt.Fprintf(&out, "<t:%s", n.Name.Local)
+	for _, a := range n.Attr {
+		fmt.Fprintf(&out, ` %s="%s"`, a.Name.Local, xmlEscape(a.Value))
 	}
-	out.WriteString(`</m:ResponseMessages></m:GetFolderResponse>`)
-	return out.String(), nil
+	out.WriteString(">")
+	out.WriteString(xmlEscape(n.Text))
+	for _, child := range n.Children {
+		out.WriteString(ewsTypeNodeXML(child))
+	}
+	fmt.Fprintf(&out, "</t:%s>", n.Name.Local)
+	return out.String()
 }

@@ -8,6 +8,7 @@ import (
 
 // EditableSections are DB-backed config keys (not storage / mailstore.root).
 var EditableSections = []string{
+	"mattermost",
 	"server",
 	"smtp",
 	"imap",
@@ -66,6 +67,8 @@ func getSectionPtr(cfg *config.Config, section string) (any, error) {
 		return nil, fmt.Errorf("nil config")
 	}
 	switch section {
+	case "mattermost":
+		return &cfg.Mattermost, nil
 	case "server":
 		return &cfg.Server, nil
 	case "smtp":

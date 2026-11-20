@@ -1,17 +1,38 @@
 # Tayga Mail Server (TMS)
 
-Corporate-class multi-domain / multi-tenant mail server in Go.
+<!-- owner-maintenance:start -->
+**Автор проекта, изменений и публикаций — Кислов Роман Сергеевич ([@rkislov](https://github.com/rkislov)).**
+
+Ошибки и предложения принимаются через **Issues**, изменения — через **Pull Requests** из форков. Прямую запись в основной репозиторий и публикацию версий выполняет только владелец `rkislov`.
+<!-- owner-maintenance:end -->
+
+Tayga Mail Server is a self-hosted mail and collaboration server written in Go. It hosts multiple organizations and domains in one installation and provides a web workspace for mail, calendars, contacts, files, and notes. Standard clients connect over SMTP, IMAP, POP3, CalDAV, CardDAV, and WebDAV. FlowSync provides ActiveSync and EWS endpoints for compatible clients, including Outlook.
 
 **Author:** Кислов Роман Сергеевич (Roman Sergeyevich Kislov)  
-**License:** server [Apache License 2.0](LICENSE); web client with OMEMO [GPL-3.0](frontend/LICENSE)
+**License:** server and FlowSync [Apache License 2.0](LICENSE)
 
 See [docs/architecture.md](docs/architecture.md) and `configs/tayga.example.yaml` (minimal bootstrap YAML). Mail policies and most options are edited in **Admin → Server settings** (`/api/v1/admin/settings`).
 
 **Первоначальная настройка (RU):** [docs/setup.md](docs/setup.md) — bootstrap, seed-админ, DNS, TLS, исходящая почта, чеклист.
 
-**Сравнение решений (RU):** [Tayga, CommuniGate Pro, RuPost и TEGU — функции, компоненты и ограничения](docs/product-comparison.md).
+**Сравнение решений (RU), 20.11.2026:** [Tayga, TEGU, CommuniGate, Яндекс 360, Р7, VK, Астра и MS Exchange](docs/product-comparison.md) · [Презентация PowerPoint](docs/presentations/tayga-competitors-2026-11-20.pptx) · [Матрица Excel: все 8 решений, 54 параметра](docs/presentations/tayga-comparison-matrix-2026-11-20.xlsx).
 
 **План разработки (RU):** [Дорожная карта: порядок работ, зависимости и критерии готовности](docs/roadmap.md).
+
+**Стабильный выпуск [v0.10.10](https://github.com/rkislov/tayga-mail-server/releases/tag/v0.10.10).** На странице выпуска доступны серверные архивы, контрольные суммы и расширение Thunderbird 2.5.0 (XPI).
+
+## Идея Tayga
+
+Tayga начиналась как идея собственной замены Microsoft Exchange. Эта основа реализована: свой сервер почты и совместной работы, свои EWS и ActiveSync в FlowSync.
+
+Следующая цель — развивать Tayga как самостоятельный продукт, который будет интереснее, проще и функциональнее аналогов. Подробное сравнение функций помогает выбирать направления развития, а открытый код и единый прикладной сервер дают основу для собственной эволюции.
+
+## Чат и видеозвонки в тестовой сборке
+
+Эти функции сейчас проверяются в отдельной сборке TMS.
+
+- Чат TMS работает с клиентами Mattermost через совместимый API v4.
+- Групповой звонок Jitsi можно начать из меню канала или командой `/meet`. Приглашение появляется в канале, встреча открывается в браузере, доступ к ней проверяется по членству в канале.
 
 ## Quick start
 
@@ -28,7 +49,7 @@ sudo ./tayga-mail -config configs/tayga.example.yaml
 ### Cross-platform release builds
 
 ```bash
-VERSION=0.9.2 ./scripts/crossbuild.sh   # → dist/*.tar.gz|zip + checksums.txt
+VERSION=0.10.10 ./scripts/crossbuild.sh   # → dist/*.tar.gz|zip + checksums.txt
 ```
 
 GitHub Releases: push a `v*` tag; [GoReleaser](https://goreleaser.com) (`.github/workflows/release.yml`) publishes linux/darwin/windows/freebsd amd64+arm64 archives.
@@ -44,6 +65,7 @@ GitHub Releases: push a `v*` tag; [GoReleaser](https://goreleaser.com) (`.github
 Seed: `admin@example.com` / `changeme`. TLS: `tls.auto_generate` or `scripts/gen-dev-certs.sh`.
 
 - LDAP: hybrid auth; group→admin roles; nested groups; `tayga-mail ldap-sync`
+- Domain and mailbox aliases: admin API and UI, domain-wide address mapping, tenant-scoped mailbox aliases, collision checks and backup/restore — [setup and API](docs/mail-aliases.md).
 - Organization directory: domain department tree backed by nested distribution groups, searchable web UI, deduplicated mail delivery and EWS group lookup/expansion — [setup and scope](docs/organization-directory.md).
 - Quotas: set `users.quota_bytes` (0 = unlimited); SMTP returns `552` when full
 - Auth API: `POST /api/v1/auth/login` → opaque tokens; TOTP MFA; OIDC per-domain
@@ -56,10 +78,10 @@ Seed: `admin@example.com` / `changeme`. TLS: `tls.auto_generate` or `scripts/gen
 - Files: versioned writes, trash, search, selection, sharing and personal WebDAV `/dav/files/`; external Collabora Online integration — [setup and limits](docs/files-and-office.md).
 - Notes: `/api/v1/notes*` (folders, rich notes, attachments, drawing); folder/note ACL for multi-user edit; FlowSync Notes (type 10) + EWS sticky notes
 - FlowSync — original module by Roman Sergeyevich Kislov, separately licensed under [Apache-2.0](internal/flowsync/LICENSE): ActiveSync `/Microsoft-Server-ActiveSync`, EWS `/EWS/Exchange.asmx`, Autodiscover (POX/JSON) + Mozilla autoconfig
-- Admin: tenant domains, users, УЦ, **XMPP** (C2S / bots), **Server settings** (DB-backed config), monitoring, backup (`/api/v1/admin/*`)
+- Admin: tenant domains, users, УЦ, **Server settings** (DB-backed config), monitoring, backup (`/api/v1/admin/*`)
 - Metrics: `GET /metrics` (Prometheus `tayga_*`)
 - Backup/restore: `./tayga-mail backup|restore -config …` or Admin UI; see [docs/ha.md](docs/ha.md)
-- HA: Postgres + shared maildir; cross-node IMAP IDLE; `ha.mode: active_standby` (`fence: mx|writers`) or `sticky` per-user writers
+- HA deployment: one active Tayga instance with Pacemaker/fencing and a complete shared or replicated state volume; [single-site and two-site guides](docs/ha.md), including MetroLUN and DRBD options.
 - Outbound: `smtp.relay` / `smtp.outbound_direct` + optional `smtp.dkim` for authenticated external recipients
 - MTA-STS / TLS-RPT / DANE: `smtp.mta_sts` (+ `publish`), `smtp.tls_rpt`, `smtp.dane` TLSA on direct MX
 - SMTP rate limits: `smtp.rate_limit.per_ip` / `per_user`
@@ -72,7 +94,7 @@ Seed: `admin@example.com` / `changeme`. TLS: `tls.auto_generate` or `scripts/gen
 - DMARC ARC trust: `dmarc.arc_trust` softens fail when ARC `cv=pass`
 - ARC: `arc.enabled` verify/seal (RFC 8617) on inbound MX
 - Quarantine admin: filters, spam/virus meta, preview (`/api/v1/admin/quarantine`)
-- WebAuthn MFA: `/api/v1/auth/webauthn/*` (passkeys; UUID credential/session IDs). Passkeys protect **web sign-in only**: adding a key does not disable password authentication in FlowSync (ActiveSync/EWS), IMAP/SMTP/POP3, DAV, ManageSieve or XMPP. The separate `mfa.require_token_for_mfa_users` policy still requires protocol access tokens for users with enabled **TOTP**.
+- WebAuthn MFA: `/api/v1/auth/webauthn/*` (passkeys; UUID credential/session IDs). Passkeys protect **web sign-in only**: adding a key does not disable password authentication in FlowSync (ActiveSync/EWS), IMAP/SMTP/POP3, DAV or ManageSieve. The separate `mfa.require_token_for_mfa_users` policy still requires protocol access tokens for users with enabled **TOTP**.
 - Account API: `GET /api/v1/me`; admin: `/api/v1/admin/users` (`http.admins`)
 - Web apps: `/api/v1/mail`, `/api/v1/calendar`, `/api/v1/contacts`, `/api/v1/files`, `/api/v1/chat` + embedded UI (ru/en)
 - Archive mailbox (gzip on disk) + FTS mail search — [docs/mail-archive-search.md](docs/mail-archive-search.md) (RU), [architecture.md](docs/architecture.md#archive-mailbox) (EN)
@@ -80,7 +102,7 @@ Seed: `admin@example.com` / `changeme`. TLS: `tls.auto_generate` or `scripts/gen
 - User migration IMAP/CalDAV/CardDAV: [docs/migration.md](docs/migration.md)
 - In-app / browser notifications (new mail, upcoming calendar) via SSE `/api/v1/notifications/stream`
 - Certificate authority (УЦ): self-signed / commercial PEM / Let’s Encrypt ACME — [docs/ca.md](docs/ca.md)
-- XMPP (optional C2S) + web Chat; bots via XEP-0114 / HTTP — see [docs/xmpp.md](docs/xmpp.md)
+- Experimental Mattermost API v4 adapter (disabled by default): [scope and setup](docs/mattermost-compatibility.md)
 - Web UI: floating rounded panels; independent day/night mode under **Appearance**
 - Server configuration: grouped sections, typed modal forms and Russian help for every parameter; bootstrap storage remains read-only
 - Calendar: click a date to open its day; double-click to create an event on that date; invitations are in a separate inbox with a pending badge
@@ -89,6 +111,6 @@ Seed: `admin@example.com` / `changeme`. TLS: `tls.auto_generate` or `scripts/gen
 
 ## License
 
-Copyright © Кислов Роман Сергеевич. Server Go code and FlowSync: Apache License 2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE). Web client (`frontend/src` and generated browser assets): GPL-3.0 — see [frontend/LICENSE](frontend/LICENSE). Third-party assets retain their respective licenses. See [web OMEMO setup and limitations](docs/web-omemo.md).
+Copyright © Кислов Роман Сергеевич. Server Go code and FlowSync: Apache License 2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE). Third-party assets retain their respective licenses.
 
 UI backdrop art (tayga / cosmos / city / kalyazin / temple) © Алиса Кислова; `moscow` (Москва-Сити) — generated backdrop.

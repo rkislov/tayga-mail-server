@@ -137,8 +137,8 @@ func TestPushRenewalPersistenceAndMalformedRequests(t *testing.T) {
 		srv.deliverPushBatch(context.Background(), time.Now().Add(time.Duration(i)*time.Hour))
 	}
 	restarted.db.QueryRow("SELECT COUNT(*) FROM xmpp_push_registrations").Scan(&n)
-	if n != 0 {
-		t.Fatal("retry exhaustion not bounded")
+	if n != 1 {
+		t.Fatal("gateway timeout revoked registration")
 	}
 }
 func TestPeerIQRouting(t *testing.T) {

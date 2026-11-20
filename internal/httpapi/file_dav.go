@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -107,6 +108,34 @@ func (s *Server) handleFileDAV(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unauthorized", 401)
 		return
 	}
+	grantee, prefix := "", "/dav/files"
+	if strings.HasPrefix(r.URL.Path, "/dav/shared/") {
+		actor := owner
+		parts := strings.SplitN(strings.TrimPrefix(r.URL.Path, "/dav/shared/"), "/", 2)
+		if parts[0] == "" {
+			s.serveSharedDAVIndex(w, r, actor)
+			return
+		}
+		user, err := s.store.GetUserByEmail(r.Context(), parts[0])
+		if err != nil || !user.Enabled {
+			http.NotFound(w, r)
+			return
+		}
+		owner, grantee, prefix = user.ID, actor, "/dav/shared/"+parts[0]
+	}
+	if strings.HasPrefix(r.URL.Path, "/dav/spaces/") {
+		actor := owner
+		parts := strings.SplitN(strings.TrimPrefix(r.URL.Path, "/dav/spaces/"), "/", 2)
+		if parts[0] == "" {
+			s.serveSpacesDAVIndex(w, r, actor)
+			return
+		}
+		if !s.fileAccessAllowed(r, parts[0], actor, "", false) {
+			http.Error(w, "space access denied", 403)
+			return
+		}
+		owner, grantee, prefix = parts[0], actor, "/dav/spaces/"+parts[0]
+	}
 	if r.ContentLength > maxWebUploadBytes {
 		http.Error(w, "file exceeds 10 GiB", 413)
 		return
@@ -116,8 +145,24 @@ func (s *Server) handleFileDAV(w http.ResponseWriter, r *http.Request) {
 		fileError(w, err)
 		return
 	}
+	fs := &personalDAV{srv: s, owner: owner, root: root, grantee: grantee, method: r.Method}
+	if grantee != "" {
+		name := strings.TrimPrefix(r.URL.Path, prefix)
+		write := r.Method != "COPY" && r.Method != "PROPFIND" && r.Method != "OPTIONS" && r.Method != "GET" && r.Method != "HEAD"
+		if !fs.allowed(r.Context(), name, write, !write) {
+			http.Error(w, "access denied", http.StatusForbidden)
+			return
+		}
+		if r.Method == "COPY" || r.Method == "MOVE" {
+			dst, e := url.Parse(r.Header.Get("Destination"))
+			if e != nil || (dst.Host != "" && dst.Host != r.Host) || !strings.HasPrefix(dst.Path, prefix+"/") || !fs.allowed(r.Context(), strings.TrimPrefix(dst.Path, prefix), true, false) {
+				http.Error(w, "destination access denied", http.StatusForbidden)
+				return
+			}
+		}
+	}
 	if r.Method == http.MethodPut || r.Method == http.MethodDelete || r.Method == "MOVE" {
-		abs, pathErr := safeJoin(root, strings.TrimPrefix(r.URL.Path, "/dav/files"))
+		abs, pathErr := safeJoin(root, strings.TrimPrefix(r.URL.Path, prefix))
 		if pathErr != nil {
 			http.Error(w, "invalid path", 400)
 			return
@@ -145,18 +190,23 @@ func (s *Server) handleFileDAV(w http.ResponseWriter, r *http.Request) {
 	s.fileMu.Lock()
 	locks := s.locksFor(owner)
 	s.fileMu.Unlock()
-	h := webdav.Handler{Prefix: "/dav/files", FileSystem: &personalDAV{srv: s, owner: owner, root: root, upload: state}, LockSystem: locks}
+	fs.upload = state
+	h := webdav.Handler{Prefix: prefix, FileSystem: fs, LockSystem: locks}
 	w.Header().Set("Cache-Control", "private, no-cache")
 	h.ServeHTTP(davQuotaResponse{w, state}, r)
 }
 
 type personalDAV struct {
-	srv         *Server
-	owner, root string
-	upload      *davUploadState
+	srv             *Server
+	owner, root     string
+	upload          *davUploadState
+	grantee, method string
 }
 
 func (f *personalDAV) Stat(ctx context.Context, name string) (os.FileInfo, error) {
+	if !f.allowed(ctx, name, false, true) {
+		return nil, os.ErrNotExist
+	}
 	abs, err := safeJoin(f.root, name)
 	if err != nil {
 		return nil, os.ErrPermission
@@ -170,20 +220,36 @@ func (f *personalDAV) Mkdir(ctx context.Context, name string, perm os.FileMode) 
 	}
 	f.srv.fileMu.Lock()
 	defer f.srv.fileMu.Unlock()
-	return os.Mkdir(abs, 0750)
+	if !f.allowed(ctx, name, true, false) {
+		return os.ErrPermission
+	}
+	err = os.Mkdir(abs, 0750)
+	if err == nil {
+		f.srv.recordFileActivity(f.owner, name, "folder_created", []fileActor{f.activityActor()})
+	}
+	return err
 }
 func (f *personalDAV) RemoveAll(ctx context.Context, name string) error {
 	f.srv.fileMu.Lock()
 	defer f.srv.fileMu.Unlock()
-	_, err := f.srv.trashFile(f.owner, name)
+	if !f.allowed(ctx, name, true, false) {
+		return os.ErrPermission
+	}
+	if f.grantee != "" && (f.method == "COPY" || f.method == "MOVE") {
+		return os.ErrExist // Do not delete an existing destination before staging.
+	}
+	_, err := f.srv.trashFile(f.owner, name, f.activityActor())
 	return err
 }
 func (f *personalDAV) Rename(ctx context.Context, from, to string) error {
 	f.srv.fileMu.Lock()
 	defer f.srv.fileMu.Unlock()
-	return f.srv.moveFile(f.owner, from, to)
+	if !f.allowed(ctx, from, true, false) || !f.allowed(ctx, to, true, false) {
+		return os.ErrPermission
+	}
+	return f.srv.moveFile(f.owner, from, to, f.activityActor())
 }
-func (s *Server) moveFile(owner, from, to string) error {
+func (s *Server) moveFile(owner, from, to string, actors ...fileActor) error {
 	root, err := s.filesRoot(owner)
 	if err != nil {
 		return err
@@ -229,16 +295,25 @@ func (s *Server) moveFile(owner, from, to string) error {
 			_ = s.rewriteRevision(owner, rev)
 		}
 	}
+	s.recordFileMove(owner, from, to, actors)
 	return nil
 }
 
 func (f *personalDAV) OpenFile(ctx context.Context, name string, flags int, perm os.FileMode) (webdav.File, error) {
+	write := flags&(os.O_WRONLY|os.O_RDWR) != 0
+	if !f.allowed(ctx, name, write, !write) {
+		return nil, os.ErrPermission
+	}
 	abs, err := safeJoin(f.root, name)
 	if err != nil {
 		return nil, os.ErrPermission
 	}
 	if flags&(os.O_WRONLY|os.O_RDWR) == 0 {
-		return os.Open(abs)
+		file, err := os.Open(abs)
+		if err != nil || f.grantee == "" {
+			return file, err
+		}
+		return &sharedDAVReadFile{File: file, fs: f, ctx: ctx, rel: cleanRel(name)}, nil
 	}
 	if abs == f.root {
 		return nil, os.ErrPermission
@@ -268,6 +343,11 @@ func (f *personalDAV) OpenFile(ctx context.Context, name string, flags int, perm
 	if err != nil {
 		return nil, err
 	}
+	if err = f.srv.saveStageGeneration(temp.Name(), f.owner); err != nil {
+		temp.Close()
+		f.srv.removeFileStage(temp.Name())
+		return nil, err
+	}
 	if info != nil && flags&os.O_TRUNC == 0 {
 		old, e := os.Open(abs)
 		if e == nil {
@@ -276,7 +356,7 @@ func (f *personalDAV) OpenFile(ctx context.Context, name string, flags int, perm
 		}
 		if e != nil {
 			temp.Close()
-			os.Remove(temp.Name())
+			f.srv.removeFileStage(temp.Name())
 			return nil, e
 		}
 		if flags&os.O_APPEND == 0 {
@@ -321,7 +401,7 @@ func (f *davFile) Close() error {
 		return nil
 	}
 	f.closed = true
-	defer os.Remove(f.File.Name())
+	defer f.fs.srv.removeFileStage(f.File.Name())
 	if err := f.File.Chmod(0640); err != nil {
 		f.File.Close()
 		return err
@@ -339,9 +419,20 @@ func (f *davFile) Close() error {
 	}
 	f.fs.srv.fileMu.Lock()
 	defer f.fs.srv.fileMu.Unlock()
-	_, err := f.fs.srv.commitFile(f.fs.owner, f.rel, f.File.Name(), f.expected)
+	if !f.fs.allowed(f.ctx, f.rel, true, false) {
+		return os.ErrPermission
+	}
+	_, err := f.fs.srv.commitFile(f.fs.owner, f.rel, f.File.Name(), f.expected, f.fs.activityActor())
 	if errors.Is(err, errFileQuota) {
 		f.fs.upload.quotaExceeded.Store(true)
 	}
 	return err
+}
+
+func (f *personalDAV) activityActor() fileActor {
+	id := f.owner
+	if f.grantee != "" {
+		id = f.grantee
+	}
+	return fileActor{ID: id, Source: "webdav"}
 }

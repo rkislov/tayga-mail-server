@@ -340,6 +340,8 @@ const calState = {
   dayClickTimer: null,
   attendees: [],
   invites: [],
+  inboxFilter: "pending",
+  inboxRequest: 0,
   proposals: [],
   highlightInvite: "",
   resources: [],
@@ -349,7 +351,7 @@ const notesState = {
   folderID: "", noteID: "", folders: [], notes: [], etag: "", rights: "write",
   shareTarget: null, saveTimer: null, drawing: false, dirty:false, revision:0, attachments:[], etags:{},
 };
-const filesState = { sharedRights:"write",listTarget:"",ownerID:"",sharedRoot:"", path: "", selected: null, entries: [] };
+const filesState = { spaceID:"",spaceName:"",spaceRights:"",sharedRights:"write",listTarget:"",ownerID:"",sharedRoot:"", path: "", selected: null, entries: [] };
 const chatState = { peer: "", roster: [], messages: [], es: null, me: "", sending: false, presence: "online", presenceSaving: false };
 
 function show(id) {
@@ -479,6 +481,7 @@ function isAuthPublicPath(path) {
 }
 
 function clearSession() {
+  resetBranding();
   resetTasks();
   resetComposeAttachments();
   disableWebPush().catch(() => {});
@@ -528,8 +531,9 @@ async function refreshAccessToken() {
 }
 
 async function api(path, opts = {}) {
-  if(filesState.ownerID&&/^\/api\/v1\/files(?:[/?]|$)/.test(path)&&!/^\/api\/v1\/files\/(?:access|shares|library|office)/.test(path))path+=(path.includes('?')?'&':'?')+'owner_id='+encodeURIComponent(filesState.ownerID);
-  const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
+  if(filesState.ownerID&&/^\/api\/v1\/files(?:[/?]|$)/.test(path)&&!/^\/api\/v1\/files\/(?:access|shares|library|office|card|spaces)/.test(path))path+=(path.includes('?')?'&':'?')+'owner_id='+encodeURIComponent(filesState.ownerID);
+  if(filesState.spaceID&&filesState.spaceID===filesState.ownerID&&/^\/api\/v1\/files\/(?:access|shares|library)(?:[/?]|$)/.test(path)&&!path.includes('owner_id=')&&!path.startsWith('/api/v1/files/library/search'))path+=(path.includes('?')?'&':'?')+'owner_id='+encodeURIComponent(filesState.spaceID);
+ const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
   if (state.tokens?.access_token) {
     headers.Authorization = "Bearer " + state.tokens.access_token;
   }
@@ -625,6 +629,7 @@ async function loadMe() {
   try {
     const me = await api("/api/v1/me");
     state.me = me;
+    refreshBranding();
     refreshMailImagePreferences();
     state.email = me.email || state.email;
     $("acct-email").textContent = me.email;
@@ -1136,10 +1141,18 @@ async function refreshTenantDomains() {
           </label>
           <label class="field-check" title="${escapeHtml(mailImageText('Общий адресный справочник пользователей этого домена','Global address list for users in this domain'))}"><input type="checkbox" data-domain-gal="${escapeHtml(d.id)}" ${d.gal_enabled?'checked':''}> GAL</label>
           <label class="field-check" title="${escapeHtml(mailImageText('Коллеги этого домена в XMPP и веб-чате. В XMPP обновится при переподключении.','Domain colleagues in XMPP and web chat. Reconnect XMPP to refresh.'))}"><input type="checkbox" data-domain-xmpp-gal="${escapeHtml(d.id)}" ${d.xmpp_gal_enabled?'checked':''}> ${escapeHtml(mailImageText('Общий список контактов XMPP','XMPP shared contacts'))}</label>
+          <button type="button" class="btn-secondary" data-domain-welcome="${escapeHtml(d.id)}">Welcome mail</button>
+          <button type="button" class="btn-secondary" data-domain-branding="${escapeHtml(d.id)}">${escapeHtml(t("branding_title"))}</button>
+          <button type="button" class="btn-secondary" data-domain-aliases="${escapeHtml(d.id)}">${escapeHtml(mailImageText('Алиасы','Aliases'))}</button>
           <button type="button" class="btn-spray" data-open-domain="${escapeHtml(d.id)}" data-name="${escapeHtml(d.name)}">${escapeHtml(t("domains_open"))}</button>
           <button type="button" class="btn-secondary" data-del-domain="${escapeHtml(d.name)}" ${d.user_count > 0 ? "disabled" : ""}>${escapeHtml(t("domains_remove"))}</button>
         </span>
       </li>`).join("") || `<li><span class="meta">${escapeHtml(t("domains_empty"))}</span></li>`;
+    $('tenant-welcome-button')?.classList.toggle('hidden', !state.me?.is_global_admin && state.me?.admin_scope !== 'tenant');
+    list.querySelectorAll('[data-domain-welcome]').forEach(button=>button.onclick=()=>openAdminWelcome('domains',items.find(d=>d.id===button.dataset.domainWelcome)));
+    $('tenant-branding-button')?.classList.toggle('hidden', !state.me?.is_global_admin && state.me?.admin_scope !== 'tenant');
+    list.querySelectorAll('[data-domain-branding]').forEach(button=>button.onclick=()=>openAdminBranding('domains',items.find(d=>d.id===button.dataset.domainBranding)));
+    list.querySelectorAll('[data-domain-aliases]').forEach(button=>button.onclick=()=>openAdminAliases('domain',items.find(d=>d.id===button.dataset.domainAliases)));
     list.querySelectorAll("[data-open-domain]").forEach((btn) => {
       btn.addEventListener("click", () => {
         tenantNav.domainID = btn.dataset.openDomain;
@@ -1328,8 +1341,9 @@ async function refreshAdminUsers() {
             </select>
           </label>
 </td><td><div class="user-action-icons">
- ${[['quota','download',t('users_quota_action')],['toggle','disconnect',t(u.enabled?'users_disable':'users_enable')],['pass','key',t('users_reset_pw')],...(state.me?.is_global_admin?[['user-role','shield',mailImageText('Роль и права пользователя','User role and permissions')]]:[]),['mail-access','reply',mailImageText('Доступ к ящику','Mailbox access')],...((u.id!==state.me?.id&&!u.is_global_admin)?[['delete-user','delete',mailImageText('Удалить пользователя','Delete user')]]:[])].map(([action,icon,label])=>`<button type="button" class="btn-secondary user-action-icon" data-${action}="${escapeHtml(u.id)}" data-enabled="${u.enabled?'1':'0'}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${designIcon(icon)}</button>`).join('')}
+ ${[['quota','download',t('users_quota_action')],['toggle','disconnect',t(u.enabled?'users_disable':'users_enable')],['pass','key',t('users_reset_pw')],...(state.me?.is_global_admin?[['user-role','shield',mailImageText('Роль и права пользователя','User role and permissions')]]:[]),['mailbox-aliases','reply',mailImageText('Алиасы ящика','Mailbox aliases')],['mail-access','reply',mailImageText('Доступ к ящику','Mailbox access')],...((u.id!==state.me?.id&&!u.is_global_admin)?[['delete-user','delete',mailImageText('Удалить пользователя','Delete user')]]:[])].map(([action,icon,label])=>`<button type="button" class="btn-secondary user-action-icon" data-${action}="${escapeHtml(u.id)}" data-enabled="${u.enabled?'1':'0'}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${designIcon(icon)}</button>`).join('')}
  </div></td></tr>`).join("") || `<tr><td colspan="7" class="meta">${t("users_empty")}</td></tr>`;
+    list.querySelectorAll('[data-mailbox-aliases]').forEach(button=>button.onclick=()=>openAdminAliases('mailbox',users.find(u=>u.id===button.dataset.mailboxAliases)));
     list.querySelectorAll('[data-delete-user]').forEach(button=>button.onclick=async()=>{const user=users.find(u=>u.id===button.dataset.deleteUser);if(!await askConfirm(mailImageText('Удалить пользователя и его данные: ','Delete user and their data: ')+user.email+'?',{danger:true}))return;button.disabled=true;try{await api('/api/v1/admin/users/'+encodeURIComponent(user.id),{method:'DELETE'});await refreshAdminUsers()}catch(err){setMsg($('admin-msg'),err.message,'err');button.disabled=false}});
     list.querySelectorAll("[data-mail-access]").forEach(button=>button.onclick=()=>openMailboxAccess(button.dataset.mailAccess));list.querySelectorAll("[data-user-role]").forEach(button=>button.onclick=()=>openUserRole(users.find(u=>u.id===button.dataset.userRole)));
     list.querySelectorAll("[data-user-mig]").forEach((sel) => {
@@ -2342,6 +2356,7 @@ function showToast(ev) {
 
 function openNotifyHref(href) {
   if (!href) return;
+  if (href === "files") { showApp("files"); openReceivedDocuments(); return; }
   if (href === "tasks") { showApp("tasks"); return; }
   if (href === "chat") { showApp("chat"); return; }
   if(href.startsWith("chat?peer=")){showApp("chat");openChatPeer(decodeURIComponent(href.slice(10)));return;}
@@ -2363,7 +2378,7 @@ function startNotifyLive() {
     updatePushButton();
   }).catch(() => {});
   const notificationRoute = new URL(location.href).searchParams.get('notification');
-  if (['mail','calendar','chat','tasks'].includes(notificationRoute)) {
+  if (['mail','calendar','chat','tasks','files'].includes(notificationRoute)) {
     const url = new URL(location.href); url.searchParams.delete('notification'); history.replaceState(null,'',url);
     setTimeout(() => openNotifyHref(notificationRoute), 0);
   }
@@ -2379,6 +2394,7 @@ function startNotifyLive() {
       notifyState.seen.add(event.id);
       if (notifyState.seen.size > 200) notifyState.seen.delete(notifyState.seen.values().next().value);
       showToast(event);
+      if(event.kind==='files'&&!$('app-files')?.classList.contains('hidden'))refreshFiles();
       if (event.kind === 'task' && !$('app-tasks')?.classList.contains('hidden')) refreshTasks();
     } catch (_) {}
   });
@@ -2591,7 +2607,7 @@ $("btn-passkey-add").addEventListener("click", async () => {
 function mailFolderLabel(mb) {
   const role = mb.role || (["inbox", "sent", "drafts", "trash", "junk", "archive"].includes(mb.name?.toLowerCase()) ? mb.name.toLowerCase() : "");
   const name = role ? t("mail_folder_" + role) : mb.name;
-  return name + (mb.shared ? " · " + t("mail_shared") : "");
+  return name + (mb.shared ? " · " + (mb.owner_email || t("mail_shared")) : "");
 }
 function sortMailFolders(folders) {
   const rank = id => { const i = mailState.order.indexOf(id); return i < 0 ? 100000 : i; };
@@ -2820,7 +2836,7 @@ function showMailReader(msg) {
   reader.classList.remove("hidden");
   setMobilePane("read");
   $("mail-subject").textContent = msg.subject || "(no subject)";
-  if ($("mail-from")) $("mail-from").textContent = msg.from || "—";
+  if ($("mail-from")) $("mail-from").textContent = msg.sender ? mailImageText(msg.sender+" от имени "+msg.from,msg.sender+" on behalf of "+msg.from) : msg.from || "—";
   renderSenderAvatar(msg.from);
   if ($("mail-to")) $("mail-to").textContent = msg.to || "—";
   if ($("mail-date")) $("mail-date").textContent = mailDateFull(msg.date || msg.internal_date);
@@ -2949,10 +2965,16 @@ $("btn-mail-archive")?.addEventListener("click", async () => {
   }
 });
 function composeBodyEl() {
+  if (typeof composeRichEditor !== "undefined" && composeRichEditor) return composeRichEditor.ui.getEditableElement();
   return $("compose-body");
 }
 
 function setComposeBody(htmlOrText, asHTML) {
+  const plain = document.createElement('div');
+  if (!asHTML) for (const line of String(htmlOrText || '').split('\n')) { const p = document.createElement('p'); p.textContent = line; plain.append(p); }
+  const editorHTML = asHTML ? (htmlOrText || '') : plain.innerHTML;
+  if (typeof composeRichPendingHTML !== 'undefined') composeRichPendingHTML = editorHTML;
+  if (typeof composeRichEditor !== 'undefined' && composeRichEditor) { composeRichEditor.setData(editorHTML); composeRichPendingHTML = null; return; }
   const el = composeBodyEl();
   if (!el) return;
   if (el.isContentEditable) {
@@ -2972,18 +2994,23 @@ function setComposeBody(htmlOrText, asHTML) {
 }
 
 function getComposeHTML() {
+  if (typeof composeRichEditor !== 'undefined' && composeRichEditor) return composeRichEditor.getData();
   const el = composeBodyEl();
   if (!el) return "";
   if (el.isContentEditable) return (el.innerHTML || "").trim();
   return "";
 }
 
+function mutateComposeHTML(update) {
+  const fragment = document.createElement('div'); fragment.innerHTML = getComposeHTML();
+  update(fragment); setComposeBody(fragment.innerHTML, true);
+}
 function getComposeText() {
   const el = composeBodyEl();
   if (!el) return "";
-  if (el.isContentEditable) {
+  if (el.tagName !== "TEXTAREA") {
     const tmp = document.createElement("div");
-    tmp.innerHTML = el.innerHTML || "";
+    tmp.innerHTML = getComposeHTML();
     tmp.querySelectorAll("a[href]").forEach(link=>{if(link.textContent!==link.getAttribute("href"))link.append(document.createTextNode(" ("+link.getAttribute("href")+")"))});
     tmp.querySelectorAll("br").forEach((br) => br.replaceWith("\n"));
     tmp.querySelectorAll("div, p, li, blockquote").forEach((n) => {
@@ -2995,7 +3022,22 @@ function getComposeText() {
   return el.value || "";
 }
 
-function openCompose({ to = "", cc = "", subject = "", body = "", bodyHTML = "" } = {}) {
+let composeSenderEpoch=0;
+async function loadComposeSenders(preferred='') {
+ const select=$('compose-from');if(!select)return;
+ const epoch=++composeSenderEpoch,userID=state.me?.id,primary=state.me?.email||'';
+ const add=(address,mode='send_as')=>{const option=document.createElement('option');option.value=address;option.dataset.senderMode=mode;option.textContent=mode==='on_behalf'?mailImageText(state.me.email+' от имени '+address,state.me.email+' on behalf of '+address):address;select.append(option)};
+ select.replaceChildren();if(primary)add(primary);select.disabled=true;renderComposeAttachments();
+ try{
+  const data=await api('/api/v1/mail/senders');
+  if(epoch!==composeSenderEpoch||state.me?.id!==userID)return;
+  select.replaceChildren();if(data.identities){for(const identity of data.identities)add(identity.email,identity.mode);}else{for(const address of data.addresses||[])add(address);}
+  const preferredOption=[...select.options].find(option=>option.value===preferred);select.selectedIndex=preferredOption?preferredOption.index:0;
+ }catch(error){if(epoch===composeSenderEpoch&&state.me?.id===userID)setMsg($('compose-msg'),mailImageText('Не удалось загрузить адреса отправителя. Повторно откройте окно письма.','Could not load sender addresses. Reopen the compose window.'),'err');}
+ finally{if(epoch===composeSenderEpoch&&state.me?.id===userID)select.disabled=false;renderComposeAttachments();}
+}
+
+function openCompose({ to = "", cc = "", from = "", subject = "", body = "", bodyHTML = "" } = {}) {
   if (composeAttachments.sending) return;
   resetComposeAttachments();
   $("compose-backdrop")?.classList.remove("hidden");
@@ -3006,10 +3048,12 @@ function openCompose({ to = "", cc = "", subject = "", body = "", bodyHTML = "" 
   if (bodyHTML) setComposeBody(bodyHTML, true);
   else setComposeBody(body, false);
   const signatureEnabled=to||body||bodyHTML?signatureState.replies:signatureState.new_messages;
-  if(signatureEnabled&&signatureState.text) {const block=document.createElement("div");block.dataset.mailSignature="true";block.style.whiteSpace="pre-wrap";block.textContent="\n-- \n"+signatureState.text;const surface=composeBodyEl();if(body||bodyHTML)surface.prepend(block);else surface.append(block);}
+  if(signatureEnabled&&signatureState.text) {const block=document.createElement("p");block.dataset.mailSignature="true";for(const line of ("-- \n"+signatureState.text).split("\n")){if(block.childNodes.length)block.append(document.createElement("br"));block.append(document.createTextNode(line));}mutateComposeHTML(surface=>{if(body||bodyHTML)surface.prepend(block);else surface.append(block);});}
   const surface = composeBodyEl();
   if (surface?.dataset) surface.dataset.placeholder = t("body");
   setMsg($("compose-msg"), "");
+  loadComposeSenders(from);
+  if (typeof ensureComposeRichEditor === "function") ensureComposeRichEditor().catch(()=>{});
   surface?.focus?.();
 }
 
@@ -3040,7 +3084,8 @@ $("compose-backdrop")?.addEventListener("click", (e) => {
   if (e.target === $("compose-backdrop")) $("compose-backdrop").classList.add("hidden");
 });
 $("btn-compose-send")?.addEventListener("click", async () => {
-  if (composeAttachments.sending || composeAttachments.entries.some(item=>item.status!=="ready")) return;
+  if (typeof mailEditorPending === "function" && (composeRichEditorBoot || mailEditorPending(composeRichEditor))) return;
+  if (composeAttachments.sending || $("compose-from")?.disabled || composeAttachments.entries.some(item=>item.status!=="ready")) return;
   composeAttachments.sending = true;
   renderComposeAttachments();
   const to = ($("compose-to").value || "").split(/[,;]/).map((s) => s.trim()).filter(Boolean);
@@ -3050,6 +3095,8 @@ $("btn-compose-send")?.addEventListener("click", async () => {
     const text = getComposeText(), html = getComposeHTML();
     const attachments = composeAttachments.entries.filter(item=>!item.share).map(item=>item.ref);
     const payload = {
+      from: $("compose-from")?.value || state.me?.email || "",
+      sender_mode: $("compose-from")?.selectedOptions[0]?.dataset.senderMode || "send_as",
       to,
       cc: ($("compose-cc")?.value || "").split(/[,;]/).map(value=>value.trim()).filter(Boolean),
       subject: $("compose-subject").value,
@@ -3159,11 +3206,15 @@ function calMonthStart(d) {
 }
 
 function showCalCompose(open) {
+ if($('form-cal-event')?.dataset.saving==='true')return;
+ if(open){calState.editingEvent=null;const form=$('form-cal-event');if(form)form.dataset.editorUser=state.me?.id || '';}
  if(open && $("cal-location")){delete $("cal-location").dataset.geo;$("cal-location").dispatchEvent(new Event("input"));}
   const dialog=mountCalendarEditor();
  if(dialog){if(open&&!dialog.open)dialog.showModal();if(!open&&dialog.open)dialog.close()}
  syncEventCalendarChoice();
   if (open) {
+    const title=$('event-editor-title');if(title){title.removeAttribute('data-i18n');title.textContent=t('new_event');}
+    if($('event-calendar-choice'))$('event-calendar-choice').disabled=false;
     setMsg($("cal-msg"), "");
     mountNewEventRecurrence();
     calState.attendees = [];
@@ -3214,7 +3265,7 @@ function renderCalReadAttachments(atts) {
       return `<div class="cal-attach-item">
         <button type="button" class="btn-secondary btn-sm" data-att-dl="${escapeHtml(a.id)}" data-name="${escapeHtml(a.filename || "file")}">${escapeHtml(a.filename || "file")}</button>
         <span class="meta">${escapeHtml(a.content_type || "")}${size}</span>
-        <button type="button" class="btn-secondary btn-sm" data-att-del="${escapeHtml(a.id)}">${escapeHtml(t("cal_attach_delete"))}</button>
+        ${a.read_only ? "" : `<button type="button" class="btn-secondary btn-sm" data-att-del="${escapeHtml(a.id)}">${escapeHtml(t("cal_attach_delete"))}</button>`}
       </div>`;
     }).join("");
     dd.querySelectorAll("[data-att-dl]").forEach((btn) => {
@@ -3362,75 +3413,92 @@ async function refreshCalInvites() {
   const list = $("cal-invite-list");
   if (!list) return;
   const userID = state.me?.id;
+  const request = calState.inboxRequest = (calState.inboxRequest || 0) + 1;
   setMsg($('cal-invite-msg'), '', '');
   try {
-    const data = await api("/api/v1/calendar/invites");
-    if (state.me?.id !== userID) return;
+    const data = await api("/api/v1/calendar/invites?all=1");
+    if (state.me?.id !== userID || request !== calState.inboxRequest) return;
     calState.invites = data.invites || [];
     calState.proposals = data.proposals || [];
     updateCalInviteBadge();
-    if (!calState.invites.length && !calState.proposals.length) {
+    const needsReply = inv => !inv.cancelled && inv.can_reply !== false && ['NEEDS-ACTION', 'TENTATIVE'].includes(String(inv.partstat || 'NEEDS-ACTION').toUpperCase());
+    const filter = calState.inboxFilter || 'pending';
+    const invites = calState.invites.filter(inv => filter === 'all' || (filter === 'pending' ? needsReply(inv) : !needsReply(inv)));
+    $('cal-inbox-filters')?.querySelectorAll('[data-inbox-filter]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.inboxFilter === filter)));
+    const visibleProposals = filter === 'history' ? [] : calState.proposals;
+    if (!invites.length && !visibleProposals.length) {
       if (!$("cal-invites-backdrop").classList.contains("hidden")) $("btn-cal-invites-close").focus();
-      list.innerHTML = `<li class="meta msg-empty">${escapeHtml(t("cal_invites_empty"))}</li>`;
+      list.innerHTML = `<li class="meta msg-empty">${escapeHtml(filter === "pending" ? t("cal_invites_empty") : t("cal_inbox_history_empty"))}</li>`;
       return;
     }
-    const proposals = calState.proposals.map(proposal => `<li class="cal-invite-item cal-proposal-item">
+    const proposals = visibleProposals.map(proposal => `<li class="cal-invite-item cal-proposal-item">
       <div class="cal-invite-main">
         <span class="meta">${escapeHtml(mailImageText('Предложение нового времени', 'New time proposal'))}</span>
         <strong>${escapeHtml(proposal.summary || '—')}</strong>
         <span class="meta">${escapeHtml(proposal.attendee)}</span>
         <span>${escapeHtml(mailImageText('Сейчас: ', 'Current: ') + fmtCalWhen(proposal.start) + ' — ' + fmtCalWhen(proposal.end))}</span>
         <strong>${escapeHtml(mailImageText('Предложено: ', 'Proposed: ') + fmtCalWhen(proposal.proposed_start) + ' — ' + fmtCalWhen(proposal.proposed_end))}</strong>
-        ${proposal.recurring ? `<span class="meta">${escapeHtml(mailImageText('Повторяющаяся встреча: изменится основное время серии.', 'Recurring meeting: the master series time will change.'))}</span>` : ''}
+        ${proposal.recurrence_id ? `<span class="meta">${escapeHtml(mailImageText('Изменится только это повторение. Остальные даты сохранятся.', 'Only this occurrence will change. Other dates stay unchanged.'))}</span>` : proposal.recurring ? `<span class="meta">${escapeHtml(mailImageText('Повторяющаяся встреча: изменится основное время серии.', 'Recurring meeting: the master series time will change.'))}</span>` : ''}
       </div>
       <div class="cal-invite-actions">
-        <button type="button" class="btn-spray btn-sm" data-proposal-act="accept" data-id="${escapeHtml(proposal.id)}">${escapeHtml(mailImageText('Принять время', 'Accept time'))}</button>
-        <button type="button" class="btn-secondary btn-sm" data-proposal-act="decline" data-id="${escapeHtml(proposal.id)}">${escapeHtml(t('cal_decline'))}</button>
+          <button type="button" class="btn-spray btn-sm" data-proposal-act="accept" data-key="${escapeHtml(proposal.key || proposal.id)}">${escapeHtml(mailImageText('Принять время', 'Accept time'))}</button>
+          <button type="button" class="btn-secondary btn-sm" data-proposal-act="decline" data-key="${escapeHtml(proposal.key || proposal.id)}">${escapeHtml(t('cal_decline'))}</button>
       </div>
     </li>`).join('');
-    list.innerHTML = proposals + calState.invites.map((inv) => {
-      const when = inv.start ? fmtCalWhen(inv.start) : "";
+    list.innerHTML = proposals + invites.map((inv) => {
+      const when = inv.start ? fmtCalWhen(inv.start) + (inv.end ? " — " + fmtCalWhen(inv.end) : "") : "";
       const org = inv.organizer?.email || "";
       const hi = inv.id === calState.highlightInvite ? " is-active" : "";
       return `<li class="cal-invite-item${hi}" data-invite="${escapeHtml(inv.id)}">
         <div class="cal-invite-main">
           <strong>${escapeHtml(inv.summary || "—")}</strong>
-          <span class="meta">${escapeHtml(org)}${when ? " · " + escapeHtml(when) : ""}</span>
+          <span class="cal-invite-status">${escapeHtml(inv.cancelled ? t('cal_inbox_cancelled') : partstatLabel(inv.partstat))}</span>
+          <span class="meta">${escapeHtml(org)}</span>
+          ${inv.delegated ? `<strong class="meta">${escapeHtml(mailImageText("Ответ от имени ", "Responding on behalf of ") + inv.attendee_email)}</strong>` : ""}
+          <span>${escapeHtml(when)}</span>
+          ${inv.location ? `<span class="meta">${escapeHtml(inv.location)}</span>` : ''}
+          ${inv.recurring ? `<span class="meta">${escapeHtml(t('cal_inbox_series'))}</span>` : ''}
         </div>
         <div class="cal-invite-actions">
-          <button type="button" class="btn-spray btn-sm" data-inv-act="accept" data-id="${escapeHtml(inv.id)}">${escapeHtml(t("cal_accept"))}</button>
+          ${inv.calendar_object_id ? `<button type="button" class="btn-secondary btn-sm" data-inv-open="${escapeHtml(inv.calendar_object_id)}">${escapeHtml(t('cal_inbox_open'))}</button>` : ''}
+          ${inv.can_reply !== false && !inv.cancelled ? `<button type="button" class="btn-spray btn-sm" data-inv-act="accept" data-id="${escapeHtml(inv.id)}">${escapeHtml(t("cal_accept"))}</button>
           <button type="button" class="btn-secondary btn-sm" data-inv-act="tentative" data-id="${escapeHtml(inv.id)}">${escapeHtml(t("cal_tentative"))}</button>
           <button type="button" class="btn-secondary btn-sm" data-inv-act="decline" data-id="${escapeHtml(inv.id)}">${escapeHtml(t("cal_decline"))}</button>
-          <button type="button" class="btn-secondary btn-sm" data-inv-act="counter" data-id="${escapeHtml(inv.id)}">${escapeHtml(t("cal_counter"))}</button>
+          <button type="button" class="btn-secondary btn-sm" data-inv-act="counter" data-id="${escapeHtml(inv.id)}">${escapeHtml(t("cal_counter"))}</button>` : ''}
         </div>
       </li>`;
     }).join("");
     if (!$("cal-invites-backdrop").classList.contains("hidden") && document.activeElement === document.body) $("btn-cal-invites-close").focus();
+    list.querySelectorAll('[data-inv-open]').forEach(button => button.addEventListener('click', () => {
+      closeCalInviteInbox();
+      openCalEvent(button.dataset.invOpen);
+    }));
     list.querySelectorAll("[data-inv-act]").forEach((btn) => {
       btn.addEventListener("click", () => replyCalInvite(btn.dataset.id, btn.dataset.invAct));
     });
-    list.querySelectorAll('[data-proposal-act]').forEach(btn => btn.addEventListener('click', () => decideCalProposal(btn.dataset.id, btn.dataset.proposalAct)));
+    list.querySelectorAll('[data-proposal-act]').forEach(btn => btn.addEventListener('click', () => decideCalProposal(btn.dataset.key, btn.dataset.proposalAct)));
   } catch (err) {
-    if (state.me?.id === userID) list.innerHTML = `<li class="meta msg-empty">${escapeHtml(err.message)}</li>`;
+    if (state.me?.id === userID && request === calState.inboxRequest) list.innerHTML = `<li class="meta msg-empty">${escapeHtml(err.message)}</li>`;
   }
 }
 
 let calInviteReplyBusy = false;
-async function decideCalProposal(id, action) {
+async function decideCalProposal(key, action) {
   if (calInviteReplyBusy) return;
-  const proposal = calState.proposals.find(item => item.id === id);
+  const proposal = calState.proposals.find(item => (item.key || item.id) === key);
   if (!proposal) return;
+  const id=proposal.id;
   calInviteReplyBusy = true;
   const userID = state.me?.id;
   const currentUser = () => state.me?.id === userID;
   $('cal-invite-list')?.querySelectorAll('button').forEach(button => button.disabled = true);
   setMsg($('cal-invite-msg'), '', '');
   try {
-    if (action === 'accept' && !await askConfirm(fmtCalWhen(proposal.proposed_start) + ' — ' + fmtCalWhen(proposal.proposed_end) + '\n' + mailImageText('Все участники получат обновлённое приглашение.', 'All attendees will receive an updated invitation.'), {
+    if (action === 'accept' && !await askConfirm(fmtCalWhen(proposal.proposed_start) + ' — ' + fmtCalWhen(proposal.proposed_end) + '\n' + (proposal.recurrence_id ? mailImageText('Изменится только это повторение. Все его участники получат обновлённое приглашение.', 'Only this occurrence will change. Its attendees will receive an updated invitation.') : mailImageText('Все участники получат обновлённое приглашение.', 'All attendees will receive an updated invitation.')), {
       title: mailImageText('Изменить время встречи?', 'Change meeting time?')
     })) return;
     if (!currentUser()) return;
-    await api('/api/v1/calendar/invites/' + encodeURIComponent(id) + '/decision', {method:'POST', body:JSON.stringify({action, event_id:proposal.event_id, revision:proposal.revision, etag:proposal.etag})});
+    await api('/api/v1/calendar/invites/' + encodeURIComponent(id) + '/decision', {method:'POST', body:JSON.stringify({action, event_id:proposal.event_id, revision:proposal.revision, etag:proposal.etag,...(proposal.recurrence_id?{recurrence_id:proposal.recurrence_id}:{})})});
     if (!currentUser()) return;
     await refreshCalInvites();
     if (!currentUser()) return;
@@ -3636,6 +3704,7 @@ function renderCalDay() {
 }
 
 function startNewCalEvent(day = calState.selectedDay || calDayKey(new Date()), hour = 10) {
+  if($('form-cal-event')?.dataset.saving==='true')return;
   if(calState.defaultCalendarID)calState.calendarID=calState.defaultCalendarID;
   if (calState.calendars.find(c=>c.id===calState.calendarID)?.writable===false) {setMsg($("cal-msg"),t("cal_readonly"),"err");return;}
   clearTimeout(calState.dayClickTimer);
@@ -3643,6 +3712,7 @@ function startNewCalEvent(day = calState.selectedDay || calDayKey(new Date()), h
   $("form-cal-event")?.reset();
   delete $("form-cal-event").dataset.createdEvent;
   calState.uploadedFiles=new Set();
+  $('cal-start').type='datetime-local';$('cal-end').type='datetime-local';
   $("cal-start").value = day + "T" + String(hour).padStart(2,"0") + ":00";
   const end = new Date(day + "T" + String(hour).padStart(2,"0") + ":00");
   end.setHours(end.getHours() + 1);
@@ -3652,15 +3722,16 @@ function startNewCalEvent(day = calState.selectedDay || calDayKey(new Date()), h
 
 let calInboxFocus = null;
 function updateCalInviteBadge() {
-  const count = calState.invites.length + (calState.proposals?.length || 0);
+  const count = calState.invites.filter(inv => !inv.cancelled && inv.can_reply !== false && ["NEEDS-ACTION", "TENTATIVE"].includes(String(inv.partstat || "NEEDS-ACTION").toUpperCase())).length + (calState.proposals?.length || 0);
   $("cal-invite-count").textContent = String(count);
   $("cal-invite-count").classList.toggle("hidden", count === 0);
-  const label = t("cal_invites") + (count ? ` · ${count}` : "");
+  const label = t("cal_inbox_title") + (count ? ` · ${count}` : "");
   $("btn-cal-invites").setAttribute("aria-label", label);
   $("btn-cal-invites").title = label;
 }
 async function openCalInviteInbox() {
   calInboxFocus = document.activeElement;
+  if (calState.highlightInvite) calState.inboxFilter = "all";
   $("cal-invites-backdrop").classList.remove("hidden");
   $("view-account").inert = true;
   $("btn-cal-invites-close").focus();
@@ -3672,6 +3743,13 @@ function closeCalInviteInbox() {
   $("view-account").inert = false;
   calInboxFocus?.focus();
 }
+$('cal-inbox-filters')?.addEventListener('click', event => {
+  const button = event.target.closest('[data-inbox-filter]');
+  if (!button || calInviteReplyBusy) return;
+  calState.inboxFilter = button.dataset.inboxFilter;
+  refreshCalInvites();
+});
+$('btn-cal-inbox-refresh')?.addEventListener('click', () => refreshCalInvites());
 $("btn-cal-invites")?.addEventListener("click", openCalInviteInbox);
 $("btn-cal-invites-close")?.addEventListener("click", closeCalInviteInbox);
 $("cal-invites-backdrop")?.addEventListener("click", event => { if (event.target === $("cal-invites-backdrop")) closeCalInviteInbox(); });
@@ -3829,6 +3907,7 @@ async function loadCalEvents() {
 
 function showCalReader(ev) {
   calState.currentEvent = ev;
+  renderCalOccurrenceReply(ev);
   const empty = $("cal-empty");
   const reader = $("cal-reader");
   if (!empty || !reader) return;
@@ -3868,6 +3947,7 @@ function showCalReader(ev) {
   renderCalReadAttachments(ev.attachments || []);
   const recurring = !!ev.recurrence_id;
   const canEdit = calendar?.writable !== false && !ev.busy_only && (!recurring || ev.occurrence_organizer);
+  $('btn-cal-edit')?.classList.toggle('hidden',!canEditCalendarEvent(ev));
   $('btn-cal-recurrence')?.classList.toggle('hidden',!canEdit || !ev.recurrence_organizer);
   $('btn-cal-instance-edit')?.classList.toggle('hidden',!recurring || !canEdit);
   $('btn-cal-series-delete')?.classList.toggle('hidden',!recurring || !canEdit);
@@ -4004,6 +4084,7 @@ $("cal-backdrop")?.addEventListener("click", (e) => {
   if (e.target === $("cal-backdrop")) showCalCompose(false);
 });
 $("btn-cal-instance-edit")?.addEventListener("click",()=>openCalOccurrenceEditor());
+$("btn-cal-edit")?.addEventListener("click",()=>editCalendarRecord(calState.currentEvent));
 $("btn-cal-series-delete")?.addEventListener("click",()=>deleteCalEvent(true));
 $("btn-cal-delete")?.addEventListener("click",()=>deleteCalEvent(false));
 $("btn-cal-attendee-add")?.addEventListener("click", () => addCalAttendeesFromInput());
@@ -4051,8 +4132,11 @@ $("cal-read-files")?.addEventListener("change", async () => {
 
 $("form-cal-event")?.addEventListener("submit", async (e) => {
   e.preventDefault();
+  const form=$("form-cal-event"),editing=calState.editingEvent,userID=state.me?.id;
+  if(form.dataset.editorUser && form.dataset.editorUser!==userID)return;
+  if(editing && !canEditCalendarEvent(editing))return;
   addCalAttendeesFromInput();
-  calState.calendarID=$("event-calendar-choice")?.value || calState.calendarID;
+  calState.calendarID=editing?.calendar_id || $("event-calendar-choice")?.value || calState.calendarID;
   if(new Date($("cal-end").value)<=new Date($("cal-start").value)){setMsg($("cal-msg"),mailImageText("Конец должен быть позже начала","End must be after start"),"err");return;}
   if (!calState.calendarID) {
     try {
@@ -4065,20 +4149,21 @@ $("form-cal-event")?.addEventListener("submit", async (e) => {
     return;
   }
   let recurrence;
-  try {recurrence=readRecurrenceFields('cal-new-recurrence');} catch(error) {setMsg($('cal-msg'),error.message,'err');return;}
-  const form=$("form-cal-event");if(form.dataset.saving==="true")return;form.dataset.saving="true";
+  try {if(!editing)recurrence=readRecurrenceFields('cal-new-recurrence');} catch(error) {setMsg($('cal-msg'),error.message,'err');return;}
+  if(form.dataset.saving==="true")return;form.dataset.saving="true";
   const saveButton=form.querySelector('[type="submit"]');if(saveButton)saveButton.disabled=true;
   setMsg($("cal-msg"), "…");
   try {
     const created = form.dataset.createdEvent ? {id:form.dataset.createdEvent} : await api("/api/v1/calendar/calendars/" + encodeURIComponent(calState.calendarID) + "/events", {
-      method: "POST",
+      method: editing ? "PUT" : "POST",
       body: JSON.stringify({
+        id: editing?.id, etag: editing?.etag, all_day: editing?.all_day,
         summary: $("cal-summary").value,
         location: $("cal-location")?.value || "",
  geo: $("cal-location")?.dataset.geo || "",
         description: $("cal-description")?.value || "",
-        start: localInputToISO($("cal-start").value),
-        end: localInputToISO($("cal-end").value),
+        start: editing?.all_day ? $("cal-start").value+'T00:00:00.000Z' : localInputToISO($("cal-start").value),
+        end: editing?.all_day ? $("cal-end").value+'T00:00:00.000Z' : localInputToISO($("cal-end").value),
         recurrence,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
         attendees: calState.attendees.map((a) => ({
@@ -4088,6 +4173,7 @@ $("form-cal-event")?.addEventListener("submit", async (e) => {
         })),
       }),
     });
+    if(state.me?.id!==userID)return;
     if(created?.id)form.dataset.createdEvent=created.id;
     const files = $("cal-files")?.files;
     if (created?.id && files?.length) {
@@ -4095,17 +4181,21 @@ $("form-cal-event")?.addEventListener("submit", async (e) => {
         const key=file.name+":"+file.size+":"+file.lastModified;
         if(calState.uploadedFiles?.has(key))continue;
         await uploadCalAttachment(created.id, file);
+        if(state.me?.id!==userID)return;
         if(!calState.uploadedFiles)calState.uploadedFiles=new Set();calState.uploadedFiles.add(key);
       }
     }
     setMsg($("cal-msg"), "OK", "ok");
     $("form-cal-event").reset();
     calState.attendees = [];
+    calState.editingEvent = null;
     renderCalAttendeeChips();
+    delete form.dataset.saving;
     showCalCompose(false);
     await loadCalEvents();
     if (created?.id) openCalEvent(created.id);
   } catch (err) {
+    if(state.me?.id!==userID)return;
     setMsg($("cal-msg"), form.dataset.createdEvent ? mailImageText("Событие сохранено, но не все вложения загружены. Повторите сохранение, чтобы дозагрузить файлы: ","Event saved, but some attachments failed. Save again to retry uploads: ")+err.message : calendarRecurrenceError(err.message), "err");
   } finally {delete form.dataset.saving;if(saveButton)saveButton.disabled=false;}
 });
@@ -4321,7 +4411,7 @@ function showFileReader(entry) {
   let preview=$('btn-files-preview');
   if(!preview){preview=document.createElement('button');preview.id='btn-files-preview';preview.type='button';preview.className='btn-secondary btn-sm';$('btn-files-download').after(preview);}
   preview.textContent=mailImageText('Просмотр','Preview');preview.hidden=entry.is_dir||!documentPreviewType(entry.name);
-  let share=$('btn-files-share');if(!share){share=document.createElement('button');share.id='btn-files-share';share.type='button';share.className='btn-secondary btn-sm';$('btn-files-download').after(share);}share.hidden=!!filesState.ownerID;share.textContent=mailImageText('Доступ','Share');share.onclick=()=>openFileAccess(joinPath(filesState.path,entry.name));
+  let share=$('btn-files-share');if(!share){share=document.createElement('button');share.id='btn-files-share';share.type='button';share.className='btn-secondary btn-sm';$('btn-files-download').after(share);}share.hidden=false;share.textContent=mailImageText('Карточка','Details');share.onclick=()=>openFileCard(joinPath(filesState.path,entry.name),filesState.ownerID);
   preview.onclick=()=>openDocumentPreview({url:'/api/v1/files/content?path='+encodeURIComponent(joinPath(filesState.path,entry.name))+(filesState.ownerID?'&owner_id='+encodeURIComponent(filesState.ownerID):''),name:entry.name,size:entry.size});
   mountFileReaderActions(entry);
 }
@@ -4583,7 +4673,7 @@ function filesGoUp() {
 async function refreshFiles() {
   const list = $("files-list");
   if (!list) return;
-  if ($("files-path")) $("files-path").textContent = "/" + (filesState.path || "");
+  if ($("files-path")) $("files-path").textContent = (filesState.spaceID&&filesState.spaceID===filesState.ownerID?filesState.spaceName+" /":"/") + (filesState.path || "");
   $("btn-files-up")?.classList.toggle("hidden", !filesState.path||!!filesState.listTarget||(filesState.ownerID&&filesState.path===filesState.sharedRoot));
   try {
     const requested=filesState.listTarget||filesState.path;const q = requested ? "?path=" + encodeURIComponent(requested) : "";
@@ -5210,6 +5300,47 @@ $("btn-note-draw-save")?.addEventListener("click", async () => {
   } catch (err) {
     await askConfirm(err.message, { title: t("note_draw") });
   }
+});
+
+$('btn-note-history')?.addEventListener('click', async () => {
+ if (!await flushNoteSave()) return;
+ const id = notesState.noteID;
+ if (!id) return;
+ const dialog = document.createElement('dialog');
+ dialog.className = 'migration-dialog'; dialog.setAttribute('aria-label', t('note_history'));
+ const title = document.createElement('h3'); title.textContent = t('note_history');
+ const close = document.createElement('button'); close.type = 'button'; close.className = 'btn-secondary'; close.textContent = t('close'); close.onclick = () => dialog.close();
+ const list = document.createElement('div');
+ const status = document.createElement('p'); status.className = 'msg'; status.setAttribute('role', 'status');
+ dialog.append(title, list, status, close); document.body.append(dialog);
+ dialog.addEventListener('close', () => dialog.remove(), {once:true}); dialog.showModal();
+ try {
+  const data = await api('/api/v1/notes/' + encodeURIComponent(id) + '/versions');
+  if (!dialog.isConnected) return;
+  if (!data.versions.length) list.textContent = t('note_history_empty');
+  for (const version of data.versions) {
+   const row = document.createElement('details');
+   const summary = document.createElement('summary'); summary.textContent = new Date(version.saved_at).toLocaleString() + ' · ' + (version.title || t('note_new'));
+   const preview = document.createElement('p'); preview.style.whiteSpace = 'pre-wrap'; preview.style.overflowWrap = 'anywhere'; preview.textContent = version.body_text;
+   row.append(summary, preview);
+   if (notesState.rights === 'write') {
+    const restore = document.createElement('button'); restore.type = 'button'; restore.className = 'btn-secondary'; restore.textContent = t('note_restore');
+    restore.onclick = async () => {
+     if (notesState.noteID !== id || !await flushNoteSave()) return;
+     restore.disabled = true;
+     try {
+      const revision = notesState.revision, etag = notesState.etags[id];
+      const note = await api('/api/v1/notes/' + encodeURIComponent(id) + '/versions/' + encodeURIComponent(version.id) + '/restore', {method:'POST', body:JSON.stringify({etag})});
+      if (notesState.noteID === id && notesState.revision === revision && !notesState.dirty) showNoteEditor(note);
+      await refreshNotes(); dialog.close();
+     } catch (err) { setMsg(status, err.message, 'err'); }
+     finally { restore.disabled = false; }
+    };
+    row.append(restore);
+   }
+   list.append(row);
+  }
+ } catch (err) { setMsg(status, err.message, 'err'); }
 });
 
 async function openNoteShare(kind) {

@@ -2,12 +2,45 @@ package storage
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/tayga/tms/internal/calutil"
 )
+
+type CalendarOccurrenceEdit struct {
+	RecurrenceID string
+	Change       calutil.OccurrenceChange
+}
+
+// ChangeCalendarOccurrences applies a protocol exception patch atomically.
+func (s *Store) ChangeCalendarOccurrences(ctx context.Context, userID, objectID, etag string, edits []CalendarOccurrenceEdit) (*CalendarObject, error) {
+	if etag == "" || len(edits) == 0 || len(edits) > 256 {
+		return nil, ErrCalendarConflict
+	}
+	tx, err := s.beginCalendarWrite(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	var source *CalendarObject
+	for _, edit := range edits {
+		if edit.RecurrenceID == "" {
+			return nil, ErrCalendarConflict
+		}
+		source, err = s.changeCalendarSeriesTx(ctx, tx, userID, objectID, etag, edit.RecurrenceID, edit.Change, nil)
+		if err != nil {
+			return nil, err
+		}
+		etag = source.ETag
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+	return source, nil
+}
 
 // ChangeCalendarOccurrence commits the organizer exception and existing local
 // participant/resource copies together. Every changed row uses optimistic
@@ -34,15 +67,30 @@ func (s *Store) changeCalendarSeries(ctx context.Context, userID, objectID, etag
 		return nil, err
 	}
 	defer tx.Rollback()
-	var email, name string
-	if err := tx.QueryRowContext(ctx, s.rebind(`SELECT email, display_name FROM users WHERE id=? AND enabled=TRUE`), userID).Scan(&email, &name); err != nil {
-		return nil, ErrUnauthorized
-	}
-	q := `SELECT o.id, o.calendar_id, o.uid, o.href_name, o.etag, o.data, o.size, o.component, o.dtstart, o.dtend, o.updated_at
-	 FROM calendar_objects o JOIN calendars c ON c.id=o.calendar_id WHERE o.id=? AND
-	 (c.user_id=? OR (c.name<>'personal' AND EXISTS (SELECT 1 FROM calendar_acl a WHERE a.calendar_id=c.id AND a.grantee_user_id=? AND a.rights='write')))`
-	source, err := s.scanCalObject(tx.QueryRowContext(ctx, s.rebind(q), objectID, userID, userID))
+	source, err := s.changeCalendarSeriesTx(ctx, tx, userID, objectID, etag, rid, change, rule)
 	if err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+	return source, nil
+}
+
+// Used by proposal decisions so the move, resources, copies, mail and decision
+// share the same transaction and calendar writer lock.
+func (s *Store) changeCalendarSeriesTx(ctx context.Context, tx *sql.Tx, userID, objectID, etag, rid string, change calutil.OccurrenceChange, rule *calutil.RecurrenceRule) (*CalendarObject, error) {
+	ctx = withCalendarActor(ctx, userID)
+	q := `SELECT o.id, o.calendar_id, o.uid, o.href_name, o.etag, o.data, o.size, o.component, o.dtstart, o.dtend, o.updated_at FROM calendar_objects o WHERE o.id=?`
+	source, err := s.scanCalObject(tx.QueryRowContext(ctx, s.rebind(q), objectID))
+	if err != nil {
+		return nil, err
+	}
+	email, name, err := s.calendarWriterTx(ctx, tx, userID, source.CalendarID)
+	if err != nil {
+		return nil, err
+	}
+	if err = tx.QueryRowContext(ctx, s.rebind(`SELECT id FROM users WHERE LOWER(email)=LOWER(?)`), email).Scan(&userID); err != nil {
 		return nil, err
 	}
 	p, err := calutil.ParseICS(source.Data)
@@ -142,6 +190,9 @@ func (s *Store) changeCalendarSeries(ctx context.Context, userID, objectID, etag
 		if n != 1 {
 			return nil, ErrCalendarConflict
 		}
+		if _, err = s.bumpCalendarScheduleTagTx(ctx, tx, o.ID); err != nil {
+			return nil, err
+		}
 		if _, err := tx.ExecContext(ctx, s.rebind(`UPDATE calendars SET ctag=? WHERE id=?`), newCTag(), o.CalendarID); err != nil {
 			return nil, err
 		}
@@ -217,10 +268,11 @@ func (s *Store) changeCalendarSeries(ctx context.Context, userID, objectID, etag
 	if err != nil {
 		return nil, err
 	}
-	if err = s.queueCalendarMail(ctx, tx, mails); err != nil {
+	mails, err = filterChangedCalendarMail(ctx, mails, data, previous)
+	if err != nil {
 		return nil, err
 	}
-	if err := tx.Commit(); err != nil {
+	if err = s.queueCalendarMail(ctx, tx, mails); err != nil {
 		return nil, err
 	}
 	source.Data, source.ETag, source.Size, source.UpdatedAt = data, ContentETag(data), int64(len(data)), now

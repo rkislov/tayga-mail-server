@@ -9,6 +9,7 @@ import (
 )
 
 const (
+	KindFiles    = "files"
 	KindMail     = "mail"
 	KindCalendar = "calendar"
 	KindSystem   = "system"

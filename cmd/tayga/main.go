@@ -381,6 +381,15 @@ func run(cfgPath string) error {
 		)
 	}
 	if sqlStore, ok := store.(*storage.Store); ok {
+		if cfg.HTTP.PublicURL != "" {
+			key, err := migrate.ResolveKey(cfg.Server.SecretsKey, filepath.Dir(cfg.Mailstore.Root))
+			if err != nil {
+				return fmt.Errorf("calendar download key: %w", err)
+			}
+			if err = sqlStore.SetCalendarAttachmentLinks(cfg.HTTP.PublicURL, key); err != nil {
+				return err
+			}
+		}
 		sqlStore.SetSpamLearningPolicy(func() (bool, string) { c := hub.Config().Spam; return spam.LearningEnabled(c), c.Folder })
 		learning := &spam.LearningWorker{Store: sqlStore, Mailstore: ms, Config: func() config.SpamConfig { return hub.Config().Spam }, Log: log}
 		learningCtx, stopLearning := context.WithCancel(ctx)

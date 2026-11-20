@@ -232,6 +232,12 @@ func (h *ewsHandler) readableEWSCollection(ctx context.Context, u *storage.User,
 		}
 		return storage.ErrUnauthorized
 	}
+	if h.mailboxRight(ctx, u.ID, id, "r") == nil {
+		return nil
+	}
+	if _, err := h.ewsCalendar(ctx, u.ID, id, false); err == nil {
+		return nil
+	}
 	_, err := (&easHandler{store: h.store}).resolveCollection(ctx, u.ID, id)
 	return err
 }

@@ -24,17 +24,11 @@ type fileStorageUsage struct {
 // Caller holds fileMu so concurrent writers cannot overcommit available space.
 func (s *Server) fileUsage(owner string) (fileStorageUsage, error) {
 	var usage fileStorageUsage
-	u, err := s.store.GetUserByID(context.Background(), owner)
+	limit, err := s.fileQuotaLimit(owner)
 	if err != nil {
 		return usage, err
 	}
-	if u.ServiceClassID != "" {
-		sc, e := s.store.GetServiceClass(context.Background(), u.ServiceClassID)
-		if e != nil {
-			return usage, e
-		}
-		usage.Limit = parseCoSConfig(sc.Config).FileQuotaBytes
-	}
+	usage.Limit = limit
 	root, err := s.filesRoot(owner)
 	if err != nil {
 		return usage, err
@@ -97,18 +91,10 @@ func fileTreeBytes(root string) (int64, error) {
 	return size, err
 }
 func (s *Server) checkFileQuota(owner string, incoming int64) error {
-	u, err := s.store.GetUserByID(context.Background(), owner)
+	limit, err := s.fileQuotaLimit(owner)
 	if err != nil {
 		return err
 	}
-	if u.ServiceClassID == "" {
-		return nil
-	}
-	sc, err := s.store.GetServiceClass(context.Background(), u.ServiceClassID)
-	if err != nil {
-		return err
-	}
-	limit := parseCoSConfig(sc.Config).FileQuotaBytes
 	if limit <= 0 {
 		return nil
 	}
@@ -120,4 +106,22 @@ func (s *Server) checkFileQuota(owner string, incoming int64) error {
 		return errFileQuota
 	}
 	return nil
+}
+
+func (s *Server) fileQuotaLimit(owner string) (int64, error) {
+	if space, err := s.store.GetFileSpace(context.Background(), owner); err == nil {
+		return space.QuotaBytes, nil
+	}
+	user, err := s.store.GetUserByID(context.Background(), owner)
+	if err != nil {
+		return 0, err
+	}
+	if user.ServiceClassID == "" {
+		return 0, nil
+	}
+	class, err := s.store.GetServiceClass(context.Background(), user.ServiceClassID)
+	if err != nil {
+		return 0, err
+	}
+	return parseCoSConfig(class.Config).FileQuotaBytes, nil
 }

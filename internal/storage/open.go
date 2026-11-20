@@ -122,6 +122,18 @@ func migrate(ctx context.Context, db *sql.DB, dialect Dialect) error {
 			"051_travel.sqlite.sql",
 			"052_directory_groups.sqlite.sql",
 			"053_directory_source.sqlite.sql",
+			"054_aliases.sqlite.sql",
+			"055_note_versions.sqlite.sql",
+			"056_calendar_occurrence_proposals.sqlite.sql",
+			"057_calendar_sent_copy.sqlite.sql",
+			"058_caldav_scheduling.sqlite.sql",
+			"059_welcome_templates.sqlite.sql",
+			"060_welcome_delivery.sqlite.sql",
+			"061_chat.sqlite.sql",
+			"062_file_spaces.sqlite.sql",
+			"063_space_recovery.sqlite.sql",
+			"064_secretary_delegation.sqlite.sql",
+			"065_ews_delegates.sqlite.sql",
 		}
 	case DialectPostgres:
 		files = []string{
@@ -178,6 +190,18 @@ func migrate(ctx context.Context, db *sql.DB, dialect Dialect) error {
 			"051_travel.postgres.sql",
 			"052_directory_groups.postgres.sql",
 			"053_directory_source.postgres.sql",
+			"054_aliases.postgres.sql",
+			"055_note_versions.postgres.sql",
+			"056_calendar_occurrence_proposals.postgres.sql",
+			"057_calendar_sent_copy.postgres.sql",
+			"058_caldav_scheduling.postgres.sql",
+			"059_welcome_templates.postgres.sql",
+			"060_welcome_delivery.postgres.sql",
+			"061_chat.postgres.sql",
+			"062_file_spaces.postgres.sql",
+			"063_space_recovery.postgres.sql",
+			"064_secretary_delegation.postgres.sql",
+			"065_ews_delegates.postgres.sql",
 		}
 	default:
 		return fmt.Errorf("unsupported dialect")
@@ -242,6 +266,37 @@ func execScript(ctx context.Context, db execer, script string) error {
 }
 
 func splitSQL(script string) []string {
+	out := []string{}
+	var chunk strings.Builder
+	block := false
+	flush := func() {
+		if block {
+			statement := strings.TrimSpace(chunk.String())
+			if statement != "" {
+				out = append(out, statement)
+			}
+		} else {
+			out = append(out, splitSimpleSQL(chunk.String())...)
+		}
+		chunk.Reset()
+	}
+	for _, line := range strings.Split(script, "\n") {
+		switch strings.TrimSpace(line) {
+		case "-- +goose StatementBegin":
+			flush()
+			block = true
+		case "-- +goose StatementEnd":
+			flush()
+			block = false
+		default:
+			chunk.WriteString(line)
+			chunk.WriteByte('\n')
+		}
+	}
+	flush()
+	return out
+}
+func splitSimpleSQL(script string) []string {
 	parts := strings.Split(script, ";")
 	out := make([]string, 0, len(parts))
 	for _, p := range parts {

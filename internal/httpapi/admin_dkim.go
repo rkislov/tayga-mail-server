@@ -75,7 +75,10 @@ func (s *Server) handleDomainDKIM(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	if r.Method == http.MethodGet {
 		if name := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("domain"))); name != "" {
-			domain, err := s.store.GetDomainByName(r.Context(), name)
+			if normalized, e := storage.NormalizeAliasDomain(name); e == nil {
+				name = normalized
+			}
+			domain, err := s.store.ResolveMailDomain(r.Context(), name)
 			if err != nil || !s.adminCanManageDomain(r, admin, domain.ID) {
 				writeJSON(w, 404, map[string]string{"error": "domain not found"})
 				return
@@ -113,7 +116,21 @@ func (s *Server) handleDomainDKIM(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, 500, map[string]string{"error": "domain lookup failed"})
 				return
 			}
+			expanded := []*storage.Domain{}
 			for _, domain := range domains {
+				expanded = append(expanded, domain)
+				aliases, e := s.store.ListDomainAliases(r.Context(), domain.ID)
+				if e != nil {
+					writeJSON(w, 500, map[string]string{"error": "domain lookup failed"})
+					return
+				}
+				for _, alias := range aliases {
+					copy := *domain
+					copy.Name = alias.Name
+					expanded = append(expanded, &copy)
+				}
+			}
+			for _, domain := range expanded {
 				if !s.adminCanManageDomain(r, admin, domain.ID) {
 					continue
 				}
@@ -165,12 +182,17 @@ func (s *Server) handleDomainDKIM(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	input.Domain = strings.ToLower(strings.TrimSpace(input.Domain))
+	if normalized, e := storage.NormalizeAliasDomain(input.Domain); e == nil {
+		input.Domain = normalized
+	}
 	input.Selector = strings.TrimSpace(input.Selector)
-	domain, err := s.store.GetDomainByName(r.Context(), input.Domain)
+	domain, err := s.store.ResolveMailDomain(r.Context(), input.Domain)
 	if err != nil || !s.adminCanManageDomain(r, admin, domain.ID) {
 		writeJSON(w, 404, map[string]string{"error": "domain not found"})
 		return
 	}
+	// The authorization domain may be canonical; the signing domain stays the alias.
+	domain.Name = input.Domain
 	if !dkimSelectorPattern.MatchString(input.Selector) {
 		writeJSON(w, 400, map[string]string{"error": "invalid selector"})
 		return

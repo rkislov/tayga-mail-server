@@ -264,7 +264,7 @@ tayga-mail backup -config /var/lib/tayga/config/tayga.yaml -out /backup/tayga-$(
 # или Админ → backup; restore: tayga-mail restore …
 ```
 
-На Postgres + общем maildir см. [ha.md](./ha.md).
+Для отказоустойчивого развёртывания с одним активным экземпляром, Pacemaker/fencing и полным общим или реплицируемым томом см. [ha.md](./ha.md). Есть инструкции одной площадки, MetroLUN между двумя площадками и DRBD. Встроенные режимы HA не являются координацией всех служб продукта.
 
 ## 10. Краткий чеклист «готово к работе»
 

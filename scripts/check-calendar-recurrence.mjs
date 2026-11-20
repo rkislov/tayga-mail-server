@@ -45,8 +45,30 @@ try {
  await page.click('#btn-cal-recurrence');await page.waitForSelector('#form-cal-recurrence');await page.evaluate(()=>{state.me.id='other';$('form-cal-recurrence').requestSubmit()});await page.waitForSelector('#cal-recurrence-dialog',{state:'detached'});assert.equal(await page.evaluate(()=>requests.length),count);
  // A late master fetch after closing must not insert a new form.
  await page.evaluate(()=>{state.me.id='owner';hold=new Promise(resolve=>window.release=resolve);openCalRecurrenceEditor()});await page.keyboard.press('Escape');await page.evaluate(()=>{release();hold=null});await page.waitForTimeout(40);assert.equal(await page.locator('#form-cal-recurrence').count(),0);
- // Complex imported rules are visibly read-only.
- await page.evaluate(()=>{master.recurrence={editable:false,raw:'FREQ=MONTHLY;BYDAY=1MO',rule:{frequency:'MONTHLY',interval:1},timezone:'UTC'}});
+ // Monthly and yearly ordinal patterns reopen without becoming plain dates.
+ await page.evaluate(()=>{master.start='2026-10-20T08:00:00Z';master.recurrence={editable:true,timezone:'Europe/Berlin',rule:{frequency:'MONTHLY',interval:1,weekdays:['TU'],week_ordinal:3,count:3}}});
+ await page.click('#btn-cal-recurrence');await page.waitForSelector('#form-cal-recurrence');
+ assert.equal(await page.inputValue('#cal-rule-pattern'),'weekday');assert.equal(await page.inputValue('#cal-rule-ordinal'),'3');assert.equal(await page.inputValue('#cal-rule-weekday'),'TU');
+ assert.equal(await page.locator('.cal-recurrence-days').isVisible(),false);
+ for(const width of [1440,390]){
+  await page.setViewportSize({width,height:900});
+  assert.equal(await page.locator('#cal-recurrence-dialog').evaluate(el=>el.scrollWidth>el.clientWidth+1),false);
+  await page.locator('#cal-rule-pattern').scrollIntoViewIfNeeded();
+  await page.screenshot({path:'/tmp/tayga-calendar-ordinal-'+width+'.png'});
+ }
+ await page.selectOption('#cal-rule-frequency','YEARLY');
+ await page.locator('#form-cal-recurrence button[type=submit]').click();await page.waitForSelector('#cal-recurrence-dialog',{state:'detached'});
+ request=await page.evaluate(()=>requests.at(-1));assert.deepEqual(request.body.rule,{frequency:'YEARLY',interval:1,weekdays:['TU'],week_ordinal:3,count:3});
+ await page.click('#btn-cal-recurrence');await page.waitForSelector('#form-cal-recurrence');
+ await page.selectOption('#cal-rule-pattern','last-day');assert.equal(await page.locator('#cal-rule-ordinal').isVisible(),false);
+ await page.locator('#form-cal-recurrence button[type=submit]').click();await page.waitForSelector('#cal-recurrence-dialog',{state:'detached'});
+ request=await page.evaluate(()=>requests.at(-1));assert.deepEqual(request.body.rule,{frequency:'MONTHLY',interval:1,month_day:-1,count:3});
+ // Changing to weekly must not leak an ordinal/month-day option.
+ await page.click('#btn-cal-recurrence');await page.waitForSelector('#form-cal-recurrence');
+ await page.selectOption('#cal-rule-frequency','WEEKLY');await page.locator('#form-cal-recurrence button[type=submit]').click();await page.waitForSelector('#cal-recurrence-dialog',{state:'detached'});
+ request=await page.evaluate(()=>requests.at(-1));assert.deepEqual(request.body.rule,{frequency:'WEEKLY',interval:1,weekdays:['TU'],count:3});
+ // More complex imported rules are still visibly read-only.
+ await page.evaluate(()=>{master.recurrence={editable:false,raw:'FREQ=MONTHLY;BYDAY=MO,TU;BYSETPOS=1',rule:{frequency:'MONTHLY',interval:1},timezone:'UTC'}});
  await page.click('#btn-cal-recurrence');await page.waitForSelector('#form-cal-recurrence');assert.equal(await page.locator('#form-cal-recurrence button[type=submit]').isDisabled(),true);assert.match(await page.locator('#cal-rule').textContent(),/исходном клиенте/);await page.keyboard.press('Escape');
  // Wire up the actual creation handler with the same fields.
  await page.evaluate(()=>{
@@ -56,6 +78,15 @@ try {
  await page.selectOption('#cal-new-recurrence-frequency','DAILY');await page.selectOption('#cal-new-recurrence-end','count');await page.fill('#cal-new-recurrence-count','3');
  await page.locator('#form-cal-event button').click();await page.waitForFunction(()=>requests.at(-1)?.method==='POST');
  request=await page.evaluate(()=>requests.at(-1));assert.equal(request.path,'/api/v1/calendar/calendars/calendar/events');assert.deepEqual(request.body.recurrence,{frequency:'DAILY',interval:1,count:3});assert.equal(request.body.timezone,'Europe/Moscow');assert.equal(request.body.start,'2026-10-19T08:00:00.000Z');
+ // Defaults for a new pattern follow the first event's current date.
+ await page.waitForFunction(()=>$('form-cal-event').dataset.saving===undefined);
+ await page.evaluate(()=>{delete $('form-cal-event').dataset.createdEvent;mountNewEventRecurrence()});
+ await page.fill('#cal-start','2026-10-20T11:00');await page.fill('#cal-end','2026-10-20T12:00');
+ await page.selectOption('#cal-new-recurrence-frequency','MONTHLY');await page.selectOption('#cal-new-recurrence-pattern','weekday');
+ assert.equal(await page.inputValue('#cal-new-recurrence-ordinal'),'3');assert.equal(await page.inputValue('#cal-new-recurrence-weekday'),'TU');
+ await page.selectOption('#cal-new-recurrence-end','count');await page.fill('#cal-new-recurrence-count','3');
+ count=await page.evaluate(()=>requests.length);await page.locator('#form-cal-event button').click();await page.waitForFunction(n=>requests.length>n,count);
+ request=await page.evaluate(()=>requests.at(-1));assert.deepEqual(request.body.recurrence,{frequency:'MONTHLY',interval:1,weekdays:['TU'],week_ordinal:3,count:3});
  const bookingMessages=await page.evaluate(()=>[
   calendarRecurrenceError('resource booking: resource booking requires a recurrence end date or count'),
   calendarRecurrenceError('resource is busy: Room 201 (2026-10-26T10:00:00Z)'),
@@ -63,5 +94,5 @@ try {
  ]);
  assert.match(bookingMessages[0],/дату окончания серии/);assert.match(bookingMessages[1],/Помещение занято: Room 201/);assert.match(bookingMessages[1],/Изменения не сохранены/);assert.match(bookingMessages[2],/1000 встреч/);
  assert.deepEqual(errors,[]);
- console.log('PASS: recurrence editor/create, timezone, count/date, readonly import, cancel/retry/double-submit, account change, 1440/390 px');
+ console.log('PASS: recurrence editor/create, monthly/yearly ordinal and last-day patterns, timezone, count/date, readonly import, cancel/retry/double-submit, account change, 1440/390 px');
 } finally {await browser.close();}

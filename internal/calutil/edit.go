@@ -93,6 +93,10 @@ func mergeStoredEvent(ev Event, generated *ical.Calendar, method string) (*ical.
 	if changed["DTEND"] {
 		delete(target.Props, "DURATION")
 	}
+	if changed["GEO"] || changed["LOCATION"] {
+		// Apple clients otherwise keep displaying the previous pinned place.
+		delete(target.Props, "X-APPLE-STRUCTURED-LOCATION")
+	}
 	// Editing the whole meeting's participants also updates detached instances.
 	// Otherwise a removed participant remains invited by an old exception.
 	if method == "REQUEST" || method == "" {
@@ -166,4 +170,19 @@ func WithAttendeeStatus(data, email, status string) (string, error) {
 		return "", fmt.Errorf("attendee not in meeting")
 	}
 	return encode(cal)
+}
+
+// DeclinedBy identifies a declined local attendee copy. The organizer's event
+// remains visible even when every guest declines it.
+func DeclinedBy(data, email string) bool {
+	p, err := ParseICS(data)
+	if err != nil || strings.EqualFold(p.Organizer.Email, email) {
+		return false
+	}
+	for _, a := range p.Attendees {
+		if strings.EqualFold(a.Email, email) && strings.EqualFold(a.PartStat, "DECLINED") {
+			return true
+		}
+	}
+	return false
 }

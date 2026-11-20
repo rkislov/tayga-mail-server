@@ -183,7 +183,7 @@ function replyToMessage(message, all=false, dialog=null) {
   let quoted=message.text || '';
   if (!quoted && message.html) {const doc=new DOMParser().parseFromString(message.html,'text/html');doc.querySelectorAll('script,style').forEach(node=>node.remove());quoted=doc.body.textContent || '';}
   ensureComposeCC();
-  openCompose({to,cc:all?(message.reply_all_cc || []).join(', '):'',subject:/^re\s*:/i.test(message.subject || '')?message.subject:'Re: '+(message.subject || ''),body:'\n\n---\n'+quoted.slice(0,10000)});
+  openCompose({to,from:message.reply_from||'',cc:all?(message.reply_all_cc || []).join(', '):'',subject:/^re\s*:/i.test(message.subject || '')?message.subject:'Re: '+(message.subject || ''),body:'\n\n---\n'+quoted.slice(0,10000)});
 }
 function forwardMailMessage(message, dialog=null) {
   if (composeAttachments.sending) return;
@@ -212,6 +212,7 @@ function createMailActionBar(message, dialog=null) {
   const bar=document.createElement('div');bar.className='reader-actions';
   for (const [action,label] of [['trip',mailImageText('Поездка в календарь','Trip to calendar')],['reply',mailImageText('Ответить','Reply')],['reply-all',mailImageText('Ответить всем','Reply all')],['forward',mailImageText('Переслать','Forward')],['spam',mailImageText('В спам','Mark as spam')],['archive',mailImageText('В архив','Archive')],['delete',mailImageText('Удалить','Delete')]]) {
     const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.title=label;button.setAttribute('aria-label',label);button.classList.add('action-icon');button.innerHTML=designIcon(action);button.dataset.mailAction=action;if(!dialog)button.id='btn-mail-'+action;
+    if(message.can_manage===false && ['spam','archive','delete'].includes(action))button.disabled=true;
     if(action==='spam' && (mailState.mailboxes || []).some(folder=>folder.id===message.mailbox_id&&folder.name==='Junk'))button.disabled=true;
     button.addEventListener('click',async()=>{
       if(action==='trip'){if(dialog?.open)dialog.close();await openTravelDrafts(message.id);return;}
@@ -221,9 +222,9 @@ function createMailActionBar(message, dialog=null) {
       button.disabled=true;
       try {
         if(action==='spam') {
-          let folders=mailState.mailboxes || [];
-          if(!folders.some(folder=>folder.name==='Junk'))folders=(await api('/api/v1/mail/mailboxes')).mailboxes || [];
-          const folder=folders.find(folder=>folder.name==='Junk');if(!folder)throw new Error(mailImageText('Папка спама недоступна','Spam folder unavailable'));
+          const ownerID=message.owner_id || state.me?.id;let folders=mailState.mailboxes || [];
+          if(!folders.some(folder=>(folder.role==='junk' || folder.name==='Junk') && (folder.owner_id || state.me?.id)===ownerID))folders=(await api('/api/v1/mail/mailboxes')).mailboxes || [];
+          const folder=folders.find(folder=>(folder.role==='junk' || folder.name==='Junk') && (folder.owner_id || state.me?.id)===ownerID);if(!folder)throw new Error(mailImageText('Папка спама недоступна','Spam folder unavailable'));
           await api('/api/v1/mail/messages/'+encodeURIComponent(message.id)+'/move',{method:'POST',body:JSON.stringify({mailbox_id:folder.id})});
         } else await api('/api/v1/mail/messages/'+encodeURIComponent(message.id)+(action==='archive'?'/archive':''),{method:action==='archive'?'POST':'DELETE'});
         if(dialog?.open)dialog.close();if(mailState.messageID===message.id)mailState.messageID='';await refreshMail();

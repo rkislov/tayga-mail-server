@@ -1,0 +1,157 @@
+body.rules-page {
+  max-width: 1280px;
+}
+header a {
+  margin-left: auto;
+  color: inherit;
+}
+.intro {
+  opacity: 0.8;
+}
+.toolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.toolbar button {
+  margin: 0;
+}
+button.primary {
+  background: #226747;
+  color: white;
+  border-color: #226747;
+}
+#dirty {
+  font-size: 13px;
+  font-weight: 600;
+}
+main {
+  display: grid;
+  grid-template-columns: 310px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+main section {
+  margin-top: 0;
+  padding: 20px;
+}
+.rule-sidebar {
+  position: sticky;
+  top: 16px;
+}
+#rules {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+#rules li {
+  display: flex;
+  align-items: center;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  margin: 5px 0;
+}
+#rules li.selected {
+  background: light-dark(#e4f2e9, #284637);
+  border-color: #6c9c7c;
+}
+#rules input {
+  width: auto;
+  margin: 0 10px;
+}
+#rules button {
+  flex: 1;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  margin: 0;
+  padding: 12px 8px;
+  color: inherit;
+  overflow-wrap: anywhere;
+}
+#rules small {
+  display: block;
+  font-size: 12px;
+  opacity: 0.65;
+}
+.editor-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: space-between;
+}
+.editor-title button {
+  margin: 0 4px 0 0;
+  padding: 6px 10px;
+}
+.editor-title h2 {
+  margin: 0;
+}
+fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.rule-block {
+  border-top: 1px solid light-dark(#d5dfd6, #3b4a3f);
+  margin-top: 24px;
+  padding-top: 18px;
+}
+h3 {
+  font-size: 16px;
+  margin: 0 0 6px;
+}
+.rule-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.9fr) minmax(150px, 1fr) 36px;
+  align-items: start;
+  gap: 9px;
+  margin: 12px 0;
+}
+.rule-row button {
+  padding: 8px;
+  margin: 5px 0 0;
+}
+.rule-row textarea {
+  min-height: 78px;
+  font: inherit;
+}
+.rule-row select {
+  min-width: 0;
+}
+.rule-row .hint {
+  margin: 5px 0;
+}
+.rule-summary {
+  background: light-dark(#f2f6f2, #17201a);
+  padding: 18px;
+  margin-top: 24px;
+  border-radius: 8px;
+}
+.rule-summary p {
+  margin-bottom: 0;
+  white-space: pre-line;
+}
+.danger {
+  color: light-dark(#a12727, #ffb1b1);
+}
+[hidden] {
+  display: none !important;
+}
+@media (max-width: 850px) {
+  main {
+    grid-template-columns: 1fr;
+  }
+  .rule-sidebar {
+    position: static;
+  }
+  .rule-row {
+    grid-template-columns: 1fr 36px;
+  }
+  .rule-row > :first-child {
+    grid-column: 1/-1;
+  }
+}

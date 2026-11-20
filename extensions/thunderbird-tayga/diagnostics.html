@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>Tayga — диагностика</title>
+    <link rel="stylesheet" href="styles.css" />
+    <style>
+      #journal { padding: 16px; border: 1px solid light-dark(#d5dfd6, #3b4a3f); border-radius: 8px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; background: light-dark(#fff, #202923); max-height: 65vh; overflow: auto; }
+    </style>
+  </head>
+  <body>
+    <header><img src="icon.svg" width="48" height="48" alt="" /><div><h1>Диагностика Tayga</h1><p id="version"></p></div></header>
+    <p>Только технические события. Пароли, токены, адреса аккаунтов, содержимое писем, имена файлов и ссылки не записываются.</p>
+    <label class="check"><input id="enabled" type="checkbox" checked /> Записывать диагностический журнал</label>
+    <p class="hint">Последние 500 записей, не старше 7 дней, хранятся в этом профиле Thunderbird. При выключении записи прежние события сохраняются до очистки. Экспорт создаёт локальный JSON-файл; автоматической отправки нет.</p>
+    <button id="reload" type="button">Обновить</button>
+    <button id="export" type="button">Сохранить журнал</button>
+    <button id="clear" type="button">Очистить журнал</button>
+    <p id="notice" role="status" aria-live="polite"></p>
+    <p id="summary"></p>
+    <pre id="journal" aria-label="Диагностический журнал"></pre>
+    <script src="diagnostics-ui.js"></script>
+  </body>
+</html>

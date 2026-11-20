@@ -21,6 +21,7 @@ func (m *Menu) editSettingsSection() error {
 		"SIEM (syslog CEF)",
 		"Логирование",
 		"CoS (классы обслуживания)",
+		"Файлы и офис (Collabora / ONLYOFFICE / Р7)",
 		"Другая секция (JSON)",
 	})
 	switch n {
@@ -39,6 +40,8 @@ func (m *Menu) editSettingsSection() error {
 	case 6:
 		return m.editCoS()
 	case 7:
+		return m.editFilesForm()
+	case 8:
 		return m.editSettingsJSON()
 	}
 	return nil
@@ -237,6 +240,50 @@ func (m *Menu) editLogForm() error {
 			return nil
 		}
 		return m.putSection(ctx, hub, "log", cur)
+	})
+}
+
+func (m *Menu) editFilesForm() error {
+	return m.withHub(func(ctx context.Context, hub *settings.Hub, _ *config.Config, _ storage.Driver) error {
+		var cur config.FilesConfig
+		if err := m.loadSection(hub, "files", &cur); err != nil {
+			return err
+		}
+		u := m.ui
+		u.Printf("Текущий редактор: %s; адрес: %s\n", orDef(cur.OfficeProvider, "collabora"), orDef(cur.OfficeURL, "не подключён"))
+		choice := u.Menu("Файлы и офис", []string{
+			"Отключить офисный редактор",
+			"Collabora Online (WOPI)",
+			"ONLYOFFICE Document Server",
+			"Р7 — Сервер документов",
+		})
+		if choice == 0 {
+			return nil
+		}
+		if choice == 1 {
+			cur.OfficeURL = ""
+		} else {
+			cur.OfficeProvider = []string{"collabora", "onlyoffice", "r7"}[choice-2]
+			cur.OfficeURL = u.Prompt("HTTPS-адрес офисного сервера", cur.OfficeURL)
+			if cur.OfficeURL == "" {
+				return fmt.Errorf("укажите HTTPS-адрес офисного сервера")
+			}
+			if cur.OfficeProvider != "collabora" {
+				u.Println("JWT: общий секрет browser/inbox/outbox Document Server, не менее 32 байт.")
+				if secret := u.Prompt("JWT-секрет (пусто = не менять)", ""); secret != "" {
+					cur.OfficeJWTSecret = secret
+				}
+			}
+		}
+		if !u.PromptYesNo("Сохранить?", true) {
+			u.Println("Отменено.")
+			return nil
+		}
+		if err := m.putSection(ctx, hub, "files", cur); err != nil {
+			return err
+		}
+		u.Println("Настройки записаны в БД. Для уже запущенного сервера перезапустите службу; настройки из веб-админки применяются сразу.")
+		return nil
 	})
 }
 

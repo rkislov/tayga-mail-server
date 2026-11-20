@@ -11,6 +11,7 @@ import (
 )
 
 var (
+	ErrNoteConflict  = errors.New("note revision conflict")
 	ErrNotFound      = errors.New("not found")
 	ErrAlreadyExists = errors.New("already exists")
 	ErrUnauthorized  = errors.New("unauthorized")
@@ -19,6 +20,12 @@ var (
 
 // Driver is the storage abstraction shared by protocol handlers.
 type Driver interface {
+	CommitWelcomeDelivery(context.Context, *CalendarDelivery, func() (*Message, error)) error
+	WelcomeDeliveryStats(context.Context, string, string) (WelcomeDeliveryStats, error)
+	GetWelcomeTemplate(context.Context, string, string) (*WelcomeTemplate, error)
+	ChangeWelcomeTemplate(context.Context, string, string, string, WelcomeChange) (*WelcomeTemplate, error)
+	ListWelcomeTemplates(context.Context, string) ([]WelcomeTemplate, error)
+	ImportWelcomeTemplate(context.Context, WelcomeTemplate) error
 	TravelMode(context.Context, string) (string, error)
 	SetTravelMode(context.Context, string, string) error
 	ClaimTravelJob(context.Context) (*TravelJob, error)
@@ -43,7 +50,7 @@ type Driver interface {
 	DeleteTask(context.Context, string, string) error
 
 	EWSMailMetadata(context.Context, string) (string, error)
-	UpdateEWSMailMetadata(context.Context, string, string, string) error
+	UpdateEWSMailMetadata(context.Context, string, string, string, ...string) error
 	SaveMetricSample(context.Context, string, MetricSample) error
 	MetricHistory(context.Context, string, int64) ([]MetricSample, error)
 	PruneMetricHistory(context.Context, int64) error
@@ -90,8 +97,14 @@ type Driver interface {
 	ListCalendarResourcesByDomain(ctx context.Context, domainID string, enabledOnly bool) ([]*CalendarResource, error)
 	ListCalendarResourcesByTenant(ctx context.Context, tenantID string, enabledOnly bool) ([]*CalendarResource, error)
 	CreateCalendarAttachment(ctx context.Context, a *CalendarAttachment) (*CalendarAttachment, error)
+	SaveCalendarClientAttachments(ctx context.Context, actorID string, o *CalendarObject, files []*CalendarAttachment) (*CalendarObject, error)
+	DeleteCalendarClientAttachments(ctx context.Context, actorID string, o *CalendarObject, files []*CalendarAttachment) (*CalendarObject, error)
 	GetCalendarAttachment(ctx context.Context, id string) (*CalendarAttachment, error)
 	ListCalendarAttachments(ctx context.Context, calendarObjectID string) ([]*CalendarAttachment, error)
+	ListCalendarEventAttachments(ctx context.Context, calendarObjectID string) ([]*CalendarAttachment, error)
+	CalendarAttachmentSharedWith(ctx context.Context, attachmentID, userID string) (bool, error)
+	CalendarAttachmentLinks(ctx context.Context, objectID, userID string) ([]CalendarAttachmentLink, error)
+	CalendarDownloadAttachment(ctx context.Context, token string) (*CalendarAttachment, error)
 	DeleteCalendarAttachment(ctx context.Context, id string) error
 	SumMailboxBytes(ctx context.Context, userID string) (int64, error)
 	MessageExistsByMessageID(ctx context.Context, mailboxID, messageID string, size int64) (bool, error)
@@ -101,6 +114,16 @@ type Driver interface {
 	SetDomainAdminDomains(ctx context.Context, userID string, domainIDs []string) error
 	ListDomainAdminDomains(ctx context.Context, userID string) ([]string, error)
 	UserAdministersDomain(ctx context.Context, userID, domainID string) (bool, error)
+
+	ListFileSpaceIDs(ctx context.Context) ([]string, error)
+	SnapshotFileSpace(ctx context.Context, id string) (*FileSpaceSnapshot, error)
+	ValidateFileSpaceSnapshot(ctx context.Context, snapshot *FileSpaceSnapshot) error
+	RestoreFileSpaceSnapshot(ctx context.Context, snapshot *FileSpaceSnapshot, operation string) error
+	FileSpaceRestoreCommitted(ctx context.Context, operation string) (bool, error)
+	GetFileSpace(ctx context.Context, id string) (*FileSpace, error)
+	ListFileSpaces(ctx context.Context, userID string) ([]*FileSpace, error)
+	FileSpaceRights(ctx context.Context, id, userID string) (string, error)
+	SaveFileSpace(ctx context.Context, actor string, space *FileSpace) (*FileSpace, error)
 
 	SetFileAccess(ctx context.Context, ownerID, path, granteeID, rights string) error
 	DeleteFileAccess(ctx context.Context, ownerID, path, granteeID string) error
@@ -113,7 +136,7 @@ type Driver interface {
 	DeleteFileShare(ctx context.Context, userID, id string) error
 	IncrementFileShareDownload(ctx context.Context, id string) error
 
-	UpsertMailboxDelegate(ctx context.Context, d *MailboxDelegate) error
+	UpsertMailboxDelegate(ctx context.Context, d *MailboxDelegate, mode ...string) error
 	ListMailboxDelegates(ctx context.Context, ownerID string) ([]*MailboxDelegate, error)
 	ListDelegationsFor(ctx context.Context, delegateID string) ([]*MailboxDelegate, error)
 	GetMailboxDelegate(ctx context.Context, ownerID, delegateID string) (*MailboxDelegate, error)
@@ -138,6 +161,15 @@ type Driver interface {
 	ListServiceClasses(ctx context.Context, tenantID string) ([]*ServiceClass, error)
 
 	CreateAlias(ctx context.Context, domainID, userID, localPart string) (*Alias, error)
+	SaveAlias(ctx context.Context, alias *Alias) (*Alias, error)
+	ListAliases(ctx context.Context, userID string) ([]*Alias, error)
+	DeleteAlias(ctx context.Context, domainID, userID, id string) error
+	ListDomainAliases(ctx context.Context, domainID string) ([]*DomainAlias, error)
+	SaveDomainAlias(ctx context.Context, alias *DomainAlias) (*DomainAlias, error)
+	DeleteDomainAlias(ctx context.Context, domainID, id string) error
+	ResolveMailDomain(ctx context.Context, name string) (*Domain, error)
+	SenderAddresses(ctx context.Context, userID string) ([]string, error)
+	CanSendFrom(ctx context.Context, userID, email string) (bool, error)
 	ResolveRecipient(ctx context.Context, email string) (*User, error)
 	ResolveRecipients(ctx context.Context, email string) ([]*User, error)
 	ListDirectoryGroups(ctx context.Context, domainID string) ([]*DirectoryGroup, error)
@@ -169,8 +201,9 @@ type Driver interface {
 	UpsertMessageSearch(ctx context.Context, messageID, subject, fromAddr, toAddr, body string) error
 	DeleteMessageSearch(ctx context.Context, messageID string) error
 	SearchMessages(ctx context.Context, userID, mailboxID, fromFilter, toFilter, subjectFilter, ftsQuery string, limit int, options ...MessageSearchOptions) ([]SearchHit, error)
-	MoveMessage(ctx context.Context, messageID, dstMailboxID string) (*Message, error)
+	MoveMessage(ctx context.Context, messageID, dstMailboxID string, actor ...string) (*Message, error)
 	DeleteMessage(ctx context.Context, messageID string) error
+	DisposeMessages(ctx context.Context, userID string, ids []string, destinationID string, principal ...string) ([]*Message, error)
 	ExpungeMailbox(ctx context.Context, mailboxID string) ([]*Message, error)
 
 	GetInboxRules(ctx context.Context, userID string) (InboxRuleSet, error)
@@ -204,12 +237,16 @@ type Driver interface {
 	ListCalendarObjects(ctx context.Context, calendarID string) ([]*CalendarObject, error)
 	GetCalendarObject(ctx context.Context, calendarID, hrefName string) (*CalendarObject, error)
 	GetCalendarObjectByID(ctx context.Context, id string) (*CalendarObject, error)
+	GetCalendarObjectByUID(ctx context.Context, calendarID, uid string) (*CalendarObject, error)
+	MoveCalendarObject(ctx context.Context, userID, id, source, destination string) (*CalendarObject, error)
 	UpsertCalendarObject(ctx context.Context, o *CalendarObject) (*CalendarObject, error)
 	SaveCalendarObjectWithMail(ctx context.Context, o *CalendarObject, mails []CalendarMail) (*CalendarObject, error)
 	SaveCalendarMeeting(ctx context.Context, actorID string, o *CalendarObject) (*CalendarObject, error)
 	SaveCalendarClientObject(ctx context.Context, actorID string, o *CalendarObject) (*CalendarObject, error)
 	DeleteCalendarMeeting(ctx context.Context, actorID string, o *CalendarObject) error
 	DeleteCalendarObjectWithMail(ctx context.Context, o *CalendarObject, mails []CalendarMail) error
+	ListCalendarSchedulingInbox(ctx context.Context, userID string) ([]CalendarSchedulingMessage, error)
+	DeleteCalendarSchedulingMessage(ctx context.Context, userID, id, etag string) error
 	ClaimCalendarDelivery(ctx context.Context) (*CalendarDelivery, error)
 	RetryCalendarDelivery(ctx context.Context, job *CalendarDelivery, cause string) error
 	CommitCalendarDelivery(ctx context.Context, job *CalendarDelivery, message *Message) error
@@ -220,11 +257,18 @@ type Driver interface {
 	ListCalendarInvitesForUser(ctx context.Context, userID string, pendingOnly bool) ([]*CalendarInvite, error)
 	ListCalendarInvitesByEventUID(ctx context.Context, eventUID string) ([]*CalendarInvite, error)
 	UpdateCalendarInvitePartStat(ctx context.Context, id, partstat string, proposedStart, proposedEnd *time.Time) error
+	RespondCalendarInvite(ctx context.Context, userID, inviteID, status, etag string, sendMail bool, comment string) (*CalendarInvite, error)
 	ReplyCalendarInvite(ctx context.Context, userID, inviteID, status string, proposedStart, proposedEnd *time.Time, etag string, comment ...string) (*CalendarInvite, error)
+	ReplyCalendarOccurrence(ctx context.Context, userID, inviteID, rid, status, etag string, sendMail bool, comment string) (*CalendarInvite, error)
+	ProposeCalendarOccurrence(ctx context.Context, userID, inviteID, rid, etag string, start, end time.Time, comment string) (*CalendarInvite, error)
+	GetCalendarOccurrenceProposal(ctx context.Context, inviteID, rid string) (*CalendarOccurrenceProposal, error)
+	ListCalendarOccurrenceProposals(ctx context.Context, userID string) ([]*CalendarOccurrenceProposal, error)
+	DecideCalendarOccurrenceProposal(ctx context.Context, userID, inviteID, objectID, rid, revision, etag string, accept bool) (*CalendarOccurrenceProposal, error)
 	ListCalendarProposals(ctx context.Context, userID string) ([]*CalendarProposal, error)
 	FreeBusyForUserExceptMeeting(ctx context.Context, userID string, from, to time.Time, uid, organizerEmail string) ([]BusyInterval, error)
 	DecideCalendarProposal(ctx context.Context, userID, inviteID, objectID, revision, etag string, accept bool) (*CalendarProposal, error)
 	ChangeCalendarOccurrence(ctx context.Context, userID, objectID, etag, rid string, change calutil.OccurrenceChange) (*CalendarObject, error)
+	ChangeCalendarOccurrences(ctx context.Context, userID, objectID, etag string, edits []CalendarOccurrenceEdit) (*CalendarObject, error)
 	ChangeCalendarRecurrence(ctx context.Context, userID, objectID, etag string, rule calutil.RecurrenceRule) (*CalendarObject, error)
 	FreeBusyForUserExceptOccurrence(ctx context.Context, userID string, from, to time.Time, uid, organizerEmail, rid string) ([]BusyInterval, error)
 	FreeBusyForUser(ctx context.Context, userID string, from, to time.Time) ([]BusyInterval, error)
@@ -255,6 +299,8 @@ type Driver interface {
 	DeleteNoteFolder(ctx context.Context, userID, id string) error
 	CreateNoteItem(ctx context.Context, n *NoteItem) (*NoteItem, error)
 	UpdateNoteItem(ctx context.Context, n *NoteItem) error
+	ListNoteVersions(ctx context.Context, noteID string) ([]NoteVersion, error)
+	GetNoteVersion(ctx context.Context, noteID, versionID string) (*NoteVersion, error)
 	GetNoteItem(ctx context.Context, userID, id string) (*NoteItem, error)
 	GetNoteItemByID(ctx context.Context, id string) (*NoteItem, error)
 	ListNoteItems(ctx context.Context, userID, folderID string, includeArchived bool) ([]*NoteItem, error)
@@ -262,6 +308,7 @@ type Driver interface {
 	ListSharedNoteItems(ctx context.Context, userID string) ([]*NoteItem, error)
 	DeleteNoteItem(ctx context.Context, userID, id string) error
 	DeleteNoteItemByID(ctx context.Context, id string) error
+	DeleteNoteItemIfMatch(ctx context.Context, id, etag string) error
 	CreateNoteAttachment(ctx context.Context, a *NoteAttachment) (*NoteAttachment, error)
 	GetNoteAttachment(ctx context.Context, id string) (*NoteAttachment, error)
 	ListNoteAttachments(ctx context.Context, noteID string) ([]*NoteAttachment, error)
@@ -382,11 +429,18 @@ type FileShare struct {
 }
 
 type MailboxDelegate struct {
-	OwnerID         string
-	DelegateID      string
-	CanRead         bool
-	CanSendAs       bool
-	CanSendOnBehalf bool
+	EWSInboxPermission    string
+	EWSCalendarPermission string
+	EWSReceiveMeetings    bool
+	OwnerID               string
+	DelegateID            string
+	CanManageMail         bool
+	CanRead               bool
+	CanSendAs             bool
+	CanSendOnBehalf       bool
+	CanReadCalendar       bool
+	CanManageCalendar     bool
+	CanRespondInvites     bool
 }
 
 type MailboxACLEntry struct {
@@ -410,11 +464,12 @@ type ServiceClass struct {
 }
 
 type Alias struct {
-	ID        string
-	DomainID  string
-	UserID    string
-	LocalPart string
-	CreatedAt time.Time
+	ID        string    `json:"id"`
+	DomainID  string    `json:"domain_id"`
+	UserID    string    `json:"user_id"`
+	LocalPart string    `json:"local_part"`
+	Email     string    `json:"email"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 type Mailbox struct {

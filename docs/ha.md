@@ -1,140 +1,66 @@
-# High availability & operations notes
+# Отказоустойчивость Tayga Mail
 
-Tayga Mail is a **single-binary** server. This document describes practical HA and ops patterns; there is no built-in cluster coordinator yet.
+Инструкция для Tayga **0.9.30**, проверена по исходному коду 22 октября 2026 года. Конфигурации подготовлены для стендовой проверки; испытания отказов на физическом кластере ещё не выполнялись. Настройка СХД, fencing и сети зависит от оборудования.
 
-## What can be shared
+## Выбор схемы
 
-| Component | Sharing model |
-|-----------|----------------|
-| **PostgreSQL** | Preferred for multi-node. Point every node at the same DSN (`storage.driver: postgres`). |
-| **SQLite** | Local only. Do not share a SQLite file over NFS for writers. |
-| **Maildir** (`mailstore.root`) | Put on shared POSIX storage (NFS/CephFS), keep node-local with sticky users, **or** enable `mailstore.object_store` (S3/MinIO write-through). Local root stays the hot cache; cold reads refill from the bucket. Concurrent writers on the same maildir need careful locking; prefer one active writer per user tree. |
-| **TLS certs** | Same `tls.cert_file` / `tls.key_file` on all nodes, or terminate TLS at a load balancer. Hot-reload via admin UI applies per-process. |
+1. **Одна площадка:** два узла, отказоустойчивый общий LUN, Corosync/Pacemaker, внешний арбитр и аппаратное отключение неисправного узла. [Пошаговая инструкция](ha-single-site.md).
+2. **Две площадки с MetroLUN:** по узлу на площадке, синхронно реплицируемый том, арбитр в третьем домене отказа, согласованное переключение хранилища и приложения. [Инструкция](ha-two-sites.md).
+3. **Две площадки без MetroLUN:** DRBD 9 Protocol C, две дисковые реплики и третий diskless-узел. [Конфигурация и порядок запуска](ha-two-sites.md#вариант-б-drbd-вместо-metrolun).
 
-## Recommended topologies
+Для текущей реализации рекомендован **один работающий процесс Tayga на кластер**. Резервный узел включён, но служба Tayga на нём остановлена. Pacemaker переносит весь набор ресурсов. Почта, HTTP/FlowSync, календари, файлы и XMPP защищаются одной схемой.
 
-### 1. Active / standby (simplest)
+## Почему не запускать два экземпляра одновременно
 
-1. One active `tayga-mail` process.
-2. Warm standby with the same config, DB replica (Postgres), and mailstore snapshot/replication.
-3. Fail over VIP / DNS to the standby; start or promote the standby process.
-4. Run regular backups (`tayga-mail backup`) from the active node.
+В Tayga есть `ha.mode: active_standby` с PostgreSQL advisory lock и `ha.mode: sticky` с арендой права записи на пользователя. Это частичная координация, а не готовый кластер всего продукта:
 
-### 1b. Automatic fencing (`ha.mode: active_standby`)
+- `ha.fence: mx` ограничивает приём MX-почты; `writers` дополнительно ограничивает ряд операций SMTP, IMAP/POP3, обработки очереди и синхронизации объектов.
+- HTTP API, файловые операции, XMPP и все фоновые службы не объединены общим запретом записи на резервном узле. Процессы имеют собственное состояние соединений и уведомлений.
+- `/readyz` проверяет доступность БД. Он не доказывает лидерство, доступность Maildir или право владения LUN.
+- PostgreSQL LISTEN/NOTIFY используется для межузлового IMAP IDLE; это не межузловой маршрутизатор XMPP.
+- `mailstore.object_store` зеркалирует операции Maildir. Ошибка записи объекта журналируется и не обязательно отменяет локальную доставку. Пользовательские файлы и версии не становятся полноценной репликой всего сервера в S3.
 
-Requires `storage.driver: postgres`. Nodes share a session advisory lock.
+В примерах **`ha.mode: none`**, а единственного владельца обеспечивает Pacemaker вместе с fencing. Два механизма выбора активного узла одновременно не включаются.
 
-```yaml
-ha:
-  mode: active_standby
-  lease_ttl: 5s
-  fence: mx       # default: only unauthenticated MX → 421 on standby
-  # fence: writers  # also gate SMTP submission, IMAP/POP3 maildir writes, outbound queue, object-store sync
-```
+Основания в коде: [запуск служб](../cmd/tayga/main.go), [HA lock](../internal/ha/lease.go), [ограничение писателей](../internal/ha/writer.go), [проверка готовности](../internal/httpapi/server.go), [Maildir/S3](../internal/mailstore/maildir.go), [экспорт](../internal/backup/backup.go).
 
-| `ha.fence` | Standby behaviour |
-|------------|-------------------|
-| `mx` | Unauthenticated MX returns `421`. Submission, IMAP, HTTP stay up on every node. |
-| `writers` | All maildir writers gated: SMTP (MX+submission) `421`, IMAP APPEND/STORE/COPY/EXPUNGE/mailbox ops → error, POP3 DELE rejected, outbound queue drain skipped, object-store sync skipped. Reads and HTTP stay up. |
+## Что переключается вместе
 
-Metric: `tayga_ha_is_leader` (1 = this process holds the lease). Use VIP/DNS or LB health that prefers the leader when `fence: writers`.
+Единица переключения — **БД + все файловые данные + секреты + конфигурация + публичная точка подключения**.
 
-### 1c. Per-user sticky writers (`ha.mode: sticky`)
+- Метаданные: пользователи, организации/тенанты/домены, календарь, задачи, контакты, токены, состояния FlowSync, XMPP/OMEMO, очереди и настройки.
+- Весь `mailstore.root`: почтовые файлы, `files/`, материалы чатов, `file-state/` с корзиной, версиями и незавершёнными загрузками. Копировать только почтовые ящики недостаточно.
+- `secrets.key` в родительском каталоге Maildir либо прежнее значение `server.secrets_key`. Замена ключа делает сохранённые пароли внешних почтовых аккаунтов недоступными.
+- TLS/ACME-каталог, DKIM-ключи по всем фактическим путям, параметры WebAuthn и дополнительные каталоги, указанные в настройках.
+- Состояние внешних компонентов: Redis/Rspamd, антивирус, Collabora, LDAP, SMTP/DLP-шлюз. Их доступность проектируется отдельно.
 
-Any node may accept connections; **writes for a given user** stick to one node via `user_writer_leases` (TTL renew on each write). Other nodes return `421` / standby error until the lease expires.
+Шаблоны предполагают общий том **`/var/lib/tayga`**. Пути вне него выявляются и переносятся либо включаются в согласованную группу хранения. Настройки из БД могут перекрывать YAML: проверять нужно итоговую конфигурацию в админке.
 
-```yaml
-ha:
-  mode: sticky
-  sticky_ttl: 30s
-  # node_id: mail-1   # optional stable identity
-```
+## База данных
 
-Works with SQLite (lab) or Postgres (multi-node). Prefer sticky LB affinity so clients usually land on the holding node; leases recover after `sticky_ttl` if a node dies.
+**Для действующего сервера с SQLite** можно сохранить БД на этом томе: ext4/XFS смонтирована только на одном узле, все процессы SQLite работают только на нём, прежний владелец перед переключением остановлен или аппаратно отключён. Это перенос единственного экземпляра БД между машинами. SQLite/WAL нельзя открывать на нескольких хостах через NFS/SMB; при переносе сохраняется весь комплект файлов, включая существующий WAL. [SQLite WAL](https://www.sqlite.org/wal.html).
 
-### 2. Multiple frontends, shared Postgres + shared maildir
+**Для нового развёртывания PostgreSQL** используйте PostgreSQL на том же эксклюзивном томе и в той же группе Pacemaker: сначала файловая система, затем БД, Tayga и VIP. Две PostgreSQL-службы не должны открывать один PGDATA. Подробности — в инструкции одной площадки.
 
-1. N identical Tayga nodes behind L4/L7 load balancer (sticky sessions help IMAP IDLE).
-2. All nodes use the same Postgres DSN and the same `mailstore.root`.
-3. SMTP MX can round-robin; submission/IMAP should prefer session affinity.
-4. Admin TLS uploads must be repeated on each node (or mount shared certs).
+Переход существующей SQLite в PostgreSQL — отдельная миграция всех таблиц с проверкой идентификаторов и состояния клиентов. Меню «перенос БД» использует `backup/restore`; текущий экспорт не включает всё состояние календарей, файлов, XMPP и сессий. **Не применять его как полную миграцию действующего сервера при установке кластера.**
 
-### 3. LB terminates TLS
+## RPO, RTO и пределы гарантий
 
-Expose only HTTP `:80` on Tayga; LB presents `:443` / `:993` / `:465`. Set `http.public_url` to the external HTTPS URL so Autodiscover and WebAuthn origins stay correct.
+**RPO** — сколько подтверждённых данных допустимо потерять. **RTO** — время восстановления доступа. Можно поставить проектную цель RTO 2–5 минут, но это критерий испытаний, а не измеренная характеристика Tayga: время зависит от fencing, восстановления БД, файловой системы и переподключения клиентов.
 
-## Backups & restore
+Синхронный MetroLUN/DRBD реплицирует записи, дошедшие до блочного слоя, при исправных репликах. Это **не позволяет сейчас заявить RPO=0 для каждого SMTP `250` или HTTP-ответа**: в пути доставки Maildir 0.9.30 есть `WriteFile` и `Rename` без явного `fsync` файла и каталогов. При аварийном отключении узла часть данных ещё может находиться в его RAM, а запись БД уже быть подтверждена.
 
-```bash
-# Full export (metadata + maildir)
-./tayga-mail backup -config configs/tayga.example.yaml -out backup.tar.gz
+Для договорного RPO=0 нужны доработка порядка долговременной записи, проверка всех путей загрузки/очередей и испытания отключением питания. Отдельно фиксируются гарантии нормального синхронного режима и работы после потери реплики. `sync` перед плановой остановкой не доказывает аварийную сохранность.
 
-# Restore into an empty or existing instance (idempotent for known emails)
-./tayga-mail restore -config configs/tayga.example.yaml -in backup.tar.gz
-```
+При переключении TCP/WebSocket-соединения разрываются; IMAP, FlowSync и XMPP переподключаются. Данные и ключи сохраняются на диске, но живой процесс не переносится. Проверять дубли повторённых операций и состояние очередей обязательно.
 
-Archive contents: tenants, domains, users (with password hashes), sieve scripts, optional maildir. On restore, maildir files are written and **reindexed** into IMAP mailboxes.
+## Передача в эксплуатацию
 
-Also available from the admin UI (Monitoring card) and:
+- [ ] Описаны RPO/RTO, объём данных, пиковая запись, пропускная способность и задержка связи.
+- [ ] На резервном узле нет второго процесса Tayga/БД и второго монтирования тома.
+- [ ] Арбитр находится вне общего отказа защищаемых узлов/площадок; fencing испытан в обе стороны.
+- [ ] Есть полный согласованный backup вне кластера и протокол восстановления.
+- [ ] Испытаны отказы узла, дискового пути, связи, арбитра и площадки; утверждён порядок возврата.
+- [ ] Мониторинг различает состояние процесса, готовность БД, владение хранилищем и работу протоколов.
 
-- `GET /api/v1/admin/backup?include_mail=1`
-- `POST /api/v1/admin/backup/restore` (multipart `file`)
-
-**Secrets:** backup archives contain password hashes — store them encrypted at rest.
-
-## Health checks
-
-| Endpoint | Use |
-|----------|-----|
-| `GET /healthz` | process up |
-| `GET /readyz` | DB ping |
-| `GET /metrics` | Prometheus (`tayga_*` gauges) |
-
-LB should mark a node unhealthy if `/readyz` fails.
-
-## IMAP IDLE (cross-node)
-
-IDLE uses an in-process update hub. When `storage.driver` is **postgres**, Tayga also starts a **LISTEN/NOTIFY** bus on channel `tayga_idle`: a delivery on node A wakes IDLE clients on every peer that shares the same DSN. Each node ignores its own NOTIFY echo.
-
-SQLite builds stay single-node (no bus). Sticky IMAP affinity is still recommended so mailbox sessions stay on one frontend, but EXISTS notifications no longer require it for multi-node Postgres HA.
-
-## Object store maildir
-
-```yaml
-mailstore:
-  root: ./data/maildir
-  object_store:
-    enabled: true
-    endpoint: "http://minio:9000"
-    region: us-east-1
-    bucket: tayga-mail
-    access_key: …
-    secret_key: …
-    prefix: "maildir/"
-    path_style: true
-```
-
-Deliver/Delete/flag moves sync object keys (relative maildir paths). `Read` falls back to the bucket on local miss. Backups still archive the local `mailstore.root` cache — warm nodes before a backup drill if you rely on cold objects.
-
-Reconcile all indexed messages (push local→blob, pull blob→local):
-
-```bash
-./tayga-mail sync-objects -config configs/tayga.example.yaml
-./tayga-mail sync-objects -config configs/tayga.example.yaml -dry-run
-```
-
-Or set `mailstore.object_store.sync_interval: 1h` for an in-process ticker.
-
-## What is not included yet
-
-- Automatic client redirect to the sticky holder (clients must retry / use LB)
-- Point-in-time DB restore orchestration (use Postgres tooling)
-
-## Checklist before production HA
-
-- [ ] Postgres with automated backups and PITR
-- [ ] Shared or replicated maildir strategy documented
-- [ ] TLS certs provisioned (or LB TLS) and `http.public_url` correct
-- [ ] Periodic `tayga-mail backup` off-box
-- [ ] Restore drill on a staging instance
-- [ ] Monitoring scrapes `/metrics` and alerts on `/readyz`
+Примеры: [deploy/ha](../deploy/ha/README.md). Они не устанавливают кластер автоматически и не меняют работающий сервер.

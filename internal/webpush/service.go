@@ -129,6 +129,8 @@ func (s *Service) Enqueue(user string, ev notify.Event) error {
 	defer cancel()
 	title := "Новое уведомление"
 	switch ev.Kind {
+	case notify.KindFiles:
+		title = "Получены документы"
 	case notify.KindMail:
 		title = "Новое письмо"
 	case notify.KindTask:

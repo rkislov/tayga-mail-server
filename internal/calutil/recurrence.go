@@ -22,6 +22,8 @@ type OccurrenceChange struct {
 	Start, End                          *time.Time
 	Summary, Location, Description, Geo *string
 	Cancel                              bool
+	AllDay                              *bool
+	ResetResponses                      bool
 }
 
 // NextSequence also accounts for detached instances that have newer versions
@@ -128,7 +130,7 @@ func recurrenceCalendar(data string) (*ical.Calendar, *ical.Component, error) {
 				return nil, nil, fmt.Errorf("duplicate recurrence exception")
 			}
 			seen[key] = true
-			if dateProp(p) != dateProp(master.Props.Get("DTSTART")) {
+			if master.Props.Get("RECURRENCE-ID") == nil && dateProp(p) != dateProp(master.Props.Get("DTSTART")) {
 				return nil, nil, fmt.Errorf("recurrence value type mismatch")
 			}
 		} else {
@@ -386,6 +388,24 @@ func GetOccurrence(data, rid string) (Occurrence, error) {
 	return Occurrence{}, fmt.Errorf("recurrence instance not found")
 }
 
+// WithOccurrenceAttendeeStatus updates only one participant on one instance.
+// Generated instances become detached VEVENTs; existing moves, versions, other
+// participants and recipient reminders are retained by MergeOccurrence.
+func WithOccurrenceAttendeeStatus(data, rid, email, status string) (string, error) {
+	instance, err := GetOccurrence(data, rid)
+	if err != nil {
+		return "", err
+	}
+	if strings.EqualFold(instance.Status, "CANCELLED") {
+		return "", fmt.Errorf("occurrence cancelled")
+	}
+	updated, err := WithAttendeeStatus(instance.source, email, status)
+	if err != nil {
+		return "", err
+	}
+	return MergeOccurrence(data, updated)
+}
+
 // OccurrenceMessage emits only the selected instance and timezone definitions.
 // It never sends the series master or private reminder alarms.
 func OccurrenceMessage(instance Occurrence, cancel bool) (string, error) {
@@ -419,6 +439,9 @@ func ChangeOccurrence(data, rid string, change OccurrenceChange) (string, string
 	}
 	ev := current.Event
 	if !change.Cancel {
+		if change.AllDay != nil {
+			ev.AllDay = *change.AllDay
+		}
 		if change.Start != nil {
 			ev.Start = change.Start
 		}
@@ -452,6 +475,12 @@ func ChangeOccurrence(data, rid string, change OccurrenceChange) (string, string
 	}
 	if len(ev.Attendees) == 0 {
 		ev.Attendees = master.Attendees
+	}
+	if change.ResetResponses {
+		for i := range ev.Attendees {
+			ev.Attendees[i].PartStat = "NEEDS-ACTION"
+			ev.Attendees[i].RSVP = true
+		}
 	}
 	ev.Sequence = NextSequence(data)
 	instance, err := BuildSimpleVEVENT(ev)

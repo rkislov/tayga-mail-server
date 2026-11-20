@@ -3,6 +3,7 @@ package flowsync
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/tayga/tms/internal/storage"
 	"strings"
@@ -32,6 +33,9 @@ func (h *ewsHandler) batchItems(ctx context.Context, u *storage.User, op, body s
 		result, err := fn(ctx, u, doc.render())
 		if err != nil {
 			result = ewsOperationError(op, "ErrorInternalServerError", "operation failed")
+			if errors.Is(err, errExchangeRecurrence) {
+				result = ewsOperationError(op, "ErrorCalendarInvalidRecurrence", "Recurrence requires the full iCalendar contract")
+			}
 		}
 		if strings.Contains(result, "<m:FaultResponse") {
 			result = ewsOperationError(op, extractTag(result, "ResponseCode"), extractTag(result, "MessageText"))

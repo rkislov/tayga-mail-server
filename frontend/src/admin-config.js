@@ -29,7 +29,7 @@ const CONFIG_SECTIONS = {
   seed: ["Первоначальная учётная запись", "Параметры создания первой организации и администратора."],
   storage: ["База данных", "Параметры bootstrap YAML, доступные только для чтения."],
   mailstore: ["Письма и S3", "Каталог maildir и зеркало объектного хранилища."],
-  files: ["Файлы и офис", "Адрес отдельного Collabora Online для совместного редактирования."],
+  files: ["Файлы и офис · ONLYOFFICE / Р7", "Подключение Collabora Online, ONLYOFFICE или Р7 для совместного редактирования."],
   ha: ["Высокая доступность", "Лидер, аренда узла и закрепление писателей за пользователями."],
   http: ["Веб-интерфейс и HTTP", "HTTP/HTTPS, публичный адрес и глобальные администраторы."],
   tls: ["TLS и ACME", "Сертификаты сервисов и автоматическая выдача через ACME."],
@@ -93,7 +93,7 @@ function configFieldHTML(field, path, locked = false) {
   else if (field.kind === "strings") input = `<textarea id="${id}" class="field-input" rows="3" ${disabled}>${escapeHtml((value || []).join("\n"))}</textarea>`;
   else if (field.options?.length) {
     const options = [...new Set([...(!field.options.includes(value ?? "") ? [value ?? ""] : []), ...field.options])];
-    input = `<select id="${id}" class="field-input" ${disabled}>${options.map(option => `<option value="${escapeHtml(option)}" ${value === option ? "selected" : ""}>${escapeHtml(option)}</option>`).join("")}</select>`;
+    input = `<select id="${id}" class="field-input" ${disabled}>${options.map(option => `<option value="${escapeHtml(option)}" ${value === option ? "selected" : ""}>${escapeHtml(configEditor.section === "files" && field.key === "office_provider" ? ({"":configText("Collabora Online (по умолчанию)","Collabora Online (default)"),collabora:"Collabora Online",onlyoffice:"ONLYOFFICE Document Server",r7:"Р7 — Сервер документов"}[option] || option) : option)}</option>`).join("")}</select>`;
   } else {
     const type = field.secret ? "password" : ["integer", "number"].includes(field.kind) ? "number" : "text";
     input = `<input id="${id}" class="field-input" type="${type}" value="${escapeHtml(field.secret ? "" : value ?? "")}" ${type === "number" ? `step="${field.kind === "integer" ? "1" : "any"}"` : ""} ${field.kind === "duration" ? 'placeholder="30s, 5m, 24h"' : ""} ${field.secret ? `autocomplete="new-password" placeholder="${escapeHtml(value ? t("config_secret_saved") : t("config_secret_empty"))}"` : ""} ${disabled} />`;
@@ -162,7 +162,7 @@ async function openAdminConfig(section) {
   const group = CONFIG_GROUPS.find(group => group.sections.includes(section));
   $("config-category").textContent = group ? configText(...group.title) : "";
   $("config-lede").textContent = configDescription(section);
-  $("config-notice").textContent = t(schema.read_only ? "config_bootstrap_hint" : "config_restart_hint");
+  $("config-notice").textContent = section === "files" ? configText("Изменения применяются сразу. После смены подключения откройте документы заново.", "Changes apply immediately. Reopen documents after changing the connection.") : t(schema.read_only ? "config_bootstrap_hint" : "config_restart_hint");
   $("config-save").classList.toggle("hidden", !!schema.read_only);
   $("config-search").value = "";
   setMsg($("config-msg"), "");

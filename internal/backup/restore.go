@@ -57,6 +57,7 @@ type sieveMeta struct {
 
 // RestoreTarGz reads a backup archive and applies it to store / maildir.
 func RestoreTarGz(ctx context.Context, store storage.Driver, r io.Reader, opts RestoreOptions) (*RestoreReport, error) {
+	ctx = storage.WithoutWelcomeMail(ctx)
 	gr, err := gzip.NewReader(r)
 	if err != nil {
 		return nil, fmt.Errorf("gzip: %w", err)
@@ -143,6 +144,39 @@ func RestoreTarGz(ctx context.Context, store storage.Driver, r io.Reader, opts R
 		rep.DomainsCreated++
 	}
 
+	if raw, ok := files["meta/welcome_templates.json"]; ok {
+		var templates []welcomeExport
+		if err := json.Unmarshal(raw, &templates); err != nil {
+			return rep, fmt.Errorf("welcome_templates.json: %w", err)
+		}
+		for _, export := range templates {
+			v := export.WelcomeTemplate
+			if export.ExternalBodies {
+				for i := range v.Revisions {
+					var body welcomeBody
+					path := welcomeRevisionPath(v.Kind, v.ScopeID, v.Revisions[i].Number)
+					if err := json.Unmarshal(files[path], &body); err != nil {
+						return rep, fmt.Errorf("welcome revision body: %w", err)
+					}
+					v.Revisions[i].HTML, v.Revisions[i].Text = body.HTML, body.Text
+				}
+			}
+			var mapped string
+			if v.Kind == "tenants" {
+				mapped = tenantMap[v.ScopeID]
+			} else if v.Kind == "domains" {
+				mapped = domainMap[v.ScopeID]
+			}
+			if mapped == "" {
+				return rep, fmt.Errorf("welcome template scope absent from backup")
+			}
+			v.ScopeID = mapped
+			if err := store.ImportWelcomeTemplate(ctx, v); err != nil {
+				return rep, fmt.Errorf("welcome template: %w", err)
+			}
+		}
+	}
+
 	userIDs := map[string]string{}
 	for _, ue := range users {
 		if existing, err := store.GetUserByEmail(ctx, ue.Email); err == nil {
@@ -184,6 +218,63 @@ func RestoreTarGz(ctx context.Context, store storage.Driver, r io.Reader, opts R
 		}
 	}
 
+	// Optional metadata keeps archives made before alias support compatible.
+	var domainAliases []*storage.DomainAlias
+	if data, ok := files["meta/domain_aliases.json"]; ok {
+		if err := json.Unmarshal(data, &domainAliases); err != nil {
+			return rep, fmt.Errorf("domain_aliases.json: %w", err)
+		}
+	}
+	for _, a := range domainAliases {
+		if a == nil || domainMap[a.DomainID] == "" {
+			return rep, fmt.Errorf("invalid domain alias target")
+		}
+		domainID := domainMap[a.DomainID]
+		existing, err := store.ListDomainAliases(ctx, domainID)
+		if err != nil {
+			return rep, err
+		}
+		found := false
+		for _, v := range existing {
+			if v.Name == a.Name {
+				found = true
+				break
+			}
+		}
+		if !found {
+			if _, err = store.SaveDomainAlias(ctx, &storage.DomainAlias{DomainID: domainID, Name: a.Name}); err != nil {
+				return rep, fmt.Errorf("domain alias %s: %w", a.Name, err)
+			}
+		}
+	}
+	var aliases []*storage.Alias
+	if data, ok := files["meta/aliases.json"]; ok {
+		if err := json.Unmarshal(data, &aliases); err != nil {
+			return rep, fmt.Errorf("aliases.json: %w", err)
+		}
+	}
+	for _, a := range aliases {
+		if a == nil || domainMap[a.DomainID] == "" || userIDs[a.UserID] == "" {
+			return rep, fmt.Errorf("invalid mailbox alias target")
+		}
+		domainID, userID := domainMap[a.DomainID], userIDs[a.UserID]
+		existing, err := store.ListAliases(ctx, userID)
+		if err != nil {
+			return rep, err
+		}
+		found := false
+		for _, v := range existing {
+			if v.DomainID == domainID && v.LocalPart == a.LocalPart {
+				found = true
+				break
+			}
+		}
+		if !found {
+			if _, err = store.CreateAlias(ctx, domainID, userID, a.LocalPart); err != nil {
+				return rep, fmt.Errorf("mailbox alias %s: %w", a.LocalPart, err)
+			}
+		}
+	}
 	// Sieve scripts: meta/sieve/{userID}/{name}.sieve + .json
 	for name, data := range files {
 		if !strings.HasPrefix(name, "meta/sieve/") || !strings.HasSuffix(name, ".sieve") {

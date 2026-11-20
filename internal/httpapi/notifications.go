@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -35,6 +36,7 @@ func (s *Server) userFromBearerOrQuery(r *http.Request) (*authUser, error) {
 }
 
 func (s *Server) handleNotifications(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	au, err := s.userFromBearerOrQuery(r)
 	if err != nil || au == nil {
 		writeAuthError(w, err)
@@ -49,12 +51,55 @@ func (s *Server) handleNotifications(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
-	if s.notify == nil {
-		writeJSON(w, http.StatusOK, map[string]any{"events": []any{}})
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit < 1 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	evs := []notify.Event{}
+	if s.notify != nil {
+		evs = s.notify.Recent(au.ID, limit)
+	}
+	s.fileMu.Lock()
+	received, err := s.recentFileRequestNotifications(au.ID, limit)
+	if err == nil {
+		spaces, e := s.store.ListFileSpaces(r.Context(), au.ID)
+		if e != nil {
+			err = e
+		} else {
+			for _, space := range spaces {
+				if space.Rights != "manage" {
+					continue
+				}
+				events, e := s.recentFileRequestNotifications(space.ID, limit)
+				if e != nil {
+					err = e
+					break
+				}
+				received = append(received, events...)
+			}
+		}
+	}
+	s.fileMu.Unlock()
+	if err != nil {
+		fileError(w, err)
 		return
 	}
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	evs := s.notify.Recent(au.ID, limit)
+	seen := map[string]bool{}
+	for _, e := range evs {
+		seen[e.ID] = true
+	}
+	for _, e := range received {
+		if !seen[e.ID] {
+			evs = append(evs, e)
+		}
+	}
+	sort.Slice(evs, func(i, j int) bool { return evs[i].CreatedAt.Before(evs[j].CreatedAt) })
+	if len(evs) > limit {
+		evs = evs[len(evs)-limit:]
+	}
 	if evs == nil {
 		evs = []notify.Event{}
 	}

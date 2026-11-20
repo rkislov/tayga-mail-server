@@ -36,8 +36,11 @@ func (s *mailSubmission) send(ctx context.Context, u *storage.User, clientID str
 		return err
 	}
 	from, err := message.Header.AddressList("From")
-	if err != nil || len(from) != 1 || !strings.EqualFold(from[0].Address, u.Email) {
-		return fmt.Errorf("sender must match authenticated account")
+	if err != nil || len(from) != 1 || len(message.Header["From"]) != 1 {
+		return fmt.Errorf("invalid sender")
+	}
+	if err := storage.AuthorizeMessageSender(ctx, s.store, u, message.Header); err != nil {
+		return err
 	}
 	recipients := []string{}
 	seen := map[string]bool{}
@@ -115,25 +118,32 @@ func (s *mailSubmission) send(ctx context.Context, u *storage.User, clientID str
 		return err
 	}
 	if save && s.ms != nil {
-		path, err := s.ms.EnsureFolder(u.Email, "Sent")
-		if err != nil {
-			return err
+		owners := []*storage.User{u}
+		if owner, err := s.store.ResolveRecipient(ctx, from[0].Address); err == nil && owner.ID != u.ID {
+			owners = append(owners, owner)
 		}
-		mb, err := s.store.EnsureMailbox(ctx, u.ID, "Sent", path)
-		if err != nil {
-			return err
+		for _, owner := range owners {
+			path, err := s.ms.EnsureFolder(owner.Email, "Sent")
+			if err != nil {
+				return err
+			}
+			mb, err := s.store.EnsureMailbox(ctx, owner.ID, "Sent", path)
+			if err != nil {
+				return err
+			}
+			rel, size, err := s.ms.Deliver(owner.Email, "Sent", raw)
+			if err != nil {
+				return err
+			}
+			record := &storage.Message{MailboxID: mb.ID, Size: size, Flags: `\Seen`, InternalDate: time.Now().UTC(), FilePath: rel, MessageID: msgid}
+			mailsearch.ApplyHeaders(record, raw)
+			inserted, err := s.store.InsertMessage(ctx, record)
+			if err != nil {
+				return err
+			}
+			_ = mailsearch.Index(ctx, s.store, inserted.ID, raw)
 		}
-		rel, size, err := s.ms.Deliver(u.Email, "Sent", raw)
-		if err != nil {
-			return err
-		}
-		record := &storage.Message{MailboxID: mb.ID, Size: size, Flags: `\Seen`, InternalDate: time.Now().UTC(), FilePath: rel, MessageID: msgid}
-		mailsearch.ApplyHeaders(record, raw)
-		inserted, err := s.store.InsertMessage(ctx, record)
-		if err != nil {
-			return err
-		}
-		_ = mailsearch.Index(ctx, s.store, inserted.ID, raw)
 	}
+
 	return nil
 }
