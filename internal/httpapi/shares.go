@@ -19,10 +19,18 @@ func (s *Server) handleFileShares(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/v1/files/shares"), "/")
+	owner := au.ID
+	if requested := r.URL.Query().Get("owner_id"); requested != "" && requested != au.ID {
+		if !s.fileCanManage(r.Context(), requested, au.ID) {
+			writeJSON(w, 403, map[string]string{"error": "space management required"})
+			return
+		}
+		owner = requested
+	}
 
 	switch {
 	case r.Method == http.MethodGet && path == "":
-		list, err := s.store.ListFileShares(r.Context(), au.ID)
+		list, err := s.store.ListFileShares(r.Context(), owner)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
@@ -60,12 +68,12 @@ func (s *Server) handleFileShares(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "file path required"})
 			return
 		}
-		root, err := s.filesRoot(au.ID)
+		root, err := s.filesRoot(owner)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
-		abs, err := safeJoin(root, rel)
+		abs, err := safeJoin(root, req.Path)
 		if err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
@@ -78,7 +86,7 @@ func (s *Server) handleFileShares(w http.ResponseWriter, r *http.Request) {
 		if req.Rights == "" {
 			req.Rights = "read"
 		}
-		if req.Rights != "read" && req.Rights != "write" {
+		if req.Rights != "read" && req.Rights != "write" && req.Rights != "upload" {
 			writeJSON(w, 400, map[string]string{"error": "unsupported rights"})
 			return
 		}
@@ -86,7 +94,14 @@ func (s *Server) handleFileShares(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, 400, map[string]string{"error": "invalid share limits"})
 			return
 		}
-		sh := &storage.FileShare{UserID: au.ID, Path: rel, MaxDownloads: req.MaxDownloads, Rights: req.Rights}
+		if req.Rights == "upload" {
+			info, e := os.Stat(abs)
+			if e != nil || !info.IsDir() || req.TTLHours < 1 || req.MaxDownloads != 0 {
+				writeJSON(w, 400, map[string]string{"error": "file requests require a folder, an expiry and no download limit"})
+				return
+			}
+		}
+		sh := &storage.FileShare{UserID: owner, Path: rel, MaxDownloads: req.MaxDownloads, Rights: req.Rights}
 		if req.Password != "" {
 			hash, err := s.authn.Hasher.Hash(req.Password)
 			if err != nil {
@@ -102,7 +117,22 @@ func (s *Server) handleFileShares(w http.ResponseWriter, r *http.Request) {
 			exp := time.Now().UTC().Add(7 * 24 * time.Hour)
 			sh.ExpiresAt = &exp
 		}
+		s.fileMu.Lock()
+		if !s.requireFileManagement(w, r, owner) {
+			s.fileMu.Unlock()
+			return
+		}
+		if info, e := os.Stat(abs); e != nil || (sh.Rights == "upload" && !info.IsDir()) {
+			err = os.ErrNotExist
+			s.fileMu.Unlock()
+			fileError(w, err)
+			return
+		}
 		saved, err := s.store.CreateFileShare(r.Context(), sh)
+		if err == nil {
+			s.recordFileEvent(owner, fileActivityEvent{Path: rel, Action: "link_created", Actor: fileActor{ID: au.ID, Source: "web"}, Subject: saved.ID, Rights: saved.Rights})
+		}
+		s.fileMu.Unlock()
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
@@ -113,10 +143,32 @@ func (s *Server) handleFileShares(w http.ResponseWriter, r *http.Request) {
 		})
 
 	case r.Method == http.MethodDelete && path != "":
-		if err := s.store.DeleteFileShare(r.Context(), au.ID, path); err != nil {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		s.fileMu.Lock()
+		defer s.fileMu.Unlock()
+		if !s.requireFileManagement(w, r, owner) {
 			return
 		}
+		links, e := s.store.ListFileShares(r.Context(), owner)
+		if e != nil {
+			fileError(w, e)
+			return
+		}
+		var removed *storage.FileShare
+		for _, link := range links {
+			if link.ID == path {
+				removed = link
+				break
+			}
+		}
+		if removed == nil {
+			writeJSON(w, 404, map[string]string{"error": "not found"})
+			return
+		}
+		if err := s.store.DeleteFileShare(r.Context(), owner, path); err != nil {
+			fileError(w, err)
+			return
+		}
+		s.recordFileEvent(owner, fileActivityEvent{Path: removed.Path, Action: "link_revoked", Actor: fileActor{ID: au.ID, Source: "web"}, Subject: removed.ID})
 		writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 
 	default:
@@ -169,6 +221,10 @@ func (s *Server) handlePublicShare(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusGone, map[string]string{"error": "download limit reached"})
 		return
 	}
+	if sh.Rights == "upload" {
+		s.handleFileRequest(w, r, sh)
+		return
+	}
 	root, err := s.filesRoot(sh.UserID)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -216,16 +272,13 @@ func (s *Server) handlePublicShare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err == nil && info.IsDir() {
-		if r.Method == http.MethodHead {
-			w.Header().Set("Content-Type", "application/zip")
-			w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": info.Name() + ".zip"}))
-			return
-		}
 		r.URL.Query()
 		query := r.URL.Query()
 		query.Set("path", cleanRel(filepath.Join(sh.Path, child)))
 		r.URL.RawQuery = query.Encode()
-		_ = s.store.IncrementFileShareDownload(r.Context(), sh.ID)
+		if r.Method != http.MethodHead {
+			_ = s.store.IncrementFileShareDownload(r.Context(), sh.ID)
+		}
 		s.downloadFileArchive(w, r, root)
 		return
 	}

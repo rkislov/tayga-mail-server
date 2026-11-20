@@ -5,12 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Tayga Mail</title>
   <link rel="manifest" href="/manifest.webmanifest" />
-  <meta name="theme-color" content="#30376f" />
-  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=0.9.18" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/assets/app.css" />
+  <meta name="theme-color" content="#375d2c" />
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=1.0.0" />
+  <link rel="stylesheet" href="/assets/app.css?v=1.0.0" />
+  <link rel="stylesheet" href="/assets/ckeditor5/ckeditor5.css" />
 </head>
 <body>
   <div id="auth-layout" class="auth-layout">
@@ -477,7 +475,7 @@
 
       <!-- NOTES -->
       <section id="app-tasks" class="app-page hidden panel-pane" style="max-width:960px;margin:auto;padding:24px;width:100%">
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><h2 data-i18n="nav_tasks" style="flex:1">Задачи</h2><button id="tasks-new" class="btn-spray hidden" data-i18n="tasks_new">Новая задача</button><button id="tasks-refresh" class="btn-secondary" data-i18n="refresh">Обновить</button></div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><h2 data-i18n="nav_tasks" style="flex:1">Задачи</h2><button id="tasks-new" class="btn-spray" data-i18n="tasks_new">Новая задача</button><button id="tasks-refresh" class="btn-secondary" data-i18n="refresh">Обновить</button></div>
         <label class="field-check"><input id="tasks-completed" type="checkbox"><span data-i18n="tasks_completed">Показывать завершённые</span></label>
         <p id="tasks-msg" role="status"></p><ul id="tasks-list"></ul>
         <details id="task-notifications" class="task-activity"><summary id="task-notifications-summary" data-i18n="task_notifications">Уведомления о задачах</summary><ul id="task-notifications-list"></ul><div class="task-pager"><button id="task-notices-prev" type="button" class="btn-secondary" data-i18n="task_prev">Назад</button><span id="task-notices-count" class="meta"></span><button id="task-notices-next" type="button" class="btn-secondary" data-i18n="task_next">Далее</button></div></details>
@@ -1181,6 +1179,6 @@ keep;</textarea>
             </div>
             <p id="branding-msg" class="msg" role="status"></p>
           </form></template>
-  <script src="/assets/app.js"></script>
+  <script src="/assets/app.js?v=1.0.0"></script>
 </body>
 </html>

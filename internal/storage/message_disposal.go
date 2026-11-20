@@ -8,16 +8,41 @@ import (
 // DisposeMessages atomically deletes owned mail messages, or moves them into an
 // owned destination. Missing/foreign IDs are omitted so callers can return an
 // individual result for each item. Returned messages retain their original paths.
-func (s *Store) DisposeMessages(ctx context.Context, userID string, ids []string, destinationID string) ([]*Message, error) {
+func (s *Store) DisposeMessages(ctx context.Context, userID string, ids []string, destinationID string, principal ...string) ([]*Message, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback()
+	actorID := userID
+	scopedInbox := false
+	if len(principal) > 0 && principal[0] != userID {
+		userID = principal[0]
+		var manage any
+		var inbox string
+		if err = tx.QueryRowContext(ctx, s.rebind(`SELECT d.can_manage_mail,d.ews_inbox_permission FROM mailbox_delegates d JOIN users owner ON owner.id=d.owner_id JOIN users actor ON actor.id=d.delegate_id WHERE d.owner_id=? AND d.delegate_id=? AND actor.enabled=TRUE AND owner.enabled=TRUE AND actor.tenant_id=owner.tenant_id`), userID, actorID).Scan(&manage, &inbox); err != nil {
+			return nil, ErrUnauthorized
+		}
+		if !asBool(manage) {
+			if inbox != "Editor" {
+				return nil, ErrUnauthorized
+			}
+			scopedInbox = true
+		}
+	}
 	if destinationID != "" {
 		var owner string
 		if err = tx.QueryRowContext(ctx, s.rebind(`SELECT user_id FROM mailboxes WHERE id=?`), destinationID).Scan(&owner); err != nil {
 			return nil, mapErr(err)
+		}
+		if scopedInbox {
+			var name string
+			if err = tx.QueryRowContext(ctx, s.rebind(`SELECT name FROM mailboxes WHERE id=?`), destinationID).Scan(&name); err != nil {
+				return nil, err
+			}
+			if name != "Trash" && name != "Recoverable Items/Deletions" {
+				return nil, ErrUnauthorized
+			}
 		}
 		if owner != userID {
 			return nil, ErrUnauthorized
@@ -41,7 +66,11 @@ func (s *Store) DisposeMessages(ctx context.Context, userID string, ids []string
 		for _, id := range unique[start:end] {
 			args = append(args, id)
 		}
-		query := `SELECT ` + msgCols + ` FROM messages WHERE mailbox_id IN (SELECT id FROM mailboxes WHERE user_id=?) AND id IN (` + marks + `)`
+		folderScope := ""
+		if scopedInbox {
+			folderScope = " AND name='INBOX'"
+		}
+		query := `SELECT ` + msgCols + ` FROM messages WHERE mailbox_id IN (SELECT id FROM mailboxes WHERE user_id=?` + folderScope + `) AND id IN (` + marks + `)`
 		if s.dialect == DialectPostgres {
 			query += ` FOR UPDATE`
 		}

@@ -25,3 +25,6 @@ frontend/node_modules/
 # Go
 /vendor/
 node_modules/
+
+# Local browser-test dependency link
+/node_modules

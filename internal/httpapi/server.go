@@ -33,6 +33,18 @@ import (
 
 // Server exposes health, metrics, auth API, and the embedded Web UI.
 type Server struct {
+	spaceRecoverySuppressed map[string]bool
+	spaceRecoveryBlocked    sync.Map
+	spaceCheckpointErrors   map[string]string
+	spaceCheckpointReaders  map[string]int
+	spaceRecoveryViews      sync.Map
+	spaceRecoveryOnce       sync.Once
+	spaceRecoveryError      error
+	spaceDownloadTickets    map[string]spaceDownloadTicket
+	fileSearchMu            sync.Mutex
+	fileSearchCache         map[string]fileSearchCacheEntry
+	fileRequestUploads      map[string]int
+	fileActivities          map[string]*fileActivityState
 	mattermostOnce          sync.Once
 	mattermostAPI           *mattermost.API
 	mailMutationLocks       [128]sync.Mutex
@@ -82,6 +94,9 @@ func (s *Server) cfgLive() *config.Config {
 
 // Handler builds the HTTP mux (health, auth, DAV, FlowSync, admin UI).
 func (s *Server) Handler() http.Handler {
+	if err := s.initializeSpaceRecovery(context.Background()); err != nil {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Error(w, "Space recovery requires attention", 503) })
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/vks/", s.handleVKS)
 	mux.HandleFunc("/.well-known/vks/keys/", s.handleVKS)
@@ -170,6 +185,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/chat-upload/", s.handleChatUploadPut)
 	mux.HandleFunc("/chat-download/", s.handleChatDownload)
 	mux.HandleFunc("/api/v1/chat/upload", s.handleChatUploadSlot)
+	mux.HandleFunc("/api/v1/files/space-recovery/", s.handleSpaceRecoveryGlobal)
+	mux.HandleFunc("/api/v1/files/spaces", s.handleFileSpaces)
+	mux.HandleFunc("/api/v1/files/spaces/", s.handleFileSpaces)
+	mux.HandleFunc("/dav/spaces/", s.handleFileDAV)
 	mux.HandleFunc("/api/v1/files/shares", s.handleFileShares)
 	mux.HandleFunc("/api/v1/files/shares/", s.handleFileShares)
 	mux.HandleFunc("/api/v1/files/", s.handleFiles)
@@ -186,8 +205,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/office/compare/", s.handleOfficeComparison)
 	mux.HandleFunc("/calendar/public/", s.handlePublicCalendar)
 	mux.HandleFunc("/s/", s.handlePublicShare)
+	mux.HandleFunc("/file-request-assets/", s.handleFileRequestAsset)
 	mux.HandleFunc("/api/v1/sieve/scripts", s.handleSieveScripts)
 	mux.HandleFunc("/api/v1/sieve/scripts/", s.handleSieveScripts)
+	mux.HandleFunc("/api/v1/admin/welcome/", s.handleAdminWelcome)
 	mux.HandleFunc("/api/v1/admin/service-classes", s.handleAdminCoS)
 	mux.HandleFunc("/api/v1/admin/service-classes/", s.handleAdminCoS)
 	mux.HandleFunc("/api/v1/admin/devices", s.handleAdminDevices)
@@ -249,6 +270,9 @@ func (s *Server) Handler() http.Handler {
 }
 
 func (s *Server) Start(ctx context.Context) error {
+	if err := s.initializeSpaceRecovery(ctx); err != nil {
+		return err
+	}
 	var tlsCfg *tls.Config
 	if s.tls != nil {
 		tlsCfg = s.tls.HTTPConfig()

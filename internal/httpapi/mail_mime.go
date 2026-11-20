@@ -38,6 +38,7 @@ func parseMIMEMessage(raw []byte) parsedMsg {
 		out.Subject = mailsearch.DecodeHeader(v)
 	}
 	out.From = mailsearch.DecodeHeader(m.Header.Get("From"))
+	out.Sender = mailsearch.DecodeHeader(m.Header.Get("Sender"))
 	out.ReplyTo = mailsearch.DecodeHeader(m.Header.Get("Reply-To"))
 	out.To = mailsearch.DecodeHeader(m.Header.Get("To"))
 	out.Cc = mailsearch.DecodeHeader(m.Header.Get("Cc"))

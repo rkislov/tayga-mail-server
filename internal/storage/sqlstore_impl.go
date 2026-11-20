@@ -357,6 +357,9 @@ func (s *Store) CreateUser(ctx context.Context, u *User) (*User, error) {
 	if _, err := tx.ExecContext(ctx, q, args...); err != nil {
 		return nil, mapErr(err)
 	}
+	if err := s.queueWelcomeMailTx(ctx, tx, u); err != nil {
+		return nil, err
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}

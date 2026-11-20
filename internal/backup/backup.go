@@ -67,6 +67,27 @@ func WriteTarGz(ctx context.Context, store storage.Driver, opts Options, w io.Wr
 		return err
 	}
 
+	welcome, err := store.ListWelcomeTemplates(ctx, opts.TenantID)
+	if err != nil {
+		return err
+	}
+	exports := make([]welcomeExport, 0, len(welcome))
+	for _, template := range welcome {
+		// Each revision has its own bounded archive entry; a long photo history
+		// must not exceed the restore reader's per-entry limit.
+		for i, revision := range template.Revisions {
+			if err := writeJSON(tw, welcomeRevisionPath(template.Kind, template.ScopeID, revision.Number), welcomeBody{HTML: revision.HTML, Text: revision.Text}); err != nil {
+				return err
+			}
+			template.Revisions[i].HTML = ""
+			template.Revisions[i].Text = ""
+		}
+		exports = append(exports, welcomeExport{WelcomeTemplate: template, ExternalBodies: true})
+	}
+	if err := writeJSON(tw, "meta/welcome_templates.json", exports); err != nil {
+		return err
+	}
+
 	var allDomains []*storage.Domain
 	var allUsers []*storage.User
 	for _, t := range tenants {
@@ -218,4 +239,18 @@ func addDir(tw *tar.Writer, src, prefix string) error {
 		_, err = io.Copy(tw, f)
 		return err
 	})
+}
+
+// Keep large image payloads outside the history index in backup archives.
+type welcomeExport struct {
+	storage.WelcomeTemplate
+	ExternalBodies bool `json:"external_bodies,omitempty"`
+}
+type welcomeBody struct {
+	HTML string `json:"html"`
+	Text string `json:"text"`
+}
+
+func welcomeRevisionPath(kind, id string, number int64) string {
+	return fmt.Sprintf("meta/welcome_revisions/%s/%s/%d.json", kind, id, number)
 }

@@ -49,47 +49,70 @@ func (h *ewsHandler) deleteEWSItems(ctx context.Context, u *storage.User, body s
 	mode := nodeAttr(root, "DeleteType")
 	if mode == "" {
 		mode = "HardDelete"
-	} // Preserve legacy callers that omit DeleteType.
-	destination := ""
-	switch mode {
-	case "HardDelete":
-	case "MoveToDeletedItems":
-		if err = h.ensureStandardMailFolders(ctx, u); err != nil {
-			return "", err
-		}
-		mb, e := h.store.GetMailbox(ctx, u.ID, "Trash")
-		if e != nil {
-			return "", e
-		}
-		destination = mb.ID
-	case "SoftDelete":
-		mb, e := h.recoveryMailbox(ctx, u)
-		if e != nil {
-			return "", e
-		}
-		destination = mb.ID
-	default:
+	}
+	if mode != "HardDelete" && mode != "SoftDelete" && mode != "MoveToDeletedItems" {
 		return ewsOperationError("DeleteItem", "ErrorInvalidRequest", "Invalid DeleteType"), nil
 	}
 	children := ids.Children
-	itemIDs := make([]string, 0, len(children))
+	groups := map[string][]string{}
 	for _, item := range children {
-		if item.Name.Local == "ItemId" {
-			itemIDs = append(itemIDs, nodeAttr(item, "Id"))
+		if item.Name.Local != "ItemId" {
+			continue
 		}
+		msg, e := h.store.GetMessageByID(ctx, nodeAttr(item, "Id"))
+		if e != nil {
+			continue
+		}
+		if e = h.mailboxRight(ctx, u.ID, msg.MailboxID, "t"); e != nil {
+			continue
+		}
+		mb, e := h.store.GetMailboxByID(ctx, msg.MailboxID)
+		if e != nil {
+			return "", e
+		}
+		groups[mb.UserID] = append(groups[mb.UserID], msg.ID)
 	}
-	messages, err := h.store.DisposeMessages(ctx, u.ID, itemIDs, destination)
-	if err != nil {
-		return "", err
+	var messages []*storage.Message
+	for ownerID, itemIDs := range groups {
+		owner, e := h.store.GetUserByID(ctx, ownerID)
+		if e != nil {
+			return "", e
+		}
+		destination := ""
+		if mode == "MoveToDeletedItems" {
+			if e = h.ensureStandardMailFolders(ctx, owner); e != nil {
+				return "", e
+			}
+			mb, e := h.store.GetMailbox(ctx, ownerID, "Trash")
+			if e != nil {
+				return "", e
+			}
+			destination = mb.ID
+		}
+		if mode == "SoftDelete" {
+			mb, e := h.recoveryMailbox(ctx, owner)
+			if e != nil {
+				return "", e
+			}
+			destination = mb.ID
+		}
+		disposed, e := h.store.DisposeMessages(ctx, u.ID, itemIDs, destination, ownerID)
+		if e != nil {
+			return "", e
+		}
+		if destination == "" && h.ms != nil {
+			for _, msg := range disposed {
+				if e = h.ms.Delete(msg.FilePath); e != nil {
+					return "", e
+				}
+			}
+		}
+		messages = append(messages, disposed...)
 	}
 	disposed := map[string]bool{}
 	for _, msg := range messages {
 		disposed[msg.ID] = true
-		if destination == "" && h.ms != nil {
-			if err = h.ms.Delete(msg.FilePath); err != nil {
-				return "", err
-			}
-		}
+
 	}
 	var out strings.Builder
 	for _, item := range children {

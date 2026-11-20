@@ -44,38 +44,23 @@ archives:
       - README.md
       - configs/tayga.example.yaml
       - deploy/systemd/tayga.service
-      - docs/setup.md
-      - docs/backup-full.md
-      - internal/imapwire/LICENSE
-      - docs/ha.md
-      - docs/ha-single-site.md
-      - docs/ha-two-sites.md
+      - deploy/systemd/update-binary.sh
       - deploy/ha/*
-      - docs/setup-filters.md
-      - docs/web-omemo.md
-      - docs/xmpp.md
-      - docs/xmpp-*.md
-      - docs/files-and-office.md
-      - docs/mattermost-compatibility.md
-      - docs/mattermost-plugins.md
-      - docs/chat-restore-acceptance.md
-      - docs/vks.md
-      - docs/external-mail.md
-      - docs/mail-delivery-logs.md
-      - docs/travel-tickets.md
-      - docs/calendar-scheduling.md
-      - docs/roadmap.md
-      - docs/organization-directory.md
-      - docs/migration.md
-      - docs/product-comparison.md
-      - docs/mail-dlp.md
-      - docs/outlook-gal.md
+      - docs/*.md
+      - docs/screenshots/*.png
+      - docs/screenshots/*.md
+      - docs/screenshots/*.txt
+      - docs/screenshots/v1.0.0/*
       - frontend/LICENSE
+      - frontend/README.md
       - frontend/package*.json
       - frontend/build-*.cjs
       - frontend/src/*
+      - frontend/assets/*
       - internal/frontend/dist/assets/libomemo-LICENSE.txt
-      - docs/release-*.md
+      - internal/frontend/dist/assets/ckeditor5/LICENSE.md
+      - internal/frontend/dist/assets/ckeditor5/COPYING.GPL
+      - internal/imapwire/LICENSE
       - internal/flowsync/LICENSE
       - internal/flowsync/NOTICE
       - internal/flowsync/UNICODE-LICENSE.txt

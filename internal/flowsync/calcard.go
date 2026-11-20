@@ -195,6 +195,7 @@ func (h *easHandler) syncMailCollection(ctx context.Context, u *storage.User, co
 		adds = append(adds, syncAdd{
 			ConversationID: conversation.ID, ConversationIndex: conversation.Index,
 			ServerID:       m.ID,
+			MeetingXML:     easMeetingMail(ctx, content, u.Email),
 			NativeBodyType: content.nativeBodyType(),
 			Body:           body, BodyType: bt, EstimatedSize: estimated, Truncated: truncated, To: content.To, Attachments: content.Attachments,
 			Subject: hdr.Subject,
@@ -320,6 +321,7 @@ func renderMailSyncXML(syncKey, collectionID string, adds []syncAdd, wb []writeb
 		fmt.Fprintf(&b, `<Email:DateReceived xmlns:Email="Email:">%s</Email:DateReceived>`, xmlEscape(a.Date))
 		fmt.Fprintf(&b, `<Email:Read xmlns:Email="Email:">%d</Email:Read>`, bool01(a.Read))
 		fmt.Fprintf(&b, `<Email:To xmlns:Email="Email:">%s</Email:To>`, xmlEscape(a.To))
+		b.WriteString(a.MeetingXML)
 		b.WriteString(renderMailConversation(a))
 		b.WriteString(renderMailBody(a))
 		b.WriteString(`</ApplicationData></Add>`)

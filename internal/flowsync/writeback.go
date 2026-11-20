@@ -116,6 +116,11 @@ func (h *easHandler) applyWritebacks(ctx context.Context, u *storage.User, kind 
 			res.ServerID, err = h.wbMail(ctx, u, collectionID, op)
 		}
 		if err != nil {
+			if kind == kindCalendar {
+				if trace, ok := ctx.Value(traceKey{}).(*requestTrace); ok {
+					trace.Result = "calendar_" + op.Kind + "_failed: " + boundedLog(err.Error())
+				}
+			}
 			res.Status = 6 // error
 			if kind == kindNotes {
 				switch {

@@ -9,6 +9,7 @@ import (
 )
 
 func (s *Server) handleDelegates(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	au, err := s.userFromBearer(r)
 	if err != nil {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
@@ -54,10 +55,14 @@ func (s *Server) handleDelegates(w http.ResponseWriter, r *http.Request) {
 
 	case r.Method == http.MethodPost && path == "":
 		var req struct {
-			Email           string `json:"email"`
-			CanRead         *bool  `json:"can_read"`
-			CanSendAs       bool   `json:"can_send_as"`
-			CanSendOnBehalf bool   `json:"can_send_on_behalf"`
+			Email             string `json:"email"`
+			CanRead           *bool  `json:"can_read"`
+			CanManageMail     bool   `json:"can_manage_mail"`
+			CanSendAs         bool   `json:"can_send_as"`
+			CanSendOnBehalf   bool   `json:"can_send_on_behalf"`
+			CanReadCalendar   bool   `json:"can_read_calendar"`
+			CanManageCalendar bool   `json:"can_manage_calendar"`
+			CanRespondInvites bool   `json:"can_respond_invites"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&req); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
@@ -72,13 +77,28 @@ func (s *Server) handleDelegates(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "cannot delegate to self"})
 			return
 		}
+		owner, err := s.store.GetUserByID(r.Context(), ownerID)
+		if err != nil || !owner.Enabled || !delegate.Enabled || owner.TenantID != delegate.TenantID || owner.AuthSource == "resource" || delegate.AuthSource == "resource" {
+			writeJSON(w, 403, map[string]string{"error": "delegation requires active users in the same tenant"})
+			return
+		}
 		canRead := true
 		if req.CanRead != nil {
 			canRead = *req.CanRead
 		}
 		d := &storage.MailboxDelegate{
 			OwnerID: ownerID, DelegateID: delegate.ID,
-			CanRead: canRead, CanSendAs: req.CanSendAs, CanSendOnBehalf: req.CanSendOnBehalf,
+			CanManageMail: req.CanManageMail, CanRead: canRead, CanSendAs: req.CanSendAs, CanSendOnBehalf: req.CanSendOnBehalf,
+			CanReadCalendar: req.CanReadCalendar, CanManageCalendar: req.CanManageCalendar, CanRespondInvites: req.CanRespondInvites,
+		}
+		if previous, err := s.store.GetMailboxDelegate(r.Context(), ownerID, delegate.ID); err == nil {
+			d.EWSInboxPermission, d.EWSCalendarPermission, d.EWSReceiveMeetings = previous.EWSInboxPermission, previous.EWSCalendarPermission, previous.EWSReceiveMeetings
+		}
+		if d.CanReadCalendar || d.CanManageCalendar || d.CanRespondInvites {
+			if err := s.store.EnsureDAVDefaults(r.Context(), ownerID); err != nil {
+				writeJSON(w, 500, map[string]string{"error": "cannot prepare owner calendars"})
+				return
+			}
 		}
 		if err := s.store.UpsertMailboxDelegate(r.Context(), d); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -103,7 +123,9 @@ func serializeDelegates(list []*storage.MailboxDelegate) []map[string]any {
 	for _, d := range list {
 		out = append(out, map[string]any{
 			"owner_id": d.OwnerID, "delegate_id": d.DelegateID,
-			"can_read": d.CanRead, "can_send_as": d.CanSendAs, "can_send_on_behalf": d.CanSendOnBehalf,
+			"ews_inbox_permission": d.EWSInboxPermission, "ews_calendar_permission": d.EWSCalendarPermission, "ews_receive_meetings": d.EWSReceiveMeetings,
+			"can_manage_mail": d.CanManageMail, "can_read": d.CanRead, "can_send_as": d.CanSendAs, "can_send_on_behalf": d.CanSendOnBehalf,
+			"can_read_calendar": d.CanReadCalendar, "can_manage_calendar": d.CanManageCalendar, "can_respond_invites": d.CanRespondInvites,
 		})
 	}
 	return out

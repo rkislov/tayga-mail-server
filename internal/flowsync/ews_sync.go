@@ -41,8 +41,15 @@ func (h *ewsHandler) syncEWSItems(ctx context.Context, u *storage.User, body str
 	if err != nil {
 		return "", err
 	}
+	access, err := h.ewsAccessSignature(ctx, u)
+	if err != nil {
+		return "", err
+	}
 	fingerprint := digest(body)
-	if key != "" && key == state.PreviousKey && fingerprint == state.RequestHash {
+	if access != "" {
+		fingerprint = digest(body + "\x00" + access)
+	}
+	if key != "" && key == state.PreviousKey && fingerprint == state.RequestHash && h.replayCalendarPrivacy(ctx, u, state.Response) {
 		return shape.projectCachedMailSync(repairEWSTimeZoneNames(state.Response))
 	}
 	if token != "" && (state.Key == "" || state.Key != key) {
@@ -117,7 +124,14 @@ func (h *ewsHandler) syncEWSHierarchy(ctx context.Context, u *storage.User, body
 	if err != nil {
 		return "", err
 	}
+	access, err := h.ewsAccessSignature(ctx, u)
+	if err != nil {
+		return "", err
+	}
 	fingerprint := digest(body)
+	if access != "" {
+		fingerprint = digest(body + "\x00" + access)
+	}
 	if key != "" && key == state.PreviousKey && fingerprint == state.RequestHash {
 		return state.Response, nil
 	}

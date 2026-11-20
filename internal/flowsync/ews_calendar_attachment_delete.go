@@ -59,7 +59,7 @@ func (h *ewsHandler) deleteCalendarAttachment(ctx context.Context, u *storage.Us
 	if err != nil {
 		return reject("ErrorInvalidAttachmentId", "Calendar attachment not found")
 	}
-	if err = h.ensureCalendarOwned(ctx, u.ID, object.CalendarID); err != nil {
+	if err = h.calendarObjectWrite(ctx, u.ID, object); err != nil {
 		return reject("ErrorAccessDenied", "Calendar owner required")
 	}
 	file, err := h.store.GetCalendarAttachment(ctx, parts[2])
@@ -67,7 +67,7 @@ func (h *ewsHandler) deleteCalendarAttachment(ctx context.Context, u *storage.Us
 		return reject("ErrorInvalidAttachmentId", "Calendar attachment not found")
 	}
 	// Read access through an invitation never grants deletion of the source file.
-	if file.CalendarObjectID != object.ID || file.UserID != u.ID {
+	if file.CalendarObjectID != object.ID {
 		return reject("ErrorAccessDenied", "Only the file owner may delete this attachment")
 	}
 	data, err := calutil.WithoutFileAttachment(object.Data, file.ID)

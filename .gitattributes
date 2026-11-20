@@ -1,0 +1,3 @@
+# Keep upstream browser bundles byte-for-byte, including literal whitespace.
+internal/frontend/dist/assets/ckeditor5/** -whitespace linguist-vendored
+internal/frontend/dist/assets/pdfjs/** -whitespace linguist-vendored

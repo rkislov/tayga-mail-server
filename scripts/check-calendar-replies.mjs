@@ -9,7 +9,9 @@ const html = await readFile(new URL('internal/frontend/dist/index.html', root), 
 const markupStart = html.indexOf('<div id="cal-invites-backdrop"');
 const markup = html.slice(markupStart, html.indexOf('</section>', markupStart) + '</section>'.length) + '</div>';
 const helpers = app.slice(app.indexOf('function localInputToISO('), app.indexOf('function calEventDayKey('));
+const partstatHelper = app.slice(app.indexOf('function partstatLabel('), app.indexOf('function renderCalAttendeeChips('));
 const controller = app.slice(app.indexOf('async function refreshCalInvites('), app.indexOf('function shiftCalMonth('));
+const inboxFilterBindings = app.slice(app.indexOf("$('cal-inbox-filters')?.addEventListener"), app.indexOf('$("btn-cal-invites")?.addEventListener'));
 const recurrenceSource=await readFile(new URL('frontend/src/calendar-recurrence.js',root),'utf8');
 const bookingErrorHelper=recurrenceSource.slice(recurrenceSource.indexOf('function calendarRecurrenceError('),recurrenceSource.indexOf("$('btn-cal-recurrence')"));
 const browser = await chromium.launch({executablePath:process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true});
@@ -35,7 +37,7 @@ try {
     const askPrompt = async (title, options) => { window.prompts.push(options.value); return window.answers.shift(); };
     const askConfirm = async text => { window.confirmTexts.push(text);if(window.switchUser) state.me={id:'another'}; return window.confirmResult; };
     const api = async (path, options) => {
-      if(!options?.method) return {invites:[invite],proposals:window.proposals};
+      if(!options?.method) { window.lastInboxPath=path; return {invites:window.inboxInvites || [invite],proposals:window.proposals}; }
       window.requests.push({path,body:JSON.parse(options.body)});
       await new Promise(resolve => setTimeout(resolve,20));
       if(window.rejectReply) throw new Error('event changed; refresh');
@@ -45,7 +47,7 @@ try {
       }
       return {};
     };
-  ` + helpers + bookingErrorHelper + controller});
+  ` + helpers + partstatHelper + bookingErrorHelper + controller + inboxFilterBindings});
   await page.evaluate(() => refreshCalInvites());
   await page.evaluate(async () => {
     window.answers = ['2026-10-20T15:00', '2026-10-20T16:00'];

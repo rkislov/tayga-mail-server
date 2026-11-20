@@ -37,6 +37,29 @@ func (s *Store) queueCalendarSentCopy(ctx context.Context, tx *sql.Tx, copy cale
 	}
 	id, now := NewID(), time.Now().UTC()
 	raw := calutil.IMIPMessageToMany(m.From, m.FromName, to, m.Subject, m.Text, m.ICS, m.Method, id, now)
-	_, err := tx.ExecContext(ctx, s.rebind(`INSERT INTO calendar_deliveries(id,sender,recipient,recipient_user_id,subject,data,next_attempt,created_at,target_mailbox) VALUES(?,?,?,?,?,?,?,?,?)`), id, m.From, m.From, senderID, m.Subject, raw, now.UnixMilli(), now.UnixNano(), "Sent")
+	var err error
+	raw, err = s.calendarActorMailTx(ctx, tx, m.From, raw)
+	if err != nil {
+		return err
+	}
+	recipients := []struct{ id, email string }{{senderID, m.From}}
+	if actorID, _ := ctx.Value(calendarActorKey{}).(string); actorID != "" && actorID != senderID {
+		var email string
+		if err = tx.QueryRowContext(ctx, s.rebind(`SELECT email FROM users WHERE id=? AND enabled=TRUE`), actorID).Scan(&email); err != nil {
+			return err
+		}
+		recipients = append(recipients, struct{ id, email string }{actorID, email})
+	}
+	for index, recipient := range recipients {
+		copyID := id
+		if index > 0 {
+			copyID = NewID()
+		}
+		_, err = tx.ExecContext(ctx, s.rebind(`INSERT INTO calendar_deliveries(id,sender,recipient,recipient_user_id,subject,data,next_attempt,created_at,target_mailbox) VALUES(?,?,?,?,?,?,?,?,?)`), copyID, m.From, recipient.email, recipient.id, m.Subject, raw, now.UnixMilli(), now.UnixNano(), "Sent")
+		if err != nil {
+			return err
+		}
+	}
+
 	return err
 }

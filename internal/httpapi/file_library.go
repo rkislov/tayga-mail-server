@@ -24,12 +24,14 @@ var errFileTooLarge = errors.New("file exceeds 10 GiB")
 var errFileIncomplete = errors.New("incomplete upload")
 
 type fileRevision struct {
-	ID    string    `json:"id"`
-	Path  string    `json:"path"`
-	Name  string    `json:"name"`
-	Size  int64     `json:"size"`
-	IsDir bool      `json:"is_dir"`
-	At    time.Time `json:"at"`
+	ActivityIDs map[string]string `json:"activity_ids,omitempty"`
+	Protected   bool              `json:"protected"`
+	ID          string            `json:"id"`
+	Path        string            `json:"path"`
+	Name        string            `json:"name"`
+	Size        int64             `json:"size"`
+	IsDir       bool              `json:"is_dir"`
+	At          time.Time         `json:"at"`
 }
 
 func fileETag(info os.FileInfo) string {
@@ -62,6 +64,13 @@ func (s *Server) retainFile(owner, rel, kind, abs string) (fileRevision, string,
 		return rev, "", err
 	}
 	rev = fileRevision{ID: storage.NewID(), Path: cleanRel(rel), Name: filepath.Base(abs), Size: info.Size(), IsDir: info.IsDir(), At: time.Now().UTC()}
+	if kind == "trash" {
+		rev.ActivityIDs = s.fileActivityBindings(owner, rel)
+	} else if kind == "versions" {
+		if state, e := s.fileActivity(owner); e == nil && state.Paths[cleanRel(rel)] != "" {
+			rev.ActivityIDs = map[string]string{cleanRel(rel): state.Paths[cleanRel(rel)]}
+		}
+	}
 	dir := filepath.Join(root, rev.ID)
 	if err = os.Mkdir(dir, 0700); err != nil {
 		return rev, "", err
@@ -110,7 +119,12 @@ func (s *Server) fileRevisions(owner, kind, rel string) ([]fileRevision, error) 
 		}
 		out = append(out, rev)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].At.After(out[j].At) })
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].At.Equal(out[j].At) {
+			return out[i].ID > out[j].ID
+		}
+		return out[i].At.After(out[j].At)
+	})
 	return out, nil
 }
 
@@ -119,16 +133,8 @@ func (s *Server) rewriteRevision(owner string, rev fileRevision) error {
 	if err != nil {
 		return err
 	}
-	data, err := json.Marshal(rev)
-	if err != nil {
-		return err
-	}
 	dir := filepath.Join(root, rev.ID)
-	temp := filepath.Join(dir, "metadata.new")
-	if err = os.WriteFile(temp, data, 0600); err != nil {
-		return err
-	}
-	return os.Rename(temp, filepath.Join(dir, "metadata.json"))
+	return writeFileStateJSON(filepath.Join(dir, "metadata.json"), rev)
 }
 
 func (s *Server) revision(owner, kind, id string) (fileRevision, string, error) {
@@ -154,7 +160,10 @@ func (s *Server) revision(owner, kind, id string) (fileRevision, string, error) 
 // commitFile is shared by web, public upload links, WebDAV and WOPI. The
 // expected ETag prevents a slow uploader from overwriting a concurrent edit.
 // Caller holds fileMu and, if applicable, the corresponding DAV/WOPI lock.
-func (s *Server) commitFile(owner, rel, temp, expected string) (string, error) {
+func (s *Server) commitFile(owner, rel, temp, expected string, actors ...fileActor) (string, error) {
+	if err := s.checkStageGeneration(temp, owner); err != nil {
+		return "", err
+	}
 	root, err := s.filesRoot(owner)
 	if err != nil {
 		return "", err
@@ -196,6 +205,11 @@ func (s *Server) commitFile(owner, rel, temp, expected string) (string, error) {
 		}
 		return "", err
 	}
+	action := "updated"
+	if info == nil {
+		action = "created"
+	}
+	s.recordFileActivity(owner, rel, action, actors)
 	info, err = os.Stat(abs)
 	return fileETag(info), err
 }
@@ -221,6 +235,10 @@ func (s *Server) stageFile(ctx context.Context, owner string, src io.Reader, siz
 		return "", 0, err
 	}
 	defer f.Close()
+	if err = s.saveStageGeneration(f.Name(), owner); err != nil {
+		s.removeFileStage(f.Name())
+		return "", 0, err
+	}
 	n, err := io.Copy(f, io.LimitReader(src, maxWebUploadBytes+1))
 	if err == nil && n > maxWebUploadBytes {
 		err = errFileTooLarge
@@ -241,7 +259,7 @@ func (s *Server) stageFile(ctx context.Context, owner string, src io.Reader, siz
 		err = f.Close()
 	}
 	if err != nil {
-		_ = os.Remove(f.Name())
+		s.removeFileStage(f.Name())
 		return "", n, err
 	}
 	return f.Name(), n, nil
@@ -267,26 +285,37 @@ func (s *Server) saveFile(w http.ResponseWriter, r *http.Request, owner, rel str
 	if r.Header.Get("If-None-Match") == "*" && info != nil {
 		return 0, errFileConflict
 	}
+	actor := s.requestFileActor(r)
 	temp, n, err := s.stageFile(r.Context(), owner, r.Body, r.ContentLength)
 	if err != nil {
 		return n, err
 	}
-	defer os.Remove(temp)
+	defer s.removeFileStage(temp)
 	s.fileMu.Lock()
 	defer s.fileMu.Unlock()
+	if actor.ID != "" && actor.ID != owner && !s.fileAccessAllowed(r, owner, actor.ID, rel, true) {
+		return n, os.ErrPermission
+	}
+	if actor.Source == "public_link" {
+		token := strings.TrimPrefix(r.URL.Path, "/s/")
+		sh, e := s.store.GetFileShareByToken(r.Context(), token)
+		if e != nil || sh.UserID != owner || sh.Rights != "write" || !pathAccessApplies(sh.Path, cleanRel(rel)) || (sh.ExpiresAt != nil && !time.Now().Before(*sh.ExpiresAt)) || (sh.MaxDownloads > 0 && sh.DownloadCount >= sh.MaxDownloads) {
+			return n, os.ErrPermission
+		}
+	}
 	release, err := s.claimFileWrite(owner, rel, "")
 	if err != nil {
 		return n, err
 	}
 	defer release()
-	etag, err := s.commitFile(owner, rel, temp, expected)
+	etag, err := s.commitFile(owner, rel, temp, expected, actor)
 	if err == nil {
 		w.Header().Set("ETag", etag)
 	}
 	return n, err
 }
 
-func (s *Server) trashFile(owner, rel string) (fileRevision, error) {
+func (s *Server) trashFile(owner, rel string, actors ...fileActor) (fileRevision, error) {
 	var rev fileRevision
 	root, err := s.filesRoot(owner)
 	if err != nil {
@@ -306,6 +335,17 @@ func (s *Server) trashFile(owner, rel string) (fileRevision, error) {
 			}
 		} else {
 			s.invalidateOfficePath(owner, rel)
+			actor := fileActor{Source: "system"}
+			if len(actors) > 0 {
+				actor = actors[0]
+			}
+			bindings := map[string]string{}
+			affected := []string{}
+			for p, id := range rev.ActivityIDs {
+				bindings[p] = ""
+				affected = append(affected, id)
+			}
+			s.recordFileEvent(owner, fileActivityEvent{Path: rel, Object: rev.ActivityIDs[cleanRel(rel)], Affected: affected, Action: "trashed", Actor: actor, Bindings: bindings})
 		}
 	}
 	return rev, err
@@ -323,9 +363,11 @@ func (s *Server) invalidateOfficePath(owner, rel string) {
 func fileError(w http.ResponseWriter, err error) {
 	status := http.StatusInternalServerError
 	switch {
+	case errors.Is(err, errSpaceRecoveryPending):
+		status = 503
 	case errors.Is(err, errFileConflict), errors.Is(err, os.ErrExist):
 		status = 409
-	case errors.Is(err, errFileLocked):
+	case errors.Is(err, errFileLocked), errors.Is(err, errFileProtected):
 		status = 423
 	case errors.Is(err, errFileTooLarge):
 		status = 413
@@ -333,6 +375,8 @@ func fileError(w http.ResponseWriter, err error) {
 		status = http.StatusInsufficientStorage
 	case errors.Is(err, errFileIncomplete):
 		status = 400
+	case errors.Is(err, os.ErrPermission):
+		status = 403
 	case errors.Is(err, os.ErrNotExist):
 		status = 404
 	case errors.Is(err, errPathEscape):
@@ -347,20 +391,33 @@ func (s *Server) handleFileLibrary(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 401, map[string]string{"error": "unauthorized"})
 		return
 	}
-	// History and trash belong exclusively to the owner; sharing a current file
-	// never grants access to previously private content or deleted siblings.
-	if owner := r.URL.Query().Get("owner_id"); owner != "" && owner != au.ID {
-		writeJSON(w, 403, map[string]string{"error": "owner access required"})
+	owner := au.ID
+	op := strings.TrimPrefix(r.URL.Path, "/api/v1/files/library/")
+	if requested := r.URL.Query().Get("owner_id"); requested != "" && requested != au.ID {
+		permitted := s.fileCanManage(r.Context(), requested, au.ID)
+		if op == "usage" || op == "search" {
+			if _, e := s.store.GetFileSpace(r.Context(), requested); e == nil {
+				permitted = s.fileAccessAllowed(r, requested, au.ID, "", false)
+			}
+		}
+		if !permitted {
+			writeJSON(w, 403, map[string]string{"error": "owner or space management required"})
+			return
+		}
+		owner = requested
+	}
+
+	if op == "retention" || op == "protection" || strings.HasPrefix(op, "cleanup/") {
+		s.handleFileRetention(w, r, owner, op)
 		return
 	}
-	op := strings.TrimPrefix(r.URL.Path, "/api/v1/files/library/")
 	if op == "compare" {
-		s.handleFileComparison(w, r, au.ID)
+		s.handleFileComparison(w, r, owner)
 		return
 	}
 	if op == "usage" && r.Method == http.MethodGet {
 		s.fileMu.Lock()
-		usage, err := s.fileUsage(au.ID)
+		usage, err := s.fileUsage(owner)
 		s.fileMu.Unlock()
 		if err != nil {
 			fileError(w, err)
@@ -370,12 +427,20 @@ func (s *Server) handleFileLibrary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if op == "search" && r.Method == http.MethodGet {
-		s.searchFiles(w, r, au.ID)
+		if mode := r.URL.Query().Get("mode"); mode != "" {
+			s.searchFileContents(w, r, au.ID)
+		} else {
+			s.searchFiles(w, r, owner)
+		}
 		return
 	}
 	if (op == "trash" || op == "versions") && r.Method == http.MethodGet {
 		s.fileMu.Lock()
-		items, err := s.fileRevisions(au.ID, op, r.URL.Query().Get("path"))
+		if !s.requireFileManagement(w, r, owner) {
+			s.fileMu.Unlock()
+			return
+		}
+		items, err := s.fileRevisions(owner, op, r.URL.Query().Get("path"))
 		s.fileMu.Unlock()
 		if err != nil {
 			fileError(w, err)
@@ -403,20 +468,32 @@ func (s *Server) handleFileLibrary(w http.ResponseWriter, r *http.Request) {
 		}
 		s.fileMu.Lock()
 		defer s.fileMu.Unlock()
-		rev, dir, err := s.revision(au.ID, req.Kind, req.ID)
+		if !s.requireFileManagement(w, r, owner) {
+			return
+		}
+		if err := s.recoverFileCleanup(r.Context(), owner); err != nil {
+			fileError(w, err)
+			return
+		}
+		rev, dir, err := s.revision(owner, req.Kind, req.ID)
 		if err != nil {
 			fileError(w, err)
 			return
 		}
 		if r.Method == http.MethodDelete {
+			if rev.Protected {
+				fileError(w, errFileProtected)
+				return
+			}
 			if err = os.RemoveAll(dir); err != nil {
 				fileError(w, err)
 				return
 			}
+			s.recordRevisionActivity(owner, rev, req.Kind+"_deleted", fileActor{ID: au.ID, Source: "web"}, "")
 			writeJSON(w, 200, map[string]string{"status": "deleted"})
 			return
 		}
-		root, err := s.filesRoot(au.ID)
+		root, err := s.filesRoot(owner)
 		if err != nil {
 			fileError(w, err)
 			return
@@ -426,7 +503,7 @@ func (s *Server) handleFileLibrary(w http.ResponseWriter, r *http.Request) {
 			fileError(w, errPathEscape)
 			return
 		}
-		release, err := s.claimFileWrite(au.ID, rev.Path, "")
+		release, err := s.claimFileWrite(owner, rev.Path, "")
 		if err != nil {
 			fileError(w, err)
 			return
@@ -447,11 +524,11 @@ func (s *Server) handleFileLibrary(w http.ResponseWriter, r *http.Request) {
 			// Versions are immutable. Link into staging rather than holding the
 			// mutation mutex while copying a potentially multi-GB document.
 			var uploads string
-			uploads, err = s.fileStateRoot(au.ID, "uploads")
+			uploads, err = s.fileStateRoot(owner, "uploads")
 			if err == nil {
 				temp := filepath.Join(uploads, "restore-"+storage.NewID())
 				if err = os.Link(filepath.Join(dir, "content"), temp); err == nil {
-					_, err = s.commitFile(au.ID, rev.Path, temp, "*")
+					_, err = s.commitFile(owner, rev.Path, temp, "*", fileActor{ID: au.ID, Source: "web"})
 					_ = os.Remove(temp)
 				}
 			}
@@ -459,6 +536,11 @@ func (s *Server) handleFileLibrary(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			fileError(w, err)
 			return
+		}
+		if req.Kind == "trash" && len(rev.ActivityIDs) > 0 {
+			s.recordFileEvent(owner, fileActivityEvent{Path: rev.Path, Object: rev.ActivityIDs[rev.Path], Bindings: rev.ActivityIDs, Action: "restored", Actor: fileActor{ID: au.ID, Source: "web"}})
+		} else {
+			s.recordFileActivity(owner, rev.Path, "restored", []fileActor{{ID: au.ID, Source: "web"}})
 		}
 		writeJSON(w, 200, map[string]string{"path": rev.Path, "status": "restored"})
 		return

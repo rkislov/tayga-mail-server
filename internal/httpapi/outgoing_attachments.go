@@ -141,10 +141,11 @@ func attachOutgoingFiles(raw []byte, files []outgoingAttachment) ([]byte, error)
 	}
 	var body bytes.Buffer
 	mw := multipart.NewWriter(&body)
-	split := bytes.Index(raw, []byte("Content-Type:"))
+	split := bytes.Index(raw, []byte("\r\nContent-Type:"))
 	if split < 0 {
 		return nil, fmt.Errorf("invalid MIME message")
 	}
+	split += 2 // Start of the header line, never a match inside Subject or From.
 	part := raw[split:]
 	sep := bytes.Index(part, []byte("\r\n\r\n"))
 	if sep < 0 {

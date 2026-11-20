@@ -57,6 +57,7 @@ type sieveMeta struct {
 
 // RestoreTarGz reads a backup archive and applies it to store / maildir.
 func RestoreTarGz(ctx context.Context, store storage.Driver, r io.Reader, opts RestoreOptions) (*RestoreReport, error) {
+	ctx = storage.WithoutWelcomeMail(ctx)
 	gr, err := gzip.NewReader(r)
 	if err != nil {
 		return nil, fmt.Errorf("gzip: %w", err)
@@ -141,6 +142,39 @@ func RestoreTarGz(ctx context.Context, store storage.Driver, r io.Reader, opts R
 		}
 		domainMap[d.ID] = d.ID
 		rep.DomainsCreated++
+	}
+
+	if raw, ok := files["meta/welcome_templates.json"]; ok {
+		var templates []welcomeExport
+		if err := json.Unmarshal(raw, &templates); err != nil {
+			return rep, fmt.Errorf("welcome_templates.json: %w", err)
+		}
+		for _, export := range templates {
+			v := export.WelcomeTemplate
+			if export.ExternalBodies {
+				for i := range v.Revisions {
+					var body welcomeBody
+					path := welcomeRevisionPath(v.Kind, v.ScopeID, v.Revisions[i].Number)
+					if err := json.Unmarshal(files[path], &body); err != nil {
+						return rep, fmt.Errorf("welcome revision body: %w", err)
+					}
+					v.Revisions[i].HTML, v.Revisions[i].Text = body.HTML, body.Text
+				}
+			}
+			var mapped string
+			if v.Kind == "tenants" {
+				mapped = tenantMap[v.ScopeID]
+			} else if v.Kind == "domains" {
+				mapped = domainMap[v.ScopeID]
+			}
+			if mapped == "" {
+				return rep, fmt.Errorf("welcome template scope absent from backup")
+			}
+			v.ScopeID = mapped
+			if err := store.ImportWelcomeTemplate(ctx, v); err != nil {
+				return rep, fmt.Errorf("welcome template: %w", err)
+			}
+		}
 	}
 
 	userIDs := map[string]string{}

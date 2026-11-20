@@ -56,10 +56,10 @@ func (h *ewsHandler) moveItem(ctx context.Context, u *storage.User, body string)
 	if err != nil {
 		return ewsFault("ErrorItemNotFound", "message unavailable"), nil
 	}
-	if err = h.ensureMailboxOwned(ctx, u.ID, msg.MailboxID); err != nil {
+	if err = h.mailboxRight(ctx, u.ID, msg.MailboxID, "t"); err != nil {
 		return ewsFault("ErrorAccessDenied", "message unavailable"), nil
 	}
-	moved, err := h.store.MoveMessage(ctx, msg.ID, dst)
+	moved, err := h.store.MoveMessage(ctx, msg.ID, dst, u.ID)
 	if err != nil {
 		return "", err
 	}

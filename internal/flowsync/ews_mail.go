@@ -42,7 +42,7 @@ func ewsMailSentDate(sent, received time.Time) string {
 }
 
 func (h *ewsHandler) getMailItem(ctx context.Context, u *storage.User, msg *storage.Message, request string) (string, error) {
-	if err := h.ensureMailboxOwned(ctx, u.ID, msg.MailboxID); err != nil {
+	if err := h.mailboxRight(ctx, u.ID, msg.MailboxID, "r"); err != nil {
 		return ewsFault("ErrorAccessDenied", "forbidden"), nil
 	}
 	if h.ms == nil {
@@ -151,6 +151,7 @@ func (h *ewsHandler) getMailItem(ctx context.Context, u *storage.User, msg *stor
 	out.WriteString(ewsAddress("ToRecipients", content.To))
 	out.WriteString(ewsAddress("CcRecipients", content.Cc))
 	out.WriteString(ewsAddress("From", content.From))
+	out.WriteString(ewsAddress("Sender", content.Sender))
 	fmt.Fprintf(&out, `<t:IsRead>%t</t:IsRead>`, storage.HasFlag(msg.Flags, `\Seen`))
 	out.WriteString(`</t:Message></m:Items></m:GetItemResponseMessage></m:ResponseMessages></m:GetItemResponse>`)
 	return shape.project(out.String())
@@ -190,7 +191,7 @@ func (h *ewsHandler) attachment(ctx context.Context, u *storage.User, reference 
 	if err != nil {
 		return messageAttachment{}, err
 	}
-	if err = h.ensureMailboxOwned(ctx, u.ID, msg.MailboxID); err != nil {
+	if err = h.mailboxRight(ctx, u.ID, msg.MailboxID, "r"); err != nil {
 		return messageAttachment{}, err
 	}
 	if h.ms == nil {

@@ -1,9 +1,9 @@
 // Personal external mailbox collection. Credentials never enter browser storage.
 let mailSourcesGeneration = 0;
 async function refreshMailSources() {
-  const host = $('app-profile'); if (!host || !state.tokens?.access_token) return;
+  const host = $('workspace-profile-extra') || document.querySelector('#app-profile .workspace-settings-content') || $('app-profile'); if (!host || !state.tokens?.access_token) return;
   let card = $('mail-sources-card');
-  if (!card) {card=document.createElement('section');card.id='mail-sources-card';card.className='card stack-gap';host.insertBefore(card,$('profile-security')?.previousElementSibling || null);}
+  if (!card) {card=document.createElement('section');card.id='mail-sources-card';card.className='card stack-gap';host.append(card);}
   const generation=++mailSourcesGeneration, token=state.tokens.access_token;
   try {
     const data=await api('/api/v1/mail-sources');if(generation!==mailSourcesGeneration||state.tokens?.access_token!==token)return;

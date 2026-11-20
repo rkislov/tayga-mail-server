@@ -33,12 +33,25 @@ func (s *Store) EWSMailboxMetadata(ctx context.Context, mailboxID string) (map[s
 	return result, rows.Err()
 }
 
-func (s *Store) UpdateEWSMailMetadata(ctx context.Context, id, flags, data string) error {
+func (s *Store) UpdateEWSMailMetadata(ctx context.Context, id, flags, data string, actor ...string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+	if len(actor) > 0 {
+		var mailboxID string
+		if err = tx.QueryRowContext(ctx, s.rebind(`SELECT mailbox_id FROM messages WHERE id=?`), id).Scan(&mailboxID); err != nil {
+			return mapErr(err)
+		}
+		right := "w"
+		if len(actor) > 1 && actor[1] == "s" {
+			right = "s"
+		}
+		if err = s.mailboxRightTx(ctx, tx, actor[0], mailboxID, right); err != nil {
+			return err
+		}
+	}
 	res, err := tx.ExecContext(ctx, s.rebind(`UPDATE messages SET flags=? WHERE id=?`), flags, id)
 	if err != nil {
 		return err

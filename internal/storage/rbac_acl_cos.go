@@ -203,34 +203,75 @@ func (s *Store) IncrementFileShareDownload(ctx context.Context, id string) error
 	return err
 }
 
-func (s *Store) UpsertMailboxDelegate(ctx context.Context, d *MailboxDelegate) error {
-	q := s.rebind(`INSERT INTO mailbox_delegates(owner_id, delegate_id, can_read, can_send_as, can_send_on_behalf)
-		VALUES (?, ?, ?, ?, ?)
+func (s *Store) UpsertMailboxDelegate(ctx context.Context, d *MailboxDelegate, mode ...string) error {
+	operation := ""
+	if len(mode) > 0 {
+		operation = mode[0]
+	}
+	if operation != "" && operation != "create" && operation != "update" {
+		return ErrUnauthorized
+	}
+	for _, permission := range []string{d.EWSInboxPermission, d.EWSCalendarPermission} {
+		if permission != "" && permission != "None" && permission != "Reviewer" && permission != "Editor" {
+			return ErrUnauthorized
+		}
+	}
+	owner, err := s.GetUserByID(ctx, d.OwnerID)
+	if err != nil {
+		return err
+	}
+	delegate, err := s.GetUserByID(ctx, d.DelegateID)
+	if err != nil {
+		return err
+	}
+	if owner.ID == delegate.ID || owner.TenantID != delegate.TenantID || !owner.Enabled || !delegate.Enabled || owner.AuthSource == "resource" || delegate.AuthSource == "resource" {
+		return ErrUnauthorized
+	}
+	q := s.rebind(`INSERT INTO mailbox_delegates(owner_id, delegate_id, can_read, can_send_as, can_send_on_behalf, can_read_calendar, can_manage_calendar, can_respond_invites, can_manage_mail, ews_inbox_permission, ews_calendar_permission, ews_receive_meetings)
+		SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ? OR EXISTS (SELECT 1 FROM mailbox_delegates WHERE owner_id=? AND delegate_id=?)
 		ON CONFLICT(owner_id, delegate_id) DO UPDATE SET
 			can_read = excluded.can_read,
 			can_send_as = excluded.can_send_as,
-			can_send_on_behalf = excluded.can_send_on_behalf`)
-	_, err := s.db.ExecContext(ctx, q, d.OwnerID, d.DelegateID, d.CanRead, d.CanSendAs, d.CanSendOnBehalf)
-	return mapErr(err)
+			can_send_on_behalf = excluded.can_send_on_behalf,
+			can_read_calendar = excluded.can_read_calendar, can_manage_calendar = excluded.can_manage_calendar, can_respond_invites = excluded.can_respond_invites, can_manage_mail=excluded.can_manage_mail, ews_inbox_permission=excluded.ews_inbox_permission, ews_calendar_permission=excluded.ews_calendar_permission, ews_receive_meetings=excluded.ews_receive_meetings`)
+	if operation == "create" {
+		q = q[:strings.Index(q, "ON CONFLICT")] + "ON CONFLICT(owner_id,delegate_id) DO NOTHING"
+	}
+	result, err := s.db.ExecContext(ctx, q, d.OwnerID, d.DelegateID, d.CanRead, d.CanSendAs, d.CanSendOnBehalf, d.CanReadCalendar, d.CanManageCalendar, d.CanRespondInvites, d.CanManageMail, d.EWSInboxPermission, d.EWSCalendarPermission, d.EWSReceiveMeetings, operation != "update", d.OwnerID, d.DelegateID)
+	if err != nil {
+		return mapErr(err)
+	}
+	if n, err := result.RowsAffected(); err != nil {
+		return err
+	} else if n == 0 {
+		if operation == "create" {
+			return ErrDelegateExists
+		}
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (s *Store) scanDelegate(row interface{ Scan(dest ...any) error }) (*MailboxDelegate, error) {
 	d := &MailboxDelegate{}
-	var cr, csa, csob any
-	if err := row.Scan(&d.OwnerID, &d.DelegateID, &cr, &csa, &csob); err != nil {
+	var cr, csa, csob, crc, cmc, cri, cmm, erm any
+	if err := row.Scan(&d.OwnerID, &d.DelegateID, &cr, &csa, &csob, &crc, &cmc, &cri, &cmm, &d.EWSInboxPermission, &d.EWSCalendarPermission, &erm); err != nil {
 		return nil, mapErr(err)
 	}
 	d.CanRead, d.CanSendAs, d.CanSendOnBehalf = asBool(cr), asBool(csa), asBool(csob)
+	d.CanReadCalendar, d.CanManageCalendar, d.CanRespondInvites = asBool(crc), asBool(cmc), asBool(cri)
+	d.CanManageMail = asBool(cmm)
+	d.EWSReceiveMeetings = asBool(erm)
 	return d, nil
 }
 
 func (s *Store) ListMailboxDelegates(ctx context.Context, ownerID string) ([]*MailboxDelegate, error) {
-	q := s.rebind(`SELECT owner_id, delegate_id, can_read, can_send_as, can_send_on_behalf FROM mailbox_delegates WHERE owner_id = ?`)
+	q := s.rebind(`SELECT owner_id, delegate_id, can_read, can_send_as, can_send_on_behalf, can_read_calendar, can_manage_calendar, can_respond_invites, can_manage_mail, ews_inbox_permission, ews_calendar_permission, ews_receive_meetings FROM mailbox_delegates WHERE owner_id = ?`)
 	return s.queryDelegates(ctx, q, ownerID)
 }
 
 func (s *Store) ListDelegationsFor(ctx context.Context, delegateID string) ([]*MailboxDelegate, error) {
-	q := s.rebind(`SELECT owner_id, delegate_id, can_read, can_send_as, can_send_on_behalf FROM mailbox_delegates WHERE delegate_id = ?`)
+	q := s.rebind(`SELECT owner_id, delegate_id, can_read, can_send_as, can_send_on_behalf, can_read_calendar, can_manage_calendar, can_respond_invites, can_manage_mail, ews_inbox_permission, ews_calendar_permission, ews_receive_meetings FROM mailbox_delegates WHERE delegate_id = ?`)
 	return s.queryDelegates(ctx, q, delegateID)
 }
 
@@ -252,7 +293,7 @@ func (s *Store) queryDelegates(ctx context.Context, q string, arg string) ([]*Ma
 }
 
 func (s *Store) GetMailboxDelegate(ctx context.Context, ownerID, delegateID string) (*MailboxDelegate, error) {
-	q := s.rebind(`SELECT owner_id, delegate_id, can_read, can_send_as, can_send_on_behalf FROM mailbox_delegates WHERE owner_id = ? AND delegate_id = ?`)
+	q := s.rebind(`SELECT owner_id, delegate_id, can_read, can_send_as, can_send_on_behalf, can_read_calendar, can_manage_calendar, can_respond_invites, can_manage_mail, ews_inbox_permission, ews_calendar_permission, ews_receive_meetings FROM mailbox_delegates WHERE owner_id = ? AND delegate_id = ?`)
 	return s.scanDelegate(s.db.QueryRowContext(ctx, q, ownerID, delegateID))
 }
 
@@ -310,8 +351,17 @@ func (s *Store) MailboxRightsForUser(ctx context.Context, mailboxID, userID stri
 	if mb.UserID == userID {
 		return "lrswipcdkxta", nil
 	}
-	if d, err := s.GetMailboxDelegate(ctx, mb.UserID, userID); err == nil && d.CanRead {
-		return "lrs", nil
+	if d, err := s.GetMailboxDelegate(ctx, mb.UserID, userID); err == nil {
+		actor, ae := s.GetUserByID(ctx, userID)
+		owner, oe := s.GetUserByID(ctx, mb.UserID)
+		if ae == nil && oe == nil && actor.Enabled && owner.Enabled && actor.TenantID == owner.TenantID {
+			if d.CanManageMail || mb.Name == "INBOX" && d.EWSInboxPermission == "Editor" {
+				return "lrswipcdkxt", nil
+			}
+			if d.CanRead || mb.Name == "INBOX" && d.EWSInboxPermission == "Reviewer" {
+				return "lrs", nil
+			}
+		}
 	}
 	var rights string
 	err = s.db.QueryRowContext(ctx, s.rebind(`SELECT rights FROM mailbox_acl WHERE mailbox_id = ? AND grantee_user_id = ?`), mailboxID, userID).Scan(&rights)
@@ -325,7 +375,7 @@ func (s *Store) ListSharedMailboxes(ctx context.Context, userID string) ([]*Mail
 	q := s.rebind(`SELECT DISTINCT m.id, m.user_id, m.name, m.path, m.uidnext, m.uidvalidity, m.created_at
 		FROM mailboxes m
 		WHERE m.id IN (SELECT mailbox_id FROM mailbox_acl WHERE grantee_user_id = ?)
-		   OR m.user_id IN (SELECT owner_id FROM mailbox_delegates WHERE delegate_id = ? AND can_read)`)
+		   OR m.user_id IN (SELECT d.owner_id FROM mailbox_delegates d JOIN users owner ON owner.id=d.owner_id JOIN users actor ON actor.id=d.delegate_id WHERE d.delegate_id = ? AND (d.can_read OR d.can_manage_mail OR (m.name='INBOX' AND d.ews_inbox_permission IN ('Reviewer','Editor'))) AND owner.enabled=TRUE AND actor.enabled=TRUE AND owner.tenant_id=actor.tenant_id)`)
 	rows, err := s.db.QueryContext(ctx, q, userID, userID)
 	if err != nil {
 		return nil, err
@@ -385,6 +435,20 @@ func (s *Store) CalendarRightsForUser(ctx context.Context, calendarID, userID st
 	if owner == userID {
 		return "write", nil
 	}
+	if cal, err := s.GetCalendarByID(ctx, owner, calendarID); err == nil && cal.Name != "personal" {
+		actor, e := s.GetUserByID(ctx, userID)
+		principal, pe := s.GetUserByID(ctx, owner)
+		if e == nil && pe == nil && actor.Enabled && principal.Enabled && actor.TenantID == principal.TenantID {
+			if grant, e := s.GetMailboxDelegate(ctx, owner, userID); e == nil {
+				if grant.CanManageCalendar || cal.Name == "default" && grant.EWSCalendarPermission == "Editor" {
+					return "write", nil
+				}
+				if grant.CanReadCalendar || grant.CanRespondInvites || cal.Name == "default" && grant.EWSCalendarPermission == "Reviewer" {
+					return "read", nil
+				}
+			}
+		}
+	}
 	var rights string
 	err = s.db.QueryRowContext(ctx, s.rebind(`SELECT rights FROM calendar_acl WHERE calendar_id = ? AND grantee_user_id = ?`), calendarID, userID).Scan(&rights)
 	if err != nil {
@@ -395,10 +459,9 @@ func (s *Store) CalendarRightsForUser(ctx context.Context, calendarID, userID st
 
 func (s *Store) ListSharedCalendars(ctx context.Context, userID string) ([]*Calendar, error) {
 	q := s.rebind(`SELECT c.id, c.user_id, c.name, c.display_name, c.description, c.color, c.public_token, c.ctag, c.created_at
-		FROM calendars c
-		INNER JOIN calendar_acl a ON a.calendar_id = c.id
-		WHERE a.grantee_user_id = ?`)
-	rows, err := s.db.QueryContext(ctx, q, userID)
+  FROM calendars c WHERE EXISTS (SELECT 1 FROM calendar_acl a WHERE a.calendar_id=c.id AND a.grantee_user_id=?)
+  OR (c.name<>'personal' AND EXISTS (SELECT 1 FROM mailbox_delegates d JOIN users owner ON owner.id=d.owner_id JOIN users actor ON actor.id=d.delegate_id WHERE d.owner_id=c.user_id AND d.delegate_id=? AND (d.can_read_calendar OR d.can_manage_calendar OR d.can_respond_invites OR (c.name='default' AND d.ews_calendar_permission IN ('Reviewer','Editor'))) AND owner.enabled=TRUE AND actor.enabled=TRUE AND owner.tenant_id=actor.tenant_id))`)
+	rows, err := s.db.QueryContext(ctx, q, userID, userID)
 	if err != nil {
 		return nil, err
 	}

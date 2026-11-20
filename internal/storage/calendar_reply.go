@@ -56,6 +56,7 @@ func (s *Store) replyCalendarInvite(ctx context.Context, userID, inviteID, statu
 	return result, nil
 }
 func (s *Store) replyCalendarInviteTx(ctx context.Context, tx *sql.Tx, userID, inviteID, status string, proposedStart, proposedEnd *time.Time, etag, rid string, sendMail, idempotent bool, comment ...string) (*CalendarInvite, error) {
+	ctx = withCalendarActor(ctx, userID)
 	var err error
 	q := `SELECT id, organizer_user_id, attendee_email, attendee_user_id, event_uid, calendar_object_id,
 		summary, partstat, proposed_start, proposed_end, created_at, updated_at FROM calendar_invites WHERE id=?`
@@ -67,7 +68,10 @@ func (s *Store) replyCalendarInviteTx(ctx context.Context, tx *sql.Tx, userID, i
 		return nil, err
 	}
 	if inv.AttendeeUserID != userID {
-		return nil, ErrUnauthorized
+		if err := s.calendarReplyDelegateTx(ctx, tx, userID, inv); err != nil {
+			return nil, err
+		}
+		userID = inv.AttendeeUserID
 	}
 	var organizerEmail string
 	if err = tx.QueryRowContext(ctx, s.rebind(`SELECT email FROM users WHERE id=? AND enabled=TRUE`), inv.OrganizerUserID).Scan(&organizerEmail); err != nil {

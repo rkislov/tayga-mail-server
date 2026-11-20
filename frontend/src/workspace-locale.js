@@ -1,0 +1,8 @@
+/* Register only presentation labels present at mount time. Message bodies, names,
+   user-created notes and other data never pass through the translation map. */
+(() => {
+ const labels=new Map(),attributes=[];
+ const roots=document.querySelectorAll('#view-login,.workspace-header,.workspace-nav,.workspace-settings-menu,.workspace-section-header,.workspace-mode-choices,.workspace-display-preferences,.workspace-mm-tabs,.workspace-files-nav,.workspace-admin-heading,.workspace-view-tabs');
+ for(const root of roots){const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);let text;while(text=walker.nextNode()){const pair=workspaceLexicon.get(text.textContent.trim());if(pair)labels.set(text,pair)}for(const el of [root,...root.querySelectorAll('*')])for(const name of ['title','aria-label','placeholder']){const pair=workspaceLexicon.get(el.getAttribute(name));if(pair)attributes.push({el,name,pair})}}
+ const original=applyLang;applyLang=function(next){original(next);for(const [node,pair]of labels)if(node.isConnected)node.textContent=pair[lang];for(const {el,name,pair}of attributes)if(el.isConnected)el.setAttribute(name,pair[lang]);const search=$('workspace-search');if(search){search.placeholder=workspaceWords('Поиск писем','Search mail');search.setAttribute('aria-label',workspaceWords('Поиск писем','Search mail'))}document.querySelectorAll('.workspace-nav .nav-btn').forEach(b=>{b.setAttribute('aria-label',b.lastElementChild?.textContent.trim()||b.textContent.trim());b.title=b.getAttribute('aria-label')});renderThemeGallery(normalizeThemeKey(localStorage.getItem('tayga.theme')||'tayga'))};
+})();

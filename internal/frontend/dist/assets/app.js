@@ -367,7 +367,7 @@ const I18N = {
     notify_cal: "Событие скоро",
     notify_perm_ok: "Уведомления разрешены",
     notify_perm_denied: "Уведомления запрещены браузером",
-    ca_title: "Удостоверяющий центр",
+    ca_title: "Сертификаты",
     ca_lede: "Каталог сертификатов: самоподписанные, коммерческие PEM и Let’s Encrypt (ACME).",
     ca_list: "Сертификаты",
     ca_active: "Активный",
@@ -1363,6 +1363,8 @@ function renderThemeGallery(active) {
     btn.addEventListener("click", () => applyTheme(key));
     gallery.appendChild(btn);
   });
+  const more=document.createElement('details');more.className='workspace-other-backgrounds';const title=document.createElement('summary');title.textContent=lang==='en'?'More backgrounds':'Другие фоны';const grid=document.createElement('div');grid.className='workspace-other-background-grid';more.append(title,grid);
+  gallery.querySelectorAll('.theme-tile').forEach(button=>{if(!['tayga','cosmos','city','teriberka'].includes(button.dataset.theme))grid.append(button)});if(grid.children.length){more.open=!!grid.querySelector('.is-active');gallery.append(more)}
 }
 
 function normalizeThemeKey(name) {
@@ -1411,7 +1413,7 @@ function updateNavUser(email, isAdmin) {
   const emailEl = $("nav-user-email");
   const roleEl = $("nav-user-role");
   if (avatar) avatar.textContent = accountInitials(state.me?.email===mail ? state.me.display_name : "", mail);
-  if (emailEl) { emailEl.textContent = String(state.me?.email === mail ? state.me.display_name || "" : "").trim() || mail || "—"; emailEl.title = mail; }
+  if (emailEl) { const name = String(state.me?.email === mail ? state.me.display_name || "" : "").trim() || mail || "—"; emailEl.textContent = document.documentElement.classList.contains("workspace-v1") && !name.includes("@") ? name.split(" ")[0] : name; emailEl.title = mail; }
   if (roleEl) {
     const key = isAdmin ? "role_admin" : "role_user";
     roleEl.setAttribute("data-i18n", key);
@@ -1430,11 +1432,11 @@ function applyColorMode(mode) {
 }
 document.querySelectorAll(".color-mode-switch button").forEach(button => button.addEventListener("click",()=>applyColorMode(button.dataset.colorMode)));
 systemColorMode.addEventListener("change",()=>{if(localStorage.getItem("tayga.colorMode")==="auto")applyColorMode("auto");});
-applyColorMode(localStorage.getItem("tayga.colorMode") || "auto");
+applyColorMode(localStorage.getItem("tayga.colorMode") || "light");
 $("color-mode-select")?.addEventListener("change",event=>applyColorMode(event.target.value));
 
 (function initTheme() {
-  const saved = localStorage.getItem("tayga.theme") || "random";
+  const saved = localStorage.getItem("tayga.theme") || "tayga";
   applyTheme(saved, {persist: false});
   document.getElementById("theme-select")?.addEventListener("change", (e) => {
     applyTheme(e.target.value);
@@ -1447,7 +1449,7 @@ const APPS = [
   "monitor", "outbound", "antispam", "maillog", "tenants", "tls", "xmpp", "mattermost", "vks", "server", "cos",
 ];
 
-const mailState = { mailboxID: "", messageID: "", mailboxes: [], order: [], searchQ: "", offset: 0, pageSize: 50, request: 0, sort: "date", sortOrder: "desc", filter: "all" };
+const mailState = { mailboxID: "", messageID: "", mailboxes: [], order: [], searchQ: "", offset: 0, pageSize: 25, request: 0, sort: "date", sortOrder: "desc", filter: "all" };
 const calState = {
   showPast: false,
   hiddenCalendars: new Set(),
@@ -1459,7 +1461,7 @@ const calState = {
   events: [],
   month: new Date(),
   selectedDay: "",
-  view: "month",
+  view: "week",
   dayClickTimer: null,
   attendees: [],
   invites: [],
@@ -1519,9 +1521,10 @@ function setNavOpen(open) {
   const nav = $("app-nav");
   const backdrop = $("nav-backdrop");
   if (!shell) return;
+  if (window.matchMedia("(min-width: 901px)").matches) open = false;
   shell.classList.toggle("nav-open", open);
   if (btn) btn.setAttribute("aria-expanded", open ? "true" : "false");
-  if (nav) nav.setAttribute("aria-hidden", open ? "false" : "true");
+  if (nav) nav.setAttribute("aria-hidden", open || window.matchMedia("(min-width: 901px)").matches ? "false" : "true");
   if (backdrop) backdrop.hidden = !open;
   document.body.style.overflow = open ? "hidden" : "";
 }
@@ -1546,7 +1549,7 @@ function showApp(name) {
   const migrationPane=$("app-migration");
   if (migrationPane) {
     if (!migrationPane._originalParent) migrationPane._originalParent=migrationPane.parentElement;
-    (app === "profile" ? $("app-profile") : migrationPane._originalParent).append(migrationPane);
+    (app === "profile" ? ($("workspace-profile-extra") || document.querySelector("#app-profile .workspace-settings-content") || $("app-profile")) : migrationPane._originalParent).append(migrationPane);
     migrationPane.classList.toggle("hidden", !["profile","migration"].includes(app));
     migrationPersonal = app === "profile";
     if (migrationPersonal) { migrationTargetID=""; refreshMigration(); }
@@ -1914,27 +1917,41 @@ function formatUptime(seconds) {
 }
 
 let monitorRequest = 0;
-function renderTimeChart(host, key, series, unit='', supplied=null, range=null) {
- if(!host)return;
- const samples=supplied||[];
- if(!samples.length){host.textContent='История пока не накоплена. Сервер сохраняет метрики раз в минуту.';return}
- const w=640,h=210,left=60,right=18,top=16,bottom=36;
- const max=Math.max(1,...samples.flatMap(sample=>sample.values.filter(value=>Number.isFinite(value))));
- const start=range?.from||samples[0].time,end=range?.to||samples.at(-1).time,span=Math.max(end-start,60000);
- const colors=['#36866b','#598ad5','#d48331','#b466b1','#bc5353','#70838d'];let svg='';
- for(let i=0;i<=4;i++){const v=max*i/4,y=h-bottom-(h-top-bottom)*i/4;svg+=svgEl('line',{x1:left,x2:w-right,y1:y,y2:y,stroke:'currentColor',opacity:0.12})+svgEl('text',{x:left-8,y:y+4,'text-anchor':'end',fill:'currentColor','font-size':11},escapeHtml(fmtNum(v)))}
- for(let i=0;i<3;i++){const x=left+(w-left-right)*i/2;svg+=svgEl('text',{x,y:h-10,'text-anchor':i===0?'start':i===2?'end':'middle',fill:'currentColor','font-size':11},escapeHtml(new Date(start+(end-start)*i/2).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})))}
- series.forEach((item,index)=>{let points=[];const flush=()=>{if(points.length)svg+=svgEl('polyline',{points:points.join(' '),fill:'none',stroke:colors[index%colors.length],'stroke-width':2.5});points=[]};let previous=null,last=null;for(const sample of samples){const value=sample.values[index];if(!Number.isFinite(value)){flush();previous=sample;continue}if(previous&&(sample.time-previous.time>150000||sample.boot!==previous.boot))flush();last=[left+(sample.time-start)/span*(w-left-right),h-bottom-value/max*(h-top-bottom)];points.push(last.join(','));previous=sample}flush();if(last)svg+=svgEl('circle',{cx:last[0],cy:last[1],r:3,fill:colors[index%colors.length]})});
- host.innerHTML=`<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${escapeHtml(series.map(item=>item.label).join(', '))}"><title>${escapeHtml(unit)}</title>${svg}</svg><div class="chart-legend">${series.map((item,i)=>`<span><i style="background:${colors[i%colors.length]}"></i>${escapeHtml(item.label)}: ${Number.isFinite(item.value)?escapeHtml(fmtNum(item.value)):'—'}</span>`).join('')}</div><p class="meta">${escapeHtml(unit)} · ${samples.length} наблюдений · с ${escapeHtml(new Date(samples[0].time).toLocaleString())}</p>`;
+// Monotone Hermite interpolation passes through samples without introducing peaks.
+function workspaceChartPath(points) {
+ if(!points.length)return '';
+ if(points.length===1)return `M${points[0][0]},${points[0][1]}`;
+ const slopes=points.slice(1).map((p,i)=>(p[1]-points[i][1])/(p[0]-points[i][0]||1));
+ const tangents=points.map((p,i)=>i===0?slopes[0]:i===points.length-1?slopes.at(-1):slopes[i-1]*slopes[i]<=0?0:2*slopes[i-1]*slopes[i]/(slopes[i-1]+slopes[i]));
+ for(let i=0;i<slopes.length;i++){if(!slopes[i]){tangents[i]=tangents[i+1]=0;continue}const a=tangents[i]/slopes[i],b=tangents[i+1]/slopes[i],norm=a*a+b*b;if(norm>9){const scale=3/Math.sqrt(norm);tangents[i]=scale*a*slopes[i];tangents[i+1]=scale*b*slopes[i]}}
+ const f=n=>Number(n.toFixed(2));let path=`M${f(points[0][0])},${f(points[0][1])}`;
+ for(let i=1;i<points.length;i++){const a=points[i-1],b=points[i],step=(b[0]-a[0])/3;path+=` C${f(a[0]+step)},${f(a[1]+tangents[i-1]*step)} ${f(b[0]-step)},${f(b[1]-tangents[i]*step)} ${f(b[0])},${f(b[1])}`}
+ return path;
+}
+function renderTimeChart(host,key,series,unit='',supplied=null,range=null){
+ if(!host)return;const samples=(supplied||[]).filter(s=>Number.isFinite(s.time));
+ if(!samples.length){host.innerHTML='<p class="workspace-chart-empty">'+mailImageText('История пока не накоплена. Метрики сохраняются раз в минуту.','No history yet. Metrics are saved every minute.')+'</p>';return}
+ const w=680,h=236,left=48,right=16,top=18,bottom=32,plotW=w-left-right,plotH=h-top-bottom,baseline=h-bottom;
+ const rawMax=Math.max(1,...samples.flatMap(s=>s.values.filter(v=>Number.isFinite(v))));const roughStep=rawMax*1.12/4,power=10**Math.floor(Math.log10(roughStep));const step=([1,2,2.5,5,10].find(v=>v*power>=roughStep)||10)*power,max=Math.ceil(rawMax*1.06/step)*step;
+ const from=Number.isFinite(range?.from)?range.from:samples[0].time,to=Number.isFinite(range?.to)?range.to:samples.at(-1).time,span=Math.max(to-from,60000);
+ const colors=['#628548','#cfaa65','#8fa17c','#8aa29a','#b78f78','#a4a87e'];let grid='',lines='',defs='';
+ const number=v=>new Intl.NumberFormat(lang==='en'?'en-GB':'ru-RU',{maximumFractionDigits:Math.abs(v)<1?2:1}).format(v);
+ for(let i=0;i<=4;i++){const y=baseline-plotH*i/4;grid+=`<line x1="${left}" x2="${w-right}" y1="${y}" y2="${y}" class="workspace-chart-grid"/><text x="${left-10}" y="${y+3}" text-anchor="end" class="workspace-chart-tick">${escapeHtml(number(max*i/4))}</text>`}
+ for(let i=0;i<5;i++){const x=left+plotW*i/4;grid+=`<text x="${x}" y="${h-8}" text-anchor="${i===0?'start':i===4?'end':'middle'}" class="workspace-chart-tick">${escapeHtml(new Date(from+(to-from)*i/4).toLocaleTimeString(lang==='en'?'en-GB':'ru-RU',{hour:'2-digit',minute:'2-digit'}))}</text>`}
+ const order=series.map((_,i)=>i).reverse();for(const index of order){const color=colors[index%colors.length],id='chart-'+(host.id||key).replace(/[^a-zA-Z0-9_-]/g,'')+'-'+index;defs+=`<linearGradient id="${id}" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="${color}" stop-opacity="${index===0?.3:.12}"/><stop offset="100%" stop-color="${color}" stop-opacity=".025"/></linearGradient>`;
+  let points=[],previous=null,last=null;const flush=()=>{if(!points.length)return;const path=workspaceChartPath(points);if(points.length>1)lines+=`<path d="${path} L${points.at(-1)[0]},${baseline} L${points[0][0]},${baseline} Z" fill="url(#${id})" class="workspace-chart-area"/>`;lines+=`<path d="${path}" fill="none" stroke="${color}" stroke-width="${index===0?2.2:1.5}" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`;points=[]};
+  for(const sample of samples){const value=sample.values[index];if(!Number.isFinite(value)){flush();previous=sample;continue}if(previous&&(sample.time-previous.time>150000||sample.boot!==previous.boot))flush();const p=[left+(sample.time-from)/span*plotW,baseline-value/max*plotH];if(points.length&&p[0]<=points.at(-1)[0])flush();points.push(p);last={point:p,value,time:sample.time};previous=sample}flush();if(last)lines+=`<circle cx="${last.point[0]}" cy="${last.point[1]}" r="3" fill="${color}" stroke="var(--work-panel)" stroke-width="1.4"><title>${escapeHtml(series[index].label+': '+number(last.value)+' · '+new Date(last.time).toLocaleString())}</title></circle>`;
+ }
+ const caption=mailImageText('Данные сервера','Server data')+' · '+unit;host.innerHTML=`<div class="workspace-chart-caption"><span>${escapeHtml(unit)}</span><span>${escapeHtml(mailImageText('Наблюдений: ','Samples: ')+samples.length)}</span></div><svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${escapeHtml(series.map(s=>s.label).join(', '))}"><title>${escapeHtml(caption)}</title><desc>${escapeHtml(mailImageText('Пробелы означают отсутствие наблюдений. Плавные линии проходят через фактические значения.','Gaps indicate missing samples. Smooth lines pass through the observed values.'))}</desc><defs>${defs}</defs>${grid}${lines}</svg><div class="chart-legend">${series.map((s,i)=>`<span><i style="background:${colors[i%colors.length]}"></i>${escapeHtml(s.label)}<strong>${Number.isFinite(s.value)?escapeHtml(number(s.value)):'—'}</strong></span>`).join('')}</div>`;
 }
 function renderMonitorHistory(history){
  const server=history.server||[],tenant=history.tenant||[];
  const draw=(id,key,rows,definitions,unit)=>{const points=rows.map(row=>({time:row.at,boot:row.boot,values:definitions.map(item=>{const value=row.values[item.key];return typeof value==='number'?value/(item.divisor||1):null})}));const series=definitions.map((item,i)=>({label:item.label,value:points.at(-1)?.values[i]}));renderTimeChart($(id),key,series,unit,points,history)};
  const combined=tenant.map(row=>({...row,values:{...row.values}})),byTime=new Map(combined.map(row=>[row.at,row]));for(const row of server){let point=byTime.get(row.at);if(!point){point={...row,values:{}};combined.push(point)}point.values.server_messages=row.values.messages;point.values.server_bytes=row.values.bytes}combined.sort((a,b)=>a.at-b.at);
- draw('chart-bars','messages',combined,[{key:'messages',label:'Тенант'},...(history.global?[{key:'server_messages',label:'Сервер'}]:[])],'Сохранённые письма');
- draw('chart-storage','storage',combined,[{key:'bytes',label:'Тенант',divisor:1048576},...(history.global?[{key:'server_bytes',label:'Сервер',divisor:1048576}]:[])],'МиБ');
+ draw('chart-bars','messages',combined,[{key:'messages',label:'Организация'},...(history.global?[{key:'server_messages',label:'Сервер'}]:[])],'Сохранённые письма');
+ draw('chart-storage','storage',combined,[{key:'bytes',label:'Организация',divisor:1048576},...(history.global?[{key:'server_bytes',label:'Сервер',divisor:1048576}]:[])],'МиБ');
  if(!history.global){for(const id of ['chart-runtime','chart-sparklines','chart-network','protection-stats'])$(id).textContent='Метрики сервера доступны глобальному администратору.';return}
- draw('chart-runtime','runtime',server,[{key:'queue',label:'В очереди'},{key:'goroutines',label:'Горутины'}],'Количество');
+ draw('chart-runtime','runtime',server,[{key:'goroutines',label:'Горутины'},{key:'queue',label:'В очереди'}],'Количество');
  draw('chart-sparklines','heap',server,[{key:'heap',label:'Память',divisor:1048576}],'МиБ');
  const keys=[...new Set(server.flatMap(row=>Object.keys(row.values).filter(key=>key.startsWith('network.'))))].sort();
  const rates=server.map((row,i)=>{const old=server[i-1],seconds=old?(row.at-old.at)/1000:0,values={};for(const key of keys){if(old&&old.boot===row.boot&&seconds>0&&seconds<=150&&typeof row.values[key]==='number'&&typeof old.values[key]==='number'&&row.values[key]>=old.values[key])values[key]=(row.values[key]-old.values[key])/seconds/1024}return {...row,values}});
@@ -3501,6 +3518,7 @@ function showToast(ev) {
 
 function openNotifyHref(href) {
   if (!href) return;
+  if (href === "files") { showApp("files"); openReceivedDocuments(); return; }
   if (href === "tasks") { showApp("tasks"); return; }
   if (href === "chat") { showApp("chat"); return; }
   if(href.startsWith("chat?peer=")){showApp("chat");openChatPeer(decodeURIComponent(href.slice(10)));return;}
@@ -3522,7 +3540,7 @@ function startNotifyLive() {
     updatePushButton();
   }).catch(() => {});
   const notificationRoute = new URL(location.href).searchParams.get('notification');
-  if (['mail','calendar','chat','tasks'].includes(notificationRoute)) {
+  if (['mail','calendar','chat','tasks','files'].includes(notificationRoute)) {
     const url = new URL(location.href); url.searchParams.delete('notification'); history.replaceState(null,'',url);
     setTimeout(() => openNotifyHref(notificationRoute), 0);
   }
@@ -3538,6 +3556,7 @@ function startNotifyLive() {
       notifyState.seen.add(event.id);
       if (notifyState.seen.size > 200) notifyState.seen.delete(notifyState.seen.values().next().value);
       showToast(event);
+      if(event.kind==='files'&&!$('app-files')?.classList.contains('hidden'))refreshFiles();
       if (event.kind === 'task' && !$('app-tasks')?.classList.contains('hidden')) refreshTasks();
     } catch (_) {}
   });
@@ -3750,7 +3769,7 @@ $("btn-passkey-add").addEventListener("click", async () => {
 function mailFolderLabel(mb) {
   const role = mb.role || (["inbox", "sent", "drafts", "trash", "junk", "archive"].includes(mb.name?.toLowerCase()) ? mb.name.toLowerCase() : "");
   const name = role ? t("mail_folder_" + role) : mb.name;
-  return name + (mb.shared ? " · " + t("mail_shared") : "");
+  return name + (mb.shared ? " · " + (mb.owner_email || t("mail_shared")) : "");
 }
 function sortMailFolders(folders) {
   const rank = id => { const i = mailState.order.indexOf(id); return i < 0 ? 100000 : i; };
@@ -3841,8 +3860,8 @@ async function refreshMail() {
     list.innerHTML = mailState.mailboxes.map((mb) => `
       <li>
         <button type="button" class="folder-btn${mb.id === mailState.mailboxID ? " is-active" : ""}" data-mb="${escapeHtml(mb.id)}">
-          <span>${escapeHtml(mailFolderLabel(mb))}</span>
-          <span class="meta">${mb.unread ? mb.unread + " · " : ""}${mb.messages || 0}</span>
+          <span class="workspace-folder-icon" aria-hidden="true">${workspaceFolderIcon(mb)}</span><span>${escapeHtml(mailFolderLabel(mb))}</span>
+          <span class="workspace-folder-count" ${mb.unread ? "" : "hidden"}>${mb.unread || ""}</span>
         </button>
       </li>`).join("") || `<li class="meta">${t("empty_mailbox")}</li>`;
     list.querySelectorAll("[data-mb]").forEach((btn) => {
@@ -3935,9 +3954,9 @@ async function refreshMailMessages() {
       ].filter(Boolean).join("");
       return `<li data-mail-color="${escapeHtml(mailMessageColor(m))}">
         <button type="button" class="msg-item${!m.seen ? " unread" : ""}${m.id === mailState.messageID ? " is-active" : ""}${q ? " is-search" : ""}" data-msg="${escapeHtml(m.id)}" data-mailbox="${escapeHtml(m.mailbox_id || "")}" title="${escapeHtml((m.mailbox_name ? m.mailbox_name + " · " : "") + (m.from || ""))}">
-          <span class="msg-flag" aria-hidden="true"></span>
+          <span class="msg-flag" aria-hidden="true"></span><span class="mail-list-avatar" aria-hidden="true">${escapeHtml(accountInitials(mailFromDisplay(m.from), m.from))}</span>
           <span class="msg-from">${escapeHtml(mailFromDisplay(m.from))}</span>
-          <span class="msg-subject">${escapeHtml(m.subject || "(no subject)")}${m.snippet ? `<span class="msg-snippet meta"> — ${escapeHtml(m.snippet)}</span>` : ""}</span>
+          <span class="msg-subject">${escapeHtml(m.subject || "(no subject)")}${m.snippet ? `<span class="msg-snippet meta">${escapeHtml(m.snippet)}</span>` : ""}</span>
           <span class="msg-date">${dateBits}</span>
         </button>
       </li>`;
@@ -3979,7 +3998,7 @@ function showMailReader(msg) {
   reader.classList.remove("hidden");
   setMobilePane("read");
   $("mail-subject").textContent = msg.subject || "(no subject)";
-  if ($("mail-from")) $("mail-from").textContent = msg.from || "—";
+  if ($("mail-from")) $("mail-from").textContent = msg.sender ? mailImageText(msg.sender+" от имени "+msg.from,msg.sender+" on behalf of "+msg.from) : msg.from || "—";
   renderSenderAvatar(msg.from);
   if ($("mail-to")) $("mail-to").textContent = msg.to || "—";
   if ($("mail-date")) $("mail-date").textContent = mailDateFull(msg.date || msg.internal_date);
@@ -3993,7 +4012,10 @@ function showMailReader(msg) {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "btn-secondary btn-sm";
-      button.textContent = attachment.filename + " · " + fmtBytes(attachment.size);
+      button.className = "workspace-attachment-card";
+      const icon=document.createElement("span");icon.className="workspace-attachment-type";icon.textContent=(attachment.filename.split('.').pop()||'FILE').slice(0,4).toUpperCase();
+      const info=document.createElement("span");info.className="workspace-attachment-info";const name=document.createElement("strong");name.textContent=attachment.filename;const size=document.createElement("small");size.textContent=fmtBytes(attachment.size);info.append(name,size);button.append(icon,info);
+      button.setAttribute("aria-label",mailImageText("Открыть вложение: ","Open attachment: ")+attachment.filename);
       button.addEventListener("click", () => openDocumentPreview({
         url: "/api/v1/mail/messages/" + encodeURIComponent(msg.id) + "/attachments/" + encodeURIComponent(attachment.id),
         name: attachment.filename, size: attachment.size
@@ -4026,14 +4048,14 @@ function showMailReader(msg) {
       policy.content = "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data:" + (externalImages ? " https: http:" : "") + "; font-src data:; form-action 'none'; base-uri 'none'";
       documentHTML.head.prepend(policy);
       const styles = documentHTML.createElement("style");
-      styles.textContent = "html{overflow-x:auto!important}body{margin:12px!important;font:15px/1.5 sans-serif;overflow-wrap:anywhere;white-space:normal!important}body *{box-sizing:border-box;max-width:100%!important}img,video{height:auto!important}table{table-layout:auto}pre{white-space:pre-wrap!important;overflow-wrap:anywhere}body{min-width:0!important;width:auto!important}";
+      styles.textContent = "html{overflow-x:auto!important}body{margin:0!important;font:14px/1.65 Arial,Helvetica,sans-serif;overflow-wrap:anywhere;white-space:normal!important}body *{box-sizing:border-box;max-width:100%!important}img,video{height:auto!important}table{table-layout:auto}pre{white-space:pre-wrap!important;overflow-wrap:anywhere}body{min-width:0!important;width:auto!important}";
       documentHTML.head.append(styles);
       frame.srcdoc = "<!doctype html>" + documentHTML.documentElement.outerHTML;
     };
     const sender = msg.sender_email || "";
     const allowed = mailImagePreferences.mode === "always" || !!sender && (mailImagePreferences.senders || []).includes(sender);
     render(allowed);
-    if (!allowed) {
+    if (!allowed && /<img[^>]+src=[\"\']?https?:/i.test(msg.html || "")) {
       const choices = document.createElement("div"); choices.className = "mail-image-controls";
       const status = document.createElement("span");status.className = "meta";status.textContent = mailImageText("Внешние изображения заблокированы", "External images are blocked");
       choices.append(status);
@@ -4059,6 +4081,7 @@ function showMailReader(msg) {
     text.textContent = msg.text || "";
     body.append(text);
   }
+  const attachmentCards=body.querySelector(".mail-attachments");if(attachmentCards)body.append(attachmentCards);
 }
 
 async function openMailMessage(id) {
@@ -4108,10 +4131,16 @@ $("btn-mail-archive")?.addEventListener("click", async () => {
   }
 });
 function composeBodyEl() {
+  if (typeof composeRichEditor !== "undefined" && composeRichEditor) return composeRichEditor.ui.getEditableElement();
   return $("compose-body");
 }
 
 function setComposeBody(htmlOrText, asHTML) {
+  const plain = document.createElement('div');
+  if (!asHTML) for (const line of String(htmlOrText || '').split('\n')) { const p = document.createElement('p'); p.textContent = line; plain.append(p); }
+  const editorHTML = asHTML ? (htmlOrText || '') : plain.innerHTML;
+  if (typeof composeRichPendingHTML !== 'undefined') composeRichPendingHTML = editorHTML;
+  if (typeof composeRichEditor !== 'undefined' && composeRichEditor) { composeRichEditor.setData(editorHTML); composeRichPendingHTML = null; return; }
   const el = composeBodyEl();
   if (!el) return;
   if (el.isContentEditable) {
@@ -4131,18 +4160,23 @@ function setComposeBody(htmlOrText, asHTML) {
 }
 
 function getComposeHTML() {
+  if (typeof composeRichEditor !== 'undefined' && composeRichEditor) return composeRichEditor.getData();
   const el = composeBodyEl();
   if (!el) return "";
   if (el.isContentEditable) return (el.innerHTML || "").trim();
   return "";
 }
 
+function mutateComposeHTML(update) {
+  const fragment = document.createElement('div'); fragment.innerHTML = getComposeHTML();
+  update(fragment); setComposeBody(fragment.innerHTML, true);
+}
 function getComposeText() {
   const el = composeBodyEl();
   if (!el) return "";
-  if (el.isContentEditable) {
+  if (el.tagName !== "TEXTAREA") {
     const tmp = document.createElement("div");
-    tmp.innerHTML = el.innerHTML || "";
+    tmp.innerHTML = getComposeHTML();
     tmp.querySelectorAll("a[href]").forEach(link=>{if(link.textContent!==link.getAttribute("href"))link.append(document.createTextNode(" ("+link.getAttribute("href")+")"))});
     tmp.querySelectorAll("br").forEach((br) => br.replaceWith("\n"));
     tmp.querySelectorAll("div, p, li, blockquote").forEach((n) => {
@@ -4158,13 +4192,13 @@ let composeSenderEpoch=0;
 async function loadComposeSenders(preferred='') {
  const select=$('compose-from');if(!select)return;
  const epoch=++composeSenderEpoch,userID=state.me?.id,primary=state.me?.email||'';
- const add=address=>{const option=document.createElement('option');option.value=address;option.textContent=address;select.append(option)};
+ const add=(address,mode='send_as')=>{const option=document.createElement('option');option.value=address;option.dataset.senderMode=mode;option.textContent=mode==='on_behalf'?mailImageText(state.me.email+' от имени '+address,state.me.email+' on behalf of '+address):address;select.append(option)};
  select.replaceChildren();if(primary)add(primary);select.disabled=true;renderComposeAttachments();
  try{
   const data=await api('/api/v1/mail/senders');
   if(epoch!==composeSenderEpoch||state.me?.id!==userID)return;
-  select.replaceChildren();for(const address of data.addresses||[])add(address);
-  select.value=(data.addresses||[]).includes(preferred)?preferred:(data.default||primary);
+  select.replaceChildren();if(data.identities){for(const identity of data.identities)add(identity.email,identity.mode);}else{for(const address of data.addresses||[])add(address);}
+  const preferredOption=[...select.options].find(option=>option.value===preferred);select.selectedIndex=preferredOption?preferredOption.index:0;
  }catch(error){if(epoch===composeSenderEpoch&&state.me?.id===userID)setMsg($('compose-msg'),mailImageText('Не удалось загрузить адреса отправителя. Повторно откройте окно письма.','Could not load sender addresses. Reopen the compose window.'),'err');}
  finally{if(epoch===composeSenderEpoch&&state.me?.id===userID)select.disabled=false;renderComposeAttachments();}
 }
@@ -4180,11 +4214,12 @@ function openCompose({ to = "", cc = "", from = "", subject = "", body = "", bod
   if (bodyHTML) setComposeBody(bodyHTML, true);
   else setComposeBody(body, false);
   const signatureEnabled=to||body||bodyHTML?signatureState.replies:signatureState.new_messages;
-  if(signatureEnabled&&signatureState.text) {const block=document.createElement("div");block.dataset.mailSignature="true";block.style.whiteSpace="pre-wrap";block.textContent="\n-- \n"+signatureState.text;const surface=composeBodyEl();if(body||bodyHTML)surface.prepend(block);else surface.append(block);}
+  if(signatureEnabled&&signatureState.text) {const block=document.createElement("p");block.dataset.mailSignature="true";for(const line of ("-- \n"+signatureState.text).split("\n")){if(block.childNodes.length)block.append(document.createElement("br"));block.append(document.createTextNode(line));}mutateComposeHTML(surface=>{if(body||bodyHTML)surface.prepend(block);else surface.append(block);});}
   const surface = composeBodyEl();
   if (surface?.dataset) surface.dataset.placeholder = t("body");
   setMsg($("compose-msg"), "");
   loadComposeSenders(from);
+  if (typeof ensureComposeRichEditor === "function") ensureComposeRichEditor().catch(()=>{});
   surface?.focus?.();
 }
 
@@ -4215,6 +4250,7 @@ $("compose-backdrop")?.addEventListener("click", (e) => {
   if (e.target === $("compose-backdrop")) $("compose-backdrop").classList.add("hidden");
 });
 $("btn-compose-send")?.addEventListener("click", async () => {
+  if (typeof mailEditorPending === "function" && (composeRichEditorBoot || mailEditorPending(composeRichEditor))) return;
   if (composeAttachments.sending || $("compose-from")?.disabled || composeAttachments.entries.some(item=>item.status!=="ready")) return;
   composeAttachments.sending = true;
   renderComposeAttachments();
@@ -4226,6 +4262,7 @@ $("btn-compose-send")?.addEventListener("click", async () => {
     const attachments = composeAttachments.entries.filter(item=>!item.share).map(item=>item.ref);
     const payload = {
       from: $("compose-from")?.value || state.me?.email || "",
+      sender_mode: $("compose-from")?.selectedOptions[0]?.dataset.senderMode || "send_as",
       to,
       cc: ($("compose-cc")?.value || "").split(/[,;]/).map(value=>value.trim()).filter(Boolean),
       subject: $("compose-subject").value,
@@ -4688,6 +4725,12 @@ function shiftCalMonth(delta) {
     renderCalMonth();
     loadCalEvents();
     return;
+  }
+  if (calState.view === "week") {
+    const day = new Date((calState.selectedDay || calDayKey(new Date())) + "T12:00");
+    day.setDate(day.getDate() + delta * 7);
+    calState.selectedDay = calDayKey(day); calState.month = calMonthStart(day);
+    renderCalMonth(); renderCalEventLog(); loadCalEvents(); return;
   }
   const m = calMonthStart(calState.month);
   calState.month = new Date(m.getFullYear(), m.getMonth() + delta, 1);
@@ -5431,11 +5474,11 @@ function renderContactCards(){
  contactState.page=Math.max(0,Math.min(contactState.page,Math.ceil(cards.length/contactState.pageSize)-1));
  const start=contactState.page*contactState.pageSize,visible=cards.slice(start,start+contactState.pageSize);
  let toolbar=$('contact-list-actions');if(!toolbar){toolbar=document.createElement('div');toolbar.id='contact-list-actions';toolbar.className='contact-list-actions';list.before(toolbar)}
- toolbar.replaceChildren();const select=document.createElement('input');select.type='checkbox';select.title=mailImageText('Выбрать все на странице','Select page');select.setAttribute('aria-label',select.title);select.checked=visible.length>0&&visible.every(c=>contactState.selected.has(c.id));select.indeterminate=visible.some(c=>contactState.selected.has(c.id))&&!select.checked;select.onchange=()=>{visible.forEach(c=>select.checked?contactState.selected.add(c.id):contactState.selected.delete(c.id));renderContactCards()};
+ toolbar.replaceChildren();toolbar.classList.toggle('has-selection',contactState.selected.size>0);const select=document.createElement('input');select.type='checkbox';select.title=mailImageText('Выбрать все на странице','Select page');select.setAttribute('aria-label',select.title);select.checked=visible.length>0&&visible.every(c=>contactState.selected.has(c.id));select.indeterminate=visible.some(c=>contactState.selected.has(c.id))&&!select.checked;select.onchange=()=>{visible.forEach(c=>select.checked?contactState.selected.add(c.id):contactState.selected.delete(c.id));renderContactCards()};
  const count=document.createElement('span');count.textContent=mailImageText('Выбрано: ','Selected: ')+contactState.selected.size;toolbar.append(select,count);
  for(const [action,label] of [['export',mailImageText('Экспорт vCard','Export vCard')],['delete',t('delete')]]){const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.innerHTML=designIcon(action==='export'?'download':'delete');button.title=label;button.setAttribute('aria-label',label);button.classList.add('contact-bulk-icon');button.disabled=!contactState.selected.size||(action==='delete'&&readonly);button.onclick=()=>contactBulkAction(action);toolbar.append(button)}
  const pages=document.createElement('div');pages.className='contact-pagination';const prev=document.createElement('button'),next=document.createElement('button'),range=document.createElement('span'),size=document.createElement('select');prev.textContent='‹';next.textContent='›';prev.title=mailImageText('Предыдущая страница','Previous page');next.title=mailImageText('Следующая страница','Next page');for(const button of [prev,next]){button.type='button';button.className='btn-secondary btn-sm';button.setAttribute('aria-label',button.title)}prev.disabled=!contactState.page;next.disabled=start+visible.length>=cards.length;prev.onclick=()=>{contactState.page--;renderContactCards()};next.onclick=()=>{contactState.page++;renderContactCards()};range.textContent=(visible.length?start+1:0)+'–'+(start+visible.length)+' / '+cards.length;size.className='field-input field-input-sm';size.setAttribute('aria-label',mailImageText('Контактов на странице','Contacts per page'));for(const n of [25,50,100]){const option=document.createElement('option');option.value=n;option.textContent=n+' '+mailImageText('на странице','per page');size.append(option)}size.value=contactState.pageSize;size.onchange=()=>{contactState.pageSize=Number(size.value);contactState.page=0;renderContactCards()};pages.append(prev,range,next,size);toolbar.append(pages);
- list.innerHTML=visible.map(c=>`<li class="contact-select-row"><input type="checkbox" data-select-card="${escapeHtml(c.id)}" aria-label="${escapeHtml(mailImageText('Выбрать: ','Select: ')+(contactDisplayName(c)||c.email||''))}" ${contactState.selected.has(c.id)?'checked':''}><button type="button" class="msg-item contact-item${c.id===contactState.cardID?' is-active':''}" data-card="${escapeHtml(c.id)}"><span class="msg-from">${escapeHtml(contactDisplayName(c)||'—')}</span><span class="msg-subject">${escapeHtml(c.email||'—')}</span><span class="msg-date">${escapeHtml(c.tel||'—')}</span></button></li>`).join('')||`<li class="meta msg-empty">${escapeHtml(t('empty_contacts'))}</li>`;
+ list.innerHTML=visible.map(c=>`<li class="contact-select-row"><input type="checkbox" data-select-card="${escapeHtml(c.id)}" aria-label="${escapeHtml(mailImageText('Выбрать: ','Select: ')+(contactDisplayName(c)||c.email||''))}" ${contactState.selected.has(c.id)?'checked':''}><button type="button" class="msg-item contact-item${c.id===contactState.cardID?' is-active':''}" data-card="${escapeHtml(c.id)}"><span class="workspace-contact-avatar" aria-hidden="true">${escapeHtml(accountInitials(contactDisplayName(c)||c.email||'?'))}</span><span class="msg-from">${escapeHtml(contactDisplayName(c)||'—')}</span><span class="msg-subject">${escapeHtml(c.email||'—')}</span><span class="msg-date">${escapeHtml(c.tel||'—')}</span></button></li>`).join('')||`<li class="meta msg-empty">${escapeHtml(t('empty_contacts'))}</li>`;
  list.querySelectorAll('[data-card]').forEach(button=>button.onclick=()=>openContactCard(button.dataset.card));list.querySelectorAll('[data-select-card]').forEach(input=>input.onchange=()=>{input.checked?contactState.selected.add(input.dataset.selectCard):contactState.selected.delete(input.dataset.selectCard);renderContactCards()});
 }
 async function contactBulkAction(action){
@@ -5539,7 +5582,7 @@ function showFileReader(entry) {
   let preview=$('btn-files-preview');
   if(!preview){preview=document.createElement('button');preview.id='btn-files-preview';preview.type='button';preview.className='btn-secondary btn-sm';$('btn-files-download').after(preview);}
   preview.textContent=mailImageText('Просмотр','Preview');preview.hidden=entry.is_dir||!documentPreviewType(entry.name);
-  let share=$('btn-files-share');if(!share){share=document.createElement('button');share.id='btn-files-share';share.type='button';share.className='btn-secondary btn-sm';$('btn-files-download').after(share);}share.hidden=!!filesState.ownerID;share.textContent=mailImageText('Доступ','Share');share.onclick=()=>openFileAccess(joinPath(filesState.path,entry.name));
+  let share=$('btn-files-share');if(!share){share=document.createElement('button');share.id='btn-files-share';share.type='button';share.className='btn-secondary btn-sm';$('btn-files-download').after(share);}share.hidden=false;share.textContent=mailImageText('Карточка','Details');share.onclick=()=>openFileCard(joinPath(filesState.path,entry.name),filesState.ownerID);
   preview.onclick=()=>openDocumentPreview({url:'/api/v1/files/content?path='+encodeURIComponent(joinPath(filesState.path,entry.name))+(filesState.ownerID?'&owner_id='+encodeURIComponent(filesState.ownerID):''),name:entry.name,size:entry.size});
   mountFileReaderActions(entry);
 }
@@ -5738,7 +5781,7 @@ function filesGoUp() {
 async function refreshFiles() {
   const list = $("files-list");
   if (!list) return;
-  if ($("files-path")) $("files-path").textContent = "/" + (filesState.path || "");
+  if ($("files-path")) $("files-path").textContent = (filesState.spaceID&&filesState.spaceID===filesState.ownerID?filesState.spaceName+" /":"/") + (filesState.path || "");
   $("btn-files-up")?.classList.toggle("hidden", !filesState.path||!!filesState.listTarget||(filesState.ownerID&&filesState.path===filesState.sharedRoot));
   try {
     const requested=filesState.listTarget||filesState.path;const q = requested ? "?path=" + encodeURIComponent(requested) : "";
@@ -6832,7 +6875,7 @@ function addChatInlinePreview(container,attachment,button) {
   const response=await fetch(url.href,{credentials:'omit',referrerPolicy:'no-referrer'});if(!response.ok)throw Error('unavailable');
   const blob=await boundedPreviewBlob(response,16*1024*1024);if(!preview.isConnected)return;
   if(type.startsWith('image/')){const objectURL=URL.createObjectURL(new Blob([blob],{type}));const image=document.createElement('img');image.alt=attachment.name;image.onload=()=>URL.revokeObjectURL(objectURL);image.onerror=()=>{URL.revokeObjectURL(objectURL);preview.remove()};image.src=objectURL;preview.replaceChildren(image)}
-  else if(type==='application/pdf'){const pdfjs=await import('/assets/pdfjs/pdf.mjs');pdfjs.GlobalWorkerOptions.workerSrc='/assets/pdfjs/pdf.worker.mjs';const pdf=await pdfjs.getDocument({data:new Uint8Array(await blob.arrayBuffer()),isEvalSupported:false}).promise;try{const page=await pdf.getPage(1);const original=page.getViewport({scale:1});const viewport=page.getViewport({scale:Math.min(1,280/original.width,320/original.height)});const canvas=document.createElement('canvas');canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;if(preview.isConnected)preview.replaceChildren(canvas)}finally{await pdf.destroy()}}
+  else if(type==='application/pdf'){const pdfjs=await import('/assets/pdfjs/pdf.mjs');pdfjs.GlobalWorkerOptions.workerSrc='/assets/pdfjs/pdf.worker.mjs';const loading=pdfjs.getDocument({data:new Uint8Array(await blob.arrayBuffer()),isEvalSupported:false}),pdf=await loading.promise;try{const page=await pdf.getPage(1);const original=page.getViewport({scale:1});const viewport=page.getViewport({scale:Math.min(1,280/original.width,320/original.height)});const canvas=document.createElement('canvas');canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;if(preview.isConnected)preview.replaceChildren(canvas)}finally{await loading.destroy()}}
  }catch{preview.remove()}};
  const observer=new IntersectionObserver(entries=>{if(entries.some(e=>e.isIntersecting)){observer.disconnect();load()}},{rootMargin:'100px'});observer.observe(preview);
 }
@@ -7713,7 +7756,7 @@ function mailImageText(ru, en) {return lang === "en" ? en : ru;}
 function renderMailImageSettings() {
   let card = $("mail-image-settings");
   if (!card) {
-    const host = $("profile-security") || $("app-security");
+    const host = $("workspace-profile-extra") || $("profile-security") || $("app-security");
     if (!host) return;
     card = document.createElement("section"); card.id = "mail-image-settings"; card.className = "card stack-gap"; host.append(card);
   }
@@ -7784,7 +7827,7 @@ function renderMailPagination(data, busy = false) {
   select.addEventListener("change", () => {mailState.pageSize = Number(select.value);change(0);});
   bar.append(previous,label,next,select);
   const filters=$("mail-quick-filters");
-  if(filters){let toolbar=$("mail-toolbar");if(!toolbar){toolbar=document.createElement("div");toolbar.id="mail-toolbar";bar.before(toolbar)}toolbar.append(filters,bar)}
+  if(filters){let toolbar=$("mail-toolbar");if(!toolbar){toolbar=document.createElement("div");toolbar.id="mail-toolbar";bar.before(toolbar)}toolbar.append(filters);document.querySelector('#app-mail .mail-list-pane').append(bar)}
 }
 
 async function openMailModal(id) {
@@ -7899,6 +7942,7 @@ function createMailActionBar(message, dialog=null) {
   const bar=document.createElement('div');bar.className='reader-actions';
   for (const [action,label] of [['trip',mailImageText('Поездка в календарь','Trip to calendar')],['reply',mailImageText('Ответить','Reply')],['reply-all',mailImageText('Ответить всем','Reply all')],['forward',mailImageText('Переслать','Forward')],['spam',mailImageText('В спам','Mark as spam')],['archive',mailImageText('В архив','Archive')],['delete',mailImageText('Удалить','Delete')]]) {
     const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.title=label;button.setAttribute('aria-label',label);button.classList.add('action-icon');button.innerHTML=designIcon(action);button.dataset.mailAction=action;if(!dialog)button.id='btn-mail-'+action;
+    if(message.can_manage===false && ['spam','archive','delete'].includes(action))button.disabled=true;
     if(action==='spam' && (mailState.mailboxes || []).some(folder=>folder.id===message.mailbox_id&&folder.name==='Junk'))button.disabled=true;
     button.addEventListener('click',async()=>{
       if(action==='trip'){if(dialog?.open)dialog.close();await openTravelDrafts(message.id);return;}
@@ -7908,9 +7952,9 @@ function createMailActionBar(message, dialog=null) {
       button.disabled=true;
       try {
         if(action==='spam') {
-          let folders=mailState.mailboxes || [];
-          if(!folders.some(folder=>folder.name==='Junk'))folders=(await api('/api/v1/mail/mailboxes')).mailboxes || [];
-          const folder=folders.find(folder=>folder.name==='Junk');if(!folder)throw new Error(mailImageText('Папка спама недоступна','Spam folder unavailable'));
+          const ownerID=message.owner_id || state.me?.id;let folders=mailState.mailboxes || [];
+          if(!folders.some(folder=>(folder.role==='junk' || folder.name==='Junk') && (folder.owner_id || state.me?.id)===ownerID))folders=(await api('/api/v1/mail/mailboxes')).mailboxes || [];
+          const folder=folders.find(folder=>(folder.role==='junk' || folder.name==='Junk') && (folder.owner_id || state.me?.id)===ownerID);if(!folder)throw new Error(mailImageText('Папка спама недоступна','Spam folder unavailable'));
           await api('/api/v1/mail/messages/'+encodeURIComponent(message.id)+'/move',{method:'POST',body:JSON.stringify({mailbox_id:folder.id})});
         } else await api('/api/v1/mail/messages/'+encodeURIComponent(message.id)+(action==='archive'?'/archive':''),{method:action==='archive'?'POST':'DELETE'});
         if(dialog?.open)dialog.close();if(mailState.messageID===message.id)mailState.messageID='';await refreshMail();
@@ -7923,6 +7967,10 @@ function renderMailActions(message) {
   const reader=$('mail-reader');if(!reader)return;
   const old=reader.querySelector('.reader-actions');const bar=createMailActionBar(message);
   const back=old?.querySelector('[data-pane-back]');if(back)bar.prepend(back);
+  const footer=reader.querySelector('.workspace-reader-footer');
+  if(footer){footer.replaceChildren();for(const action of ['reply','forward']){const button=bar.querySelector('[data-mail-action="'+action+'"]');if(button){button.classList.remove('action-icon');const label=document.createElement('span');label.textContent=button.getAttribute('aria-label');button.append(label);footer.append(button)}}}
+  const more=document.createElement('details');more.className='workspace-reader-more';const trigger=document.createElement('summary');trigger.textContent='⋮';trigger.setAttribute('aria-label',mailImageText('Другие действия','More actions'));const menu=document.createElement('div');
+  for(const action of ['reply-all','spam','trip']){const button=bar.querySelector('[data-mail-action="'+action+'"]');if(button){const label=document.createElement('span');label.textContent=button.getAttribute('aria-label');button.classList.remove('action-icon');button.append(label);menu.append(button)}}more.append(trigger,menu);bar.append(more);
   if(old)old.replaceWith(bar);else reader.prepend(bar);
 }
 function renderMailQuickFilters() {
@@ -8560,7 +8608,7 @@ async function openDocumentPreview({url,name,size,blob:suppliedBlob}) {
   const download=document.createElement('button');download.type='button';download.className='btn-secondary btn-sm';download.textContent=t('download');download.disabled=true;
   const close=document.createElement('button');close.type='button';close.className='btn-secondary action-icon';close.title=mailImageText('Закрыть','Close');close.setAttribute('aria-label',close.title);close.innerHTML=designIcon('close');close.onclick=()=>dialog.close();header.append(title,download,close);
   const content=document.createElement('div');content.className='document-preview-content';content.setAttribute('role','status');content.textContent=mailImageText('Загрузка…','Loading…');dialog.append(header,content);document.body.append(dialog);dialog.showModal();
-  const controller=new AbortController();let objectURL='',pdfDocument=null,renderTask=null;dialog.addEventListener('close',()=>{dialog.remove();controller.abort();if(objectURL)URL.revokeObjectURL(objectURL);try{renderTask?.cancel();pdfDocument?.destroy()?.catch(()=>{})}catch{}if(focus?.isConnected)focus.focus()},{once:true});
+  const controller=new AbortController();let objectURL='',pdfDocument=null,pdfLoadingTask=null,renderTask=null;dialog.addEventListener('close',()=>{dialog.remove();controller.abort();if(objectURL)URL.revokeObjectURL(objectURL);try{renderTask?.cancel();pdfLoadingTask?.destroy()?.catch(()=>{})}catch{}if(focus?.isConnected)focus.focus()},{once:true});
   try {
     if(size>64*1024*1024)throw new Error(mailImageText('Файл больше 64 МиБ. Используйте скачивание.','File exceeds 64 MiB. Use download.'));
     let blob=suppliedBlob;
@@ -8574,8 +8622,8 @@ async function openDocumentPreview({url,name,size,blob:suppliedBlob}) {
     else if(type==='application/pdf'){
       const pdfjs=await import('/assets/pdfjs/pdf.mjs');pdfjs.GlobalWorkerOptions.workerSrc='/assets/pdfjs/pdf.worker.mjs';
       if(!dialog.open)return;
-      pdfDocument=await pdfjs.getDocument({data:new Uint8Array(await blob.arrayBuffer()),isEvalSupported:false,cMapUrl:'/assets/pdfjs/cmaps/',cMapPacked:true,standardFontDataUrl:'/assets/pdfjs/standard_fonts/',wasmUrl:'/assets/pdfjs/wasm/'}).promise;
-      if(!dialog.open){pdfDocument.destroy();return}
+      pdfLoadingTask=pdfjs.getDocument({data:new Uint8Array(await blob.arrayBuffer()),isEvalSupported:false,cMapUrl:'/assets/pdfjs/cmaps/',cMapPacked:true,standardFontDataUrl:'/assets/pdfjs/standard_fonts/',wasmUrl:'/assets/pdfjs/wasm/'});pdfDocument=await pdfLoadingTask.promise;
+      if(!dialog.open){pdfLoadingTask.destroy();return}
       const nav=document.createElement('div');nav.className='pdf-preview-nav';const previous=document.createElement('button'),next=document.createElement('button'),pageLabel=document.createElement('span');for(const button of [previous,next]){button.type='button';button.className='btn-secondary btn-sm'}previous.textContent='‹';next.textContent='›';previous.setAttribute('aria-label',mailImageText('Предыдущая страница','Previous page'));next.setAttribute('aria-label',mailImageText('Следующая страница','Next page'));nav.append(previous,pageLabel,next);header.after(nav);
       let pageNumber=1;const render=async()=>{previous.disabled=true;next.disabled=true;const page=await pdfDocument.getPage(pageNumber);if(!dialog.open)return;const viewport=page.getViewport({scale:Math.min(2,Math.max(1,content.clientWidth-32)/page.getViewport({scale:1}).width,4096/page.getViewport({scale:1}).height)}),canvas=document.createElement('canvas');canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);canvas.setAttribute('aria-label',mailImageText('Страница PDF ','PDF page ')+pageNumber);content.replaceChildren(canvas);renderTask=page.render({canvasContext:canvas.getContext('2d'),viewport});await renderTask.promise;pageLabel.textContent=pageNumber+' / '+pdfDocument.numPages;previous.disabled=pageNumber===1;next.disabled=pageNumber===pdfDocument.numPages;};
       const change=async(delta)=>{pageNumber+=delta;try{await render()}catch(error){if(dialog.open)content.textContent=error.message}};previous.onclick=()=>change(-1);next.onclick=()=>change(1);await render();
@@ -8595,7 +8643,7 @@ function renderMailSelection(messages) {
  selectedMailIDs.clear();let bar=$('mail-selection');if(!bar){bar=document.createElement('div');bar.id='mail-selection';bar.className='mail-selection';$('mail-msg-list').before(bar)}bar.replaceChildren();bar.hidden=!messages.length;
  const all=document.createElement('input');all.type='checkbox';all.setAttribute('aria-label',mailImageText('Выбрать письма на этой странице','Select messages on this page'));bar.append(all);
  const count=document.createElement('span');count.className='meta';bar.append(count);const buttons=[];
- const update=()=>{count.textContent=mailImageText('Выбрано: ','Selected: ')+selectedMailIDs.size;all.checked=messages.length>0&&selectedMailIDs.size===messages.length;all.indeterminate=selectedMailIDs.size>0&&!all.checked;buttons.forEach(b=>b.disabled=mailBatchBusy||!selectedMailIDs.size);};
+ const update=()=>{bar.hidden=!selectedMailIDs.size;count.textContent=mailImageText('Выбрано: ','Selected: ')+selectedMailIDs.size;all.checked=messages.length>0&&selectedMailIDs.size===messages.length;all.indeterminate=selectedMailIDs.size>0&&!all.checked;buttons.forEach(b=>b.disabled=mailBatchBusy||!selectedMailIDs.size);};
  all.onchange=()=>{$('mail-msg-list').querySelectorAll('.mail-select').forEach(input=>{input.checked=all.checked;if(all.checked)selectedMailIDs.add(input.value);else selectedMailIDs.delete(input.value)});update()};
  for(const message of messages){const row=$('mail-msg-list').querySelector('[data-msg="'+CSS.escape(message.id)+'"]')?.parentElement;if(!row)continue;row.classList.add('selectable-mail');const input=document.createElement('input');input.className='mail-select';input.type='checkbox';input.value=message.id;input.setAttribute('aria-label',mailImageText('Выбрать письмо: ','Select message: ')+(message.subject||''));input.onchange=()=>{if(input.checked)selectedMailIDs.add(message.id);else selectedMailIDs.delete(message.id);update()};row.prepend(input);}
  for(const [action,label] of [['read',mailImageText('Прочитано','Mark read')],['unread',mailImageText('Не прочитано','Mark unread')],['archive',mailImageText('В архив','Archive')],['spam',mailImageText('В спам','Spam')],['delete',t('delete')]]) {const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.textContent=label;buttons.push(button);bar.append(button);button.onclick=async()=>{
@@ -8717,46 +8765,40 @@ function mountCalendarPropertyTabs(props){
 }
 
 function updateCreateButton(app) {
- document.querySelectorAll('.mail-settings').forEach(settings=>{settings.hidden=app!==(settings.dataset.app||'mail');settings.querySelector('.create-fab-menu').hidden=true;settings.querySelector('button.mail-settings-toggle').setAttribute('aria-expanded','false');});
- let root=document.getElementById('section-create');
- if(!root){root=document.createElement('div');root.id='section-create';root.className='section-create';document.getElementById('view-account').append(root);}
- root.replaceChildren();
- if(app==='chat'){root.hidden=true;return;}
- const actions={mail:['compose','btn-compose'],calendar:['new_event','btn-cal-new'],contacts:['new_contact','btn-contact-new'],notes:['note_new','btn-note-new'],tasks:['tasks_new','tasks-new'],chat:['chat_new','mm-chat-new'],filters:['rules_new','btn-rule-new'],tenants:['users_create','btn-directory-create'],files:['upload','files-upload']};
- const action=actions[app];root.hidden=!action;if(!action)return;if(app==='tenants'&&tenantNav.level==='tenants'&&!state.me?.is_global_admin){root.hidden=true;return;}
- const button=document.createElement('button');button.type='button';button.className='create-fab';button.textContent='+';button.title=t(action[0]);button.setAttribute('aria-label',t(action[0]));if(app==='files')button.disabled=!!filesState.ownerID&&filesState.sharedRights!=='write';root.append(button);
- if(app==='chat'||app==='files'||(app==='tenants'&&tenantNav.level==='users')){
-  const menu=document.createElement('div');menu.className='create-fab-menu';menu.hidden=true;menu.id='create-file-menu';
-  for(const [key,id] of (app==='chat'?[['chat_new','mm-chat-new'],['chat_group_new','mm-chat-create']]:app==='files'?[['upload','files-upload'],['mkdir','btn-files-mkdir'],['files_upload_folder','files-upload-folder']]:[['users_create','btn-directory-create'],['resources_add','btn-directory-resource']])){const item=document.createElement('button');item.type='button';item.textContent=t(key);item.onclick=()=>{menu.hidden=true;button.setAttribute('aria-expanded','false');document.getElementById(id)?.click();};menu.append(item);}
-  root.prepend(menu);button.setAttribute('aria-controls',menu.id);button.setAttribute('aria-expanded','false');button.onclick=()=>{menu.hidden=!menu.hidden;button.setAttribute('aria-expanded',String(!menu.hidden));};root.onkeydown=e=>{if(e.key==='Escape'){menu.hidden=true;button.setAttribute('aria-expanded','false');button.focus();}};
- }else button.onclick=()=>{const target=document.getElementById(action[1]);if(target&&!target.disabled){button.classList.remove('is-activated');void button.offsetWidth;button.classList.add('is-activated');button.addEventListener('animationend',()=>button.classList.remove('is-activated'),{once:true});target.click();}};
+ document.querySelectorAll('.mail-settings').forEach(settings=>{settings.hidden=app!==(settings.dataset.app||'mail');const menu=settings.querySelector('.create-fab-menu');if(menu)menu.hidden=true;settings.querySelector('button.mail-settings-toggle')?.setAttribute('aria-expanded','false');});
+ document.getElementById('section-create')?.remove();
 }
 
 async function openMailboxAccess(ownerID='') {
- const dialog=document.createElement('dialog');dialog.className='document-preview';dialog.setAttribute('aria-label',mailImageText('Доступ к ящику','Mailbox access'));
- const header=document.createElement('header'),title=document.createElement('strong'),close=document.createElement('button');title.textContent=mailImageText('Доступ к ящику','Mailbox access');close.type='button';close.className='btn-secondary';close.textContent='×';close.onclick=()=>dialog.close();header.append(title,close);
- const body=document.createElement('div');body.className='document-preview-content';const form=document.createElement('form'),email=document.createElement('input');email.type='email';email.required=true;email.placeholder='user@example.com';email.className='field-input';form.append(email);
- const checks={};for(const [key,label] of [['can_read',mailImageText('Читать письма','Read messages')],['can_send_as',mailImageText('Отправлять как владелец','Send as owner')],['can_send_on_behalf',mailImageText('Отправлять от имени владельца','Send on behalf')]]){const line=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.checked=key==='can_read';checks[key]=input;line.append(input,document.createTextNode(' '+label));form.append(line);}
- const save=document.createElement('button');save.className='btn-spray';save.textContent=mailImageText('Предоставить доступ','Grant access');form.append(save);const status=document.createElement('p'),list=document.createElement('div');body.append(form,status,list);dialog.append(header,body);document.body.append(dialog);dialog.addEventListener('close',()=>dialog.remove(),{once:true});dialog.showModal();
+ const dialog=document.createElement('dialog');dialog.className='document-preview';dialog.setAttribute('aria-label',mailImageText('Делегирование почты и календаря','Mail and calendar delegation'));
+ const header=document.createElement('header'),title=document.createElement('strong'),close=document.createElement('button');title.textContent=mailImageText('Делегирование','Delegation');close.type='button';close.className='btn-secondary';close.textContent='×';close.onclick=()=>dialog.close();header.append(title,close);
+ const body=document.createElement('div');body.className='document-preview-content';const form=document.createElement('form'),email=document.createElement('input');email.type='email';email.required=true;email.setAttribute('aria-label',mailImageText('Сотрудник — адрес почты','Employee email address'));email.placeholder='user@example.com';email.className='field-input';form.append(email);
+ const fields=[['can_manage_mail',mailImageText('Управлять письмами (без права отправки)','Manage messages (sending is separate)')],['can_read',mailImageText('Читать письма','Read messages')],['can_send_as',mailImageText('Отправлять как владелец','Send as owner')],['can_send_on_behalf',mailImageText('Отправлять от имени владельца (видно секретаря)','Send on behalf (shows the assistant)')],['can_read_calendar',mailImageText('Просматривать календари','View calendars')],['can_manage_calendar',mailImageText('Создавать, переносить и отменять встречи руководителя','Create, reschedule and cancel owner meetings')],['can_respond_invites',mailImageText('Отвечать на приглашения за руководителя','Respond to invitations for the owner')]];
+ const hint=document.createElement('p');hint.className='meta';hint.textContent=mailImageText('Права выдаются отдельно. Личный календарь не открывается делегату. Отзыв применяется при следующем запросе.','Permissions are separate. The personal calendar remains private. Revocation takes effect on the next request.');body.append(hint);
+ const checks={};for(const [key,label] of fields){const line=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.checked=key==='can_read';checks[key]=input;line.append(input,document.createTextNode(' '+label));form.append(line);}
+ const reset=()=>{save.textContent=mailImageText('Предоставить доступ','Grant access');email.value='';email.readOnly=false;for(const key in checks)checks[key].checked=key==='can_read';};
+
+ const save=document.createElement('button');save.type='submit';save.className='btn-spray';save.textContent=mailImageText('Предоставить доступ','Grant access');form.append(save);const status=document.createElement('p'),list=document.createElement('div');body.append(form,status,list);dialog.append(header,body);document.body.append(dialog);dialog.addEventListener('close',()=>dialog.remove(),{once:true});dialog.showModal();
  const suffix=ownerID?'?owner_id='+encodeURIComponent(ownerID):'';
- const refresh=async()=>{const result=await api('/api/v1/mail/delegates'+suffix);list.replaceChildren();for(const item of result.delegates||[]){const row=document.createElement('div');row.textContent=(item.email||item.delegate_id)+' · '+[item.can_read&&mailImageText('чтение','read'),item.can_send_as&&mailImageText('отправка как владелец','send as'),item.can_send_on_behalf&&mailImageText('от имени','on behalf')].filter(Boolean).join(', ');const revoke=document.createElement('button');revoke.type='button';revoke.className='btn-secondary btn-sm';revoke.textContent=mailImageText('Отозвать','Revoke');revoke.onclick=async()=>{try{await api('/api/v1/mail/delegates/'+encodeURIComponent(item.delegate_id)+suffix,{method:'DELETE'});await refresh();}catch(error){status.textContent=error.message}};row.append(revoke);list.append(row);}};
- form.onsubmit=async event=>{event.preventDefault();save.disabled=true;try{const request={email:email.value};for(const key in checks)request[key]=checks[key].checked;await api('/api/v1/mail/delegates'+suffix,{method:'POST',body:JSON.stringify(request)});email.value='';await refresh();}catch(error){status.textContent=error.message}finally{save.disabled=false}};
+ const refresh=async()=>{const result=await api('/api/v1/mail/delegates'+suffix);list.replaceChildren();for(const item of result.delegates||[]){const row=document.createElement('div');row.textContent=(item.email||item.delegate_id)+' · '+fields.filter(([key])=>item[key]).map(([,label])=>label).concat([item.ews_inbox_permission&&item.ews_inbox_permission!=='None'?'EWS Inbox: '+item.ews_inbox_permission:'',item.ews_calendar_permission&&item.ews_calendar_permission!=='None'?'EWS Calendar: '+item.ews_calendar_permission:'',item.ews_receive_meetings?mailImageText('копии приглашений','meeting copies'):''].filter(Boolean)).join(', ');const change=document.createElement('button');change.type='button';change.className='btn-secondary btn-sm';change.textContent=mailImageText('Изменить','Edit');change.onclick=()=>{email.value=item.email||'';email.readOnly=true;save.textContent=mailImageText('Сохранить права','Save permissions');for(const key in checks)checks[key].checked=!!item[key];email.focus();};const revoke=document.createElement('button');revoke.type='button';revoke.className='btn-secondary btn-sm';revoke.textContent=mailImageText('Отозвать','Revoke');revoke.onclick=async()=>{revoke.disabled=true;try{await api('/api/v1/mail/delegates/'+encodeURIComponent(item.delegate_id)+suffix,{method:'DELETE'});reset();await refresh();}catch(error){status.textContent=error.message}finally{revoke.disabled=false}};row.append(change,revoke);list.append(row);}};
+
+ form.onsubmit=async event=>{event.preventDefault();save.disabled=true;try{const request={email:email.value};for(const key in checks)request[key]=checks[key].checked;await api('/api/v1/mail/delegates'+suffix,{method:'POST',body:JSON.stringify(request)});reset();await refresh();}catch(error){status.textContent=error.message}finally{save.disabled=false}};
  try{await refresh();}catch(error){status.textContent=error.message}
 }
-const mailboxAccessButton=document.createElement('button');mailboxAccessButton.type='button';mailboxAccessButton.className='btn-secondary btn-sm';mailboxAccessButton.textContent=mailImageText('Доступ к ящику','Mailbox access');mailboxAccessButton.onclick=()=>openMailboxAccess();mountMailSettings();
+const mailboxAccessButton=document.createElement('button');mailboxAccessButton.type='button';mailboxAccessButton.className='btn-secondary btn-sm';mailboxAccessButton.textContent=mailImageText('Делегирование почты и календаря','Mail and calendar delegation');mailboxAccessButton.onclick=()=>openMailboxAccess();mountMailSettings();
 
 function mountMailSettings(){
  const host=document.querySelector('.mail-folders');const folders=$('btn-mail-folders');if(!host||!folders)return;
  const root=document.createElement('div');root.className='mail-settings';
  const menu=document.createElement('div');menu.id='mail-settings-menu';menu.className='create-fab-menu';menu.hidden=true;
  folders.removeAttribute('class');mailboxAccessButton.removeAttribute('class');menu.append(folders,mailboxAccessButton);
- const button=document.createElement('button');button.type='button';button.className='mail-settings-toggle';button.innerHTML='<span aria-hidden="true">⚙</span>';button.title=mailImageText('Настройки почты','Mail settings');button.setAttribute('aria-label',button.title);button.setAttribute('aria-controls',menu.id);button.setAttribute('aria-expanded','false');
+ const button=document.createElement('button');button.type='button';button.className='mail-settings-toggle';button.innerHTML=designIcon('settings');button.title=mailImageText('Настройки почты','Mail settings');button.setAttribute('aria-label',button.title);button.setAttribute('aria-controls',menu.id);button.setAttribute('aria-expanded','false');
  const close=()=>{menu.hidden=true;button.setAttribute('aria-expanded','false')};
  button.onclick=()=>{menu.hidden=!menu.hidden;button.setAttribute('aria-expanded',String(!menu.hidden))};
  menu.addEventListener('click',event=>{if(event.target.closest('button'))close()});
  root.addEventListener('keydown',event=>{if(event.key==='Escape'){close();button.focus()}});
  document.addEventListener('click',event=>{if(!root.contains(event.target))close()});
- root.append(menu,button);$('view-account').append(root);
+ root.append(menu,button);$('app-mail').querySelector('.mail-list-toolbar').append(root);
 }
 
 function mountProfilePassword(){
@@ -8774,15 +8816,7 @@ function renderCalendarMap(geo){
  const map=document.createElement('iframe');map.title=mailImageText('Место события на Яндекс Картах','Event location on Yandex Maps');map.loading='lazy';map.referrerPolicy='no-referrer';map.setAttribute('sandbox','allow-scripts allow-same-origin allow-popups');map.style.cssText='display:block;width:100%;height:240px;border:0;border-radius:12px';const point=parts[1]+','+parts[0];map.src='https://yandex.ru/map-widget/v1/?ll='+encodeURIComponent(point)+'&z=16&pt='+encodeURIComponent(point+',pm2rdm');container.append(map);$('cal-headers')?.after(container);
 }
 
-async function openFileAccess(path){
- const dialog=document.createElement('dialog');dialog.className='document-preview';const header=document.createElement('header'),title=document.createElement('strong'),close=document.createElement('button');title.textContent=mailImageText('Доступ: ','Share: ')+path;close.type='button';close.className='btn-secondary';close.textContent='×';close.onclick=()=>dialog.close();header.append(title,close);const body=document.createElement('div');body.className='document-preview-content';const status=document.createElement('p');status.setAttribute('role','status');
- const form=document.createElement('form'),email=document.createElement('input'),rights=document.createElement('select'),save=document.createElement('button');email.type='email';email.required=true;email.placeholder='user@example.com';email.className='field-input';rights.className='field-input';for(const [value,text] of [['read',mailImageText('Только чтение','Read only')],['write',mailImageText('Чтение и запись','Read and write')]]){const option=new Option(text,value);rights.add(option)}save.textContent=mailImageText('Предоставить доступ пользователю','Grant user access');save.className='btn-spray';form.append(email,rights,save);const grants=document.createElement('div');
- const linkForm=document.createElement('form'),password=document.createElement('input'),ttl=document.createElement('input'),linkRights=rights.cloneNode(true),create=document.createElement('button'),result=document.createElement('div');password.type='password';password.maxLength=256;password.placeholder=mailImageText('Пароль (необязательно)','Password (optional)');password.autocomplete='new-password';password.className='field-input';ttl.type='number';ttl.min='1';ttl.max='8760';ttl.value='168';ttl.className='field-input';const timeLabel=document.createElement('label');timeLabel.textContent=mailImageText('Срок действия, часов','Expires after, hours');timeLabel.append(ttl);create.className='btn-spray';create.textContent=mailImageText('Создать ссылку','Create link');linkForm.append(password,timeLabel,linkRights,create,result);const links=document.createElement('div');body.append(form,grants,document.createElement('hr'),linkForm,links,status);dialog.append(header,body);document.body.append(dialog);dialog.addEventListener('close',()=>dialog.remove(),{once:true});dialog.showModal();
- const refresh=async()=>{const [access,shared]=await Promise.all([api('/api/v1/files/access'),api('/api/v1/files/shares')]);grants.replaceChildren();links.replaceChildren();for(const item of access.access||[]){if(item.path!==path)continue;const row=document.createElement('p');row.textContent=item.email+' · '+item.rights;const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.textContent=mailImageText('Отозвать','Revoke');button.onclick=async()=>{try{await api('/api/v1/files/access',{method:'DELETE',body:JSON.stringify({path,grantee_id:item.grantee_id})});await refresh()}catch(e){status.textContent=e.message}};row.append(button);grants.append(row)}for(const item of shared.shares||[]){if(item.path!==path)continue;const row=document.createElement('p'),link=document.createElement('a');link.href=item.url;link.target='_blank';link.rel='noopener noreferrer';link.textContent=mailImageText('Ссылка','Link')+' · '+(item.rights||'read')+' · '+new Date(item.expires_at).toLocaleString();const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.textContent=mailImageText('Отозвать','Revoke');button.onclick=async()=>{try{await api('/api/v1/files/shares/'+encodeURIComponent(item.id),{method:'DELETE'});await refresh()}catch(e){status.textContent=e.message}};row.append(link,button);links.append(row)}};
- form.onsubmit=async event=>{event.preventDefault();save.disabled=true;try{await api('/api/v1/files/access',{method:'POST',body:JSON.stringify({path,email:email.value,rights:rights.value})});email.value='';await refresh()}catch(e){status.textContent=e.message}finally{save.disabled=false}};
- linkForm.onsubmit=async event=>{event.preventDefault();create.disabled=true;try{const value=await api('/api/v1/files/shares',{method:'POST',body:JSON.stringify({path,password:password.value,rights:linkRights.value,ttl_hours:Number(ttl.value)})});password.value='';const input=document.createElement('input');input.readOnly=true;input.className='field-input';input.value=value.url;input.onclick=()=>input.select();result.replaceChildren(input);await refresh()}catch(e){status.textContent=e.message}finally{create.disabled=false}};
- try{await refresh()}catch(e){status.textContent=e.message}
-}
+async function openFileAccess(path){return openFileCard(path)}
 
 function avatarFallback(image,email='') {
  let fallback=image._initials;
@@ -8801,7 +8835,7 @@ async function loadAccountAvatar(image,email=''){
  }catch{if(image.dataset.request===request)avatarFallback(image,email)}
 }
 function renderSenderAvatar(from){const email=String(from||'').match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0];const host=$('mail-from');if(!host||!email)return;const image=document.createElement('img');image.className='account-avatar';image.alt='';image.hidden=true;image.dataset.displayName=String(from||'').replace(email,'');host.prepend(image);loadAccountAvatar(image,email);}
-function mountProfileAvatar(){const host=$('profile-form');if(!host)return;const row=document.createElement('div');row.className='profile-avatar-controls';const image=document.createElement('img');image.className='account-avatar profile-avatar';image.alt=mailImageText('Аватар','Avatar');const input=document.createElement('input');input.type='file';input.accept='image/png,image/jpeg';const label=document.createElement('label');label.textContent=mailImageText('Аватар для почты и XMPP','Mail and XMPP avatar');label.append(input);const remove=document.createElement('button');remove.type='button';remove.className='btn-secondary btn-sm';remove.textContent=mailImageText('Удалить аватар','Remove avatar');const status=document.createElement('p');status.setAttribute('role','status');row.append(image,label,remove,status);host.before(row);
+function mountProfileAvatar(){const host=$('profile-form');if(!host)return;const row=document.createElement('div');row.className='profile-avatar-controls';const image=document.createElement('img');image.className='account-avatar profile-avatar';image.alt=mailImageText('Аватар','Avatar');const input=document.createElement('input');input.type='file';input.accept='image/png,image/jpeg';const label=document.createElement('label');label.textContent=mailImageText('Фото профиля','Profile photo');label.append(input);const remove=document.createElement('button');remove.type='button';remove.className='btn-secondary btn-sm';remove.textContent=mailImageText('Удалить аватар','Remove avatar');const status=document.createElement('p');status.setAttribute('role','status');row.append(image,label,remove,status);host.before(row);
  input.onchange=async()=>{const file=input.files?.[0];if(!file)return;input.disabled=true;try{const response=await fetch('/api/v1/me/avatar',{method:'PUT',headers:{Authorization:'Bearer '+state.tokens?.access_token},body:file});if(!response.ok)throw Error((await response.json()).error);await loadAccountAvatar(image);status.textContent=mailImageText('Аватар сохранён','Avatar saved');}catch(e){status.textContent=e.message}finally{input.disabled=false;input.value=''}};remove.onclick=async()=>{try{await api('/api/v1/me/avatar',{method:'DELETE'});image.dataset.request=String(Number(image.dataset.request||0)+1);avatarFallback(image);}catch(e){status.textContent=e.message}};const observer=new MutationObserver(()=>{if(!$('app-profile').classList.contains('hidden'))loadAccountAvatar(image)});observer.observe($('app-profile'),{attributes:true,attributeFilter:['class']});}
 mountProfileAvatar();
 
@@ -8877,17 +8911,17 @@ async function openUserRole(user){
 function mountContactSettings(){
  const root=document.createElement('div');root.className='mail-settings';root.dataset.app='contacts';root.hidden=true;
  const menu=document.createElement('div');menu.className='create-fab-menu';menu.id='contact-settings-menu';menu.hidden=true;
- const button=document.createElement('button');button.type='button';button.className='mail-settings-toggle';button.innerHTML='<span aria-hidden="true">⚙</span>';button.title=mailImageText('Настройки контактов','Contact settings');button.setAttribute('aria-label',button.title);button.setAttribute('aria-controls',menu.id);button.setAttribute('aria-expanded','false');
+ const button=document.createElement('button');button.type='button';button.className='mail-settings-toggle';button.innerHTML=designIcon('settings');button.title=mailImageText('Настройки контактов','Contact settings');button.setAttribute('aria-label',button.title);button.setAttribute('aria-controls',menu.id);button.setAttribute('aria-expanded','false');
  const close=()=>{menu.hidden=true;button.setAttribute('aria-expanded','false')};
  const refresh=document.createElement('button');refresh.type='button';refresh.textContent=mailImageText('Обновить адресные книги','Refresh address books');refresh.onclick=()=>{close();refreshContacts()};
  const exportButton=document.createElement('button');exportButton.type='button';exportButton.textContent=mailImageText('Экспорт выбранных контактов','Export selected contacts');exportButton.onclick=()=>{close();contactBulkAction('export')};
  const label=document.createElement('label');label.textContent=mailImageText('Порядок имени','Name order');label.htmlFor='contact-name-order';const order=document.createElement('select');order.id='contact-name-order';order.className='field-input field-input-sm';for(const [value,text] of [['first',mailImageText('Имя Фамилия','First Last')],['last',mailImageText('Фамилия Имя','Last First')]]){const option=document.createElement('option');option.value=value;option.textContent=text;order.append(option)}order.value=contactNameOrder();order.onchange=()=>{setContactNameOrder(order.value);close()};
  menu.append(label,order,refresh,exportButton);button.onclick=()=>{order.value=contactNameOrder();exportButton.disabled=!contactState.selected.size;menu.hidden=!menu.hidden;button.setAttribute('aria-expanded',String(!menu.hidden))};
 
- root.addEventListener('keydown',event=>{if(event.key==='Escape'){close();button.focus()}});document.addEventListener('click',event=>{if(!root.contains(event.target))close()});root.append(menu,button);$('view-account').append(root);
+ root.addEventListener('keydown',event=>{if(event.key==='Escape'){close();button.focus()}});document.addEventListener('click',event=>{if(!root.contains(event.target))close()});root.append(menu,button);$('contact-book-title').parentElement.append(root);
 }
 mountContactSettings();
-$('btn-contact-add-visible')?.remove();
+
 
 const mailLabelColors={red:'#d85565',orange:'#dc894b',yellow:'#d0ad35',green:'#47996e',blue:'#568bd0',purple:'#9770c8'};
 function mailMessageColor(message){
@@ -8899,7 +8933,7 @@ function mountMailLabels(messages){
   const row=$('mail-msg-list').querySelector('[data-msg="'+CSS.escape(message.id)+'"]')?.parentElement;if(!row)continue;
   const flag=document.createElement('button');flag.type='button';flag.className='mail-label-action mail-flag-toggle';
   const flagged=String(message.flags||'').split(/\s+/).some(value=>value.toLowerCase()==='\\flagged');
-  flag.setAttribute('aria-pressed',String(flagged));flag.title=mailImageText(flagged?'Снять флажок':'Поставить флажок',flagged?'Remove flag':'Flag message');flag.setAttribute('aria-label',flag.title);flag.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V3h12l-2 4 2 4H5"/></svg>';
+  flag.setAttribute('aria-pressed',String(flagged));flag.title=mailImageText(flagged?'Снять флажок':'Поставить флажок',flagged?'Remove flag':'Flag message');flag.setAttribute('aria-label',flag.title);flag.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z"/></svg>';
   flag.onclick=async()=>{flag.disabled=true;try{await api('/api/v1/mail/messages/'+encodeURIComponent(message.id),{method:'PATCH',body:JSON.stringify({flagged:!flagged})});await refreshMailMessages()}catch(error){setMsg($('mail-msg'),error.message,'err');flag.disabled=false}};
   const color=document.createElement('button');color.type='button';color.className='mail-label-action mail-color-toggle';color.title=mailImageText('Цвет письма','Message color');color.setAttribute('aria-label',color.title);color.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 12 9-9h8v8l-9 10z"/><circle cx="16" cy="7" r="1"/></svg>';color.onclick=()=>showMailColorPicker(message,color);row.append(flag,color);
  }
@@ -8926,7 +8960,7 @@ function mountSectionSettings(app,title,items){
  menu.addEventListener('click',event=>{if(event.target.closest('button'))close()});
  button.onclick=()=>{menu.hidden=!menu.hidden;button.setAttribute('aria-expanded',String(!menu.hidden))};
  root.addEventListener('keydown',event=>{if(event.key==='Escape'){close();button.focus()}});
- document.addEventListener('click',event=>{if(!root.contains(event.target))close()});root.append(menu,button);$('view-account').append(root);
+ document.addEventListener('click',event=>{if(!root.contains(event.target))close()});root.append(menu,button);$('contact-book-title').parentElement.append(root);
 }
 mountSectionSettings('calendar',mailImageText('Настройки календаря','Calendar settings'),[
  {label:mailImageText('Добавить календарь','Add calendar'),run:()=>$('btn-cal-add')?.click()},
@@ -9034,6 +9068,7 @@ async function openFileHistory(kind,path='') {
         actions.querySelectorAll('button').forEach(b=>b.disabled=true);
         try{await api('/api/v1/files/library/'+(remove?kind:'restore'),{method:remove?'DELETE':'POST',body:JSON.stringify({id:item.id,kind})});await load();await refreshFiles()}catch(error){view.status.textContent=libraryMessage(error);actions.querySelectorAll('button').forEach(b=>b.disabled=false)}
       };
+      if(kind==='versions')actions.append(fileAction(item.protected?mailImageText('Снять защиту','Unprotect'):mailImageText('Защитить версию','Protect version'),async()=>{try{await api('/api/v1/files/library/protection',{method:'PATCH',body:JSON.stringify({id:item.id,protected:!item.protected})});await load()}catch(error){view.status.textContent=libraryMessage(error)}}));
       actions.append(fileAction(mailImageText('Восстановить','Restore'),()=>act(false),'reply'));actions.append(fileAction(mailImageText('Удалить навсегда','Delete permanently'),()=>act(true),'delete'));row.append(name,date,size,actions);tbody.append(row);
 	  if(kind==='versions'&&!item.is_dir&&/\.(docx|doc|odt|rtf|txt|md|csv|xlsx|ods|pptx|odp|pdf)$/i.test(item.path))actions.prepend(fileAction(mailImageText('Сравнить','Compare'),()=>openFileComparison(item.path,item.id)));
     }
@@ -9060,7 +9095,7 @@ function mountFileReaderActions(entry) {
   let versions=$('btn-files-versions'),office=$('btn-files-office');
   if(!versions){versions=fileAction(mailImageText('История версий','Version history'),()=>{});versions.id='btn-files-versions';$('btn-files-download').after(versions)}
   if(!office){office=fileAction(mailImageText('Открыть в офисе','Open in office'),()=>{});office.id='btn-files-office';$('btn-files-download').after(office)}
-  versions.hidden=entry.is_dir||!!filesState.ownerID;versions.onclick=()=>openFileHistory('versions',joinPath(filesState.path,entry.name));
+  versions.hidden=entry.is_dir||(!!filesState.ownerID&&!(filesState.spaceID===filesState.ownerID&&filesState.spaceRights==='manage'));versions.onclick=()=>openFileHistory('versions',joinPath(filesState.path,entry.name));
   office.hidden=entry.is_dir||!(/\.(odt|ods|odp|odg|docx?|xlsx?|pptx?|rtf|csv|txt)$/i.test(entry.name));office.onclick=()=>openOfficeDocument(joinPath(filesState.path,entry.name),entry.name);
 	let template=$('btn-file-use-template');
 	if(!template){template=fileAction(mailImageText('Использовать как шаблон','Use as template'),()=>{});template.id='btn-file-use-template';office.after(template);}
@@ -9116,9 +9151,45 @@ async function trashSelectedFiles(){
   try{for(const name of names){if(filesState.ownerID!==owner||filesState.path!==path)throw new Error(mailImageText('Папка изменилась; операция остановлена.','Folder changed; operation stopped.'));await api('/api/v1/files?path='+encodeURIComponent(joinPath(path,name)),{method:'DELETE'});fileBrowser.selected.delete(name);moved++}setMsg($('files-msg'),mailImageText('В корзине: ','Moved to trash: ')+moved)}catch(error){setMsg($('files-msg'),libraryMessage(error),'err')}finally{await refreshFiles();updateFileSelection()}
 }
 async function openFileSearch(){
-  const v=fileLibraryDialog(mailImageText('Поиск во всех моих файлах','Search all my files'));const form=document.createElement('form'),query=document.createElement('input'),submit=fileAction(mailImageText('Найти','Search'),()=>{});submit.type='submit';query.type='search';query.required=true;query.maxLength=256;query.className='field-input';query.placeholder=mailImageText('Имя файла или папки','File or folder name');query.setAttribute('aria-label',query.placeholder);query.value=$('files-search')?.value||'';form.className='file-library-search';form.append(query,submit);const results=document.createElement('div'),nav=document.createElement('div');nav.className='file-library-nav';v.body.append(form,results,nav);let page=1,seq=0;
-  const search=async()=>{const id=++seq;if(!query.value.trim())return;v.status.textContent=mailImageText('Поиск…','Searching…');try{const data=await api('/api/v1/files/library/search?q='+encodeURIComponent(query.value)+'&page='+page);if(id!==seq||!v.dialog.open)return;results.replaceChildren();for(const entry of data.entries||[]){const row=fileAction(entry.path,async()=>{filesState.ownerID='';filesState.listTarget='';filesState.sharedRoot='';filesState.path=entry.is_dir?entry.path:entry.path.split('/').slice(0,-1).join('/');filesState.selected=null;v.dialog.close();await refreshFiles();if(!entry.is_dir)selectFileEntry(entry.name)});row.className='file-search-result';results.append(row)}v.status.textContent=data.truncated?mailImageText('Просмотрено 100 000 элементов. Уточните запрос или папку.','Scanned 100,000 entries. Narrow your query or folder.'):mailImageText('Найдено: ','Found: ')+data.total;const prev=fileAction('‹',()=>{page--;search()}),next=fileAction('›',()=>{page++;search()}),label=document.createElement('span');label.textContent=String(page);prev.disabled=page<=1;next.disabled=page*data.page_size>=data.total;nav.replaceChildren(prev,label,next)}catch(error){v.status.textContent=libraryMessage(error)}};form.onsubmit=event=>{event.preventDefault();page=1;search()};if(query.value)await search();else query.focus();
+ const v=fileLibraryDialog(mailImageText('Поиск файлов и документов','Search files and documents')),identity=state.email;
+ const alive=()=>v.dialog.open&&state.email===identity;
+ const timer=setInterval(()=>{if(state.email!==identity)v.dialog.close()},500);
+ let abort=null;v.dialog.addEventListener('close',()=>{clearInterval(timer);abort?.abort()},{once:true});
+ const form=document.createElement('form');form.className='file-card-form';
+ const query=document.createElement('input');query.type='search';query.required=true;query.maxLength=256;query.className='field-input';query.placeholder=mailImageText('Имя или фраза из документа','Name or phrase from a document');query.setAttribute('aria-label',query.placeholder);query.value=$('files-search')?.value||'';
+ const mode=document.createElement('select');mode.className='field-input';mode.setAttribute('aria-label',mailImageText('Где искать','Search in'));
+ for(const [value,ru,en] of [['all','Имена и содержимое PDF/DOCX','Names and PDF/DOCX contents'],['content','Содержимое PDF/DOCX','PDF/DOCX contents'],['name','Только имена','Names only']])mode.add(new Option(mailImageText(ru,en),value));
+ const scope=document.createElement('select');scope.className='field-input';scope.setAttribute('aria-label',mailImageText('Область поиска','Search scope'));
+ scope.add(new Option(mailImageText('Мои и доступные мне файлы','My files and shared with me'),'accessible'));scope.add(new Option(mailImageText('Только мои файлы','Only my files'),'own'));
+ const currentPath=filesState.ownerID?'':filesState.path;if(currentPath)scope.add(new Option(mailImageText('Текущая папка: ','Current folder: ')+currentPath,'folder'));
+ const submit=fileAction(mailImageText('Найти','Search'),()=>{});submit.type='submit';form.append(query,mode,scope,submit);
+ const note=document.createElement('p');note.className='meta';note.textContent=mailImageText('Поиск фразы без учёта регистра в текущих документах. PDF нужен текстовый слой; OCR сканов не выполняется. Корзина и старые версии исключены.','Case-insensitive phrase search in current documents. PDFs need a text layer; scanned images are not OCR processed. Trash and old versions are excluded.');
+ const warnings=document.createElement('p');warnings.className='meta';warnings.setAttribute('aria-label',mailImageText('Ограничения поиска','Search limitations'));
+ const results=document.createElement('div'),nav=document.createElement('div');nav.className='file-library-nav';v.body.append(form,note,warnings,results,nav);let page=1,seq=0;
+ const search=async()=>{
+  const id=++seq;abort?.abort();abort=new AbortController();if(!query.value.trim())return;
+  results.replaceChildren();nav.replaceChildren();warnings.textContent='';v.status.textContent=mailImageText('Поиск…','Searching…');
+  try{
+   const data=await api('/api/v1/files/library/search?q='+encodeURIComponent(query.value)+'&mode='+mode.value+'&scope='+(scope.value==='folder'?'own':scope.value)+(scope.value==='folder'?'&path='+encodeURIComponent(currentPath):'')+'&page='+page,{signal:abort.signal});if(id!==seq||!alive())return;
+   for(const entry of data.entries||[]){
+    const card=document.createElement('section');card.className='file-content-search-result';
+    const open=fileAction(entry.path,async()=>{if(!alive())return;filesState.ownerID=entry.shared?entry.owner_id:'';filesState.spaceID=entry.space?entry.owner_id:'';filesState.spaceName=entry.space?entry.owner_email:'';filesState.spaceRights=entry.space_rights||'';filesState.sharedRoot=entry.shared?entry.path:'';filesState.sharedRights=entry.rights||'read';filesState.listTarget=entry.shared&&!entry.is_dir?entry.path:'';filesState.path=entry.is_dir?entry.path:entry.path.split('/').slice(0,-1).join('/');filesState.selected=null;v.dialog.close();await refreshFiles();if(typeof updateCreateButton==='function')updateCreateButton('files');if(!entry.is_dir)selectFileEntry(entry.name)});open.className='file-search-result';card.append(open);
+    if(entry.shared){const owner=document.createElement('p');owner.className='meta';owner.textContent=mailImageText('Общий файл · ','Shared file · ')+entry.owner_email;card.append(owner)}
+    if(entry.snippet){const snippet=document.createElement('p');snippet.className='file-content-snippet';const match=document.createElement('mark');match.textContent=entry.snippet.match;snippet.append(document.createTextNode(entry.snippet.before),match,document.createTextNode(entry.snippet.after));card.append(snippet)}
+    results.append(card);
+   }
+   const messages=[];
+   if(data.truncated)messages.push(mailImageText('Поиск ограничен временем или объёмом. Результаты неполные; сузьте область поиска.','Search reached its time or size limit. Results are partial; narrow the scope.'));
+   if(data.skipped_documents)messages.push(mailImageText('Не удалось прочитать документов: ','Unreadable documents: ')+data.skipped_documents);
+   if(data.empty_documents)messages.push(mailImageText('Документов без извлечённого текста: ','Documents without extracted text: ')+data.empty_documents);
+   if(mode.value!=='name'&&data.pdf_search_available===false)messages.push(mailImageText('Поиск PDF недоступен: на сервере нужен pdftotext из Poppler. DOCX продолжают участвовать в поиске.','PDF search is unavailable: the server needs Poppler pdftotext. DOCX search remains available.'));
+   warnings.textContent=messages.join(' · ');v.status.textContent=mailImageText('Найдено: ','Found: ')+data.total;
+   const prev=fileAction('‹',()=>{page--;void search()}),next=fileAction('›',()=>{page++;void search()}),label=document.createElement('span');label.textContent=String(page);prev.setAttribute('aria-label',mailImageText('Предыдущая страница','Previous page'));next.setAttribute('aria-label',mailImageText('Следующая страница','Next page'));prev.disabled=page<=1;next.disabled=page*data.page_size>=data.total;nav.replaceChildren(prev,label,next);
+  }catch(error){if(id===seq&&alive()&&error.name!=='AbortError')v.status.textContent=libraryMessage(error)}
+ };
+ form.onsubmit=event=>{event.preventDefault();page=1;void search()};mode.onchange=scope.onchange=()=>{page=1;if(query.value.trim())void search()};if(query.value)await search();else query.focus();
 }
+
 function mountFileLibrary(){
   const toolbar=document.createElement('div');toolbar.className='file-browser-tools';const search=document.createElement('input');search.id='files-search';search.type='search';search.className='field-input';search.placeholder=mailImageText('Поиск в папке','Search this folder');search.setAttribute('aria-label',search.placeholder);let timer;search.oninput=()=>{clearTimeout(timer);fileBrowser.page=0;timer=setTimeout(refreshFiles,200)};
   const global=fileAction(mailImageText('Искать везде','Search all'),openFileSearch);global.id='btn-files-search-all';toolbar.append(search,global);$('files-upload-panel').before(toolbar);
@@ -9612,7 +9683,8 @@ function resetComposeAttachments() {
   renderComposeAttachments();
 }
 function renderComposeAttachments() {
-  const items=composeAttachments.entries, busy=composeAttachments.sending||!!composeAttachments.preparing;
+  const editorBusy=typeof composeRichEditor!=='undefined'&&(!!composeRichEditorBoot||mailEditorPending(composeRichEditor));
+ const items=composeAttachments.entries, busy=composeAttachments.sending||!!composeAttachments.preparing||editorBusy;
   const send=$('btn-compose-send');if(send)send.disabled=busy||!!$('compose-from')?.disabled||items.some(item=>item.status!=='ready');
   if($('compose-attach'))$('compose-attach').disabled=composeAttachments.sending;
   const list=$('compose-uploads');if(!list)return;list.replaceChildren();list.hidden=!items.length;
@@ -9628,13 +9700,14 @@ function renderComposeAttachments() {
     const actions=document.createElement('div');actions.className='compose-upload-actions';
     if(item.status==='error'){const retry=document.createElement('button');retry.type='button';retry.className='btn-secondary btn-sm';retry.textContent=mailImageText('Повторить','Retry');retry.disabled=busy;retry.onclick=()=>queueComposeUpload(item);actions.append(retry)}
     const remove=document.createElement('button');remove.type='button';remove.className='btn-secondary btn-sm';remove.textContent='×';remove.title=mailImageText('Убрать из письма','Remove from message');remove.setAttribute('aria-label',remove.title+' '+item.file.name);remove.disabled=busy;
-    remove.onclick=()=>{item.controller?.abort();composeAttachments.entries=composeAttachments.entries.filter(value=>value!==item);composeBodyEl()?.querySelector('[data-upload-link="'+item.id+'"]')?.remove();renderComposeAttachments()};actions.append(remove);row.append(content,actions);list.append(row);
+    remove.onclick=()=>{item.controller?.abort();composeAttachments.entries=composeAttachments.entries.filter(value=>value!==item);mutateComposeHTML(body=>body.querySelector('[data-upload-link="'+item.id+'"]')?.remove());renderComposeAttachments()};actions.append(remove);row.append(content,actions);list.append(row);
   }
 }
 function addComposeFileLink(item){
-  const body=composeBodyEl();if(body.querySelector('[data-upload-link="'+item.id+'"]'))return;
+  if(typeof mailEditorPending==='function'&&mailEditorPending(composeRichEditor))return;
+  const body=document.createElement('div');body.innerHTML=getComposeHTML();if(body.querySelector('[data-upload-link="'+item.id+'"]'))return;
   const paragraph=document.createElement('p');paragraph.dataset.uploadLink=item.id;
-  const link=document.createElement('a');link.href=item.share.url;link.textContent=item.file.name;paragraph.append(link,document.createTextNode(' ('+fmtBytes(item.file.size)+') — '+mailImageText('ссылка до ','link expires ')+new Date(item.share.expires_at).toLocaleDateString()));body.append(paragraph);
+  const link=document.createElement('a');link.href=item.share.url;link.textContent=item.file.name;paragraph.append(link,document.createTextNode(' ('+fmtBytes(item.file.size)+') — '+mailImageText('ссылка до ','link expires ')+new Date(item.share.expires_at).toLocaleDateString()));body.append(paragraph);setComposeBody(body.innerHTML,true);
 }
 async function prepareComposeAttachments() {
   if(composeAttachments.preparing)return composeAttachments.preparing;
@@ -9698,9 +9771,9 @@ $('compose-attach')?.addEventListener('change',event=>{
 // Personal external mailbox collection. Credentials never enter browser storage.
 let mailSourcesGeneration = 0;
 async function refreshMailSources() {
-  const host = $('app-profile'); if (!host || !state.tokens?.access_token) return;
+  const host = $('workspace-profile-extra') || document.querySelector('#app-profile .workspace-settings-content') || $('app-profile'); if (!host || !state.tokens?.access_token) return;
   let card = $('mail-sources-card');
-  if (!card) {card=document.createElement('section');card.id='mail-sources-card';card.className='card stack-gap';host.insertBefore(card,$('profile-security')?.previousElementSibling || null);}
+  if (!card) {card=document.createElement('section');card.id='mail-sources-card';card.className='card stack-gap';host.append(card);}
   const generation=++mailSourcesGeneration, token=state.tokens.access_token;
   try {
     const data=await api('/api/v1/mail-sources');if(generation!==mailSourcesGeneration||state.tokens?.access_token!==token)return;
@@ -10618,3 +10691,694 @@ async function openAdminBranding(kind, target) {
   } catch (err) { if (dialog.isConnected) setMsg(status, err.message, 'err'); }
 }
 $('tenant-branding-button')?.addEventListener('click', () => openAdminBranding('tenants', {id:tenantNav.tenantID, name:tenantNav.tenantName}));
+// File details and access. Links and activity are returned only to the owner.
+async function openFileCard(path,owner='') {
+ const view=fileLibraryDialog(mailImageText('Карточка: ','Details: ')+path);
+ view.dialog.classList.add('file-card-dialog');
+ const identity=state.email,alive=()=>view.dialog.open&&state.email===identity;
+ const timer=setInterval(()=>{if(state.email!==identity)view.dialog.close()},500);
+ view.dialog.addEventListener('close',()=>clearInterval(timer),{once:true});
+ const endpoint='/api/v1/files/card?path='+encodeURIComponent(path)+(owner?'&owner_id='+encodeURIComponent(owner):'');
+ let busy=false,sequence=0;
+ const text=(node,value)=>{node.textContent=value;return node};
+ const section=title=>{const node=document.createElement('section');node.className='file-card-section';node.append(text(document.createElement('h3'),title));view.body.append(node);return node};
+ const rightsLabel=value=>value==='upload'?mailImageText('Только загрузка','Upload only'):value==='manage'?mailImageText('Управление','Manage'):value==='owner'?mailImageText('Владелец','Owner'):value==='write'?mailImageText('Чтение и запись','Read and write'):mailImageText('Только чтение','Read only');
+ const button=(label,run)=>fileAction(label,()=>act(run));
+ const field=(form,label,input)=>{const row=document.createElement('label');row.textContent=label;input.className='field-input';row.append(input);form.append(row);return input};
+ const rightsSelect=()=>{const select=document.createElement('select');for(const value of ['read','write'])select.add(new Option(rightsLabel(value),value));return select};
+ const notify=message=>{if(alive())view.status.textContent=message};
+ async function act(fn){if(busy||!alive())return;busy=true;view.body.inert=true;notify(mailImageText('Сохранение…','Saving…'));try{await fn();if(alive()){await load();notify(mailImageText('Сохранено','Saved'))}}catch(error){notify(libraryMessage(error))}finally{busy=false;view.body.inert=false}}
+ async function mutate(url,method,body){if(!alive())return;return api(url,{method,...(body?{body:JSON.stringify(body)}:{})})}
+ async function load(){
+  const seq=++sequence,data=await api(endpoint);if(!alive()||seq!==sequence)return;
+  view.body.replaceChildren();
+  const props=section(mailImageText('Сведения','Details'));
+  for(const [label,value] of [[mailImageText('Путь','Path'),data.path],[mailImageText('Тип','Type'),data.is_dir?mailImageText('Папка','Folder'):mailImageText('Файл','File')],...(!data.is_dir?[[mailImageText('Размер','Size'),fmtBytes(data.size)]]:[]),[mailImageText('Изменён','Modified'),new Date(data.mtime).toLocaleString()],[mailImageText('Ваши права','Your permissions'),rightsLabel(data.effective_rights)]]){const p=document.createElement('p');p.textContent=label+': '+value;props.append(p)}
+  if(data.space){const space=section(mailImageText('Общее пространство','Shared space'));space.append(text(document.createElement('p'),data.space.name+' · '+rightsLabel(data.effective_rights)));for(const grant of data.space.groups||[])space.append(text(document.createElement('p'),grant.name+' · '+rightsLabel(grant.rights)));if(data.can_manage)space.append(fileAction(mailImageText('Настроить пространство','Space settings'),()=>{view.dialog.close();return openFileSpaceSettings(data.space.id)}))}
+  const access=section(mailImageText('Доступ пользователей','User access'));
+  const accessNote=document.createElement('p');accessNote.className='meta';accessNote.textContent=data.can_manage?mailImageText('Доступ из родительских папок продолжает действовать. При нескольких разрешениях действует наиболее широкое.','Access inherited from parent folders remains effective. The broadest permission applies.'):mailImageText('Показаны только ваши разрешения. Управление доступом и журнал доступны владельцу.','Only your permissions are shown. Access management and activity are available to the owner.');access.append(accessNote);
+  for(const grant of data.access||[]){
+   const row=document.createElement('div');row.className='file-card-row';row.append(text(document.createElement('span'),grant.email+' · '+rightsLabel(grant.rights)));
+   if(grant.inherited){row.append(text(document.createElement('span'),mailImageText('Из папки: ','From folder: ')+grant.path));if(data.can_manage)row.append(button(mailImageText('Открыть папку','Open folder'),async()=>{view.dialog.close();await openFileCard(grant.path)}))}
+   else if(data.can_manage){const select=rightsSelect();select.value=grant.rights;select.className='field-input';select.setAttribute('aria-label',mailImageText('Права: ','Permissions: ')+grant.email);row.append(select,button(mailImageText('Изменить','Change'),()=>mutate('/api/v1/files/access','POST',{path,email:grant.email,rights:select.value})),button(mailImageText('Отозвать','Revoke'),async()=>{if(await askConfirm(mailImageText('Отозвать прямой доступ для ','Revoke direct access for ')+grant.email+'?'))await mutate('/api/v1/files/access','DELETE',{path,grantee_id:grant.grantee_id})}))}
+   access.append(row);
+  }
+  if(!data.access?.length)access.append(text(document.createElement('p'),mailImageText('Дополнительных разрешений нет','No additional permissions')));
+  if(data.can_manage){
+   {const form=document.createElement('form');form.className='file-card-form';const email=field(form,'Email',document.createElement('input'));email.type='email';email.required=true;email.autocomplete='off';const rights=field(form,mailImageText('Права','Permissions'),rightsSelect());const submit=fileAction(mailImageText('Предоставить доступ','Grant access'),()=>{});submit.type='submit';form.append(submit);form.onsubmit=event=>{event.preventDefault();void act(()=>mutate('/api/v1/files/access','POST',{path,email:email.value.trim(),rights:rights.value}))};access.append(form);}
+   const links=section(mailImageText('Публичные ссылки','Public links'));
+   for(const share of (data.shares||[]).filter(item=>item.rights!=='upload')){
+    const row=document.createElement('div');row.className='file-card-row';const details=[rightsLabel(share.rights),share.active?mailImageText('Активна','Active'):mailImageText('Недействительна','Inactive'),share.password_protected?mailImageText('С паролем','Password protected'):mailImageText('Без пароля','No password'),share.expires_at?new Date(share.expires_at).toLocaleString():mailImageText('Бессрочно','No expiry'),mailImageText('Скачиваний: ','Downloads: ')+share.download_count+(share.max_downloads?' / '+share.max_downloads:'')];row.append(text(document.createElement('p'),details.join(' · ')));
+    if(share.inherited){row.append(text(document.createElement('p'),mailImageText('Из папки: ','From folder: ')+share.path));row.append(button(mailImageText('Управлять в папке','Manage in folder'),async()=>{view.dialog.close();await openFileCard(share.path)}))}
+    else{
+     const url=document.createElement('input');url.className='field-input';url.readOnly=true;url.value=share.url;url.setAttribute('aria-label',mailImageText('Публичная ссылка','Public link'));url.onclick=()=>url.select();row.append(url,fileAction(mailImageText('Копировать','Copy'),async()=>{if(!alive())return;try{await navigator.clipboard.writeText(share.url);notify(mailImageText('Ссылка скопирована','Link copied'))}catch{url.focus();url.select()}}),button(mailImageText('Отозвать ссылку','Revoke link'),async()=>{if(await askConfirm(mailImageText('Отозвать публичную ссылку?','Revoke public link?'),{danger:true}))await mutate('/api/v1/files/shares/'+encodeURIComponent(share.id),'DELETE')}));
+    }
+    links.append(row);
+   }
+   if(!(data.shares||[]).some(item=>item.rights!=='upload'))links.append(text(document.createElement('p'),mailImageText('Публичных ссылок нет','No public links')));
+   const form=document.createElement('form');form.className='file-card-form';
+   const password=field(form,mailImageText('Пароль (необязательно)','Password (optional)'),document.createElement('input'));password.type='password';password.maxLength=256;password.autocomplete='new-password';
+   const ttl=field(form,mailImageText('Срок действия, часов','Expires after, hours'),document.createElement('input'));ttl.type='number';ttl.min='1';ttl.max='8760';ttl.step='1';ttl.value='168';ttl.required=true;
+   const max=field(form,mailImageText('Лимит скачиваний (0 — без лимита)','Download limit (0 — unlimited)'),document.createElement('input'));max.type='number';max.min='0';max.step='1';max.value='0';max.required=true;
+   const rights=field(form,mailImageText('Права по ссылке','Link permissions'),rightsSelect());const submit=fileAction(mailImageText('Создать ссылку','Create link'),()=>{});submit.type='submit';form.append(submit);form.onsubmit=event=>{event.preventDefault();void act(()=>mutate('/api/v1/files/shares','POST',{path,password:password.value,ttl_hours:Number(ttl.value),max_downloads:Number(max.value),rights:rights.value}))};links.append(form);
+   if(data.is_dir){
+    const requests=section(mailImageText('Запросить файлы','Request files'));
+    requests.append(text(document.createElement('p'),mailImageText('Получатель ссылки может только отправить документы. Просмотр папки и замена существующих файлов запрещены. После загрузки вы получите уведомление.','The link recipient can only upload documents. Folder browsing and overwriting existing files are forbidden. You will be notified after upload.')));
+    for(const request of (data.shares||[]).filter(item=>item.rights==='upload')){
+     const row=document.createElement('div');row.className='file-card-row';row.append(text(document.createElement('p'),(request.active?mailImageText('Приём открыт','Accepting files'):mailImageText('Приём закрыт','Closed'))+' · '+new Date(request.expires_at).toLocaleString()));
+     if(request.inherited){row.append(text(document.createElement('p'),mailImageText('Запрос для родительской папки: ','Request for parent folder: ')+request.path),button(mailImageText('Управлять запросом в папке','Manage request in folder'),async()=>{view.dialog.close();await openFileCard(request.path)}))}
+     else{const url=document.createElement('input');url.className='field-input';url.readOnly=true;url.value=request.url;url.setAttribute('aria-label',mailImageText('Ссылка для запроса файлов','File request link'));url.onclick=()=>url.select();row.append(url,fileAction(mailImageText('Копировать запрос','Copy request'),async()=>{if(!alive())return;try{await navigator.clipboard.writeText(request.url);notify(mailImageText('Ссылка скопирована','Link copied'))}catch{url.focus();url.select()}}),button(mailImageText('Закрыть приём','Close request'),async()=>{if(await askConfirm(mailImageText('Закрыть приём по этой ссылке?','Close this file request?')))await mutate('/api/v1/files/shares/'+encodeURIComponent(request.id),'DELETE')}))}
+     requests.append(row);
+    }
+    const requestForm=document.createElement('form');requestForm.className='file-card-form';
+    const expiry=field(requestForm,mailImageText('Срок запроса, часов','Request expiry, hours'),document.createElement('input'));expiry.type='number';expiry.min='1';expiry.max='8760';expiry.step='1';expiry.value='168';expiry.required=true;
+    const create=fileAction(mailImageText('Создать запрос файлов','Create file request'),()=>{});create.type='submit';requestForm.append(create);requestForm.onsubmit=event=>{event.preventDefault();void act(()=>mutate('/api/v1/files/shares','POST',{path,rights:'upload',ttl_hours:Number(expiry.value)}))};requests.append(requestForm);
+   }
+   const events=section(mailImageText('Журнал событий','Activity'));
+   const note=document.createElement('p');note.className='meta';note.textContent=mailImageText('События фиксируются с момента включения журнала. Скачивания и просмотры здесь не учитываются.','Events are recorded from the time activity logging is enabled. Downloads and views are not included.');events.append(note);
+   const list=document.createElement('ol');list.className='file-card-events';events.append(list);
+   let cursor=data.next_cursor;
+   const renderEvents=entries=>{for(const event of entries){const row=document.createElement('li');const source=({web:'Web',webdav:'WebDAV',collabora:'Collabora',onlyoffice:'ONLYOFFICE',r7:'Р7',public_link:mailImageText('Публичная ссылка','Public link'),retention:mailImageText('Очистка по политике','Retention cleanup'),system:mailImageText('Система','System'),file_request:mailImageText('Запрос файлов','File request'),chat:mailImageText('Чат','Chat')})[event.actor?.source]||event.actor?.source||'';row.textContent=new Date(event.at).toLocaleString()+' · '+fileActivityLabel(event.action)+' · '+(event.actor_email||source)+(event.actor_email?' · '+source:'')+(event.subject?' · '+event.subject:'')+(event.rights?' · '+rightsLabel(event.rights):'')+(event.previous_path?' · '+event.previous_path+' → '+event.path:'');list.append(row)}};
+   renderEvents(data.events||[]);if(!data.events?.length)events.append(text(document.createElement('p'),mailImageText('Событий пока нет','No events yet')));
+   const more=fileAction(mailImageText('Ранее','Earlier'),async()=>{if(!cursor||busy||!alive())return;more.disabled=true;try{const page=await api(endpoint+'&before='+encodeURIComponent(cursor));if(!alive()||seq!==sequence)return;renderEvents(page.events||[]);cursor=page.next_cursor;more.hidden=!cursor}catch(error){notify(libraryMessage(error))}finally{more.disabled=false}});more.hidden=!cursor;events.append(more);
+  }
+  const refresh=fileAction(mailImageText('Обновить карточку','Refresh details'),async()=>{if(busy)return;refresh.disabled=true;try{await load()}catch(error){notify(libraryMessage(error))}finally{refresh.disabled=false}});view.body.append(refresh);
+ }
+ try{await load()}catch(error){notify(libraryMessage(error))}
+}
+function fileActivityLabel(action){return ({space_created:mailImageText('Пространство создано','Space created'),space_restored:mailImageText('Пространство восстановлено','Space restored'),space_updated:mailImageText('Настройки пространства изменены','Space settings updated'),file_received:mailImageText('Получен документ по запросу','Document received via file request'),created:mailImageText('Файл создан','File created'),updated:mailImageText('Файл изменён','File updated'),folder_created:mailImageText('Папка создана','Folder created'),moved:mailImageText('Перемещён / переименован','Moved / renamed'),trashed:mailImageText('Перемещён в корзину','Moved to trash'),restored:mailImageText('Восстановлен','Restored'),access_changed:mailImageText('Предоставлен / изменён доступ','Access granted / changed'),access_revoked:mailImageText('Доступ отозван','Access revoked'),link_created:mailImageText('Создана публичная ссылка','Public link created'),link_revoked:mailImageText('Публичная ссылка отозвана','Public link revoked'),versions_deleted:mailImageText('Версия удалена','Version deleted'),trash_deleted:mailImageText('Удалено из корзины','Trash permanently deleted'),versions_cleaned:mailImageText('Версия очищена по политике','Version removed by retention'),trash_cleaned:mailImageText('Корзина очищена по политике','Trash removed by retention'),protection_changed:mailImageText('Изменена защита версии','Version protection changed')})[action]||action}
+
+async function openReceivedDocuments(){
+ const view=fileLibraryDialog(mailImageText('Полученные документы','Received documents')),identity=state.email;
+ const timer=setInterval(()=>{if(state.email!==identity)view.dialog.close()},500);view.dialog.addEventListener('close',()=>clearInterval(timer),{once:true});
+ try{const result=await api('/api/v1/notifications?limit=100');if(!view.dialog.open||state.email!==identity){view.dialog.close();return}
+  const list=document.createElement('ul');view.body.append(list);
+  for(const event of (result.events||[]).filter(item=>item.kind==='files').reverse()){const row=document.createElement('li');row.textContent=new Date(event.created_at).toLocaleString()+' · '+event.body;list.append(row)}
+  if(!list.children.length)view.status.textContent=mailImageText('Полученных документов пока нет','No received documents yet');
+ }catch(error){view.status.textContent=libraryMessage(error)}
+}
+$('files-settings-menu')?.append(fileAction(mailImageText('Полученные документы','Received documents'),openReceivedDocuments));
+// Organization-owned storage. Group roles and settings are authoritative on the server.
+function fileSpaceRoleLabel(value){return ({read:mailImageText('Чтение','Read'),write:mailImageText('Чтение и запись','Read and write'),manage:mailImageText('Управление','Manage')})[value]||value}
+async function openFileSpaces(){
+ const view=fileLibraryDialog(mailImageText('Общие пространства','Shared spaces')),identity=state.email;
+ const timer=setInterval(()=>{if(state.email!==identity)view.dialog.close()},500);view.dialog.addEventListener('close',()=>clearInterval(timer),{once:true});
+ try{const data=await api('/api/v1/files/spaces');if(!view.dialog.open||state.email!==identity)return;
+  const note=document.createElement('p');note.textContent=mailImageText('Пространства принадлежат организации. Доступ определяется группами; файлы сохраняются при смене сотрудников.','Spaces belong to the organization. Group membership determines access; files survive staff changes.');view.body.append(note);
+  for(const space of data.spaces){const row=document.createElement('section');row.className='file-card-section';const title=document.createElement('strong');title.textContent=space.name;const info=document.createElement('p');info.textContent=(space.kind==='department'?mailImageText('Отдел','Department'):mailImageText('Проект','Project'))+' · '+fileSpaceRoleLabel(space.rights)+' · '+(space.quota_bytes?fmtBytes(space.quota_bytes):mailImageText('Без ограничения квоты','Unlimited quota'));row.append(title,info);
+   row.append(fileAction(mailImageText('Открыть','Open'),async()=>{if(state.email!==identity)return;filesState.ownerID=space.id;filesState.spaceID=space.id;filesState.spaceName=space.name;filesState.spaceRights=space.rights;filesState.sharedRights=space.rights==='read'?'read':'write';filesState.sharedRoot='';filesState.listTarget='';filesState.path='';filesState.selected=null;view.dialog.close();await refreshFiles();if(typeof updateCreateButton==='function')updateCreateButton('files')}));
+   if(space.rights==='manage')row.append(fileAction(mailImageText('Резервирование и откат','Backup and recovery'),()=>{view.dialog.close();return openSpaceRecovery(space.id)}));
+   if(space.rights==='manage')row.append(fileAction(mailImageText('Настройки','Settings'),()=>{view.dialog.close();return openFileSpaceSettings(space.id)}));
+   view.body.append(row);
+  }
+  if(!data.spaces.length){const empty=document.createElement('p');empty.textContent=mailImageText('Доступных пространств пока нет','No shared spaces available');view.body.append(empty)}
+  if(data.can_create)view.body.append(fileAction(mailImageText('Восстановить пространство из архива','Restore space from archive'),()=>{view.dialog.close();return openSpaceRecovery()}));
+  if(data.can_create)view.body.append(fileAction(mailImageText('Создать пространство','Create space'),()=>{view.dialog.close();return openFileSpaceSettings('',data.tenant_id)}));
+ }catch(error){view.status.textContent=libraryMessage(error)}
+}
+async function openFileSpaceSettings(id='',tenant=''){
+ const view=fileLibraryDialog(id?mailImageText('Настройки пространства','Space settings'):mailImageText('Новое пространство','New space')),identity=state.email;
+ const timer=setInterval(()=>{if(state.email!==identity)view.dialog.close()},500);view.dialog.addEventListener('close',()=>clearInterval(timer),{once:true});
+ try{
+  let space=id?await api('/api/v1/files/spaces/'+encodeURIComponent(id)):{tenant_id:tenant,name:'',kind:'project',description:'',quota_bytes:0,version_days:0,trash_days:0,keep_versions:0,automatic:false,revision:0,groups:[]};
+  if(!view.dialog.open||state.email!==identity)return;
+  if(id&&space.rights!=='manage'){view.status.textContent=mailImageText('Требуются права управления','Management rights required');return}
+  const choices=await api('/api/v1/files/spaces/groups?'+(id?'space_id='+encodeURIComponent(id):'tenant_id='+encodeURIComponent(tenant)));if(!view.dialog.open||state.email!==identity)return;
+  const form=document.createElement('form');form.className='file-card-form';view.body.append(form);
+  const field=(label,input)=>{const row=document.createElement('label');row.textContent=label;input.className='field-input';input.setAttribute('aria-label',label);row.append(input);form.append(row);return input};
+  const name=field(mailImageText('Название','Name'),document.createElement('input'));name.required=true;name.maxLength=200;name.value=space.name;
+  const kind=field(mailImageText('Тип пространства','Space type'),document.createElement('select'));kind.add(new Option(mailImageText('Отдел','Department'),'department'));kind.add(new Option(mailImageText('Проект','Project'),'project'));kind.value=space.kind;
+  const description=field(mailImageText('Описание','Description'),document.createElement('textarea'));description.maxLength=2000;description.value=space.description;
+  const number=(label,value,max)=>{const input=field(label,document.createElement('input'));input.type='number';input.min='0';input.max=String(max);input.step='1';input.value=String(value);input.required=true;return input};
+  const quota=number(mailImageText('Квота в байтах (0 — без ограничения)','Quota in bytes (0 — unlimited)'),space.quota_bytes,Number.MAX_SAFE_INTEGER);
+  const versions=number(mailImageText('Хранить версии, дней (0 — бессрочно)','Version retention, days (0 — forever)'),space.version_days,36500);
+  const trash=number(mailImageText('Хранить корзину, дней (0 — бессрочно)','Trash retention, days (0 — forever)'),space.trash_days,36500);
+  const keep=number(mailImageText('Минимум последних версий','Minimum latest versions'),space.keep_versions,10000);
+  const automatic=document.createElement('input');automatic.type='checkbox';automatic.checked=space.automatic;const automaticLabel=document.createElement('label');automaticLabel.textContent=mailImageText('Автоматическая очистка','Automatic cleanup');automaticLabel.prepend(automatic);form.append(automaticLabel);
+  const hint=document.createElement('p');hint.className='meta';hint.textContent=mailImageText('Квота учитывает текущие файлы, версии и корзину. Понижение квоты не удаляет данные. 0 дней — бессрочное хранение. Администраторы организации сохраняют управление независимо от состава групп.','Quota includes current files, versions and trash. Lowering the quota does not delete data. 0 days means keep forever. Organization administrators retain management regardless of group membership.');form.append(hint);
+  const groups=document.createElement('div');form.append(groups);const grants=new Map((space.groups||[]).map(grant=>[grant.group_id,grant.rights]));
+  const render=()=>{groups.replaceChildren();for(const [groupID,rights] of grants){const group=choices.groups.find(g=>g.id===groupID),row=document.createElement('div');row.className='file-card-row';const label=document.createElement('span');label.textContent=group?group.name+' · '+group.email:groupID;const select=document.createElement('select');select.className='field-input';select.setAttribute('aria-label',mailImageText('Права группы: ','Group role: ')+(group?.name||groupID));for(const role of ['read','write','manage'])select.add(new Option(fileSpaceRoleLabel(role),role));select.value=rights;select.onchange=()=>grants.set(groupID,select.value);row.append(label,select,fileAction(mailImageText('Убрать группу','Remove group'),()=>{grants.delete(groupID);render()}));groups.append(row)}};
+  const group=field(mailImageText('Добавить группу','Add group'),document.createElement('select'));group.add(new Option(mailImageText('Выберите группу','Select a group'),''));for(const choice of choices.groups)group.add(new Option(choice.name+' · '+choice.email,choice.id));group.onchange=()=>{if(group.value){grants.set(group.value,'read');group.value='';render()}};render();
+  const statusNote=document.createElement('p');statusNote.className='meta';form.append(statusNote);
+  if(id){const usage=await api('/api/v1/files/library/usage?owner_id='+encodeURIComponent(id));statusNote.textContent=mailImageText('Занято: ','Used: ')+fmtBytes(usage.used_bytes)+' · '+mailImageText('WebDAV: ','WebDAV: ')+location.origin+'/dav/spaces/'+id+'/'}
+  const save=fileAction(mailImageText('Сохранить пространство','Save space'),()=>{});save.type='submit';form.append(save);let busy=false;
+  form.onsubmit=async event=>{event.preventDefault();if(busy||!view.dialog.open||state.email!==identity)return;busy=true;save.disabled=true;
+   try{const value={...space,name:name.value,kind:kind.value,description:description.value,quota_bytes:Number(quota.value),version_days:Number(versions.value),trash_days:Number(trash.value),keep_versions:Number(keep.value),automatic:automatic.checked,groups:[...grants].map(([group_id,rights])=>({group_id,rights}))};
+    const saved=await api('/api/v1/files/spaces'+(id?'/'+encodeURIComponent(id):''),{method:id?'PUT':'POST',body:JSON.stringify(value)});if(!view.dialog.open||state.email!==identity)return;space=saved;if(filesState.spaceID===saved.id){filesState.spaceName=saved.name;filesState.spaceRights=saved.rights;filesState.sharedRights=saved.rights==='read'?'read':'write';if(!saved.rights){filesState.ownerID='';filesState.spaceID='';filesState.path='';filesState.listTarget='';filesState.sharedRoot=''}await refreshFiles()}if(!id){view.dialog.close();await openFileSpaces()}else{view.status.textContent=mailImageText('Пространство сохранено','Space saved');if(saved.rights!=='manage')view.dialog.close()}
+   }catch(error){view.status.textContent=error.status===409?mailImageText('Пространство изменено другим управляющим. Откройте настройки заново; введённые значения сохранены в форме.','Another manager changed the space. Reopen settings; your inputs remain in this form.'):libraryMessage(error)}finally{busy=false;save.disabled=false}
+  };
+ }catch(error){view.status.textContent=libraryMessage(error)}
+}
+const sharedSpacesButton=fileAction(mailImageText('Общие пространства','Shared spaces'),openFileSpaces);$('btn-files-refresh')?.after(sharedSpacesButton);
+// Checkpoint-backed recovery; preview and apply are separate, stale plans fail closed.
+async function openSpaceRecovery(space=''){
+ const view=fileLibraryDialog(mailImageText('Резервирование и откат','Backup and recovery')),identity=state.email,alive=()=>view.dialog.open&&state.email===identity;
+ const timer=setInterval(()=>{if(state.email!==identity)view.dialog.close()},500);view.dialog.addEventListener('close',()=>clearInterval(timer),{once:true});
+ const endpoint=space?'/api/v1/files/spaces/'+encodeURIComponent(space)+'/recovery':'/api/v1/files/space-recovery';
+ let busy=false,currentPlan=null;
+ const paragraph=(text,host=view.body)=>{const node=document.createElement('p');node.textContent=text;host.append(node);return node};
+ const field=(form,label,input)=>{const row=document.createElement('label');row.textContent=label;input.className='field-input';input.setAttribute('aria-label',label);row.append(input);form.append(row);return input};
+ async function act(fn){if(busy||!alive())return;busy=true;view.body.inert=true;view.status.textContent=mailImageText('Выполняется…','Working…');try{await fn()}catch(error){if(alive())view.status.textContent=error.status===409?mailImageText('Пространство изменилось после предпросмотра. Постройте новый план восстановления.','The space changed after preview. Generate a new recovery plan.'):libraryMessage(error)}finally{busy=false;view.body.inert=false}}
+ const preview=document.createElement('section');preview.className='file-card-section';
+ function renderPlan(plan){
+  if(!alive())return;currentPlan=plan;preview.replaceChildren();paragraph(mailImageText('Точка восстановления: ','Recovery point: ')+new Date(plan.checkpoint_at).toLocaleString(),preview);
+  paragraph(mailImageText('Изменений: ','Changes: ')+plan.total_changes+' · '+mailImageText('Содержимое до / после: ','Content before / after: ')+fmtBytes(plan.before_bytes)+' / '+fmtBytes(plan.after_bytes),preview);
+  paragraph(mailImageText('Будет занято в квоте: ','Projected quota usage: ')+fmtBytes(plan.projected_used_bytes)+' / '+(plan.quota_bytes?fmtBytes(plan.quota_bytes):'∞'),preview);
+  if(plan.metadata_restored){paragraph(mailImageText('Вернутся настройки, группы, персональные разрешения, ссылки, версии, корзина и журнал из точки восстановления. Членство в группах остаётся текущим.','Settings, group grants, personal permissions, links, versions, trash and activity will return to the checkpoint. Group membership remains current.'),preview);paragraph(mailImageText('Пространство: ','Space: ')+plan.settings.name+' · '+mailImageText('Разрешений: ','Grants: ')+plan.access_count+' · '+mailImageText('Ссылок: ','Links: ')+plan.link_count,preview);paragraph(mailImageText('Хранение версий / корзины, дней: ','Version / trash retention, days: ')+plan.settings.version_days+' / '+plan.settings.trash_days+' · '+mailImageText('Минимум версий: ','Minimum versions: ')+plan.settings.keep_versions+' · '+mailImageText('Автоочистка: ','Automatic cleanup: ')+(plan.settings.automatic?mailImageText('включена','on'):mailImageText('выключена','off')),preview);for(const group of plan.settings.groups||[])paragraph(group.name+' · '+fileSpaceRoleLabel(group.rights),preview)}
+  else paragraph(mailImageText('Настройки и групповые права сохраняются. Текущая папка попадёт в корзину; прямые разрешения и ссылки внутри выбранного пути будут отозваны. Доступ из родительских папок продолжает действовать.','Settings and group roles are kept. The current folder is preserved in trash; direct grants and links inside the selected path will be revoked. Parent-folder access remains effective.'),preview);
+  if(plan.quota_blocked)paragraph(mailImageText('Недостаточно квоты. Увеличьте лимит и постройте новый план.','Quota is insufficient. Raise the limit and generate a new plan.'),preview);
+  const list=document.createElement('ul');list.className='file-card-events';for(const change of plan.changes||[]){const row=document.createElement('li');row.textContent=({added:mailImageText('Добавить','Add'),modified:mailImageText('Заменить','Replace'),deleted:mailImageText('Убрать','Remove')})[change.kind]+' · '+change.path+' · '+fmtBytes(change.before_bytes)+' → '+fmtBytes(change.after_bytes);list.append(row)};preview.append(list);
+  if(plan.total_changes>(plan.changes||[]).length)paragraph(mailImageText('Показаны первые 200 изменений.','Showing the first 200 changes.'),preview);
+  paragraph(mailImageText('Перед применением создаётся отдельная страховочная точка.','A separate safety checkpoint is saved before applying.'),preview);
+  const apply=fileAction(mailImageText('Применить восстановление','Apply recovery'),()=>act(async()=>{
+   if(!currentPlan||!await askConfirm(mailImageText('Применить показанный план восстановления?','Apply the displayed recovery plan?'),{danger:true})||!alive())return;
+   const target='/api/v1/files/spaces/'+encodeURIComponent(currentPlan.space_id)+'/recovery';const result=await api(target+'/apply',{method:'POST',body:JSON.stringify({plan_id:currentPlan.plan_id})});if(!alive())return;currentPlan=null;preview.replaceChildren();view.status.textContent=mailImageText('Восстановление завершено.','Recovery completed.');
+   if(result.safety_checkpoint_id){paragraph(mailImageText('Страховочная точка: ','Safety checkpoint: ')+result.safety_checkpoint_id,preview);preview.append(fileAction(mailImageText('Предпросмотр отмены восстановления','Preview undo'),()=>act(async()=>{const plan=await api(target+'/preview',{method:'POST',body:JSON.stringify({checkpoint_id:result.safety_checkpoint_id,mode:'full'})});renderPlan(plan)})))}
+   if(filesState.ownerID===result.space_id){try{const current=await api('/api/v1/files/spaces/'+encodeURIComponent(result.space_id));filesState.spaceName=current.name;filesState.spaceRights=current.rights;filesState.sharedRights=current.rights==='read'?'read':'write';await refreshFiles()}catch{filesState.ownerID='';filesState.spaceID='';filesState.path='';filesState.listTarget='';await refreshFiles()}}
+  }));apply.disabled=!!plan.quota_blocked;preview.append(apply);preview.scrollIntoView({block:'nearest'});view.status.textContent=mailImageText('Проверьте план перед применением.','Review the plan before applying.');
+ }
+ async function load(){
+  let data={checkpoints:[]};if(space)data=await api(endpoint);if(!alive())return;view.body.replaceChildren();
+  paragraph(mailImageText('Автоматически сохраняются последние 50 точек после изменений. Ручные и страховочные точки хранятся до удаления. Они удерживают место на диске отдельно от файловой квоты.','The latest 50 automatic checkpoints are kept after changes. Manual and safety points remain until deleted. They retain disk space separately from file quota.'));
+  if(data.last_error)paragraph(mailImageText('Не удалось создать одну из последних автоматических точек. Проверьте место на сервере.','A recent automatic checkpoint failed. Check server disk space.'));
+  if(data.pending)view.body.append(fileAction(mailImageText('Повторить завершение восстановления','Retry recovery completion'),()=>act(async()=>{await api(endpoint+'/retry',{method:'POST',body:'{}'});await load();view.status.textContent=mailImageText('Операция завершена','Operation completed')})));
+  if(space){
+   const manual=document.createElement('form');manual.className='file-card-form';const label=field(manual,mailImageText('Название ручной точки','Manual checkpoint label'),document.createElement('input'));label.maxLength=200;const create=fileAction(mailImageText('Создать контрольную точку','Create checkpoint'),()=>{});create.type='submit';manual.append(create);manual.onsubmit=event=>{event.preventDefault();void act(async()=>{await api(endpoint+'/checkpoints',{method:'POST',body:JSON.stringify({label:label.value})});await load();view.status.textContent=mailImageText('Контрольная точка создана','Checkpoint created')})};view.body.append(manual);
+   const form=document.createElement('form');form.className='file-card-form';const points=field(form,mailImageText('Контрольная точка','Checkpoint'),document.createElement('select'));for(const point of data.checkpoints){const label=new Date(point.at).toLocaleString()+' · '+(point.automatic?mailImageText('Автоматическая','Automatic'):mailImageText('Ручная / страховочная','Manual / safety'))+' · '+(fileActivityLabel(point.label)||point.label);points.add(new Option(label,point.id))}
+   const at=field(form,mailImageText('Выбрать по времени (необязательно)','Select by time (optional)'),document.createElement('input'));at.type='datetime-local';at.step='1';points.onchange=()=>{at.value=''};paragraph(mailImageText('По времени выбирается ближайшая сохранённая точка не позднее указанного момента; её точное время показано в плане.','Time selection uses the latest saved checkpoint at or before that moment; its exact time is shown in the plan.'),form);
+   const mode=field(form,mailImageText('Объём восстановления','Recovery scope'),document.createElement('select'));mode.add(new Option(mailImageText('Всё пространство и настройки','Whole space and settings'),'full'));mode.add(new Option(mailImageText('Только выбранная папка','Selected folder only'),'folder'));
+   const path=field(form,mailImageText('Путь папки от корня пространства','Folder path from space root'),document.createElement('input'));path.disabled=true;path.placeholder='contracts';mode.onchange=()=>{path.disabled=mode.value!=='folder';path.required=mode.value==='folder'};
+   const plan=fileAction(mailImageText('Предпросмотр восстановления','Preview recovery'),()=>{});plan.type='submit';form.append(plan);form.onsubmit=event=>{event.preventDefault();void act(async()=>{const payload={mode:mode.value,path:mode.value==='folder'?path.value:''};if(at.value)payload.at=new Date(at.value).toISOString();else payload.checkpoint_id=points.value;renderPlan(await api(endpoint+'/preview',{method:'POST',body:JSON.stringify(payload)}))})};
+   const actions=document.createElement('div');actions.className='file-card-row';const download=fileAction(mailImageText('Скачать архив','Download archive'),()=>act(async()=>{const ticket=await api(endpoint+'/download',{method:'POST',body:JSON.stringify({checkpoint_id:points.value})});if(!alive())return;const link=document.createElement('a');link.href=ticket.url;link.download='';document.body.append(link);link.click();link.remove();view.status.textContent=mailImageText('Архив передан браузеру для скачивания','Archive sent to the browser for download')}));download.disabled=!points.options.length;
+   const remove=fileAction(mailImageText('Удалить точку','Delete checkpoint'),()=>act(async()=>{if(!points.value||!await askConfirm(mailImageText('Удалить выбранную контрольную точку без возможности восстановления?','Permanently delete the selected checkpoint?'),{danger:true}))return;await api(endpoint+'/checkpoints/'+encodeURIComponent(points.value),{method:'DELETE'});await load();view.status.textContent=mailImageText('Точка удалена','Checkpoint deleted')}));remove.disabled=!points.options.length;actions.append(download,remove);form.append(actions);plan.disabled=!points.options.length;view.body.append(form);
+  }
+  const form=document.createElement('form');form.className='file-card-form';const file=field(form,mailImageText('Импорт архива пространства (.tar.gz)','Import space archive (.tar.gz)'),document.createElement('input'));file.type='file';file.accept='.gz,.tgz';file.required=true;const upload=fileAction(mailImageText('Загрузить архив и проверить','Upload and validate archive'),()=>{});upload.type='submit';form.append(upload);form.onsubmit=event=>{event.preventDefault();void act(async()=>{view.status.textContent=mailImageText('Загрузка и проверка архива…','Uploading and validating archive…');const result=await api(endpoint+'/import',{method:'POST',headers:{'Content-Type':'application/gzip'},body:file.files[0]});renderPlan(result.preview)})};view.body.append(form);
+  paragraph(mailImageText('Архив содержит документы и секреты действующих ссылок. Для восстановления нужны соответствующие пользователи и группы организации.','The archive contains documents and active-link secrets. Matching organization users and groups are required for restoration.'));view.body.append(preview);
+ }
+ try{await load()}catch(error){if(alive())view.status.textContent=libraryMessage(error)}
+}
+// One locally hosted CKEditor build for compose and tenant/domain welcome mail.
+let mailEditorLibrary;
+async function loadMailEditorLibrary() {
+  if (!mailEditorLibrary) mailEditorLibrary = Promise.all([
+    import('/assets/ckeditor5/ckeditor5.js'),
+    import('/assets/ckeditor5/translations/ru.js')
+  ]).catch(error => { mailEditorLibrary = null; throw error; });
+  return mailEditorLibrary;
+}
+async function prepareMailPhoto(file, aborted = () => false) {
+  if (!['image/png','image/jpeg','image/gif','image/webp'].includes(file.type) || file.size > 20*1024*1024) throw Error(mailImageText('Выберите фотографию PNG, JPEG, GIF или WebP до 20 МиБ.', 'Choose a PNG, JPEG, GIF or WebP photo up to 20 MiB.'));
+  const bitmap = await createImageBitmap(file);
+  try {
+    if (aborted()) throw new DOMException('Cancelled', 'AbortError');
+    const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement('canvas'); canvas.width = Math.max(1,Math.round(bitmap.width*scale)); canvas.height = Math.max(1,Math.round(bitmap.height*scale));
+    canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);
+    let result = canvas.toDataURL(file.type === 'image/png' ? 'image/png' : 'image/jpeg', .85);
+    if (result.length > 2*1024*1024*4/3) result = canvas.toDataURL('image/jpeg', .75);
+    if (result.length > 2*1024*1024*4/3) throw Error(mailImageText('Изображение превышает 2 МиБ после обработки.', 'The processed image exceeds 2 MiB.'));
+    if (aborted()) throw new DOMException('Cancelled', 'AbortError');
+    return result;
+  } finally { bitmap.close(); }
+}
+async function createMailRichEditor(host, {html = '', onChange = () => {}} = {}) {
+  const [CK, ru] = await loadMailEditorLibrary();
+  const {ClassicEditor, Essentials, Paragraph, Heading, Bold, Italic, Underline, Strikethrough, List, Link, AutoLink, BlockQuote, Table, TableToolbar, Image, ImageToolbar, ImageCaption, ImageStyle, ImageResize, ImageUpload, FileRepository, GeneralHtmlSupport, RemoveFormat} = CK;
+  const editor = await ClassicEditor.create(host, {
+    licenseKey:'GPL',
+    ui:{overlayContainer:host.closest('dialog') || document.body},
+    language:typeof lang !== 'undefined' && lang === 'en' ? 'en' : 'ru', translations:[ru.default],
+    initialData:html,
+    plugins:[Essentials, Paragraph, Heading, Bold, Italic, Underline, Strikethrough, List, Link, AutoLink, BlockQuote, Table, TableToolbar, Image, ImageToolbar, ImageCaption, ImageStyle, ImageResize, ImageUpload, FileRepository, GeneralHtmlSupport, RemoveFormat],
+    extraPlugins:[function MailPhotoUpload(editor) {
+      editor.plugins.get('FileRepository').createUploadAdapter = loader => {
+        let cancelled = false;
+        return {upload:async () => ({default:await prepareMailPhoto(await loader.file, () => cancelled)}), abort:() => {cancelled = true;}};
+      };
+    }],
+    toolbar:{items:['undo','redo','|','heading','|','bold','italic','underline','strikethrough','removeFormat','|','link','bulletedList','numberedList','blockQuote','|','uploadImage','insertTable'], shouldNotGroupWhenFull:false},
+    image:{upload:{types:['jpeg','png','gif','webp']}, toolbar:['imageTextAlternative','toggleImageCaption','|','resizeImage']},
+    table:{contentToolbar:['tableColumn','tableRow','mergeTableCells']},
+    htmlSupport:{allow:[{name:/^(p|div|span|blockquote|table|thead|tbody|tfoot|tr|td|th|figure|figcaption|img)$/,attributes:['data-upload-link','data-mail-signature','width','height','colspan','rowspan','align'],styles:['color','background-color','font-size','font-family','text-align','white-space','width','height','max-width','border','border-collapse','padding','margin']}]},
+    link:{defaultProtocol:'https://', addTargetToExternalLinks:true}
+  });
+  editor.model.document.on('change:data', onChange);
+  return editor;
+}
+function mailEditorPending(editor) { return !!editor?.plugins.get('PendingActions')?.hasAny; }
+
+let composeRichEditor = null, composeRichEditorBoot = null, composeRichPendingHTML = null;
+async function ensureComposeRichEditor() {
+  if (composeRichEditor) return composeRichEditor;
+  if (!composeRichEditorBoot) {
+    const host = $('compose-body');
+    composeRichEditorBoot = createMailRichEditor(host, {html:host.innerHTML, onChange:() => renderComposeAttachments()})
+      .then(editor => {
+        composeRichEditor = editor;
+        if (composeRichPendingHTML !== null) { editor.setData(composeRichPendingHTML); composeRichPendingHTML = null; }
+        $('compose-rte-toolbar').hidden = true;
+        editor.plugins.get('PendingActions').on('change:hasAny', () => {
+          if (!mailEditorPending(editor)) prepareComposeAttachments().catch(error => setMsg($('compose-msg'),error.message,'err'));
+          renderComposeAttachments();
+        });
+        renderComposeAttachments(); return editor;
+      }).catch(error => {
+        setMsg($('compose-msg'),mailImageText('Не удалось загрузить редактор: ', 'Could not load editor: ')+error.message,'err');
+        throw error;
+      }).finally(() => { composeRichEditorBoot = null; renderComposeAttachments(); });
+  }
+  return composeRichEditorBoot;
+}
+// Welcome mail revisions are saved independently from publication.
+async function openAdminWelcome(kind, target) {
+  document.querySelector('dialog.welcome-dialog')?.close();
+  const label = mailImageText;
+  const dialog = directoryDialog(label('Приветственное письмо', 'Welcome mail') + ' — ' + target.name, 'welcome-dialog');
+  const endpoint = '/api/v1/admin/welcome/' + kind + '/' + encodeURIComponent(target.id);
+  const node = (tag, cls, text) => { const el = document.createElement(tag); if (cls) el.className = cls; if (text) el.textContent = text; return el; };
+  const status = node('p', 'msg'); status.setAttribute('role', 'status');
+  const info = node('p', 'meta');
+  const deliveryInfo = node('p', 'meta'); deliveryInfo.setAttribute('aria-live','polite');
+  const help = node('p', 'meta', label('Сохранение создаёт версию. Публикация включает выбранную сохранённую версию. Опубликованное письмо автоматически отправляется при создании новых ящиков; отключённые ящики получат его после включения. Публикация не рассылает письмо существующим пользователям.', 'Saving creates a version. Publishing activates the selected saved version. The published letter is sent automatically to new mailboxes; disabled mailboxes receive it after activation. Publishing does not mail existing users.'));
+  const policy = node('div', 'welcome-policy');
+  const mode = node('select', 'field-input'); mode.setAttribute('aria-label', label('Режим шаблона', 'Template mode'));
+  for (const [value, text] of [['inherit', label('Наследовать от тенанта', 'Inherit from tenant')], ['own', label('Свой шаблон', 'Own template')], ['off', label('Не отправлять', 'Disabled')]]) {
+    if (kind !== 'domains' && value === 'inherit') continue;
+    mode.append(new Option(text, value));
+  }
+  const changeMode = directoryButton(label('Применить режим', 'Apply mode'), () => mutate({action:'mode', mode:mode.value}));
+  const reload = directoryButton(label('Обновить историю', 'Refresh history'), () => load(true));
+  policy.append(mode, changeMode, reload);
+  const form = node('div', 'welcome-form');
+  function field(title, tag = 'input') {
+    const wrapper = node('label', 'field-label', title), input = node(tag, 'field-input');
+    wrapper.append(input); form.append(wrapper); return input;
+  }
+  const subject = field(label('Тема письма', 'Subject')); subject.maxLength = 250;
+  const variables = node('p', 'meta', label('Переменные в тексте: {{name}}, {{email}}, {{domain}}, {{tenant}}. Фотографии можно загрузить кнопкой на панели. Внешние ссылки — полные HTTPS-адреса.', 'Text variables: {{name}}, {{email}}, {{domain}}, {{tenant}}. Upload photos using the toolbar. External links require full HTTPS URLs.'));
+  form.append(variables);
+  const tools = node('div', 'welcome-toolbar');
+  const visualTab = directoryButton(label('Визуальный редактор', 'Visual editor'), () => switchEditor(false));
+  const sourceTab = directoryButton('HTML', () => switchEditor(true));
+  tools.append(visualTab, sourceTab);
+  const editor = node('div', 'welcome-rich-host');
+  const editorSurface = node('div'); editor.append(editorSurface);
+  const source = node('textarea', 'field-input welcome-source'); source.setAttribute('aria-label', label('HTML письма', 'Mail HTML')); source.spellcheck = false; source.hidden = true;
+  const comment = field(label('Комментарий к версии', 'Version comment')); comment.maxLength = 1000;
+  // Keep the editor between its toolbar and version comment.
+  form.insertBefore(tools, comment.parentElement); form.insertBefore(editor, comment.parentElement); form.insertBefore(source, comment.parentElement);
+  const actions = node('div', 'welcome-toolbar');
+  const save = directoryButton(label('Сохранить новую версию', 'Save new version'), () => mutate({action:'save', content:content()}), true);
+  const previewButton = directoryButton(label('Предпросмотр', 'Preview'), previewDraft);
+  actions.append(save, previewButton); form.append(actions);
+  const preview = node('iframe', 'welcome-preview'); preview.title = label('Предпросмотр письма', 'Mail preview'); preview.setAttribute('sandbox', ''); preview.hidden = true;
+  const textPreview = node('pre', 'welcome-text'); textPreview.hidden = true;
+  const historyTitle = node('h3', 'heading', label('История версий', 'Version history'));
+  const historyTools = node('div', 'welcome-toolbar');
+  const versions = node('select', 'field-input'); versions.setAttribute('aria-label', label('Версия письма', 'Mail version'));
+  const publish = directoryButton(label('Опубликовать выбранную', 'Publish selected'), async () => {
+    if (!await askConfirm(label('Опубликовать выбранную сохранённую версию? Изменения в редакторе не входят в публикацию.', 'Publish the selected saved version? Unsaved editor changes are not included.'))) return;
+    await mutate({action:'publish', revision:Number(versions.value)}, false);
+  });
+  const restore = directoryButton(label('Восстановить как новую версию', 'Restore as new version'), async () => {
+    if (!await askConfirm(label('Создать новую версию из выбранной? Текущий текст редактора будет заменён. Публикация выполняется отдельно.', 'Create a new version from the selected one? This replaces the editor content. Publish it separately.'))) return;
+    await mutate({action:'restore', revision:Number(versions.value), content:{comment:comment.value}});
+  });
+  historyTools.append(versions, publish, restore);
+  const historyContent = node('div', 'welcome-comparison');
+  const selectedText = node('pre', 'welcome-text');
+  const publishedText = node('pre', 'welcome-text');
+  historyContent.append(selectedText, publishedText);
+  const historyPreview = node('iframe', 'welcome-preview'); historyPreview.title = label('Просмотр выбранной версии', 'Selected version preview'); historyPreview.setAttribute('sandbox', '');
+  const audit = node('details'); audit.append(node('summary', '', label('Журнал изменений', 'Change log'))); const auditText = node('pre', 'welcome-text'); audit.append(auditText);
+  dialog.append(help, status, info, deliveryInfo, policy, form, preview, textPreview, historyTitle, historyTools, historyContent, historyPreview, audit);
+  let data = null, busy = false, dirty = false, sourceMode = false, visualHTML = '', rich = null;
+  const sample = value => String(value).replace(/\{\{(name|email|domain|tenant)\}\}/g, (_, key) => ({name:label('Анна Иванова', 'Anna Ivanova'), email:'anna@example.com', domain:'example.com', tenant:label('Организация', 'Organization')}[key]));
+  function documentHTML(html) {
+    return '<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; img-src https: data:; style-src \'unsafe-inline\'; base-uri \'none\'; form-action \'none\'"><style>body{font:16px/1.5 system-ui;padding:16px;overflow-wrap:anywhere;color:#18212b;background:white}img{max-width:100%;height:auto}table{max-width:100%}pre{white-space:pre-wrap}</style></head><body>' + html + '</body></html>';
+  }
+  function setVisual(html) {
+    visualHTML = html;
+    if (rich) rich.setData(html);
+  }
+  const bodyHTML = () => sourceMode ? source.value : (rich ? rich.getData() : visualHTML);
+  const content = () => ({subject:subject.value, html:bodyHTML(), comment:comment.value});
+  function fill(revision) {
+    const v = revision || {subject:label('Добро пожаловать в {{tenant}}', 'Welcome to {{tenant}}'), html:label('<h1>Здравствуйте, {{name}}!</h1><p>Ваш почтовый адрес: {{email}}.</p>', '<h1>Hello, {{name}}!</h1><p>Your email address: {{email}}.</p>')};
+    subject.value = v.subject; source.value = v.html; setVisual(v.html); comment.value = ''; dirty = false;
+    preview.hidden = textPreview.hidden = true;
+  }
+  function lock(value) {
+    busy = value;
+    dialog.querySelectorAll('button,input,select,textarea').forEach(el => { if (!el.closest('.ck')) el.disabled = el.closest('header') ? false : value; });
+    if (rich) { if (value) rich.enableReadOnlyMode('request'); else rich.disableReadOnlyMode('request'); }
+    if (!value) {
+      publish.disabled = restore.disabled = !data?.revisions.length;
+      changeMode.disabled = !data;
+      save.disabled = previewButton.disabled = !data || (rich && mailEditorPending(rich));
+      for (const option of mode.options) if (option.value === 'own') option.disabled = !data?.published;
+    }
+  }
+  function error(err) {
+    const messages = {
+      'use a subject, HTML body and supported variables; maximum text size is 256 KB; embedded images up to 2 MiB each and 8 MiB total': label('Проверьте тему, текст и переменные. Текст — до 256 КиБ, фотографии — до 2 МиБ каждая и 8 МиБ суммарно.', 'Check the subject, body and variables. Text: up to 256 KB; photos: 2 MiB each, 8 MiB total.'),
+      'invalid action or mode; publish a revision before enabling own template': label('Сначала опубликуйте сохранённую версию, затем включайте свой шаблон.', 'Publish a saved version before enabling your own template.'),
+      'welcome save failed': label('Не удалось сохранить письмо. Текст остаётся в редакторе.', 'Could not save the letter. Your text remains in the editor.'),
+      'welcome lookup failed': label('Не удалось загрузить шаблон. Повторите загрузку истории.', 'Could not load the template. Refresh history to retry.'),
+      'forbidden': label('Недостаточно прав для управления этим шаблоном.', 'You do not have permission to manage this template.'),
+      'revision not found': label('Версия не найдена. Обновите историю.', 'Version not found. Refresh history.')
+    };
+    const conflict = String(err.message).includes('welcome template changed');
+    setMsg(status, conflict ? label('Шаблон изменён другим администратором. Ваш текст сохранён в редакторе. Обновите историю, проверьте изменения и повторите сохранение.', 'Another administrator changed this template. Your editor text is retained. Refresh history, review the changes and save again.') : (messages[err.message] || err.message), 'err');
+  }
+  function renderHistory() {
+    const chosen = Number(versions.value), selected = data.revisions.find(v => v.number === chosen), active = data.revisions.find(v => v.number === data.published);
+    selectedText.textContent = selected ? label('Выбрана версия ', 'Selected version ') + selected.number + '\n' + selected.subject + '\n\n' + selected.html : label('Версий пока нет.', 'No versions yet.');
+    publishedText.textContent = active ? label('Опубликована версия ', 'Published version ') + active.number + '\n' + active.subject + '\n\n' + active.html : label('Нет опубликованной версии.', 'No published version.');
+    historyPreview.hidden = !selected;
+    if (selected) historyPreview.srcdoc = documentHTML(sample(selected.html));
+  }
+  function render() {
+    const previous = versions.value; versions.replaceChildren();
+    for (const v of [...data.revisions].reverse()) versions.append(new Option('#' + v.number + (v.number === data.published ? ' ● ' + label('Опубликована', 'Published') : '') + ' · ' + new Date(v.saved_at).toLocaleString() + ' · ' + v.author + (v.restored_from ? ' ← #' + v.restored_from : '') + (v.comment ? ' · ' + v.comment : ''), String(v.number)));
+    if ([...versions.options].some(o => o.value === previous)) versions.value = previous;
+    mode.value = data.mode;
+    auditText.textContent = [...data.events].reverse().map(e => new Date(e.at).toLocaleString() + ' · ' + e.actor + ' · ' + ({save:label('Сохранение', 'Save'), publish:label('Публикация', 'Publish'), restore:label('Восстановление', 'Restore'), mode:label('Смена режима', 'Mode change')}[e.action] || e.action) + (e.revision ? ' #' + e.revision : '') + ' · ' + e.mode).join('\n');
+    renderHistory();
+  }
+  function showDeliveryStats(result) {
+    const stats = result.delivery_stats;
+    deliveryInfo.textContent = stats ? label('Доставлено: ', 'Delivered: ') + stats.delivered + label(' · Ожидают: ', ' · Pending: ') + stats.pending + label(' · Повтор после ошибки: ', ' · Retrying: ') + stats.retrying : '';
+  }
+  async function load(keepEditor = false) {
+    if (busy) return; lock(true);
+    try {
+      const result = await api(endpoint); if (!dialog.isConnected) return;
+      data = result.template; render(); showDeliveryStats(result);
+      info.textContent = result.effective ? label('Действует: ', 'Effective: ') + (result.source === 'tenants' ? label('тенант', 'tenant') : label('домен', 'domain')) + ' · #' + result.effective.number + ' · ' + result.effective.subject : label('Действующее письмо отсутствует.', 'No effective letter.');
+      if (!keepEditor) fill(data.revisions.at(-1) || result.effective);
+      if (keepEditor) setMsg(status, label('История обновлена. Текст редактора сохранён; следующее сохранение создаст новую версию.', 'History refreshed. Editor text retained; saving will create a new version.'), 'ok');
+    } catch (err) { error(err); } finally { lock(false); }
+  }
+  async function mutate(change, replaceEditor = true) {
+    if (busy || !data || (rich && mailEditorPending(rich))) return; lock(true); setMsg(status, '');
+    try {
+      const result = await api(endpoint, {method:'POST', body:JSON.stringify({...change, expected:data.generation})});
+      if (!dialog.isConnected) return;
+      data = result; render();
+      if (replaceEditor && (change.action === 'save' || change.action === 'restore')) { fill(data.revisions.at(-1)); versions.value = String(data.revisions.at(-1).number); renderHistory(); }
+      setMsg(status, change.action === 'publish' ? label('Версия опубликована.', 'Version published.') : label('Сохранено.', 'Saved.'), 'ok');
+      // Update effective inheritance without touching the editor or version choice.
+      const effective = await api(endpoint);
+      if (dialog.isConnected) showDeliveryStats(effective);
+      if (dialog.isConnected) info.textContent = effective.effective ? label('Действует: ', 'Effective: ') + (effective.source === 'tenants' ? label('тенант', 'tenant') : label('домен', 'domain')) + ' · #' + effective.effective.number + ' · ' + effective.effective.subject : label('Действующее письмо отсутствует.', 'No effective letter.');
+    } catch (err) { error(err); } finally { lock(false); }
+  }
+  async function switchEditor(toSource) {
+    if (busy || toSource === sourceMode) return;
+    if (rich && mailEditorPending(rich)) { setMsg(status, label('Дождитесь вставки фотографии.', 'Wait for the photo to finish inserting.'), 'err'); return; }
+    if (toSource) { source.value = bodyHTML(); sourceMode = true; }
+    else {
+      lock(true);
+      try {
+        const clean = await api(endpoint, {method:'POST', body:JSON.stringify({action:'preview', content:content()})});
+        setVisual(clean.html); sourceMode = false;
+      } catch (err) { error(err); } finally { lock(false); }
+    }
+    source.hidden = !sourceMode; editor.hidden = sourceMode;
+    visualTab.setAttribute('aria-pressed', String(!sourceMode)); sourceTab.setAttribute('aria-pressed', String(sourceMode));
+  }
+  async function previewDraft() {
+    if (busy || (rich && mailEditorPending(rich))) return; lock(true);
+    try {
+      const clean = await api(endpoint, {method:'POST', body:JSON.stringify({action:'preview', content:content()})});
+      preview.srcdoc = documentHTML(sample(clean.html)); preview.hidden = false;
+      textPreview.textContent = sample(clean.subject) + '\n\n' + sample(clean.text); textPreview.hidden = false;
+    } catch (err) { error(err); } finally { lock(false); }
+  }
+  subject.oninput = source.oninput = comment.oninput = () => { dirty = true; };
+  versions.onchange = renderHistory;
+  const close = dialog.querySelector('header button');
+  const closeEditor = async () => { if (!dirty || await askConfirm(label('Закрыть редактор без сохранения изменений?', 'Close without saving your changes?'))) dialog.close(); };
+  close.onclick = closeEditor; dialog.addEventListener('cancel', event => { event.preventDefault(); closeEditor(); });
+  dialog.addEventListener('close', () => { rich?.destroy().catch(()=>{}); }, {once:true});
+  await load();
+  if (!dialog.isConnected || !data) return;
+  lock(true);
+  try {
+    const instance = await createMailRichEditor(editorSurface, {html:visualHTML, onChange:() => { dirty = true; }});
+    if (!dialog.isConnected) { await instance.destroy(); return; }
+    rich = instance;
+    rich.plugins.get('PendingActions').on('change:hasAny', () => { save.disabled = rich.plugins.get('PendingActions').hasAny || busy; });
+  } catch (err) {
+    sourceMode = true; source.hidden = false; editor.hidden = true;
+    error(err);
+  } finally { lock(false); }
+}
+$('tenant-welcome-button')?.addEventListener('click', () => openAdminWelcome('tenants', {id:tenantNav.tenantID, name:tenantNav.tenantName}));
+const workspaceLexicon=new Map();
+function workspaceWords(ru,en){const pair={ru,en};workspaceLexicon.set(ru,pair);workspaceLexicon.set(en,pair);return lang==='en'?en:ru;}
+/* The personal-space shell is constructed from the approved navigation model.
+   Application controllers continue to own their data and actions. */
+function workspaceIcon(name){
+ if(name==='tree')return '<svg viewBox="0 0 32 40" fill="none" aria-hidden="true"><use href="/assets/tayga-tree.svg?v=1.0.0#tayga-tree"/></svg>';
+ const paths={plus:'M12 4v16M4 12h16',save:'M4 3h13l3 3v15H4zM8 3v7h8V3M8 21v-7h8v7',refresh:'M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-1l2 6M4 12l2 6a7 7 0 0 0 12-1',upload:'M12 20V4m-6 6 6-6 6 6M3 17v5h18v-5',download:'M12 3v14m-6-6 6 6 6-6M3 17v5h18v-5',delete:'M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7',send:'m3 3 19 9-19 9 4-9zM7 12h15',reply:'m9 5-7 7 7 7M2 12h12a7 7 0 0 1 7 7',tree:'m12 1-6 7h4L3 16h6l-7 7h20l-7-7h6l-7-8h4zM12 23v3',mail:'M3 5h18v14H3zM3 6l9 7 9-7',calendar:'M4 5h16v16H4zM8 2v6m8-6v6M4 10h16',contacts:'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8M4 22v-2a8 8 0 0 1 16 0v2',tasks:'M4 3h16v18H4zM8 12l3 3 5-6',notes:'M5 3h14v18H5zM8 7h8M8 11h8M8 15h5',files:'M3 5h6l2 3h10v13H3z',chat:'M3 4h18v14H9l-6 4z',settings:'m9 3 6 0 1 4 4 1v6l-4 1-1 4H9l-1-4-4-1V8l4-1zM9 11a3 3 0 1 0 6 0 3 3 0 0 0-6 0',admin:'M12 2 3 6v6c0 5 9 10 9 10s9-5 9-10V6zM9 12l2 2 4-5',compose:'m16 3 5 5-12 12H4v-5zM14 5l5 5',collapse:'m12 7-5 5 5 5m6-10-5 5 5 5',back:'m9 5-7 7 7 7M2 12h20',search:'M10 3a7 7 0 1 0 0 14 7 7 0 0 0 0-14m5 12 6 6',bell:'M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4',more:'M12 4v.01M12 12v.01M12 20v.01',monitor:'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z',queue:'M4 3h16v18H4zM7 7h10M7 12h10M7 17h6',migration:'M3 7h16l-4-4m6 14H5l4 4',certificate:'M12 2a7 7 0 1 0 0 14 7 7 0 0 0 0-14M7 14l-2 8 7-4 7 4-2-8',server:'M3 3h18v7H3zM3 14h18v7H3zM7 6h1m-1 11h1',cos:'m12 2 10 5-10 5L2 7zM2 12l10 5 10-5M2 17l10 5 10-5',language:'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18M3 12h18M12 3c-5 5-5 13 0 18 5-5 5-13 0-18',signature:'m15 3 6 6-12 12H3v-6zM3 21h18',security:'M6 10V7a6 6 0 0 1 12 0v3M4 10h16v12H4zM12 14v4',appearance:'M3 4h18v14H3zM8 22h8M12 18v4',filter:'M3 4h18l-7 8v8l-4-2v-6z',inbox:'M3 5h18v14H3zM3 12h5l2 3h4l2-3h5',sent:'m3 3 19 9-19 9 4-9zM7 12h15',drafts:'M6 3h8l4 4v14H6zM14 3v5h4',archive:'M3 3h18v5H3zM5 8v13h14V8M9 12h6',trash:'M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7',junk:'M12 3 3 7v5c0 5 9 9 9 9s9-4 9-9V7zM12 8v5m0 3h.01'};
+ return '<svg viewBox="0 0 24 '+(name==='tree'?'27':'24')+'" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="'+(paths[name]||paths.settings)+'"/></svg>';
+}
+function workspaceFolderIcon(folder){return workspaceIcon(String(folder.role||folder.name||'').toLowerCase())}
+(() => {
+ const shell=$('view-account'),oldNav=$('app-nav'),oldHeader=document.querySelector('.app-topbar');if(!shell||!oldNav)return;
+ const desktop=matchMedia('(min-width:901px)'),words=workspaceWords;
+ const main=document.querySelector('.app-main');main.className='workspace-main';shell.classList.add('workspace-shell');document.documentElement.classList.add('workspace-v1');
+ const logout=$('btn-logout'),notify=$('btn-notify-perm'),folders=document.querySelector('#app-mail>.mail-folders');
+ const extras=[...oldNav.querySelectorAll('#nav-admin button:not([data-app])')];
+ const header=document.createElement('header');header.className='workspace-header';
+ header.innerHTML='<button type="button" id="btn-nav-toggle" class="workspace-menu-toggle" aria-controls="app-nav" aria-label="'+words('Открыть меню','Open navigation')+'" aria-expanded="false">'+workspaceIcon('monitor')+'</button><div id="header-branding" class="workspace-brand"><span class="workspace-logo">'+workspaceIcon('tree')+'</span><img id="header-branding-image" class="hidden" alt=""><span class="header-branding-copy"><strong id="header-branding-name">Tayga Mail</strong></span></div><form class="workspace-search" role="search">'+workspaceIcon('search')+'<input id="workspace-search" type="search" autocomplete="off" aria-label="'+words('Поиск писем','Search mail')+'" placeholder="'+words('Поиск писем','Search mail')+'"></form><div class="workspace-header-actions"></div>';
+ const nav=document.createElement('aside');nav.id='app-nav';nav.className='workspace-nav';nav.setAttribute('aria-label',words('Главное меню','Main navigation'));
+ nav.innerHTML='<div class="nav-user" id="nav-user"><span class="nav-avatar" id="nav-avatar"></span><div class="nav-user-meta"><span class="workspace-greeting">'+words('Добро пожаловать,','Welcome,')+'</span><strong class="nav-user-email" id="nav-user-email"></strong><span class="nav-user-role" id="nav-user-role"></span></div></div>';
+ const apps=document.createElement('nav');apps.className='workspace-app-links';const admins=document.createElement('nav');admins.id='nav-admin';admins.className='hidden workspace-admin-links';nav.append(apps,admins);
+ function button(parent,app,ru,en,icon){const b=document.createElement('button');b.type='button';b.className='nav-btn';if(app)b.dataset.app=app;b.innerHTML='<span class="nav-ico">'+workspaceIcon(icon)+'</span><span>'+words(ru,en)+'</span>';b.onclick=()=>{showApp(app);setNavOpen(false)};parent.append(b);return b}
+ const compose=button(apps,'mail','Написать','Compose','compose');compose.id='workspace-compose';compose.classList.add('workspace-compose');compose.removeAttribute('data-app');compose.onclick=()=>{setNavOpen(false);openCompose()};
+ button(apps,'mail','Почта','Mail','mail');if(folders){folders.className='workspace-mail-folders';apps.append(folders)}
+ for(const row of [['calendar','Календарь','Calendar','calendar'],['contacts','Контакты','Contacts','contacts'],['tasks','Задачи','Tasks','tasks'],['notes','Заметки','Notes','notes'],['files','Файлы','Files','files'],['chat','Чат','Chat','chat']])button(apps,...row);
+ const appFooter=document.createElement('div');appFooter.className='workspace-nav-footer';apps.append(appFooter);const settings=button(appFooter,'profile','Настройки','Settings','settings');settings.id='workspace-settings-entry';const adminEntry=button(appFooter,'monitor','Администрирование','Administration','admin');adminEntry.id='workspace-admin-entry';
+ for(const row of [['monitor','Обзор','Overview','monitor'],['tenants','Домены и пользователи','Domains & users','contacts'],['outbound','Очередь','Mail queue','queue'],['antispam','Антиспам','Antispam','admin'],['maillog','Лог писем','Mail log','notes'],['migration','Миграция','Migration','migration'],['tls','Сертификаты','Certificates','certificate'],['mattermost','Mattermost','Mattermost','chat'],['server','Сервер','Server','server'],['cos','CoS','CoS','cos']])button(admins,...row);
+ if(extras.length){const more=document.createElement('details');more.className='workspace-admin-more';const title=document.createElement('summary');title.textContent=words('Дополнительно','More');more.append(title,...extras);admins.append(more)}
+ const adminFooter=document.createElement('div');adminFooter.className='workspace-nav-footer';admins.append(adminFooter);const back=button(adminFooter,'mail','К приложениям','Back to apps','back');back.id='workspace-apps-entry';
+ const collapse=button(nav,null,'Свернуть','Collapse','collapse');collapse.id='sidebar-collapse';
+ const tooltip=document.createElement('div');tooltip.id='sidebar-tooltip';tooltip.className='sidebar-tooltip';tooltip.hidden=true;tooltip.setAttribute('role','tooltip');document.body.append(tooltip);
+ const language=$('topbar-language');if(language){language.hidden=true;header.append(language)}oldHeader.replaceWith(header);oldNav.replaceWith(nav);
+ notify.className='workspace-notify';notify.innerHTML=workspaceIcon('bell');header.querySelector('.workspace-header-actions').append(notify);
+ const menu=document.createElement('details');menu.className='workspace-profile-dropdown';menu.innerHTML='<summary id="workspace-profile" aria-label="'+words('Меню пользователя','User menu')+'"><span></span><i>⌄</i></summary><div class="workspace-profile-menu"></div>';header.querySelector('.workspace-header-actions').append(menu);
+ for(const row of [['profile','Профиль','Profile','contacts'],['vks','Видеоконференции','Video meetings','chat'],['migration','Перенос данных','Import data','migration']]){const b=button(menu.lastElementChild,...row);b.addEventListener('click',()=>menu.open=false)}menu.lastElementChild.append(logout);
+ header.querySelector('form').onsubmit=e=>{e.preventDefault();const query=$('workspace-search').value.trim();showApp('mail');$('mail-search').value=query;mailState.searchQ=query;mailState.offset=0;refreshMailMessages()};
+ let collapsed=false;try{collapsed=localStorage.getItem('tayga.sidebarCollapsed')==='true'}catch{}
+ const settingsApps=new Set(['profile','security','appearance','filters','language']);const adminApps=new Set(['monitor','tenants','outbound','antispam','maillog','migration','tls','mattermost','server','cos']);
+ function hideTip(){tooltip.hidden=true;nav.querySelectorAll('[aria-describedby]').forEach(b=>b.removeAttribute('aria-describedby'))}
+ function sync(){
+  const active=document.querySelector('.app-page:not(.hidden)')?.id.replace('app-','')||'mail';const isAdmin=!!state.me?.is_admin;const area=isAdmin&&adminApps.has(active)?'admin':'apps';shell.dataset.workspaceArea=area;shell.dataset.workspaceApp=active;shell.classList.toggle('sidebar-collapsed',collapsed);apps.hidden=area==='admin';admins.hidden=area!=='admin';if(admins.classList.contains('hidden'))admins.classList.remove('hidden');adminEntry.hidden=!isAdmin;settings.classList.toggle('is-active',settingsApps.has(active));if(folders)folders.hidden=active!=='mail';
+  const name=state.me?.display_name||state.me?.email||state.email||'Tayga';$('nav-user-email').textContent=name.includes('@')?name:name.split(' ')[0];$('nav-user-email').title=name;$('nav-avatar').textContent=accountInitials(name);$('workspace-profile').firstElementChild.textContent=accountInitials(name);$('nav-user-role').textContent=words('Администратор','Administrator');
+  collapse.setAttribute('aria-expanded',String(!collapsed));collapse.lastElementChild.textContent=collapsed?words('Развернуть','Expand'):words('Свернуть','Collapse');
+  nav.inert=!desktop.matches&&!shell.classList.contains('nav-open');nav.setAttribute('aria-hidden',String(nav.inert));if(desktop.matches){if(shell.classList.contains('nav-open'))shell.classList.remove('nav-open');$('nav-backdrop').hidden=true}
+  nav.querySelectorAll('.nav-btn').forEach(b=>{b.setAttribute('aria-label',(b.lastElementChild?.textContent||b.textContent).trim());b.title=b.getAttribute('aria-label');if(b.classList.contains('is-active'))b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});
+ }
+ collapse.onclick=()=>{collapsed=!collapsed;localStorage.setItem('tayga.sidebarCollapsed',String(collapsed));hideTip();sync()};$('btn-nav-toggle').onclick=()=>{setNavOpen(!shell.classList.contains('nav-open'));sync()};
+ nav.querySelectorAll('.nav-btn').forEach(b=>{const tip=()=>{hideTip();if(!desktop.matches||!collapsed)return;tooltip.textContent=b.getAttribute('aria-label');const r=b.getBoundingClientRect();tooltip.style.left=r.right+10+'px';tooltip.style.top=Math.min(r.top,innerHeight-44)+'px';tooltip.hidden=false;b.setAttribute('aria-describedby',tooltip.id)};b.onmouseenter=tip;b.onfocus=tip;b.onmouseleave=hideTip;b.onblur=hideTip});
+ document.addEventListener('keydown',e=>{if(e.key==='Escape'){hideTip();menu.open=false;if(!desktop.matches){setNavOpen(false);sync()}}});document.addEventListener('click',e=>{if(!menu.contains(e.target))menu.open=false});desktop.addEventListener('change',()=>{setNavOpen(false);sync()});
+ new MutationObserver(sync).observe(shell,{attributes:true,attributeFilter:['class']});document.querySelectorAll('.app-page').forEach(page=>new MutationObserver(sync).observe(page,{attributes:true,attributeFilter:['class']}));
+ new MutationObserver(sync).observe(admins,{attributes:true,attributeFilter:['class']});
+ const aliases={cal:'calendar',event:'calendar',contact:'contacts',people:'contacts',user:'contacts',theme:'appearance',lang:'language',mkdir:'files',compose:'compose',logout:'back'};document.querySelectorAll('.ico[data-ico],.nav-ico[data-ico]').forEach(el=>{el.innerHTML=workspaceIcon(aliases[el.dataset.ico]||el.dataset.ico)});
+ // Place paging below the list; use the existing reader actions and controllers.
+ const footer=document.createElement('div');footer.className='workspace-reader-footer';$('mail-reader').append(footer);
+ sync();
+})();
+/* Layout composition for the approved personal-space screens. Uses the existing APIs and forms. */
+(() => {
+ const words=workspaceWords;
+ const main=document.querySelector('.workspace-main');
+ // Writing stays inside the same workspace, keeping navigation and the forest visible.
+ const compose=$('compose-backdrop');main.append(compose);$('compose-panel').setAttribute('aria-modal','false');
+ const close=document.createElement('button');close.type='button';close.className='btn-secondary workspace-compose-back';close.innerHTML=designIcon('back');close.setAttribute('aria-label',words('Вернуться к почте','Back to mail'));close.onclick=()=>$('btn-compose-close').click();$('compose-title').before(close);
+ // The month remains a working mini-calendar beside the week schedule.
+ const calendar=$('app-calendar'), month=$('cal-month'), monthHome=month.parentElement;
+ const mini=document.createElement('div');mini.className='workspace-mini-calendar';calendar.querySelector('.mail-folders .pane-head').after(mini);
+ const week=document.createElement('section');week.id='workspace-week';week.className='workspace-week';week.setAttribute('aria-label',words('Расписание недели','Week schedule'));month.after(week);
+ const views=document.createElement('div');views.className='workspace-view-tabs';views.setAttribute('role','group');views.setAttribute('aria-label',words('Вид календаря','Calendar view'));
+ for(const [value,ru,en] of [['week','Неделя','Week'],['month','Месяц','Month'],['day','День','Day']]){const b=document.createElement('button');b.type='button';b.dataset.view=value;b.textContent=words(ru,en);b.onclick=()=>{calState.view=value;if(!calState.selectedDay)calState.selectedDay=calDayKey(new Date());renderCalMonth()};views.append(b)}
+ calendar.querySelector('.cal-month-toolbar').after(views);
+ const originalMonth=renderCalMonth, originalDay=renderCalDay;
+ renderCalMonth=function(){originalMonth();renderWeek()};
+ renderCalDay=function(){originalDay();if(calState.view==='week'){$('cal-day-view').classList.add('hidden');month.classList.remove('hidden')}if(week)week.hidden=calState.view!=='week'};
+ function renderWeek(){
+  const weekly=calState.view==='week';calendar.classList.toggle('workspace-calendar-week',weekly);week.hidden=!weekly;
+  views.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.view===calState.view)));
+  if(!weekly){if(month.parentElement!==monthHome)week.before(month);return}
+  if(month.parentElement!==mini)mini.append(month);month.classList.remove('hidden');
+  const anchor=new Date((calState.selectedDay||calDayKey(new Date()))+'T12:00');const monday=new Date(anchor);monday.setDate(anchor.getDate()-(anchor.getDay()+6)%7);
+  const days=Array.from({length:7},(_,i)=>{const d=new Date(monday);d.setDate(d.getDate()+i);return d});
+  $('cal-month-label').textContent=days[0].toLocaleDateString(calLocale(),{day:'numeric'})+' — '+days[6].toLocaleDateString(calLocale(),{day:'numeric',month:'long',year:'numeric'});
+  week.innerHTML='<div class="workspace-week-head"><span></span>'+days.map(d=>'<button type="button" data-week-day="'+calDayKey(d)+'" class="'+(calDayKey(d)===calDayKey(new Date())?'is-today':'')+'">'+escapeHtml(d.toLocaleDateString(calLocale(),{weekday:'short',day:'numeric'}))+'</button>').join('')+'</div><div class="workspace-week-scroll"><div class="workspace-week-body"><div class="workspace-week-hours">'+Array.from({length:24},(_,h)=>'<span>'+String(h).padStart(2,'0')+':00</span>').join('')+'</div>'+days.map(d=>{
+   const key=calDayKey(d);const events=calState.events.filter(e=>calEventOccursOnDay(e,key));
+   const timed=events.filter(e=>!e.all_day).map(e=>{const a=new Date(e.start),z=new Date(e.end||e.start);return {e,start:Math.max(0,a<new Date(key+'T00:00')?0:a.getHours()*60+a.getMinutes()),end:Math.min(1440,z>=new Date(key+'T23:59:59')?1440:z.getHours()*60+z.getMinutes())}}).sort((a,b)=>a.start-b.start);
+   const lanes=[];for(const x of timed){let lane=lanes.findIndex(end=>end<=x.start);if(lane<0)lane=lanes.length;lanes[lane]=x.end;x.lane=lane}const columns=Math.max(1,lanes.length);
+   return '<div class="workspace-week-day" data-schedule-day="'+key+'">'+events.filter(e=>e.all_day).map(e=>'<button type="button" class="workspace-week-event is-all-day" data-week-event="'+escapeHtml(e.id)+'" title="'+escapeHtml(calendarEventLabel(e))+'">'+escapeHtml(calendarEventLabel(e))+'</button>').join('')+timed.map(({e,start,end,lane})=>'<button type="button" class="workspace-week-event" data-week-event="'+escapeHtml(e.id)+'" style="top:'+start/60*56+'px;height:'+Math.max(30,(end-start)/60*56)+'px;left:calc('+lane/columns*100+'% + 2px);width:calc('+100/columns+'% - 4px);--event-color:'+calendarEventColor(e)+'" title="'+escapeHtml(calendarEventLabel(e)+' · '+fmtCalTime(e.start)+' — '+fmtCalTime(e.end))+'"><strong>'+escapeHtml(calendarEventLabel(e))+'</strong><small>'+escapeHtml(fmtCalTime(e.start)+' — '+fmtCalTime(e.end))+'</small></button>').join('')+'</div>';
+  }).join('')+'</div></div>';
+  week.querySelectorAll('[data-week-event]').forEach(b=>b.onclick=()=>openCalEvent(b.dataset.weekEvent));week.querySelectorAll('[data-week-day]').forEach(b=>b.onclick=()=>{selectCalDay(b.dataset.weekDay);openCalDay(b.dataset.weekDay);renderWeek()});
+  week.querySelectorAll('[data-schedule-day]').forEach(el=>el.ondblclick=e=>{if(!e.target.closest('button'))startNewCalEvent(el.dataset.scheduleDay)});
+  week.querySelector('.workspace-week-scroll').scrollTop=8*56;
+ }
+ // Tasks use a list and a persistent detail pane. The existing editor handles changes.
+ const tasks=$('app-tasks'),taskList=document.createElement('div'),taskDetail=document.createElement('aside');taskList.className='workspace-task-list';taskDetail.className='workspace-task-detail';taskDetail.setAttribute('aria-label',words('Подробности задачи','Task details'));
+ while(tasks.firstChild)taskList.append(tasks.firstChild);tasks.append(taskList,taskDetail);let selectedTask='';
+ function selectTask(id){const task=taskRows.find(x=>x.id===id);if(!task){taskDetail.innerHTML='<p class="empty-state">'+escapeHtml(t('tasks_empty'))+'</p>';return}selectedTask=id;taskDetail.innerHTML='<div class="pane-head"><span>'+escapeHtml(words('Задача','Task'))+'</span><button type="button" class="btn-secondary" data-task-detail-edit>'+escapeHtml(t('edit'))+'</button></div><h2>'+escapeHtml(task.title)+'</h2><p class="workspace-task-body">'+escapeHtml(task.body||'')+'</p><dl><div><dt>'+escapeHtml(t('task_due'))+'</dt><dd>'+escapeHtml(task.due?new Date(task.due).toLocaleDateString(calLocale(),{day:'numeric',month:'long'}):'—')+'</dd></div><div><dt>'+escapeHtml(t('task_status'))+'</dt><dd><span class="workspace-status">'+escapeHtml(t('task_status_'+taskStatus(task)))+'</span></dd></div><div><dt>'+escapeHtml(t('task_percent'))+'</dt><dd>'+Number(task.percent_complete??(task.completed?100:0))+'%</dd></div></dl><p class="meta">'+escapeHtml(taskPeople(task))+'</p>';
+  taskDetail.querySelector('[data-task-detail-edit]').onclick=()=>editTask(task);if(!task.completed&&task.can_update!==false&&!task.recurring){const button=document.createElement('button');button.type='button';button.className='btn-secondary workspace-complete-task';button.textContent='✓ '+t('task_complete');button.onclick=()=>{$('tasks-list').querySelector('[data-task-toggle="'+CSS.escape(task.id)+'"]')?.click()};taskDetail.append(button)}
+  tasks.querySelectorAll('.task-row').forEach(row=>row.classList.toggle('is-active',row.querySelector('[data-task-edit]')?.dataset.taskEdit===id));
+ }
+ new MutationObserver(()=>{tasks.querySelectorAll('[data-task-edit]').forEach(b=>b.onclick=()=>selectTask(b.dataset.taskEdit));selectTask(taskRows.some(t=>t.id===selectedTask)?selectedTask:taskRows[0]?.id)}).observe($('tasks-list'),{childList:true});
+ // Settings use a secondary menu inside a single white workspace.
+ const settingPages=['profile','appearance','filters','language'];
+ for(const app of settingPages){const page=$('app-'+app);if(!page)continue;const content=document.createElement('div');content.className='workspace-settings-content';while(page.firstChild)content.append(page.firstChild);const menu=document.createElement('aside');menu.className='workspace-settings-menu';const title=document.createElement('h2');title.textContent=words('Настройки','Settings');menu.append(title);
+  for(const [target,ru,en,icon] of [['profile','Профиль и безопасность','Profile & security','user'],['appearance','Внешний вид','Appearance','settings'],['filters','Почтовые фильтры','Mail filters','filter'],['language','Язык интерфейса','Language','globe']]){const button=document.createElement('button');button.type='button';button.className='workspace-settings-link'+(target===app?' is-active':'');button.innerHTML=workspaceIcon(target==='profile'?'contacts':target==='language'?'language':target==='filters'?'filter':'appearance')+'<span>'+words(ru,en)+'</span>';button.onclick=()=>showApp(target);if(target===app)button.setAttribute('aria-current','page');menu.append(button)}page.append(menu,content);page.classList.add('workspace-settings-page');}
+ // Contact details are a profile card, with real mail/edit actions.
+ const avatar=document.createElement('div');avatar.className='workspace-contact-avatar workspace-contact-avatar-large';$('contact-subject').before(avatar);const actions=document.createElement('div');actions.className='workspace-contact-actions';const write=document.createElement('button');write.type='button';write.className='btn-spray';write.textContent=words('Написать','Write');write.onclick=()=>{const c=contactState.cards.find(c=>c.id===contactState.cardID);if(c?.email)openCompose({to:c.email})};actions.append(write);$('contact-reader').append(actions);
+ new MutationObserver(()=>{avatar.textContent=accountInitials($('contact-subject').textContent);write.disabled=!$('contact-read-email').textContent.trim()}).observe($('contact-subject'),{childList:true});
+ const create=$('btn-contact-new');if(create){create.innerHTML=designIcon('plus')+'<span>'+words('Новый контакт','New contact')+'</span>';document.querySelector('#app-contacts .mail-list-toolbar').prepend(create)}
+ const pagination=()=>{const p=$('mail-pagination'),pane=document.querySelector('#app-mail .mail-list-pane');if(p&&p.parentElement!==pane)pane.append(p)};pagination();
+})();
+/* Fresh view compositions matching the personal-space boards. Stable element IDs
+   are the contract with application controllers, not a source of visual layout. */
+(() => {
+ const words=workspaceWords;
+ function view(app,template,slots){const root=$('app-'+app),saved={};for(const [key,value] of Object.entries(slots))saved[key]=typeof value==='string'?$(value):value;root.replaceChildren();const markup=document.createElement('template');markup.innerHTML=template;root.append(markup.content);for(const [key,node] of Object.entries(saved)){const host=root.querySelector('[data-slot="'+key+'"]');if(host&&node)host.append(node)}return root}
+ function action(label,icon,run,primary=false){const b=document.createElement('button');b.type='button';b.className=primary?'btn-spray':'btn-secondary';b.innerHTML=workspaceIcon(icon)+'<span>'+label+'</span>';b.onclick=run;return b}
+ function labelControl(id,label,icon){const b=$(id);b.innerHTML=workspaceIcon(icon)+'<span>'+label+'</span>';b.classList.add('btn-labeled');return b}
+ // MAIL: message list and reader, with a compact sender card.
+ const mail=$('app-mail'),listPane=mail.querySelector('.mail-list-pane'),readPane=mail.querySelector('.mail-read');
+ const mailToolbar=listPane.querySelector('.mail-list-toolbar');mailToolbar.classList.add('workspace-mail-header');
+ const oldSender=renderSenderAvatar;
+ renderSenderAvatar=function(from){const host=$('mail-from');if(!host)return;const original=host.textContent;host.replaceChildren();const name=document.createElement('strong');name.textContent=mailFromDisplay(from);const email=document.createElement('span');email.className='workspace-sender-email';email.textContent=String(from||'').match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0]||'';const text=document.createElement('span');text.className='workspace-sender-text';text.append(name,email);if(original.includes(words('от имени','on behalf of'))){text.replaceChildren(document.createTextNode(original))}host.append(text);oldSender(from)};
+ const headerDate=$('mail-date').parentElement;headerDate.classList.add('workspace-sender-date');
+ // CONTACTS: a title across the workspace, then groups, contacts, and profile.
+ const contacts=$('app-contacts'),contactGroups=contacts.querySelector('.mail-folders'),contactReader=contacts.querySelector('.mail-read');
+ const contactList=contacts.querySelector('.mail-list-pane'),bookTitle=$('contact-book-title'),create=$('btn-contact-new'),search=$('contact-search'),refresh=$('btn-contacts-refresh'),contactSettings=contactList.querySelector('.mail-settings');
+ labelControl('btn-contact-new',words('Новый контакт','New contact'),'plus');
+ const contactHeader=document.createElement('header');contactHeader.className='workspace-section-header';contactHeader.innerHTML='<h2>'+words('Контакты','Contacts')+'</h2>';contactHeader.append(create,search,refresh);if(contactSettings)contactHeader.append(contactSettings);
+ const contactSubhead=contactList.querySelector('.mail-list-toolbar');contactSubhead.replaceChildren(bookTitle);bookTitle.removeAttribute('data-i18n');
+ contacts.replaceChildren(contactHeader,contactGroups,contactList,contactReader);contacts.classList.add('workspace-with-header');
+ contactGroups.querySelector('.pane-head strong').textContent=words('Адресные книги','Address books');contactGroups.querySelector('.pane-head strong').removeAttribute('data-i18n');
+ const editContact=action(words('Изменить','Edit'),'compose',()=>{const c=contactState.cards.find(c=>c.id===contactState.cardID);if(!c||c.readonly)return;contactState.editing=c;for(const [key,id] of [['fn','contact-fn'],['email','contact-email'],['tel','contact-tel'],['org','contact-org'],['note','contact-note']])$(id).value=c[key]||'';showContactCompose(true)});contactReader.querySelector('.workspace-contact-actions').append(editContact);
+ // CALENDAR: title/date/event action above the mini-month, time grid and details.
+ const calendar=$('app-calendar'),calGroups=calendar.querySelector('.mail-folders'),calList=calendar.querySelector('.cal-main-pane'),calReader=calendar.querySelector('.mail-read'),calNav=calendar.querySelector('.cal-month-nav');
+ const calHeader=document.createElement('header');calHeader.className='workspace-section-header workspace-calendar-header';calHeader.innerHTML='<h2>'+words('Календарь','Calendar')+'</h2>';const event=labelControl('btn-cal-new',words('Событие','Event'),'plus');calHeader.append(calNav,event);calendar.replaceChildren(calHeader,calGroups,calList,calReader);calendar.classList.add('workspace-with-header');calList.querySelector('.cal-month-toolbar').hidden=true;
+ const groupHead=calGroups.querySelector('.pane-head'),mini=calGroups.querySelector('.workspace-mini-calendar');groupHead.querySelector('strong').textContent=words('Мои календари','My calendars');groupHead.querySelector('strong').removeAttribute('data-i18n');if(mini)calGroups.prepend(mini);const miniTitle=document.createElement('strong');miniTitle.className='workspace-mini-month';if(mini)mini.prepend(miniTitle);
+ const originalMonth=renderCalMonth;renderCalMonth=function(){originalMonth();miniTitle.textContent=calState.month.toLocaleDateString(calLocale(),{month:'long',year:'numeric'})};
+ // FILES: navigation is separate from the file table, and details stay on the right.
+ const files=$('app-files'),filesList=files.querySelector('.files-list-pane'),filesReader=files.querySelector('.mail-read'),fileToolbar=filesList.querySelector('.files-toolbar');
+ const filesHeader=document.createElement('header');filesHeader.className='workspace-section-header';filesHeader.innerHTML='<h2>'+words('Файлы','Files')+'</h2>';const path=$('files-path');path.classList.add('workspace-breadcrumb');filesHeader.append(path,labelControl('btn-files-mkdir',words('Новая папка','New folder'),'files'),labelControl('btn-files-upload',words('Загрузить','Upload'),'upload'));fileToolbar.hidden=true;
+ const filesNav=document.createElement('aside');filesNav.className='workspace-files-nav panel-pane';const mine=action(words('Мои файлы','My files'),'files',()=>{filesState.ownerID='';filesState.spaceID='';filesState.path='';filesState.selected=null;refreshFiles()});mine.classList.add('is-active');filesNav.append(mine,action(words('Общие пространства','Shared spaces'),'contacts',()=>openFileSpaces()),action(words('Поиск файлов','Search files'),'search',()=>openFileSearch()),action(words('Корзина','Trash'),'trash',()=>openFileHistory('trash')),action('WebDAV','server',()=>openFileDAVInfo()));
+ // Additional file operations are available in a compact menu, not scattered over the title.
+ const more=document.createElement('details');more.className='workspace-files-more';more.innerHTML='<summary aria-label="'+words('Другие действия','More actions')+'">⋮</summary><div></div>';const rest=fileToolbar.querySelector('.toolbar-actions');if(rest)more.lastElementChild.append(rest);filesHeader.append(more);
+ files.replaceChildren(filesHeader,filesNav,filesList,filesReader);files.classList.add('workspace-files-view');
+ // NOTES: the editor's typography and formatting bar are independent of list rows.
+ const noteToolbar=document.querySelector('#note-editor .note-toolbar');const formats=document.createElement('div');formats.className='workspace-note-formats';for(const [command,label] of [['bold','B'],['italic','I'],['underline','U']]){const b=document.createElement('button');b.type='button';b.textContent=label;b.title=command;b.onclick=()=>{$('note-body').focus();document.execCommand(command);$('note-body').dispatchEvent(new InputEvent('input',{bubbles:true}))};formats.append(b)}noteToolbar.prepend(formats);
+ const noteExtras=document.createElement('details');noteExtras.className='workspace-reader-more';noteExtras.innerHTML='<summary aria-label="'+words('Другие действия','More actions')+'">⋮</summary><div></div>';for(const id of ['btn-note-draw','btn-note-share','btn-note-history','btn-note-delete']){const b=$(id);if(b)noteExtras.lastElementChild.append(b)}noteToolbar.append(noteExtras);
+ // PROFILE: identity, quota, display-name field, followed by security and signature.
+ const profile=$('app-profile').querySelector('.workspace-settings-content'),profileTop=profile.querySelector('.card'),avatarControls=document.querySelector('.profile-avatar-controls'),form=$('profile-form'),email=$('acct-email'),quota=$('acct-quota'),role=$('acct-role'),meta=$('acct-meta'),info=$('profile-info'),refreshMe=$('btn-refresh-me');
+ const profileHero=document.createElement('div');profileHero.className='workspace-profile-hero';profileHero.innerHTML='<div class="workspace-profile-identity"><strong id="workspace-profile-name"></strong></div>';const identity=profileHero.firstElementChild;identity.append(email,quota);const profileAvatar=avatarControls.querySelector('.account-avatar');const fallback=profileAvatar?._initials;profileHero.prepend(profileAvatar);if(fallback)profileHero.prepend(fallback);
+ const photoMore=document.createElement('details');photoMore.className='workspace-profile-photo';photoMore.innerHTML='<summary>'+words('Изменить фото','Change photo')+'</summary>';photoMore.append(avatarControls);
+ const profileTitle=document.createElement('h2');profileTitle.textContent=words('Профиль','Profile');profileTop.replaceChildren(profileTitle,profileHero,photoMore,form);profileTop.classList.add('workspace-profile-card');
+ const extra=document.createElement('details');extra.className='workspace-account-details';extra.innerHTML='<summary>'+words('Сведения об учётной записи','Account information')+'</summary>';extra.append(role,meta,info,refreshMe);profileTop.append(extra);
+ const security=$('profile-security');const signature=$('signature-form')?.closest('.card');if(security)profileTop.after(security);if(signature)security?.after(signature);const travel=$('travel-profile');if(travel){const details=document.createElement('details');details.className='workspace-account-details';details.innerHTML='<summary>'+words('Билеты и поездки','Tickets & travel')+'</summary>';travel.before(details);details.append(travel)}
+ const oldLoadMe=loadMe;loadMe=async function(){await oldLoadMe();$('workspace-profile-name').textContent=state.me?.display_name||state.me?.email||'';const used=Number(state.me?.used_bytes||0),limit=Number(state.me?.quota_bytes||0);let meter=$('workspace-quota-meter');if(!meter){meter=document.createElement('progress');meter.id='workspace-quota-meter';quota.after(meter)}meter.max=limit||1;meter.value=limit?Math.min(used,limit):0};
+ // Secondary account tools are grouped below the profile/security/signature flow.
+ const profileExtra=document.createElement('details');profileExtra.id='workspace-profile-extra';profileExtra.className='workspace-account-details';profileExtra.innerHTML='<summary>'+words('Другие настройки учётной записи','More account settings')+'</summary>';profile.append(profileExtra);
+ if(travel)profileExtra.append(travel.closest('details')||travel);
+ if(security){const securityHeading=document.createElement('h3');securityHeading.className='workspace-security-title';securityHeading.textContent=words('Безопасность','Security');security.prepend(securityHeading);for(const card of [...security.querySelectorAll(':scope>.card')]){const totp=card.querySelector('#btn-totp-setup'),passkey=card.querySelector('#btn-passkey-add');if(!totp&&!passkey){profileExtra.append(card);continue}card.classList.add('workspace-security-control');if(totp){card.querySelector('h3').textContent=words('Двухфакторная аутентификация','Two-factor authentication');const confirm=$('btn-totp-confirm');confirm.hidden=$('totp-setup-box').classList.contains('hidden');new MutationObserver(()=>confirm.hidden=$('totp-setup-box').classList.contains('hidden')).observe($('totp-setup-box'),{attributes:true,attributeFilter:['class']});}if(passkey){card.querySelector('h3').textContent='Passkeys';const hint=card.querySelector('.field-hint');if(hint){const info=document.createElement('details');info.className='workspace-security-info';info.innerHTML='<summary>'+words('О входе с ключом','About passkeys')+'</summary>';hint.before(info);info.append(hint)}}}}
+ for(const menu of document.querySelectorAll('.workspace-settings-menu')){const profileButton=menu.querySelector('.workspace-settings-link');profileButton.lastElementChild.textContent=words('Профиль','Profile');const securityButton=action(words('Безопасность','Security'),'security',()=>{showApp('profile');requestAnimationFrame(()=>$('profile-security').scrollIntoView({block:'start',behavior:'smooth'}))});securityButton.className='workspace-settings-link';const signatureButton=action(words('Подпись','Signature'),'signature',()=>{showApp('profile');requestAnimationFrame(()=>$('signature-form').closest('.card').scrollIntoView({block:'start',behavior:'smooth'}))});signatureButton.className='workspace-settings-link';profileButton.after(securityButton,signatureButton)}
+ // Appearance: segmented theme choices and picture swatches, not a large wallpaper banner.
+ const appearance=$('app-appearance').querySelector('.workspace-settings-content'),mode=$('color-mode-select');if(mode){const choices=document.createElement('div');choices.className='workspace-mode-choices';for(const [value,ru,en,icon] of [['light','Светлая','Light','appearance'],['dark','Тёмная','Dark','appearance'],['auto','Системная','System','appearance']]){const b=action(words(ru,en),icon,()=>{applyColorMode(value);choices.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',String(x.dataset.mode===value)))});b.dataset.mode=value;b.setAttribute('aria-pressed',String(localStorage.getItem('tayga.colorMode')===value));choices.append(b)}mode.hidden=true;mode.after(choices)}
+ const preview=$('theme-preview');if(preview)preview.hidden=true;const backgroundLabel=appearance.querySelector('[data-i18n=appearance_hint]');if(backgroundLabel){backgroundLabel.removeAttribute('data-i18n');backgroundLabel.textContent=words('Фон','Background');backgroundLabel.className='workspace-background-label'}
+ // Every retained icon control receives an actual outline SVG.
+ const aliases={cal:'calendar',event:'calendar',contact:'contacts',people:'contacts',user:'contacts',theme:'appearance',lang:'language',mkdir:'files',logout:'back'};document.querySelectorAll('.ico[data-ico]').forEach(el=>el.innerHTML=workspaceIcon(aliases[el.dataset.ico]||el.dataset.ico));
+ // Display preferences are real, persisted settings, including a compact list.
+ const preferencePanel=document.createElement('section');preferencePanel.className='workspace-display-preferences';preferencePanel.innerHTML='<div class="workspace-style-preview"><h3>'+words('Предпросмотр','Preview')+'</h3><div class="workspace-preview-list"><strong>'+words('Входящие','Inbox')+'</strong><div><span>А</span><b>'+words('Анна Смирнова','Anna Smirnova')+'</b><small>10:42</small></div><div><span>Т</span><b>'+words('Команда Tayga','Tayga team')+'</b><small>'+words('Вчера','Yesterday')+'</small></div></div></div><div class="workspace-display-options"><h3>'+words('Плотность списка','List density')+'</h3><div class="workspace-density-options"></div><h3>'+words('Акцентный цвет','Accent color')+'</h3><div class="workspace-accent-options"></div></div>';appearance.append(preferencePanel);
+ function setDensity(value){document.documentElement.dataset.density=value;localStorage.setItem('tayga.density',value);preferencePanel.querySelectorAll('[data-density]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.density===value)))}
+ for(const [value,ru,en]of [['comfortable','Комфортная','Comfortable'],['compact','Компактная','Compact']]){const b=action(words(ru,en),'notes',()=>setDensity(value));b.dataset.density=value;preferencePanel.querySelector('.workspace-density-options').append(b)}setDensity(localStorage.getItem('tayga.density')||'comfortable');
+ const accents=[['pine','#4a7139','Сосна','Pine'],['sage','#798c65','Шалфей','Sage'],['amber','#b9873b','Янтарь','Amber'],['sand','#b2a16c','Песок','Sand'],['stone','#78857b','Камень','Stone']];function setAccent(key){const accent=accents.find(x=>x[0]===key)||accents[0];localStorage.setItem('tayga.accent',accent[0]);document.documentElement.style.setProperty('--work-primary',accent[1]);document.documentElement.style.setProperty('--work-accent',accent[1]);preferencePanel.querySelectorAll('[data-accent]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.accent===accent[0])))}
+ for(const [key,color,ru,en]of accents){const b=document.createElement('button');b.type='button';b.dataset.accent=key;b.style.background=color;b.setAttribute('aria-label',words(ru,en));b.title=words(ru,en);b.onclick=()=>setAccent(key);preferencePanel.querySelector('.workspace-accent-options').append(b)}setAccent(localStorage.getItem('tayga.accent')||'pine');
+ // A selected file has a document cover and a bounded, authenticated thumbnail.
+ const oldFileReader=showFileReader;let filePreviewSequence=0,filePreviewAbort=null;
+ showFileReader=function(entry){oldFileReader(entry);const sequence=++filePreviewSequence;filePreviewAbort?.abort();$('workspace-file-symbol')?.remove();$('workspace-file-thumbnail')?.remove();$('workspace-file-modified')?.remove();if(!entry)return;
+  const symbol=document.createElement('div');symbol.id='workspace-file-symbol';symbol.className='workspace-file-symbol';symbol.textContent=entry.is_dir?'▱':(entry.name.split('.').pop()||'FILE').slice(0,4).toUpperCase();$('files-subject').before(symbol);
+  if(entry.mtime){const row=document.createElement('div');row.id='workspace-file-modified';const dt=document.createElement('dt');dt.textContent=words('Изменён','Modified');const dd=document.createElement('dd');dd.textContent=new Date(entry.mtime).toLocaleString(calLocale());row.append(dt,dd);$('files-read-type').closest('dl').append(row)}
+  const type=documentPreviewType(entry.name);if(entry.is_dir||!(type==='application/pdf'||type.startsWith('image/'))||entry.size>16*1024*1024)return;
+  const thumbnail=document.createElement('button');thumbnail.type='button';thumbnail.id='workspace-file-thumbnail';thumbnail.className='workspace-file-thumbnail';thumbnail.setAttribute('aria-label',words('Открыть предпросмотр: ','Open preview: ')+entry.name);thumbnail.textContent=words('Предпросмотр…','Preview…');thumbnail.onclick=()=>$('btn-files-preview')?.click();$('files-reader').append(thumbnail);const controller=new AbortController();filePreviewAbort=controller;const identity=state.me?.id;
+  void(async()=>{let pdfTask;try{const path=joinPath(filesState.path,entry.name),url='/api/v1/files/content?path='+encodeURIComponent(path)+(filesState.ownerID?'&owner_id='+encodeURIComponent(filesState.ownerID):'')+(filesState.spaceID?'&space_id='+encodeURIComponent(filesState.spaceID):'');const response=await fetch(url,{headers:{Authorization:'Bearer '+state.tokens?.access_token},signal:controller.signal});if(!response.ok)throw Error('preview unavailable');const blob=await boundedPreviewBlob(response,16*1024*1024);if(sequence!==filePreviewSequence||identity!==state.me?.id)return;
+   if(type.startsWith('image/')){const image=document.createElement('img'),url=URL.createObjectURL(blob);image.alt=entry.name;image.onload=image.onerror=()=>URL.revokeObjectURL(url);image.src=url;thumbnail.replaceChildren(image)}else{const pdfjs=await import('/assets/pdfjs/pdf.mjs');pdfjs.GlobalWorkerOptions.workerSrc='/assets/pdfjs/pdf.worker.mjs';pdfTask=pdfjs.getDocument({data:new Uint8Array(await blob.arrayBuffer()),isEvalSupported:false});const pdf=await pdfTask.promise;const page=await pdf.getPage(1),base=page.getViewport({scale:1}),viewport=page.getViewport({scale:Math.min(240/base.width,230/base.height)}),canvas=document.createElement('canvas');canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;if(sequence===filePreviewSequence&&identity===state.me?.id&&thumbnail.isConnected)thumbnail.replaceChildren(canvas)}
+  }catch(error){if(error.name!=='AbortError'&&sequence===filePreviewSequence)thumbnail.textContent=words('Открыть предпросмотр','Open preview')}finally{if(pdfTask?.destroy)await pdfTask.destroy()}})();
+ };
+ // The login uses the same artwork, a single paper card and the tree mark.
+ const brand=document.querySelector('#view-login .brand');if(brand){brand.className='brand workspace-login-brand';brand.innerHTML=workspaceIcon('tree')+'<span>Tayga Mail</span>'}
+ const loginTitle=document.querySelector('#view-login [data-i18n=login_title]');if(loginTitle){loginTitle.removeAttribute('data-i18n');loginTitle.textContent=words('Добро пожаловать','Welcome')}
+ const loginLede=document.querySelector('#view-login .lede');if(loginLede){loginLede.removeAttribute('data-i18n');loginLede.textContent=words('Войдите в свою учётную запись Tayga Mail','Sign in to your Tayga Mail account')}
+ const loginSubmit=document.querySelector('#form-login button[type=submit]');loginSubmit.removeAttribute('data-i18n');loginSubmit.textContent=words('Войти','Sign in');const artCredit=document.createElement('p');artCredit.className='workspace-login-art';artCredit.textContent='Рисунки © Алиса Кислова · Apache-2.0';$('view-login').append(artCredit);
+})();
+/* Administrative views: selectable records, concise tables and real detail panes. */
+(() => {
+ const words=workspaceWords,esc=escapeHtml;
+ const button=(label,run,primary=false)=>{const b=document.createElement('button');b.type='button';b.className=primary?'btn-spray':'btn-secondary';b.textContent=label;b.onclick=run;return b};
+ function detail(title,entries){const node=document.createElement('section');node.className='workspace-record-detail';const h=document.createElement('h3');h.textContent=title;node.append(h);const dl=document.createElement('dl');for(const [label,value]of entries){const row=document.createElement('div'),dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;dd.textContent=value==null||value===''?'—':String(value);row.append(dt,dd);dl.append(row)}node.append(dl);return node}
+ function selectable(row,run){row.tabIndex=0;row.onclick=e=>{if(!e.target.closest('button,input,select,a'))run()};row.onkeydown=e=>{if(e.target===row&&(e.key==='Enter'||e.key===' ')){e.preventDefault();run()}}}
+ // Overview: four leading metrics, two charts, configured service listeners.
+ const monitor=$('card-monitor'),grid=$('monitor-grid'),charts=$('monitor-charts');const advanced=document.createElement('details');advanced.className='workspace-monitor-advanced';advanced.innerHTML='<summary>'+words('Подробная статистика и инструменты','Detailed statistics & tools')+'</summary><div class="workspace-monitor-extra"></div>';const extra=advanced.lastElementChild;
+ const lede=monitor.querySelector('.heading+p');if(lede)extra.append(lede);const period=$('monitor-period');period.classList.add('workspace-monitor-period');const periodLabel=monitor.querySelector('[for=monitor-period]');if(periodLabel)periodLabel.hidden=true;
+ const toolbar=document.createElement('header');toolbar.className='workspace-admin-heading';const title=monitor.querySelector('.heading');title.removeAttribute('data-i18n');title.textContent=words('Состояние сервера','Server status');toolbar.append(title,period);monitor.prepend(toolbar);
+ const leadingCharts=[charts.querySelector('#chart-bars')?.closest('.chart-card'),charts.querySelector('#chart-runtime')?.closest('.chart-card')].filter(Boolean);for(const card of [...charts.children])if(!leadingCharts.includes(card))extra.append(card);
+ const serviceHost=document.createElement('section');serviceHost.className='workspace-service-list';serviceHost.innerHTML='<h3>'+words('Службы','Services')+'</h3>';charts.after(serviceHost);
+ for(const child of [...monitor.children])if(![toolbar,grid,charts,serviceHost].includes(child)&&child.id!=='monitor-msg')extra.append(child);monitor.append(advanced);for(const node of [...$('app-monitor').children])if(node.tagName==='BUTTON')extra.append(node);
+ const oldMonitor=refreshMonitor;refreshMonitor=async function(){await oldMonitor();const metrics=[...grid.children];if(metrics.length>=12){const labels={Tenant:words('Организация','Organization'),Uptime:words('Время работы','Uptime'),'Users (tenant)':words('Пользователи организации','Organization users'),Domains:words('Домены','Domains'),'Messages (tenant)':words('Письма организации','Organization messages'),'Bytes (tenant)':words('Хранилище организации','Organization storage'),'Users (server)':words('Пользователи сервера','Server users'),'Messages (server)':words('Писем на сервере','Server messages'),'Bytes (server)':words('Хранилище','Storage'),'Outbound queued':words('Исходящая очередь','Outgoing queue'),Goroutines:'Goroutines',Heap:words('Память процесса','Process memory')};for(const node of metrics){const key=node.firstElementChild?.textContent;if(labels[key])node.firstElementChild.textContent=labels[key]}const secondary=document.createElement('div');secondary.className='monitor-grid';for(const i of [0,2,3,4,5,6,8,10])secondary.append(metrics[i]);$('workspace-monitor-secondary')?.remove();secondary.id='workspace-monitor-secondary';extra.prepend(secondary);grid.replaceChildren(...[metrics[1],metrics[11],metrics[9],metrics[7]])}
+  try{const status=await api('/api/v1/admin/status');serviceHost.querySelector('table')?.remove();const table=document.createElement('table');table.innerHTML='<tbody>'+[['SMTP',status.listeners?.smtp_submission||status.listeners?.smtp_mx],['IMAP',status.listeners?.imaps||status.listeners?.imap],['HTTP / HTTPS',status.listeners?.https||status.listeners?.http],['ManageSieve',status.listeners?.managesieve]].map(([name,address])=>'<tr><td><span class="workspace-service-dot '+(address?'is-on':'')+'"></span>'+name+'</td><td>'+esc(address||words('Не настроен','Not configured'))+'</td><td><span class="badge">'+words(address?'Настроен':'Выключен',address?'Configured':'Disabled')+'</span></td></tr>').join('')+'</tbody>';serviceHost.append(table)}catch{}
+ };
+ // Queue: the table always keeps its geometry, including the empty state.
+ const queue=$('app-outbound');queue.innerHTML='<div class="workspace-admin-heading"><h2>'+words('Исходящая почтовая очередь','Outgoing mail queue')+'</h2><button type="button" id="workspace-queue-refresh" class="btn-secondary">'+words('Обновить','Refresh')+'</button></div><div class="workspace-queue-filters"><input type="search" class="field-input" id="workspace-queue-search" placeholder="'+words('Поиск на странице по отправителю и получателю','Search senders and recipients on this page')+'"><div class="workspace-view-tabs"><button type="button" data-queue-filter="all" aria-pressed="true">'+words('Все','All')+'</button><button type="button" data-queue-filter="pending">'+words('Ожидание','Pending')+'</button><button type="button" data-queue-filter="error">'+words('Ошибки','Errors')+'</button></div></div><p id="outbound-msg" class="msg" role="status"></p><div class="workspace-record-layout"><div class="workspace-record-table"><table><thead><tr><th>'+words('Отправитель','Sender')+'</th><th>'+words('Получатель','Recipient')+'</th><th>'+words('Статус','Status')+'</th><th>'+words('Следующая попытка','Next attempt')+'</th></tr></thead><tbody id="outbound-list"></tbody></table><div id="outbound-pager" class="file-library-nav"></div></div><aside id="workspace-queue-detail" class="workspace-record-aside"></aside></div>';
+ let queueRows=[],queueSelected='',queueFilter='all',queueSequence=0;function renderQueue(){const q=$('workspace-queue-search').value.trim().toLocaleLowerCase();const visible=queueRows.filter(it=>(queueFilter==='all'||(queueFilter==='error'?!!it.last_error:!it.last_error))&&(!q||(it.envelope_from+' '+it.envelope_to).toLocaleLowerCase().includes(q)));$('outbound-list').innerHTML=visible.map(it=>'<tr data-queue-id="'+esc(it.id)+'"><td>'+esc(it.envelope_from)+'</td><td>'+esc(it.envelope_to)+'</td><td><span class="badge '+(it.last_error?'warn':'')+'">'+words(it.last_error?'Повторная попытка':'Ожидание',it.last_error?'Retry scheduled':'Pending')+'</span></td><td>'+esc(new Date(it.next_attempt).toLocaleString(calLocale()))+'</td></tr>').join('')||'<tr><td colspan="4" class="workspace-table-empty">'+words('Очередь пуста','Queue is empty')+'</td></tr>';const select=id=>{queueSelected=id;const it=queueRows.find(x=>x.id===id),host=$('workspace-queue-detail');host.replaceChildren();if(!it){host.innerHTML='<p class="meta">'+words('Выберите письмо из очереди','Select a queued message')+'</p>';return}host.append(detail(words('Письмо из очереди','Queued message'),[[words('Отправитель','Sender'),it.envelope_from],[words('Получатель','Recipient'),it.envelope_to],[words('Попытки','Attempts'),it.attempts+' / '+it.max_attempts],[words('Причина','Reason'),it.last_error],[words('Следующая попытка','Next attempt'),new Date(it.next_attempt).toLocaleString(calLocale())],['Message-ID',it.message_id]]));const actions=document.createElement('div');actions.className='actions';for(const [action,ru,en]of [['retry','Повторить','Retry'],['delete','Удалить','Delete']])actions.append(button(words(ru,en),async()=>{if(action==='delete'&&!await askConfirm(words('Удалить письмо из очереди без уведомления отправителя?','Delete this queued message without notifying its sender?'),{danger:true}))return;try{await api('/api/v1/admin/outbound/'+encodeURIComponent(id)+(action==='retry'?'/retry':''),{method:action==='retry'?'POST':'DELETE'});await refreshOutbound()}catch(e){setMsg($('outbound-msg'),e.message,'err')}},action==='retry'));host.append(actions);queue.querySelectorAll('[data-queue-id]').forEach(r=>r.classList.toggle('is-active',r.dataset.queueId===id))};queue.querySelectorAll('[data-queue-id]').forEach(r=>selectable(r,()=>select(r.dataset.queueId)));select(visible.some(x=>x.id===queueSelected)?queueSelected:visible[0]?.id)}
+ refreshOutbound=async function(){const sequence=++queueSequence;try{const data=await api('/api/v1/admin/outbound?limit=30&offset='+outboundOffset);if(sequence!==queueSequence)return;queueRows=data.items||[];if(!queueRows.length&&outboundOffset>0){outboundOffset=Math.max(0,outboundOffset-30);return refreshOutbound()}renderQueue();const pager=$('outbound-pager');pager.replaceChildren(button('‹',()=>{outboundOffset=Math.max(0,outboundOffset-30);refreshOutbound()}),document.createTextNode((queueRows.length?outboundOffset+1:0)+'—'+(outboundOffset+queueRows.length)+' / '+data.total),button('›',()=>{outboundOffset+=30;refreshOutbound()}));pager.firstElementChild.disabled=outboundOffset===0;pager.lastElementChild.disabled=outboundOffset+queueRows.length>=data.total;setMsg($('outbound-msg'),'')}catch(e){setMsg($('outbound-msg'),e.message,'err')}};
+ $('workspace-queue-refresh').onclick=()=>refreshOutbound();$('workspace-queue-search').oninput=renderQueue;queue.querySelectorAll('[data-queue-filter]').forEach(b=>b.onclick=()=>{queueFilter=b.dataset.queueFilter;queue.querySelectorAll('[data-queue-filter]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));renderQueue()});
+ // Mail logs have structured fields from the API; preserve raw lines in details.
+ const oldLog=$('maillog-lines'),log=document.createElement('div');log.id='maillog-lines';log.className='workspace-mail-log';oldLog.replaceWith(log);
+ refreshMailLog=async function(reset=true){if(reset)maillogOffset=0;const request=++maillogRequest;try{const params=new URLSearchParams({limit:String(maillogPageSize+1),offset:String(maillogOffset)}),query=$('maillog-q').value.trim();if(query)params.set('q',query);const data=await api('/api/v1/admin/mail-log?'+params);if(request!==maillogRequest)return;const items=(data.items||[]).slice(0,maillogPageSize);log.innerHTML='<div class="workspace-record-table"><table><thead><tr><th>'+words('Время','Time')+'</th><th>'+words('Отправитель','Sender')+'</th><th>'+words('Получатель','Recipient')+'</th><th>'+words('Событие','Event')+'</th><th>Message-ID</th></tr></thead><tbody>'+items.map((it,i)=>'<tr data-log-row="'+i+'"><td>'+esc(new Date(it.created_at).toLocaleTimeString(calLocale(),{hour:'2-digit',minute:'2-digit'}))+'</td><td>'+esc(it.mail_from||'—')+'</td><td>'+esc(it.rcpt_to||'—')+'</td><td><span class="badge">'+esc(it.event)+'</span></td><td>'+esc(it.message_id||'—')+'</td></tr>').join('')+(!items.length?'<tr><td colspan="5" class="workspace-table-empty">'+words('Записей пока нет','No log entries')+'</td></tr>':'')+'</tbody></table></div><section class="workspace-log-detail"></section>';const select=i=>{const it=items[i],host=log.lastElementChild;host.replaceChildren();if(!it)return;host.append(detail(words('Детали доставки','Delivery details'),[[words('Время','Time'),new Date(it.created_at).toLocaleString(calLocale())],[words('Направление','Direction'),it.direction],[words('Отправитель','Sender'),it.mail_from],[words('Получатель','Recipient'),it.rcpt_to],['Message-ID',it.message_id],[words('Размер','Size'),fmtBytes(it.size)]]));const raw=document.createElement('details');raw.innerHTML='<summary>'+words('Строка журнала','Raw log entry')+'</summary>';const pre=document.createElement('pre');pre.textContent=it.line||it.detail;raw.append(pre);host.append(raw);log.querySelectorAll('[data-log-row]').forEach(r=>r.classList.toggle('is-active',Number(r.dataset.logRow)===i))};log.querySelectorAll('[data-log-row]').forEach(r=>selectable(r,()=>select(Number(r.dataset.logRow))));select(0);$('maillog-prev').disabled=maillogOffset===0;$('maillog-next').disabled=(data.items||[]).length<=maillogPageSize;setMsg($('maillog-msg'),items.length?(maillogOffset+1)+'—'+(maillogOffset+items.length):'0')}catch(e){setMsg($('maillog-msg'),e.message,'err')}};
+ // User policy controls belong in the selected profile, not in every table row.
+ const userLevel=$('tenant-level-users'),userTable=$('admin-user-list').closest('.admin-table-scroll'),userAside=document.createElement('aside'),userLayout=document.createElement('div');userLayout.className='workspace-record-layout workspace-users-layout';userAside.className='workspace-record-aside';userTable.before(userLayout);userLayout.append(userTable,userAside);let selectedUser='';
+ new MutationObserver(()=>{const rows=[...$('admin-user-list').children].filter(r=>r.cells.length>1);for(const r of rows)r.dataset.workspaceUser=r.querySelector('[data-user-cos]')?.dataset.userCos||'';const select=id=>{selectedUser=id;userAside.replaceChildren();const row=rows.find(r=>r.dataset.workspaceUser===id);if(!row)return;const name=row.cells[0].textContent,email=row.cells[1].textContent;userAside.append(detail(name, [['Email',email],[words('Статус','Status'),[row.cells[2].querySelector('.badge')?.textContent,row.cells[2].querySelector('.meta')?.textContent].filter(Boolean).join(' · ')],[words('Квота','Quota'),row.cells[3].textContent]]));for(const i of [4,5,6]){const cell=row.cells[i];if(!cell)continue;const wrap=document.createElement('div');wrap.className='workspace-user-policy';while(cell.firstChild)wrap.append(cell.firstChild);const stored=row._workspaceControls?.[i];if(stored){wrap.replaceChildren(stored)}else{row._workspaceControls||={};row._workspaceControls[i]=wrap.firstElementChild}userAside.append(wrap)}userAside.querySelectorAll('.user-action-icons button').forEach(b=>{if(!b.querySelector('.workspace-action-label')){const span=document.createElement('span');span.className='workspace-action-label';span.textContent=b.getAttribute('aria-label');b.append(span)}});rows.forEach(r=>r.classList.toggle('is-active',r===row))};for(const r of rows)selectable(r,()=>select(r.dataset.workspaceUser));select(rows.some(r=>r.dataset.workspaceUser===selectedUser)?selectedUser:rows[0]?.dataset.workspaceUser)}).observe($('admin-user-list'),{childList:true});
+ // Keep creation and search on one row, with occasional tools behind a menu.
+ const usersTools=document.createElement('div');usersTools.className='workspace-directory-tools';const search=$('admin-user-search'),searchLabel=search?.closest('label'),createUser=userLevel.querySelector('.admin-create'),org=$('btn-org-structure-admin');if(search){searchLabel?.before(usersTools);usersTools.append(search);searchLabel?.remove();search.setAttribute('aria-label',words('Поиск пользователей','Search users'))}if(createUser){createUser.querySelector('summary').textContent=words('Добавить пользователя','Add user');usersTools.append(createUser)}if(org){const more=document.createElement('details');more.className='workspace-files-more';more.innerHTML='<summary aria-label="'+words('Другие действия','More actions')+'">⋮</summary><div></div>';more.lastElementChild.append(org);usersTools.append(more)}if($('admin-user-search-status'))usersTools.after($('admin-user-search-status'));
+ // Certificate catalogue: selected certificate details and existing action handlers.
+ const oldCertificates=renderCertList;renderCertList=function(certs){oldCertificates(certs);const list=$('ca-cert-list');if(!certs?.length)return;const existing=[...list.children],certificateActions=existing.map(row=>row.querySelector('.actions')),wrap=document.createElement('div');wrap.className='workspace-record-layout';const table=document.createElement('table');table.innerHTML='<thead><tr><th>'+words('Общее имя (CN)','Common name (CN)')+'</th><th>'+words('Издатель','Issuer')+'</th><th>'+words('Действителен до','Valid until')+'</th><th>'+words('Статус','Status')+'</th></tr></thead><tbody>'+certs.map((c,i)=>'<tr data-cert-row="'+i+'"><td>'+esc(c.name||c.id)+'</td><td>'+esc(c.issuer||sourceLabel(c.source))+'</td><td>'+esc(formatCertificateDate(c.not_after))+'</td><td><span class="badge">'+esc(c.active?t('ca_active'):words('В каталоге','Available'))+'</span></td></tr>').join('')+'</tbody>';const aside=document.createElement('aside');aside.className='workspace-record-aside';wrap.append(table,aside);list.replaceChildren(wrap);function select(i){const c=certs[i];aside.replaceChildren(detail(c.name||c.id,[[words('Издатель','Issuer'),c.issuer||sourceLabel(c.source)],[words('Субъект','Subject'),c.subject],[words('Домены','Domains'),(c.domains||[]).join(', ')],[words('Действует с','Valid from'),formatCertificateDate(c.not_before)],[words('Действует до','Valid until'),formatCertificateDate(c.not_after)],['SHA-256',c.fingerprint_sha256]]));const actions=certificateActions[i];if(actions)aside.append(actions);table.querySelectorAll('[data-cert-row]').forEach(r=>r.classList.toggle('is-active',Number(r.dataset.certRow)===i))}table.querySelectorAll('[data-cert-row]').forEach(r=>selectable(r,()=>select(Number(r.dataset.certRow))));select(Math.max(0,certs.findIndex(c=>c.active)))};
+ // Quarantine preview stays under its table. It never executes message HTML.
+ openProtectionMessage=async function(id){try{const it=await api('/api/v1/admin/quarantine/'+encodeURIComponent(id));$('protection-reader')?.remove();const reader=detail(it.subject||words('Без темы','No subject'),[[words('Отправитель','Sender'),it.from],[words('Получатель','Recipient'),it.email],[words('Оценка','Score'),it.spam_score],['SPF / DKIM / DMARC',it.auth_results],[words('Антивирус','Antivirus'),it.virus_status]]);reader.id='protection-reader';reader.classList.add('workspace-protection-reader');const pre=document.createElement('pre');pre.textContent=it.preview||words('Текст письма отсутствует','No message text');const actions=document.createElement('div');actions.className='actions';actions.append(button(words('Выпустить','Release'),()=>protectionMessageAction(id,'release'),true),button(words('Удалить','Delete'),()=>protectionMessageAction(id,'delete')));reader.append(pre,actions);document.querySelector('#app-antispam .card').append(reader)}catch(e){setMsg($('protection-msg'),e.message,'err')}};
+ // Server editor uses the catalogue/detail split on desktop and a dialog on mobile.
+ const oldOpenConfig=openAdminConfig,config=$('config-backdrop');openAdminConfig=async function(section){const inline=matchMedia('(min-width:901px)').matches&&!$('app-server').classList.contains('hidden');(inline?$('app-server'):document.body).append(config);config.classList.toggle('workspace-config-inline',inline);await oldOpenConfig(section);if(inline){$('view-account').inert=false;$('config-dialog').setAttribute('aria-modal','false')}};
+ // CoS follows the same master/detail composition as the render.
+ const cos=$('app-cos'),cosList=$('card-cos'),sheet=$('editor-sheet-backdrop'),oldCoSEdit=openCoSEditor,oldCoSRefresh=refreshCoS;
+ cos.classList.add('workspace-cos-view');openCoSEditor=function(sc){const inline=matchMedia('(min-width:901px)').matches;(inline?cos:document.body).append(sheet);sheet.classList.toggle('workspace-sheet-inline',inline);oldCoSEdit(sc);if(inline){$('view-account').inert=false;$('editor-sheet').setAttribute('aria-modal','false')}};
+ refreshCoS=async function(){await oldCoSRefresh();if(matchMedia('(min-width:901px)').matches&&cosState.items?.length&&!cos.classList.contains('hidden')&&sheet.classList.contains('hidden'))openCoSEditor(cosState.items[0])};
+ // Domain cards retain their actions; legacy XMPP-only controls are not exposed.
+ new MutationObserver(()=>{$('admin-domain-list').querySelectorAll('[data-domain-xmpp-gal]').forEach(input=>input.closest('label').hidden=true)}).observe($('admin-domain-list'),{childList:true});
+ // Mattermost policy, notifications and integrations are separate tabs over real controls.
+ const mm=$('app-mattermost'),mmCard=mm.querySelector('.card'),mmForm=$('mm-policy-form'),mmPush=mmForm.querySelector('fieldset'),mmPolicy=mmForm.querySelector('.config-fields'),mmEmail=mmForm.querySelector('details'),mmPlugins=mmCard.querySelector(':scope>section');
+ const mmTabs=document.createElement('div');mmTabs.className='workspace-mm-tabs';const mmPanels=[mmPolicy,mmPush,mmEmail,mmPlugins];let currentMMTab=0;
+ const mmActions=mmForm.querySelector(':scope>.actions');for(const [i,ru,en]of [[0,'Подключение','Connection'],[1,'Уведомления','Notifications'],[2,'Интеграции','Integrations']]){const b=button(words(ru,en),()=>selectMM(i));mmTabs.append(b)}
+ function selectMM(index){currentMMTab=index;mmPanels.forEach((node,i)=>{if(node)node.hidden=index===0?i!==0:index===1?i!==1:i<2});[...mmTabs.children].forEach((b,i)=>b.setAttribute('aria-pressed',String(i===index)))}
+ mmForm.before(mmTabs);mmCard.classList.add('workspace-mm-settings');selectMM(0);
+ const scopeDescription=mmCard.querySelector(':scope>.meta');if(scopeDescription){const details=document.createElement('details');details.className='workspace-mm-help';details.innerHTML='<summary>'+words('Наследование настроек','Settings inheritance')+'</summary>';scopeDescription.before(details);details.append(scopeDescription)}
+ // Domains use the same table and detail pattern as users and certificates.
+ const oldDomains=refreshTenantDomains;refreshTenantDomains=async function(){await oldDomains();const host=$('admin-domain-list'),items=[...host.children].filter(el=>el.tagName==='LI'&&el.querySelector('[data-open-domain]'));if(!items.length)return;const records=items.map(li=>({name:li.querySelector('strong')?.textContent||'',users:li.querySelector('.meta')?.textContent||'',actions:li.querySelector('.actions')}));const wrap=document.createElement('div');wrap.className='workspace-record-layout';const table=document.createElement('table');table.innerHTML='<thead><tr><th>'+words('Домен','Domain')+'</th><th>'+words('Пользователи','Users')+'</th><th>'+words('Миграция','Migration')+'</th></tr></thead><tbody>'+records.map((r,i)=>'<tr data-domain-record="'+i+'"><td>'+esc(r.name)+'</td><td>'+esc(r.users)+'</td><td>'+esc(r.actions?.querySelector('[data-dom-mig]')?.selectedOptions[0]?.textContent||'—')+'</td></tr>').join('')+'</tbody>';const aside=document.createElement('aside');aside.className='workspace-record-aside';wrap.append(table,aside);host.replaceChildren(wrap);function select(i){const record=records[i];aside.replaceChildren(detail(record.name,[[words('Организация','Organization'),tenantNav.tenantName],[words('Пользователи','Users'),record.users]]));record.actions?.querySelector('[data-domain-xmpp-gal]')?.closest('label').remove();if(record.actions)aside.append(record.actions);table.querySelectorAll('[data-domain-record]').forEach(row=>row.classList.toggle('is-active',Number(row.dataset.domainRecord)===i))}table.querySelectorAll('[data-domain-record]').forEach(row=>selectable(row,()=>select(Number(row.dataset.domainRecord))));select(0)};
+})();
+/* Register only presentation labels present at mount time. Message bodies, names,
+   user-created notes and other data never pass through the translation map. */
+(() => {
+ const labels=new Map(),attributes=[];
+ const roots=document.querySelectorAll('#view-login,.workspace-header,.workspace-nav,.workspace-settings-menu,.workspace-section-header,.workspace-mode-choices,.workspace-display-preferences,.workspace-mm-tabs,.workspace-files-nav,.workspace-admin-heading,.workspace-view-tabs');
+ for(const root of roots){const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);let text;while(text=walker.nextNode()){const pair=workspaceLexicon.get(text.textContent.trim());if(pair)labels.set(text,pair)}for(const el of [root,...root.querySelectorAll('*')])for(const name of ['title','aria-label','placeholder']){const pair=workspaceLexicon.get(el.getAttribute(name));if(pair)attributes.push({el,name,pair})}}
+ const original=applyLang;applyLang=function(next){original(next);for(const [node,pair]of labels)if(node.isConnected)node.textContent=pair[lang];for(const {el,name,pair}of attributes)if(el.isConnected)el.setAttribute(name,pair[lang]);const search=$('workspace-search');if(search){search.placeholder=workspaceWords('Поиск писем','Search mail');search.setAttribute('aria-label',workspaceWords('Поиск писем','Search mail'))}document.querySelectorAll('.workspace-nav .nav-btn').forEach(b=>{b.setAttribute('aria-label',b.lastElementChild?.textContent.trim()||b.textContent.trim());b.title=b.getAttribute('aria-label')});renderThemeGallery(normalizeThemeKey(localStorage.getItem('tayga.theme')||'tayga'))};
+})();

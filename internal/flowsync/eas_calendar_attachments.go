@@ -69,7 +69,7 @@ func readCalendarAttachment(ctx context.Context, store storage.Driver, ms *mails
 	}
 	// A known file ID grants no access. Match the current, owned event as well
 	// as the attachment; removal of either revokes an old reference immediately.
-	if _, err = store.GetCalendarByID(ctx, u.ID, object.CalendarID); err != nil {
+	if _, err = (&ewsHandler{store: store}).ewsCalendarObject(ctx, u.ID, object, false); err != nil {
 		return messageAttachment{}, err
 	}
 	file, err := store.GetCalendarAttachment(ctx, parts[2])

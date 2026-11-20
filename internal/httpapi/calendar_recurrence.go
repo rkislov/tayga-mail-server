@@ -40,7 +40,7 @@ func (s *Server) handleCalendarRecurrence(w http.ResponseWriter, r *http.Request
 		writeJSON(w, 409, map[string]string{"error": "invalid stored event"})
 		return
 	}
-	if p.Organizer.Email != "" && !strings.EqualFold(p.Organizer.Email, au.Email) {
+	if p.Organizer.Email != "" && !calendarActsAsOrganizer(p.Organizer.Email, cal, au) {
 		writeJSON(w, 403, map[string]string{"error": "only the organizer can change the series"})
 		return
 	}

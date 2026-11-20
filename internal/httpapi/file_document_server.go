@@ -148,8 +148,7 @@ func (s *Server) documentSession(r *http.Request, token string, write bool) (off
 		return sess, false
 	}
 	user, e := s.store.GetUserByID(r.Context(), sess.User)
-	owner, oe := s.store.GetUserByID(r.Context(), sess.Owner)
-	if e != nil || oe != nil || user == nil || owner == nil || !user.Enabled || !owner.Enabled || (write && !sess.Writable) {
+	if e != nil || user == nil || !user.Enabled || !s.fileOwnerActive(r.Context(), sess.Owner) || (write && !sess.Writable) {
 		return sess, false
 	}
 	if sess.Owner != sess.User && !s.fileAccessAllowed(r, sess.Owner, sess.User, sess.Path, write) {

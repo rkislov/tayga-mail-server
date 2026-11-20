@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 40" fill="none" color="#375d2c">
+  <style>@media(prefers-color-scheme:dark){:root{color:#e7efdc}}</style>
+  <symbol id="tayga-tree" viewBox="0 0 32 40">
+    <path d="M16 2 9 11h5L6 21h7L3 32h26L19 21h7L18 11h5L16 2ZM16 32v6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+  <use href="#tayga-tree"/>
+</svg>

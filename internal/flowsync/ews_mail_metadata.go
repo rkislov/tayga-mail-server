@@ -57,6 +57,15 @@ func (h *ewsHandler) updateMailMetadata(ctx context.Context, u *storage.User, ms
 	if err = json.Unmarshal([]byte(raw), &props); err != nil {
 		return "", err
 	}
+	right := "s"
+	for _, change := range updates.Children {
+		if nodeAttr(change.child("FieldURI"), "FieldURI") != "message:IsRead" {
+			right = "w"
+		}
+	}
+	if err := h.mailboxRight(ctx, u.ID, msg.MailboxID, right); err != nil {
+		return ewsOperationError("UpdateItem", "ErrorAccessDenied", "Mailbox write denied"), nil
+	}
 	flags := storage.ParseFlags(msg.Flags)
 	invalid := func(field string) (string, error) {
 		return ewsFault("ErrorInvalidPropertySet", "Unsupported or invalid mail property: "+field), nil
@@ -178,7 +187,7 @@ func (h *ewsHandler) updateMailMetadata(ctx context.Context, u *storage.User, ms
 		return invalid("metadata limit")
 	}
 	normalized := storage.NormalizeFlags(flags)
-	if err = h.store.UpdateEWSMailMetadata(ctx, msg.ID, normalized, string(data)); err != nil {
+	if err = h.store.UpdateEWSMailMetadata(ctx, msg.ID, normalized, string(data), u.ID, right); err != nil {
 		return "", err
 	}
 	response := ewsUpdateResponse("Message", msg.ID)

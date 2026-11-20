@@ -200,6 +200,7 @@ type folderChange struct {
 }
 
 type syncAdd struct {
+	MeetingXML                        string
 	ConversationID, ConversationIndex string
 	EstimatedSize                     int
 	Truncated                         bool

@@ -58,10 +58,45 @@ func (h *ewsHandler) findRequestedFolder(ctx context.Context, u *storage.User, b
 	if systemFolderName(u, id) != "" || id == galFolderID(u) {
 		return `<m:FindFolderResponse xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"><m:ResponseMessages><m:FindFolderResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:RootFolder TotalItemsInView="0" IncludesLastItemInRange="true"><t:Folders/></m:RootFolder></m:FindFolderResponseMessage></m:ResponseMessages></m:FindFolderResponse>`, nil
 	}
-	if id != "root:"+u.ID {
-		if err = h.ensureMailboxOwned(ctx, u.ID, id); err != nil {
-			return ewsOperationError("FindFolder", "ErrorAccessDenied", "folder unavailable"), nil
+	if id == "root:"+u.ID {
+		return h.findFolder(ctx, u)
+	}
+	listing, e := h.findFolder(ctx, u)
+	if e != nil {
+		return "", e
+	}
+	doc, e := parseProtocolXML([]byte(listing))
+	if e != nil {
+		return "", e
+	}
+	visible := doc.find("Folders")
+	parents := map[string]string{}
+	found := false
+	for _, f := range visible.Children {
+		key := nodeAttr(f.child("FolderId"), "Id")
+		parents[key] = nodeAttr(f.child("ParentFolderId"), "Id")
+		if key == id {
+			found = true
 		}
 	}
-	return h.findFolder(ctx, u)
+	if !found {
+		return ewsOperationError("FindFolder", "ErrorAccessDenied", "Folder unavailable"), nil
+	}
+	var out strings.Builder
+	for _, f := range visible.Children {
+		key := nodeAttr(f.child("FolderId"), "Id")
+		parent := parents[key]
+		deep := extractAttr(body, "FindFolder", "Traversal") == "Deep"
+		for steps := 0; parent != "" && steps < len(parents); steps++ {
+			if parent == id {
+				out.WriteString(f.render())
+				break
+			}
+			if !deep {
+				break
+			}
+			parent = parents[parent]
+		}
+	}
+	return ewsNotificationSuccess("FindFolder", `<m:RootFolder IncludesLastItemInRange="true"><t:Folders>`+out.String()+`</t:Folders></m:RootFolder>`), nil
 }

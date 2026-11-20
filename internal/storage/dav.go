@@ -15,15 +15,16 @@ import (
 
 // Calendar is a CalDAV collection owned by a user.
 type Calendar struct {
-	ID          string
-	UserID      string
-	Name        string
-	DisplayName string
-	Description string
-	Color       string
-	PublicToken string
-	CTag        string
-	CreatedAt   time.Time
+	DelegateOrganizerEmail string `json:"-"` // verified management principal, never persisted
+	ID                     string
+	UserID                 string
+	Name                   string
+	DisplayName            string
+	Description            string
+	Color                  string
+	PublicToken            string
+	CTag                   string
+	CreatedAt              time.Time
 }
 
 // CalendarObject is an iCalendar resource inside a calendar.
@@ -310,6 +311,7 @@ func (s *Store) SaveCalendarObjectWithMail(ctx context.Context, o *CalendarObjec
 }
 
 func (s *Store) saveCalendarObject(ctx context.Context, o *CalendarObject, mails []CalendarMail, actorID string, clientWrite bool, changes ...calendarAttachmentChanges) (*CalendarObject, error) {
+	ctx = withCalendarActor(ctx, actorID)
 	attachmentActorID := actorID
 	var files, removed []*CalendarAttachment
 	for _, change := range changes {
@@ -330,9 +332,23 @@ func (s *Store) saveCalendarObject(ctx context.Context, o *CalendarObject, mails
 		if err = tx.QueryRowContext(ctx, s.rebind(`SELECT user_id FROM calendars WHERE id=?`), o.CalendarID).Scan(&owner); err != nil {
 			return nil, mapErr(err)
 		}
-		if actorID == "" || owner != actorID {
+		if actorID == "" {
 			return nil, ErrUnauthorized
 		}
+		if owner != actorID {
+			email, _, e := s.calendarWriterTx(ctx, tx, actorID, o.CalendarID)
+			if e != nil {
+				return nil, e
+			}
+			var ownerEmail string
+			if e = tx.QueryRowContext(ctx, s.rebind(`SELECT email FROM users WHERE id=?`), owner).Scan(&ownerEmail); e != nil {
+				return nil, e
+			}
+			if !strings.EqualFold(email, ownerEmail) {
+				return nil, ErrUnauthorized
+			}
+		}
+		attachmentActorID = owner
 	}
 	var old, currentID, currentETag string
 	err = tx.QueryRowContext(ctx, s.rebind(`SELECT data,id,etag FROM calendar_objects WHERE calendar_id=? AND href_name=?`), o.CalendarID, o.HrefName).Scan(&old, &currentID, &currentETag)
