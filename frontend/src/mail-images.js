@@ -235,14 +235,18 @@ function createMailActionBar(message, dialog=null) {
 }
 function renderMailActions(message) {
   const reader=$('mail-reader');if(!reader)return;
-  const old=reader.querySelector('.reader-actions');const bar=createMailActionBar(message);
-  const back=old?.querySelector('[data-pane-back]');if(back)bar.prepend(back);
-  const footer=reader.querySelector('.workspace-reader-footer');
-  if(footer){footer.replaceChildren();for(const action of ['reply','forward']){const button=bar.querySelector('[data-mail-action="'+action+'"]');if(button){button.classList.remove('action-icon');const label=document.createElement('span');label.textContent=button.getAttribute('aria-label');button.append(label);footer.append(button)}}}
+  const old=reader.querySelector('.reader-actions'),bar=createMailActionBar(message);
+  const back=reader.querySelector('[data-pane-back]');
+  if(back){let navigation=reader.querySelector('.workspace-mail-back');if(!navigation){navigation=document.createElement('div');navigation.className='workspace-mail-back';reader.prepend(navigation)}navigation.append(back)}
+  let footer=reader.querySelector('.workspace-reader-footer');
+  if(!footer){footer=document.createElement('footer');footer.className='workspace-reader-footer';reader.append(footer)}
+  old?.remove();footer.replaceChildren();
+  for(const action of ['reply','forward']){const item=bar.querySelector('[data-mail-action="'+action+'"]');if(item){item.classList.remove('action-icon');const label=document.createElement('span');label.textContent=item.getAttribute('aria-label');item.append(label);footer.append(item)}}
   const more=document.createElement('details');more.className='workspace-reader-more';const trigger=document.createElement('summary');trigger.textContent='⋮';trigger.setAttribute('aria-label',mailImageText('Другие действия','More actions'));const menu=document.createElement('div');
-  for(const action of ['reply-all','spam','trip']){const button=bar.querySelector('[data-mail-action="'+action+'"]');if(button){const label=document.createElement('span');label.textContent=button.getAttribute('aria-label');button.classList.remove('action-icon');button.append(label);menu.append(button)}}more.append(trigger,menu);bar.append(more);
-  if(old)old.replaceWith(bar);else reader.prepend(bar);
+  for(const action of ['reply-all','spam','trip']){const item=bar.querySelector('[data-mail-action="'+action+'"]');if(item){const label=document.createElement('span');label.textContent=item.getAttribute('aria-label');item.classList.remove('action-icon');item.append(label);menu.append(item)}}
+  more.append(trigger,menu);bar.append(more);footer.append(bar);reader.append(footer);
 }
+
 function renderMailQuickFilters() {
   let bar=$('mail-quick-filters');if(!bar){const list=$('mail-msg-list');if(!list)return;bar=document.createElement('div');bar.id='mail-quick-filters';bar.className='mail-quick-filters';bar.setAttribute('aria-label',mailImageText('Быстрые фильтры','Quick filters'));list.parentElement.insertBefore(bar,list);}
   bar.replaceChildren();

@@ -13,7 +13,7 @@ new_binary="${TAYGA_NEW_BINARY:-$script_dir/../../tayga-mail}"
 new_binary="$(readlink -f -- "$new_binary")"
 [[ -f "$new_binary" && -x "$new_binary" ]] || { echo 'Set TAYGA_NEW_BINARY to the extracted release binary.' >&2; exit 1; }
 new_version="$("$new_binary" version)"
-[[ "$new_version" == 'tayga-mail 1.0.0 '* ]] || { echo "Expected 1.0.0, received: $new_version" >&2; exit 1; }
+[[ "$new_version" == 'tayga-mail 1.0.1 '* ]] || { echo "Expected 1.0.1, received: $new_version" >&2; exit 1; }
 root="$(readlink -m -- "${TAYGA_ROOT:-/var/lib/tayga}")"
 config="${TAYGA_CONFIG:-$root/config/tayga.yaml}"
 [[ "$root" != / && "$root" == /* ]] || { echo 'Set a specific installation root.' >&2; exit 1; }
@@ -45,7 +45,7 @@ cleanup() {
  exit "$result"
 }
 trap cleanup EXIT
-backup_file="${TAYGA_BACKUP_FILE:-/var/backups/tayga/pre-1.0.0-$(date -u +%Y%m%d-%H%M%S).tar.gz.age}"
+backup_file="${TAYGA_BACKUP_FILE:-/var/backups/tayga/pre-1.0.1-$(date -u +%Y%m%d-%H%M%S).tar.gz.age}"
 if [[ "$mode" == --backup ]]; then
  [[ -n "${TAYGA_RECIPIENT:-}" ]] || { echo 'Set TAYGA_RECIPIENT to an age public recipient; keep the private identity off this server.' >&2; exit 1; }
  mkdir -p -- "$(dirname -- "$backup_file")"
@@ -67,12 +67,13 @@ fi
 [[ "$(sha256sum "$backup_file" | cut -d ' ' -f 1)" == "$TAYGA_BACKUP_SHA256" ]] || { echo 'Backup SHA-256 mismatch.' >&2; exit 1; }
 ready_url="${TAYGA_READY_URL:?Set TAYGA_READY_URL to the installation readiness endpoint}"
 ready_args=(--fail --silent --show-error --max-time 4)
+if [[ -n "${TAYGA_READY_RESOLVE:-}" ]]; then ready_args+=(--resolve "$TAYGA_READY_RESOLVE"); fi
 if [[ -n "${TAYGA_READY_CA:-}" ]]; then ready_args+=(--cacert "$TAYGA_READY_CA"); fi
 if [[ "$was_active" == true ]]; then curl "${ready_args[@]}" "$ready_url" >/dev/null; fi
 owner="$(stat -c %u "$target")"; group="$(stat -c %g "$target")"; mode_bits="$(stat -c %a "$target")"
 staged="$(mktemp "${target}.new.XXXXXXXX")"
 install -o "$owner" -g "$group" -m "$mode_bits" "$new_binary" "$staged"
-rollback_binary="$(mktemp "${target}.before-1.0.0.XXXXXXXX")"
+rollback_binary="$(mktemp "${target}.before-1.0.1.XXXXXXXX")"
 cp -p -- "$target" "$rollback_binary"
 systemctl stop "$service"; stopped=true
 mv -f -- "$staged" "$target"; staged=''

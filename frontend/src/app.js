@@ -2861,6 +2861,33 @@ async function refreshMailMessages() {
   }
 }
 
+// Read the inert, script-blocked document from the parent to size the full
+// message. Scripts stay disabled both by sandbox and the message CSP.
+function sizeMailContentFrame(frame) {
+  let observer, pending;
+  const cleanup = () => { observer?.disconnect(); cancelAnimationFrame(pending); };
+  frame._mailResizeCleanup = cleanup;
+  frame.addEventListener("load", () => {
+    cleanup();
+    try {
+      const doc = frame.contentDocument;
+      if (!doc?.body) return;
+      const resize = () => {
+        if (!frame.isConnected) return;
+        const natural = Math.ceil(Math.max(doc.body.scrollHeight, doc.body.getBoundingClientRect().height));
+        const height = Math.min(500000, Math.max(1, natural + 2));
+        if (Math.abs(parseFloat(frame.style.height || "0") - height) > 1) frame.style.height = height + "px";
+        doc.documentElement.style.setProperty("overflow-y", natural > 500000 ? "auto" : "hidden", "important");
+      };
+      const schedule = () => { cancelAnimationFrame(pending); pending = requestAnimationFrame(resize); };
+      observer = new ResizeObserver(schedule);
+      observer.observe(doc.body);
+      doc.fonts?.ready.then(schedule);
+      schedule();
+    } catch { /* A followed external link cannot be measured across origins. */ }
+  });
+}
+
 function showMailReader(msg) {
   const empty = $("mail-empty");
   const reader = $("mail-reader");
@@ -2881,6 +2908,7 @@ function showMailReader(msg) {
   if ($("mail-date")) $("mail-date").textContent = mailDateFull(msg.date || msg.internal_date);
   renderMailActions(msg);
   const body = $("mail-body");
+  body.querySelectorAll("iframe").forEach(frame => frame._mailResizeCleanup?.());
   body.replaceChildren();
   if (msg.attachments?.length) {
     const attachments = document.createElement("div");
@@ -2905,7 +2933,8 @@ function showMailReader(msg) {
     const frame = document.createElement("iframe");
     frame.className = "mail-content-frame";
     frame.title = msg.subject || "Письмо";
-    frame.setAttribute("sandbox", "allow-popups allow-popups-to-escape-sandbox");
+    frame.setAttribute("sandbox", "allow-same-origin allow-popups allow-popups-to-escape-sandbox");
+    sizeMailContentFrame(frame);
     frame.referrerPolicy = "no-referrer";
     const render = (externalImages) => {
       const documentHTML = new DOMParser().parseFromString(msg.html, "text/html");
@@ -2925,7 +2954,7 @@ function showMailReader(msg) {
       policy.content = "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data:" + (externalImages ? " https: http:" : "") + "; font-src data:; form-action 'none'; base-uri 'none'";
       documentHTML.head.prepend(policy);
       const styles = documentHTML.createElement("style");
-      styles.textContent = "html{overflow-x:auto!important}body{margin:0!important;font:14px/1.65 Arial,Helvetica,sans-serif;overflow-wrap:anywhere;white-space:normal!important}body *{box-sizing:border-box;max-width:100%!important}img,video{height:auto!important}table{table-layout:auto}pre{white-space:pre-wrap!important;overflow-wrap:anywhere}body{min-width:0!important;width:auto!important}";
+      styles.textContent = "html{overflow-x:auto!important}html,body{height:auto!important;min-height:0!important}body{margin:0!important;font:14px/1.65 Arial,Helvetica,sans-serif;overflow-wrap:anywhere;white-space:normal!important}body *{box-sizing:border-box;max-width:100%!important}img,video{height:auto!important}table{table-layout:auto}pre{white-space:pre-wrap!important;overflow-wrap:anywhere}body{min-width:0!important;width:auto!important}";
       documentHTML.head.append(styles);
       frame.srcdoc = "<!doctype html>" + documentHTML.documentElement.outerHTML;
     };

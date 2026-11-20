@@ -62,6 +62,10 @@
  // A selected file has a document cover and a bounded, authenticated thumbnail.
  const oldFileReader=showFileReader;let filePreviewSequence=0,filePreviewAbort=null;
  showFileReader=function(entry){oldFileReader(entry);const sequence=++filePreviewSequence;filePreviewAbort?.abort();$('workspace-file-symbol')?.remove();$('workspace-file-thumbnail')?.remove();$('workspace-file-modified')?.remove();if(!entry)return;
+  const reader=$('files-reader'),toolbar=reader.querySelector('.reader-actions');
+  let hero=reader.querySelector('.workspace-file-hero');if(!hero){hero=document.createElement('div');hero.className='workspace-file-hero';toolbar.after(hero);hero.append($('files-subject'))} $('files-subject').title=entry.name;
+  let extra=reader.querySelector('.workspace-reader-more');if(!extra){extra=document.createElement('details');extra.className='workspace-reader-more';extra.innerHTML='<summary aria-label="'+words('Другие действия','More actions')+'">⋮</summary><div></div>';toolbar.append(extra)}extra.open=false;
+  for(const id of ['btn-file-use-template','btn-files-versions','btn-files-share','btn-files-delete']){const button=$(id);if(button)extra.lastElementChild.append(button)}
   const symbol=document.createElement('div');symbol.id='workspace-file-symbol';symbol.className='workspace-file-symbol';symbol.textContent=entry.is_dir?'▱':(entry.name.split('.').pop()||'FILE').slice(0,4).toUpperCase();$('files-subject').before(symbol);
   if(entry.mtime){const row=document.createElement('div');row.id='workspace-file-modified';const dt=document.createElement('dt');dt.textContent=words('Изменён','Modified');const dd=document.createElement('dd');dd.textContent=new Date(entry.mtime).toLocaleString(calLocale());row.append(dt,dd);$('files-read-type').closest('dl').append(row)}
   const type=documentPreviewType(entry.name);if(entry.is_dir||!(type==='application/pdf'||type.startsWith('image/'))||entry.size>16*1024*1024)return;
