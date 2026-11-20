@@ -28,3 +28,6 @@ node_modules/
 
 # Local browser-test dependency link
 /node_modules
+
+# Local build previews and deployment handoff files
+/output/

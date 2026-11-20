@@ -27,7 +27,7 @@ cp docs/*.md "$PACKAGE_STAGE/docs/"
 cp -R docs/screenshots "$PACKAGE_STAGE/docs/"
 cp deploy/systemd/update-binary.sh "$PACKAGE_STAGE/deploy/systemd/"
 mkdir -p "$PACKAGE_STAGE/frontend"
-cp frontend/LICENSE frontend/package*.json frontend/build-*.cjs "$PACKAGE_STAGE/frontend/"
+cp frontend/LICENSE frontend/README.md frontend/package*.json frontend/build-*.cjs "$PACKAGE_STAGE/frontend/"
 cp -R frontend/src frontend/assets "$PACKAGE_STAGE/frontend/"
 cp internal/frontend/dist/assets/libomemo-LICENSE.txt "$PACKAGE_STAGE/docs/"
 archives=()
@@ -59,7 +59,7 @@ for t in "${targets[@]}"; do
     (cd "$PACKAGE_STAGE" && zip -qr "${OUT}/${name}.zip" "tayga-mail${ext}" LICENSE NOTICE README.md configs/tayga.example.yaml deploy docs frontend)
     archives+=("${name}.zip")
   else
-    COPYFILE_DISABLE=1 tar -czf "${OUT}/${name}.tar.gz" -C "$PACKAGE_STAGE" tayga-mail LICENSE NOTICE README.md configs/tayga.example.yaml deploy docs frontend
+    COPYFILE_DISABLE=1 tar --no-xattrs -czf "${OUT}/${name}.tar.gz" -C "$PACKAGE_STAGE" tayga-mail LICENSE NOTICE README.md configs/tayga.example.yaml deploy docs frontend
     archives+=("${name}.tar.gz")
   fi
   rm -f "${PACKAGE_STAGE}/tayga-mail${ext}"
