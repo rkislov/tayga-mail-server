@@ -15,6 +15,7 @@ import (
 	"path"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 
 	"filippo.io/age"
@@ -123,7 +124,19 @@ func syncPath(name string) error {
 }
 
 func safeName(s string) bool {
-	return s != "." && fsValidPath(s) && !strings.ContainsAny(s, "\\:\x00")
+	if s == "." || !fsValidPath(s) || strings.ContainsAny(s, "\\\x00") || !filepath.IsLocal(filepath.FromSlash(s)) {
+		return false
+	}
+	// Colons are part of standard Maildir flag suffixes on Unix. Windows
+	// rejects them (including alternate data streams); drive-qualified names
+	// are rejected on every platform even though Unix would confine them.
+	if runtime.GOOS == "windows" && strings.Contains(s, ":") {
+		return false
+	}
+	if len(s) >= 2 && s[1] == ':' && (s[0] >= 'A' && s[0] <= 'Z' || s[0] >= 'a' && s[0] <= 'z') {
+		return false
+	}
+	return true
 }
 
 func fsValidPath(s string) bool {

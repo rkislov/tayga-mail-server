@@ -3984,6 +3984,33 @@ async function refreshMailMessages() {
   }
 }
 
+// Read the inert, script-blocked document from the parent to size the full
+// message. Scripts stay disabled both by sandbox and the message CSP.
+function sizeMailContentFrame(frame) {
+  let observer, pending;
+  const cleanup = () => { observer?.disconnect(); cancelAnimationFrame(pending); };
+  frame._mailResizeCleanup = cleanup;
+  frame.addEventListener("load", () => {
+    cleanup();
+    try {
+      const doc = frame.contentDocument;
+      if (!doc?.body) return;
+      const resize = () => {
+        if (!frame.isConnected) return;
+        const natural = Math.ceil(Math.max(doc.body.scrollHeight, doc.body.getBoundingClientRect().height));
+        const height = Math.min(500000, Math.max(1, natural + 2));
+        if (Math.abs(parseFloat(frame.style.height || "0") - height) > 1) frame.style.height = height + "px";
+        doc.documentElement.style.setProperty("overflow-y", natural > 500000 ? "auto" : "hidden", "important");
+      };
+      const schedule = () => { cancelAnimationFrame(pending); pending = requestAnimationFrame(resize); };
+      observer = new ResizeObserver(schedule);
+      observer.observe(doc.body);
+      doc.fonts?.ready.then(schedule);
+      schedule();
+    } catch { /* A followed external link cannot be measured across origins. */ }
+  });
+}
+
 function showMailReader(msg) {
   const empty = $("mail-empty");
   const reader = $("mail-reader");
@@ -4004,6 +4031,7 @@ function showMailReader(msg) {
   if ($("mail-date")) $("mail-date").textContent = mailDateFull(msg.date || msg.internal_date);
   renderMailActions(msg);
   const body = $("mail-body");
+  body.querySelectorAll("iframe").forEach(frame => frame._mailResizeCleanup?.());
   body.replaceChildren();
   if (msg.attachments?.length) {
     const attachments = document.createElement("div");
@@ -4028,7 +4056,8 @@ function showMailReader(msg) {
     const frame = document.createElement("iframe");
     frame.className = "mail-content-frame";
     frame.title = msg.subject || "Письмо";
-    frame.setAttribute("sandbox", "allow-popups allow-popups-to-escape-sandbox");
+    frame.setAttribute("sandbox", "allow-same-origin allow-popups allow-popups-to-escape-sandbox");
+    sizeMailContentFrame(frame);
     frame.referrerPolicy = "no-referrer";
     const render = (externalImages) => {
       const documentHTML = new DOMParser().parseFromString(msg.html, "text/html");
@@ -4048,7 +4077,7 @@ function showMailReader(msg) {
       policy.content = "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data:" + (externalImages ? " https: http:" : "") + "; font-src data:; form-action 'none'; base-uri 'none'";
       documentHTML.head.prepend(policy);
       const styles = documentHTML.createElement("style");
-      styles.textContent = "html{overflow-x:auto!important}body{margin:0!important;font:14px/1.65 Arial,Helvetica,sans-serif;overflow-wrap:anywhere;white-space:normal!important}body *{box-sizing:border-box;max-width:100%!important}img,video{height:auto!important}table{table-layout:auto}pre{white-space:pre-wrap!important;overflow-wrap:anywhere}body{min-width:0!important;width:auto!important}";
+      styles.textContent = "html{overflow-x:auto!important}html,body{height:auto!important;min-height:0!important}body{margin:0!important;font:14px/1.65 Arial,Helvetica,sans-serif;overflow-wrap:anywhere;white-space:normal!important}body *{box-sizing:border-box;max-width:100%!important}img,video{height:auto!important}table{table-layout:auto}pre{white-space:pre-wrap!important;overflow-wrap:anywhere}body{min-width:0!important;width:auto!important}";
       documentHTML.head.append(styles);
       frame.srcdoc = "<!doctype html>" + documentHTML.documentElement.outerHTML;
     };
@@ -7211,6 +7240,7 @@ const mmChat = (() => {
   let selected = '', posts = new Map(), page = 0, complete = false, historyBusy = false, historyRevision = 0;
   let sending = false, reply = '', pending = null, peopleMode = 'direct', peopleChannel = '', searchRevision = 0, searchTimer = null;
   let refreshing = null, viewBusy = false;
+  let attachments = [], mediaEpoch = 0, mediaBytes = 0, mediaURLs = [], mediaController = new AbortController(), avatarCache = new Map();
   let browseRevision = 0, browsePage = 0, browseTerm = '';
   const el = id => $('mm-chat-' + id);
   const label = user => user?.nickname?.trim() || [user?.first_name, user?.last_name].filter(Boolean).join(' ').trim() || user?.email || user?.username || 'Пользователь';
@@ -7223,7 +7253,85 @@ const mmChat = (() => {
   const errorText = error => error.data?.message || error.message;
   const visible = () => !document.hidden && !el('thread').closest('#app-chat').classList.contains('hidden') && document.hasFocus();
   function connection(text) { el('connection').textContent = text; }
+  const iconPaths = {refresh:'M20 7v5h-5 M4 17v-5h5 M6 7a7 7 0 0 1 12-1l2 3 M4 15l2 3a7 7 0 0 0 12-1',new:'M12 20H4V4h12 M15 5l4-4 4 4-4 4 M10 14l9-9',channel:'M8 3 6 21 M16 3l-2 18 M3 8h18 M2 16h18',browse:'M21 11a9 9 0 1 1-9-8 M16 3h5v5 M21 3l-9 9',members:'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M20 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75',call:'M15 8l6-4v16l-6-4 M3 5h12v14H3z',reply:'M9 10 4 5l5-4 M4 5h9a7 7 0 0 1 7 7v7',attach:'M21 11 12 20a6 6 0 0 1-9-9L13 1a4 4 0 0 1 6 6L9 17a2 2 0 0 1-3-3l9-9',close:'M6 6l12 12 M18 6 6 18',download:'M12 3v12 M7 10l5 5 5-5 M4 16v5h16v-5'};
+  function iconButton(button, name, title) {
+    button.classList.add('mm-icon-button'); button.title = title; button.setAttribute('aria-label',title);
+    button.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="'+iconPaths[name]+'"/></svg>';
+    return button;
+  }
+  async function binary(path, options = {}, retry = false) {
+    const check = guard(); check();
+    const response = await fetch('/api/v4'+path, {...options, headers:{Authorization:'Bearer '+state.tokens.access_token}}); check();
+    if (response.status === 401 && !retry && state.tokens?.refresh_token) {
+      if (await refreshAccessToken()) { check(); return binary(path,options,true); }
+    }
+    if (!response.ok) throw Error('Не удалось загрузить файл ('+response.status+')');
+    return response;
+  }
+  function avatar(user) {
+    const node = document.createElement('span'); node.className = 'mm-avatar'; node.setAttribute('aria-hidden','true');
+    node.textContent = label(user).split(/\s+/).slice(0,2).map(part=>part[0]).join('').toLocaleUpperCase();
+    if (!user?.id) return node;
+    if (!avatarCache.has(user.id) && avatarCache.size < 128) {
+      const check = guard();
+      avatarCache.set(user.id,(async()=>{try{const response=await binary('/users/'+encodeURIComponent(user.id)+'/image',{signal:mediaController.signal});const blob=await boundedPreviewBlob(response,2*1024*1024);check();const url=URL.createObjectURL(blob);return url}catch{return null}})());
+    }
+    avatarCache.get(user.id)?.then(url=>{if(url&&node.isConnected){const image=document.createElement('img');image.alt='';image.src=url;node.replaceChildren(image)}});
+    return node;
+  }
+  function clearMedia() { mediaEpoch++; mediaURLs.forEach(url=>URL.revokeObjectURL(url)); mediaURLs=[]; mediaBytes=0; }
+  function clearAttachments() { attachments.forEach(item=>{if(item.url)URL.revokeObjectURL(item.url)});attachments=[];pending=null;renderAttachments(); }
+  function renderAttachments() {
+    const box=el('attachments'); if(!box)return;box.replaceChildren();
+    attachments.forEach(item=>{const row=document.createElement('div');row.className='mm-pending-file';if(item.url){const image=document.createElement('img');image.alt='';image.src=item.url;row.append(image)}const name=document.createElement('span');name.textContent=item.file.name;row.append(name);const remove=iconButton(document.createElement('button'),'close','Убрать '+item.file.name);remove.type='button';remove.disabled=sending;remove.onclick=()=>{if(item.url)URL.revokeObjectURL(item.url);attachments=attachments.filter(other=>other!==item);pending=null;renderAttachments()};row.append(remove);box.append(row)});
+    box.hidden=!attachments.length;
+  }
+  function addFiles(files) {
+    if(sending||!selected)return;
+    if(attachments.length+files.length>5 || attachments.reduce((n,item)=>n+item.file.size,0)+[...files].reduce((n,file)=>n+file.size,0)>1024**3){setMsg(el('send-error'),'Можно прикрепить до 5 файлов общим размером до 1 ГиБ','err');return}
+    for(const file of files)attachments.push({file,url:/^image\/(png|jpeg|gif|webp)$/.test(file.type)&&file.size<16*1024*1024?URL.createObjectURL(file):null});
+    pending=null;setMsg(el('send-error'),'');renderAttachments();
+  }
+  async function renderFiles(post, host, epoch) {
+    for(const id of post.file_ids||[]) {
+      if(epoch!==mediaEpoch||!current())return;
+      const card=document.createElement('div');card.className='mm-file';const format=document.createElement('span');format.className='mm-file-format';format.textContent='FILE';format.setAttribute('aria-hidden','true');card.append(format);const name=document.createElement('span');name.textContent='Вложение';card.append(name);host.append(card);
+      const download=iconButton(document.createElement('button'),'download','Скачать вложение');download.type='button';card.append(download);
+      download.onclick=async()=>{download.disabled=true;try{const check=guard(),response=await binary('/files/'+encodeURIComponent(id));const blob=await response.blob();check();if(epoch!==mediaEpoch)return;const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=name.textContent;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}catch(error){report(error)}finally{download.disabled=false}};
+      try {
+        const info=await request('/files/'+encodeURIComponent(id)+'/info');if(epoch!==mediaEpoch)return;
+        name.textContent=info.name;const extension=String(info.extension||info.name.split('.').pop()||'FILE').replace(/[^a-z0-9]/gi,'').slice(0,5).toUpperCase();format.textContent=extension||'FILE';format.dataset.format=extension;download.setAttribute('aria-label','Скачать '+info.name);download.title=download.getAttribute('aria-label')?.replace('вложение',info.name)||info.name;
+        const size=document.createElement('small');size.textContent=fmtBytes(info.size);card.append(size);
+        if(info.has_preview_image && info.size<=12*1024*1024 && mediaBytes+info.size<=32*1024*1024) {
+          mediaBytes+=info.size;
+          const response=await binary('/files/'+encodeURIComponent(id)+'/preview',{signal:mediaController.signal});const blob=await boundedPreviewBlob(response,12*1024*1024);
+          if(epoch!==mediaEpoch||!current())return;
+          const url=URL.createObjectURL(blob);mediaURLs.push(url);const image=document.createElement('img');image.alt=info.name;image.src=url;image.className='mm-file-image';card.classList.add('has-image');card.prepend(image);
+          image.onload=()=>{const box=el('posts');if(box.scrollHeight-box.scrollTop-box.clientHeight<image.height+100)box.scrollTop=box.scrollHeight};
+        }
+      } catch(error) { if(epoch===mediaEpoch){card.classList.add('has-error');name.textContent='Вложение недоступно';card.title=errorText(error)} }
+    }
+  }
+  async function refreshStatus() {try{const status=await request('/users/me/status');el('status').value=status.status;el('status').dataset.status=status.status}catch{} }
+  function setupControls() {
+    for(const [id,name,title] of [['refresh','refresh','Обновить'],['new','new','Новый диалог'],['create','channel','Создать канал'],['browse','browse','Открытые каналы'],['members','members','Участники'],['call','call','Звонок Jitsi'],['reply-cancel','close','Отменить ответ']])iconButton(el(id),name,title);
+    const identity=el('self').parentElement, profile=document.createElement('div');profile.className='mm-profile-text';profile.append(el('self'),el('connection'));identity.append(profile);
+    const status=document.createElement('select');status.id='mm-chat-status';status.className='mm-status';status.setAttribute('aria-label','Мой статус');
+    for(const [value,title] of [['online','В сети'],['away','Отошёл'],['dnd','Не беспокоить'],['offline','Не в сети']])status.add(new Option(title,value));profile.append(status);
+    status.onchange=async()=>{status.disabled=true;try{await request('/users/me/status',{method:'PUT',body:JSON.stringify({status:status.value})});status.dataset.status=status.value}catch(error){report(error);await refreshStatus()}finally{status.disabled=false}};
+    const input=document.createElement('input');input.type='file';input.multiple=true;input.hidden=true;input.id='mm-chat-files';input.onchange=()=>{addFiles(input.files);input.value=''};
+    const attach=iconButton(document.createElement('button'),'attach','Прикрепить файлы');attach.id='mm-chat-attach';attach.type='button';attach.onclick=()=>input.click();
+    const box=document.createElement('div');box.id='mm-chat-attachments';box.hidden=true;el('send').before(box);el('send').prepend(attach,input);
+    el('body').addEventListener('paste',event=>{if(event.clipboardData.files.length){event.preventDefault();addFiles(event.clipboardData.files)}});
+    el('send').addEventListener('dragover',event=>{if(event.dataTransfer.types.includes('Files')){event.preventDefault();el('send').classList.add('is-dragging')}});
+    el('send').addEventListener('dragleave',()=>el('send').classList.remove('is-dragging'));
+    el('send').addEventListener('drop',event=>{event.preventDefault();el('send').classList.remove('is-dragging');addFiles(event.dataTransfer.files)});
+  }
+  setupControls();
   function stop() {
+    clearMedia(); clearAttachments(); mediaController.abort(); mediaController=new AbortController();
+    avatarCache.forEach(promise=>promise.then(url=>{if(url)URL.revokeObjectURL(url)}));avatarCache.clear();
+    el('self').closest('.mm-chat-identity').querySelector('.mm-avatar')?.remove();
     generation++; historyRevision++; searchRevision++; browseRevision++;
     el('browse-dialog')?.close(); el('browse-results')?.replaceChildren();
     clearTimeout(reconnect); clearTimeout(searchTimer); clearInterval(heartbeat); clearInterval(poll);
@@ -7246,7 +7354,7 @@ const mmChat = (() => {
         me = await request('/users/me'); users.set(me.id, me);
         const teams = await request('/users/me/teams'); team = teams[0];
         if (!team) throw Error('Нет доступной команды');
-        el('self').textContent = label(me);
+        el('self').textContent = label(me);el('self').closest('.mm-chat-identity').prepend(avatar(me));void refreshStatus();
         await syncChannels(); connect();
         poll = setInterval(() => { if (current()) syncChannels().catch(report); }, 30000);
         return true;
@@ -7298,7 +7406,7 @@ const mmChat = (() => {
         const member = memberships.get(channel.id), unread = Math.max(0, channel.total_msg_count - (member?.msg_count || 0));
         const button = document.createElement('button'); button.type = 'button'; button.className = 'msg-item mm-chat-channel'; button.classList.toggle('is-active', channel.id === selected);
         if (channel.id === selected) button.setAttribute('aria-current','true');
-        const name = document.createElement('span'); name.textContent = (channel.type === 'D' ? '' : channel.type === 'P' ? '🔒 ' : '# ') + channelName(channel); button.append(name);
+        const name = document.createElement('span'); name.textContent = (channel.type === 'D' ? '' : channel.type === 'P' ? '🔒 ' : '# ') + channelName(channel); if(channel.type==='D')button.append(avatar(users.get(channel.name.split('__').find(id=>id!==me?.id)||me?.id)));button.append(name);
         if (unread) { const badge = document.createElement('span'); badge.className = 'mm-chat-unread'; badge.textContent = String(unread); badge.setAttribute('aria-label',unread + ' непрочитанных'); button.append(badge); }
         button.onclick = () => open(channel.id).catch(report); container.append(button);
       }
@@ -7313,6 +7421,7 @@ const mmChat = (() => {
   }
   async function open(id) {
     if (!await ensure()) return;
+    clearMedia(); clearAttachments();
     selected = id; historyRevision++; posts = new Map(); page = 0; complete = historyBusy = false; reply = ''; pending = null;
     el('reply').classList.add('hidden'); el('body').value = ''; el('thread').classList.remove('hidden'); el('empty').classList.add('hidden');
     el('posts').replaceChildren(); setMsg(el('send-error'),''); renderChannels(); setMobilePane('read');
@@ -7342,12 +7451,13 @@ const mmChat = (() => {
   function renderPosts(keepScroll = false) {
     const box = el('posts'), previousHeight = box.scrollHeight, previousTop = box.scrollTop;
     const nearBottom = previousHeight - previousTop - box.clientHeight < 100;
+    clearMedia(); const epoch=mediaEpoch;
     box.replaceChildren();
     if (!complete) { const older = document.createElement('button'); older.type = 'button'; older.className = 'btn-secondary btn-sm'; older.textContent = 'Загрузить более ранние'; older.onclick = () => loadHistory(); box.append(older); }
     const ordered = [...posts.values()].sort((a,b) => a.create_at - b.create_at || a.id.localeCompare(b.id));
     for (const post of ordered) {
       const article = document.createElement('article'); article.className = 'chat-bubble' + (post.user_id === me.id ? ' is-mine' : ''); article.dataset.postId = post.id;
-      const author = document.createElement('strong'); author.textContent = label(users.get(post.user_id)); article.append(author);
+      const author = document.createElement('strong'); author.textContent = label(users.get(post.user_id)); article.append(avatar(users.get(post.user_id)),author);
       if (post.root_id) { const root = posts.get(post.root_id), quote = document.createElement('div'); quote.className = 'mm-chat-quote'; quote.textContent = 'Ответ: ' + (root?.message?.slice(0,160) || 'сообщение в ветке'); article.append(quote); }
       const text = document.createElement('p');
       const callURL = meetingURL(post.props?.tms_meeting_url);
@@ -7357,11 +7467,12 @@ const mmChat = (() => {
         link.textContent = 'Присоединиться к звонку Jitsi';
         text.append(link);
       } else {
-        text.textContent = post.message || (post.file_ids?.length ? 'Вложение' : '');
+        text.textContent = post.message || '';text.hidden=!post.message;
       }
       article.append(text);
+      if(post.file_ids?.length){const files=document.createElement('div');files.className='mm-post-files';article.append(files);void renderFiles(post,files,epoch)}
       const time = document.createElement('time'); time.dateTime = new Date(post.create_at).toISOString(); time.textContent = new Date(post.create_at).toLocaleString(lang === 'en' ? 'en-GB' : 'ru-RU'); article.append(time);
-      const answer = document.createElement('button'); answer.type = 'button'; answer.className = 'btn-secondary btn-sm mm-chat-answer'; answer.textContent = 'Ответить'; answer.onclick = () => { reply = post.root_id || post.id; el('reply-label').textContent = 'Ответ: ' + post.message.slice(0,120); el('reply').classList.remove('hidden'); el('body').focus(); }; article.append(answer);
+      const answer = document.createElement('button'); answer.type = 'button'; answer.className = 'btn-secondary btn-sm mm-chat-answer'; iconButton(answer,'reply','Ответить'); answer.onclick = () => { reply = post.root_id || post.id; el('reply-label').textContent = 'Ответ: ' + post.message.slice(0,120); el('reply').classList.remove('hidden'); el('body').focus(); }; article.append(answer);
       box.append(article);
     }
     if (!ordered.length) { const hint = document.createElement('p'); hint.className = 'meta'; hint.textContent = 'Сообщений пока нет'; box.append(hint); }
@@ -7419,16 +7530,18 @@ const mmChat = (() => {
   async function send(event) {
     event.preventDefault();
     const input = el('body'), body = input.value.trim(), id = selected, root = reply;
-    if (!body || !id || sending || !me) return;
-    const version = generation; sending = true; const button = el('send').querySelector('[type=submit]'); button.disabled = true; setMsg(el('send-error'),'');
+    if ((!body && !attachments.length) || !id || sending || !me) return;
+    const version = generation, selectedFiles=[...attachments]; sending = true;renderAttachments(); const button = el('send').querySelector('[type=submit]'); button.disabled = true; setMsg(el('send-error'),'');
     if (!pending || pending.channel_id !== id || pending.message !== body || pending.root_id !== root) pending = {channel_id:id,message:body,root_id:root,pending_post_id:me.id + ':' + crypto.randomUUID()};
     try {
       const submission = pending;
+      if(selectedFiles.length && !submission.file_ids){setMsg(el('send-error'),'Загрузка файлов…');const data=new FormData();data.append('channel_id',id);selectedFiles.forEach(item=>data.append('files',item.file,item.file.name));const response=await binary('/files?channel_id='+encodeURIComponent(id),{method:'POST',body:data});const uploaded=await response.json();if(version!==generation||!current())return;submission.file_ids=uploaded.file_infos.map(info=>info.id)}
+      setMsg(el('send-error'),'');
       const post = await request('/posts',{method:'POST',body:JSON.stringify(submission)});
-      if (selected === id) { posts.set(post.id,post); renderPosts(); el('posts').scrollTop = el('posts').scrollHeight; if (input.value.trim() === body) input.value = ''; reply = ''; el('reply').classList.add('hidden'); }
+      if (selected === id) { posts.set(post.id,post); renderPosts(); el('posts').scrollTop = el('posts').scrollHeight; if (input.value.trim() === body) input.value = ''; reply = ''; el('reply').classList.add('hidden'); clearAttachments(); }
       if (pending === submission) pending = null; await syncChannels(); void markViewed();
     } catch (error) { if (generation === version) setMsg(el('send-error'),errorText(error),'err'); }
-    finally { if (generation === version) { sending = false; button.disabled = false; } }
+    finally { if (generation === version) { sending = false; button.disabled = false;renderAttachments(); } }
   }
   async function searchPeople() {
     const revision = ++searchRevision;
@@ -7439,7 +7552,7 @@ const mmChat = (() => {
       for (const user of list) {
         users.set(user.id,user);
         const button = document.createElement('button'); button.type = 'button'; button.className = 'msg-item mm-chat-person';
-        const name = document.createElement('strong'); name.textContent = label(user); const username = document.createElement('span'); username.className = 'meta'; username.textContent = '@' + user.username; button.append(name,username);
+        const name = document.createElement('strong'); name.textContent = label(user); const username = document.createElement('span'); username.className = 'meta'; username.textContent = '@' + user.username; button.append(avatar(user),name,username);
         button.onclick = async () => {
           button.disabled = true;
           try {
@@ -7468,7 +7581,7 @@ const mmChat = (() => {
       const list = await request('/channels/' + id + '/members'); await getUsers(list.map(member => member.user_id));
       if (id !== selected) return;
       el('people-list').replaceChildren(); el('search').value = ''; el('search').hidden = true; el('people-title').textContent = 'Участники'; setMsg(el('people-error'),'');
-      for (const member of list) { const row = document.createElement('p'); row.textContent = label(users.get(member.user_id)); el('people-list').append(row); }
+      for (const member of list) { const row = document.createElement('p'); row.className='mm-member';row.append(avatar(users.get(member.user_id)),document.createTextNode(label(users.get(member.user_id)))); el('people-list').append(row); }
       if (channels.find(channel => channel.id === id)?.type !== 'D') { const add = document.createElement('button'); add.type = 'button'; add.className = 'btn-spray'; add.textContent = 'Добавить участника'; add.onclick = () => { peopleMode = 'member'; peopleChannel = id; el('search').hidden = false; el('people-title').textContent = 'Добавить участника'; el('search').focus(); void searchPeople(); }; el('people-list').append(add); }
       el('people').showModal();
     } catch (error) { report(error); }
@@ -7574,7 +7687,7 @@ const mmChat = (() => {
   el('people').addEventListener('close',() => { searchRevision++; clearTimeout(searchTimer); el('search').hidden = false; });
   el('send').onsubmit = send;
   el('body').addEventListener('keydown',event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); el('send').requestSubmit(); } });
-  el('reply-cancel').onclick = () => { reply = ''; el('reply').classList.add('hidden'); };
+  el('reply-cancel').onclick = () => { reply = ''; el('reply').classList.add('hidden'); clearAttachments(); };
   el('create').onclick = async () => { if (await ensure()) { el('create-name').value = ''; setMsg(el('create-error'),''); el('create-dialog').showModal(); } };
   el('create-cancel').onclick = () => el('create-dialog').close();
   el('create-form').onsubmit = async event => {
@@ -7965,14 +8078,18 @@ function createMailActionBar(message, dialog=null) {
 }
 function renderMailActions(message) {
   const reader=$('mail-reader');if(!reader)return;
-  const old=reader.querySelector('.reader-actions');const bar=createMailActionBar(message);
-  const back=old?.querySelector('[data-pane-back]');if(back)bar.prepend(back);
-  const footer=reader.querySelector('.workspace-reader-footer');
-  if(footer){footer.replaceChildren();for(const action of ['reply','forward']){const button=bar.querySelector('[data-mail-action="'+action+'"]');if(button){button.classList.remove('action-icon');const label=document.createElement('span');label.textContent=button.getAttribute('aria-label');button.append(label);footer.append(button)}}}
+  const old=reader.querySelector('.reader-actions'),bar=createMailActionBar(message);
+  const back=reader.querySelector('[data-pane-back]');
+  if(back){let navigation=reader.querySelector('.workspace-mail-back');if(!navigation){navigation=document.createElement('div');navigation.className='workspace-mail-back';reader.prepend(navigation)}navigation.append(back)}
+  let footer=reader.querySelector('.workspace-reader-footer');
+  if(!footer){footer=document.createElement('footer');footer.className='workspace-reader-footer';reader.append(footer)}
+  old?.remove();footer.replaceChildren();
+  for(const action of ['reply','forward']){const item=bar.querySelector('[data-mail-action="'+action+'"]');if(item){item.classList.remove('action-icon');const label=document.createElement('span');label.textContent=item.getAttribute('aria-label');item.append(label);footer.append(item)}}
   const more=document.createElement('details');more.className='workspace-reader-more';const trigger=document.createElement('summary');trigger.textContent='⋮';trigger.setAttribute('aria-label',mailImageText('Другие действия','More actions'));const menu=document.createElement('div');
-  for(const action of ['reply-all','spam','trip']){const button=bar.querySelector('[data-mail-action="'+action+'"]');if(button){const label=document.createElement('span');label.textContent=button.getAttribute('aria-label');button.classList.remove('action-icon');button.append(label);menu.append(button)}}more.append(trigger,menu);bar.append(more);
-  if(old)old.replaceWith(bar);else reader.prepend(bar);
+  for(const action of ['reply-all','spam','trip']){const item=bar.querySelector('[data-mail-action="'+action+'"]');if(item){const label=document.createElement('span');label.textContent=item.getAttribute('aria-label');item.classList.remove('action-icon');item.append(label);menu.append(item)}}
+  more.append(trigger,menu);bar.append(more);footer.append(bar);reader.append(footer);
 }
+
 function renderMailQuickFilters() {
   let bar=$('mail-quick-filters');if(!bar){const list=$('mail-msg-list');if(!list)return;bar=document.createElement('div');bar.id='mail-quick-filters';bar.className='mail-quick-filters';bar.setAttribute('aria-label',mailImageText('Быстрые фильтры','Quick filters'));list.parentElement.insertBefore(bar,list);}
   bar.replaceChildren();
@@ -8379,16 +8496,16 @@ $('monitor-open-antispam')?.addEventListener('click',()=>showApp('antispam'));
 
 async function refreshProtectionDiagnostics(){
  let host=$('protection-diagnostics');
- if(!host){host=document.createElement('section');host.id='protection-diagnostics';host.className='protection-diagnostics';document.querySelector('#app-antispam .protection-settings')?.after(host);
+ if(!host){host=document.createElement('section');host.id='protection-diagnostics';host.className='protection-diagnostics';const overview=$('protection-overview');if(overview)overview.append(host);else document.querySelector('#app-antispam .protection-settings')?.after(host);
  const head=document.createElement('div');head.className='actions';const title=document.createElement('h3');title.className='heading';title.textContent=mailImageText('Обучение и антивирус','Learning and antivirus');const select=document.createElement('select');select.className='field-input';select.id='protection-period';select.setAttribute('aria-label',mailImageText('Период статистики','Statistics period'));for(const [value,text]of [['hour',mailImageText('Текущий час','Current hour')],['day',mailImageText('Последние сутки','Last 24 hours')],['30d',mailImageText('Последние 30 дней','Last 30 days')]]){const o=document.createElement('option');o.value=value;o.textContent=text;select.append(o)}select.value='day';select.onchange=refreshProtectionDiagnostics;head.append(title,select);const content=document.createElement('div');content.id='protection-diagnostic-content';host.append(head,content)}
  const content=$('protection-diagnostic-content');content.setAttribute('aria-live','polite');content.textContent=mailImageText('Загрузка…','Loading…');
  try{const d=await api('/api/v1/admin/protection/stats?period='+$('protection-period').value);content.replaceChildren();
  const note=document.createElement('p');note.className='meta';note.textContent=mailImageText('Счётчики сохраняются после перезапуска; данные собираются с установки 0.9.18, по часовым интервалам. Антивирус — проверки по получателям.','Counters survive restarts; data starts with 0.9.18 and uses hourly buckets. Antivirus counts per-recipient checks.');content.append(note);
  const grid=document.createElement('div');grid.className='protection-stat-grid';content.append(grid);
- const card=(name,rows)=>{const box=document.createElement('div');box.className='protection-stat-card';const h=document.createElement('h4');h.textContent=name;const dl=document.createElement('dl');for(const [label,value]of rows){const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;dd.textContent=String(value??0);dl.append(dt,dd)}box.append(h,dl);grid.append(box);return box};
+ const card=(name,rows,state)=>{const box=document.createElement('div');box.className='protection-stat-card';if(state)box.dataset.state=state;const h=document.createElement('h4');h.textContent=name;const dl=document.createElement('dl');for(const [label,value]of rows){const row=document.createElement('div');row.className='protection-stat-row';const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;dd.textContent=String(value??0);if(typeof value==='number'||value==null)dd.className='is-numeric';row.append(dt,dd);dl.append(row)}box.append(h,dl);grid.append(box);return box};
  const learning=d.counts?.learning||{},av=d.counts?.antivirus||{};
- card('Rspamd · '+mailImageText('обучение','learning'),[[mailImageText('Автообучение','Automatic training'),d.learning_enabled?mailImageText('Включено','Enabled'):mailImageText('Выключено','Disabled')],['Spam',learning.spam],['Ham',learning.ham],[mailImageText('Уже обучено','Already learned'),learning.duplicate],[mailImageText('Пропущено','Skipped'),learning.skipped],[mailImageText('Ошибки попыток','Failed attempts'),learning.error],[mailImageText('В очереди сейчас','Pending now'),d.queue?.pending],[mailImageText('Исчерпаны попытки','Retries exhausted'),d.queue?.failed]]);
- card(mailImageText('Антивирус','Antivirus'),[[mailImageText('Состояние','Status'),d.antivirus_enabled?d.antivirus_backend:mailImageText('Выключен','Disabled')],[mailImageText('Чистые','Clean'),av.clean],[mailImageText('Отклонено','Rejected'),av.reject],[mailImageText('Карантин','Quarantined'),av.quarantine],[mailImageText('Помечено','Tagged'),av.tag],[mailImageText('Ошибки','Errors'),av.error]]);
+ card('Rspamd · '+mailImageText('обучение','learning'),[[mailImageText('Автообучение','Automatic training'),d.learning_enabled?mailImageText('Включено','Enabled'):mailImageText('Выключено','Disabled')],['Spam',learning.spam],['Ham',learning.ham],[mailImageText('Уже обучено','Already learned'),learning.duplicate],[mailImageText('Пропущено','Skipped'),learning.skipped],[mailImageText('Ошибки попыток','Failed attempts'),learning.error],[mailImageText('В очереди сейчас','Pending now'),d.queue?.pending],[mailImageText('Исчерпаны попытки','Retries exhausted'),d.queue?.failed]],d.learning_enabled?'on':'off');
+ card(mailImageText('Антивирус','Antivirus'),[[mailImageText('Состояние','Status'),d.antivirus_enabled?d.antivirus_backend:mailImageText('Выключен','Disabled')],[mailImageText('Чистые','Clean'),av.clean],[mailImageText('Отклонено','Rejected'),av.reject],[mailImageText('Карантин','Quarantined'),av.quarantine],[mailImageText('Помечено','Tagged'),av.tag],[mailImageText('Ошибки','Errors'),av.error]],d.antivirus_enabled?'on':'off');
  const versions=[];if(d.antivirus_version){versions.push(['ClamAV',d.antivirus_version.engine],[mailImageText('Версия базы','Database version'),d.antivirus_version.database_version],[mailImageText('Дата базы','Database date'),d.antivirus_version.database_date])}else if(d.antivirus_enabled)versions.push([mailImageText('Версия базы','Database version'),mailImageText('Нет данных от сканера','Scanner did not provide data')]);
  if(d.rspamd){versions.push(['Rspamd',d.rspamd.version||'—'],[mailImageText('Обучено в Rspamd всего','Total learned in Rspamd'),d.rspamd.learned??'—']);for(const f of d.rspamd.statfiles||[])versions.push([f.symbol||'Bayes',f.revision??f.used??'—'])}
  if(versions.length)card(mailImageText('Движки и базы','Engines and databases'),versions);
@@ -11208,24 +11325,25 @@ function workspaceFolderIcon(folder){return workspaceIcon(String(folder.role||fo
  calendar.querySelector('.cal-month-toolbar').after(views);
  const originalMonth=renderCalMonth, originalDay=renderCalDay;
  renderCalMonth=function(){originalMonth();renderWeek()};
- renderCalDay=function(){originalDay();if(calState.view==='week'){$('cal-day-view').classList.add('hidden');month.classList.remove('hidden')}if(week)week.hidden=calState.view!=='week'};
+ renderCalDay=function(){if(calState.view==='month')originalDay();$('cal-day-view').classList.add('hidden');renderWeek()};
  function renderWeek(){
-  const weekly=calState.view==='week';calendar.classList.toggle('workspace-calendar-week',weekly);week.hidden=!weekly;
+  const weekly=calState.view==='week'||calState.view==='day',daily=calState.view==='day';calendar.classList.toggle('workspace-calendar-week',weekly);calendar.classList.toggle('workspace-calendar-day',daily);week.hidden=!weekly;
   views.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.view===calState.view)));
   if(!weekly){if(month.parentElement!==monthHome)week.before(month);return}
   if(month.parentElement!==mini)mini.append(month);month.classList.remove('hidden');
   const anchor=new Date((calState.selectedDay||calDayKey(new Date()))+'T12:00');const monday=new Date(anchor);monday.setDate(anchor.getDate()-(anchor.getDay()+6)%7);
-  const days=Array.from({length:7},(_,i)=>{const d=new Date(monday);d.setDate(d.getDate()+i);return d});
-  $('cal-month-label').textContent=days[0].toLocaleDateString(calLocale(),{day:'numeric'})+' — '+days[6].toLocaleDateString(calLocale(),{day:'numeric',month:'long',year:'numeric'});
+  const hourSize=44,rangeKey=calState.view+':'+calDayKey(daily?anchor:monday),savedScroll=week.dataset.range===rangeKey?week.querySelector('.workspace-week-scroll')?.scrollTop:null;week.dataset.range=rangeKey;week.style.setProperty('--schedule-days',daily?'1':'7');week.style.setProperty('--hour-size',hourSize+'px');week.setAttribute('aria-label',words(daily?'Расписание дня':'Расписание недели',daily?'Day schedule':'Week schedule'));
+  const days=Array.from({length:daily?1:7},(_,i)=>{const d=new Date(daily?anchor:monday);d.setDate(d.getDate()+i);return d});
+  $('cal-month-label').textContent=daily?anchor.toLocaleDateString(calLocale(),{weekday:'long',day:'numeric',month:'long'}):days[0].toLocaleDateString(calLocale(),{day:'numeric'})+' — '+days[6].toLocaleDateString(calLocale(),{day:'numeric',month:'long',year:'numeric'});
   week.innerHTML='<div class="workspace-week-head"><span></span>'+days.map(d=>'<button type="button" data-week-day="'+calDayKey(d)+'" class="'+(calDayKey(d)===calDayKey(new Date())?'is-today':'')+'">'+escapeHtml(d.toLocaleDateString(calLocale(),{weekday:'short',day:'numeric'}))+'</button>').join('')+'</div><div class="workspace-week-scroll"><div class="workspace-week-body"><div class="workspace-week-hours">'+Array.from({length:24},(_,h)=>'<span>'+String(h).padStart(2,'0')+':00</span>').join('')+'</div>'+days.map(d=>{
    const key=calDayKey(d);const events=calState.events.filter(e=>calEventOccursOnDay(e,key));
    const timed=events.filter(e=>!e.all_day).map(e=>{const a=new Date(e.start),z=new Date(e.end||e.start);return {e,start:Math.max(0,a<new Date(key+'T00:00')?0:a.getHours()*60+a.getMinutes()),end:Math.min(1440,z>=new Date(key+'T23:59:59')?1440:z.getHours()*60+z.getMinutes())}}).sort((a,b)=>a.start-b.start);
    const lanes=[];for(const x of timed){let lane=lanes.findIndex(end=>end<=x.start);if(lane<0)lane=lanes.length;lanes[lane]=x.end;x.lane=lane}const columns=Math.max(1,lanes.length);
-   return '<div class="workspace-week-day" data-schedule-day="'+key+'">'+events.filter(e=>e.all_day).map(e=>'<button type="button" class="workspace-week-event is-all-day" data-week-event="'+escapeHtml(e.id)+'" title="'+escapeHtml(calendarEventLabel(e))+'">'+escapeHtml(calendarEventLabel(e))+'</button>').join('')+timed.map(({e,start,end,lane})=>'<button type="button" class="workspace-week-event" data-week-event="'+escapeHtml(e.id)+'" style="top:'+start/60*56+'px;height:'+Math.max(30,(end-start)/60*56)+'px;left:calc('+lane/columns*100+'% + 2px);width:calc('+100/columns+'% - 4px);--event-color:'+calendarEventColor(e)+'" title="'+escapeHtml(calendarEventLabel(e)+' · '+fmtCalTime(e.start)+' — '+fmtCalTime(e.end))+'"><strong>'+escapeHtml(calendarEventLabel(e))+'</strong><small>'+escapeHtml(fmtCalTime(e.start)+' — '+fmtCalTime(e.end))+'</small></button>').join('')+'</div>';
+   return '<div class="workspace-week-day'+(key===calDayKey(new Date())?' is-today':'')+'" data-schedule-day="'+key+'" tabindex="0" aria-label="'+escapeHtml(d.toLocaleDateString(calLocale(),{weekday:'long',day:'numeric',month:'long'})+' · '+words('Enter — создать событие','Enter — new event'))+'">'+events.filter(e=>e.all_day).map(e=>'<button type="button" class="workspace-week-event is-all-day" data-week-event="'+escapeHtml(e.id)+'" title="'+escapeHtml(calendarEventLabel(e))+'">'+escapeHtml(calendarEventLabel(e))+'</button>').join('')+timed.map(({e,start,end,lane})=>'<button type="button" class="workspace-week-event" data-week-event="'+escapeHtml(e.id)+'" style="top:'+start/60*hourSize+'px;height:'+Math.max(30,(end-start)/60*hourSize)+'px;left:calc('+lane/columns*100+'% + 2px);width:calc('+100/columns+'% - 4px);--event-color:'+calendarEventColor(e)+'" title="'+escapeHtml(calendarEventLabel(e)+' · '+fmtCalTime(e.start)+' — '+fmtCalTime(e.end))+'"><strong>'+escapeHtml(calendarEventLabel(e))+'</strong><small>'+escapeHtml(fmtCalTime(e.start)+' — '+fmtCalTime(e.end))+'</small></button>').join('')+'</div>';
   }).join('')+'</div></div>';
   week.querySelectorAll('[data-week-event]').forEach(b=>b.onclick=()=>openCalEvent(b.dataset.weekEvent));week.querySelectorAll('[data-week-day]').forEach(b=>b.onclick=()=>{selectCalDay(b.dataset.weekDay);openCalDay(b.dataset.weekDay);renderWeek()});
-  week.querySelectorAll('[data-schedule-day]').forEach(el=>el.ondblclick=e=>{if(!e.target.closest('button'))startNewCalEvent(el.dataset.scheduleDay)});
-  week.querySelector('.workspace-week-scroll').scrollTop=8*56;
+  week.querySelectorAll('[data-schedule-day]').forEach(el=>{el.ondblclick=e=>{if(!e.target.closest('button'))startNewCalEvent(el.dataset.scheduleDay,Math.max(0,Math.min(23,Math.floor((e.clientY-el.getBoundingClientRect().top)/hourSize))))};el.onkeydown=e=>{if(e.target===el&&(e.key==='Enter'||e.key===' ')){e.preventDefault();startNewCalEvent(el.dataset.scheduleDay)}}});
+  week.querySelector('.workspace-week-scroll').scrollTop=savedScroll??8*hourSize;
  }
  // Tasks use a list and a persistent detail pane. The existing editor handles changes.
  const tasks=$('app-tasks'),taskList=document.createElement('div'),taskDetail=document.createElement('aside');taskList.className='workspace-task-list';taskDetail.className='workspace-task-detail';taskDetail.setAttribute('aria-label',words('Подробности задачи','Task details'));
@@ -11309,6 +11427,10 @@ function workspaceFolderIcon(folder){return workspaceIcon(String(folder.role||fo
  // A selected file has a document cover and a bounded, authenticated thumbnail.
  const oldFileReader=showFileReader;let filePreviewSequence=0,filePreviewAbort=null;
  showFileReader=function(entry){oldFileReader(entry);const sequence=++filePreviewSequence;filePreviewAbort?.abort();$('workspace-file-symbol')?.remove();$('workspace-file-thumbnail')?.remove();$('workspace-file-modified')?.remove();if(!entry)return;
+  const reader=$('files-reader'),toolbar=reader.querySelector('.reader-actions');
+  let hero=reader.querySelector('.workspace-file-hero');if(!hero){hero=document.createElement('div');hero.className='workspace-file-hero';toolbar.after(hero);hero.append($('files-subject'))} $('files-subject').title=entry.name;
+  let extra=reader.querySelector('.workspace-reader-more');if(!extra){extra=document.createElement('details');extra.className='workspace-reader-more';extra.innerHTML='<summary aria-label="'+words('Другие действия','More actions')+'">⋮</summary><div></div>';toolbar.append(extra)}extra.open=false;
+  for(const id of ['btn-file-use-template','btn-files-versions','btn-files-share','btn-files-delete']){const button=$(id);if(button)extra.lastElementChild.append(button)}
   const symbol=document.createElement('div');symbol.id='workspace-file-symbol';symbol.className='workspace-file-symbol';symbol.textContent=entry.is_dir?'▱':(entry.name.split('.').pop()||'FILE').slice(0,4).toUpperCase();$('files-subject').before(symbol);
   if(entry.mtime){const row=document.createElement('div');row.id='workspace-file-modified';const dt=document.createElement('dt');dt.textContent=words('Изменён','Modified');const dd=document.createElement('dd');dd.textContent=new Date(entry.mtime).toLocaleString(calLocale());row.append(dt,dd);$('files-read-type').closest('dl').append(row)}
   const type=documentPreviewType(entry.name);if(entry.is_dir||!(type==='application/pdf'||type.startsWith('image/'))||entry.size>16*1024*1024)return;
@@ -11344,9 +11466,6 @@ function workspaceFolderIcon(folder){return workspaceIcon(String(folder.role||fo
  let queueRows=[],queueSelected='',queueFilter='all',queueSequence=0;function renderQueue(){const q=$('workspace-queue-search').value.trim().toLocaleLowerCase();const visible=queueRows.filter(it=>(queueFilter==='all'||(queueFilter==='error'?!!it.last_error:!it.last_error))&&(!q||(it.envelope_from+' '+it.envelope_to).toLocaleLowerCase().includes(q)));$('outbound-list').innerHTML=visible.map(it=>'<tr data-queue-id="'+esc(it.id)+'"><td>'+esc(it.envelope_from)+'</td><td>'+esc(it.envelope_to)+'</td><td><span class="badge '+(it.last_error?'warn':'')+'">'+words(it.last_error?'Повторная попытка':'Ожидание',it.last_error?'Retry scheduled':'Pending')+'</span></td><td>'+esc(new Date(it.next_attempt).toLocaleString(calLocale()))+'</td></tr>').join('')||'<tr><td colspan="4" class="workspace-table-empty">'+words('Очередь пуста','Queue is empty')+'</td></tr>';const select=id=>{queueSelected=id;const it=queueRows.find(x=>x.id===id),host=$('workspace-queue-detail');host.replaceChildren();if(!it){host.innerHTML='<p class="meta">'+words('Выберите письмо из очереди','Select a queued message')+'</p>';return}host.append(detail(words('Письмо из очереди','Queued message'),[[words('Отправитель','Sender'),it.envelope_from],[words('Получатель','Recipient'),it.envelope_to],[words('Попытки','Attempts'),it.attempts+' / '+it.max_attempts],[words('Причина','Reason'),it.last_error],[words('Следующая попытка','Next attempt'),new Date(it.next_attempt).toLocaleString(calLocale())],['Message-ID',it.message_id]]));const actions=document.createElement('div');actions.className='actions';for(const [action,ru,en]of [['retry','Повторить','Retry'],['delete','Удалить','Delete']])actions.append(button(words(ru,en),async()=>{if(action==='delete'&&!await askConfirm(words('Удалить письмо из очереди без уведомления отправителя?','Delete this queued message without notifying its sender?'),{danger:true}))return;try{await api('/api/v1/admin/outbound/'+encodeURIComponent(id)+(action==='retry'?'/retry':''),{method:action==='retry'?'POST':'DELETE'});await refreshOutbound()}catch(e){setMsg($('outbound-msg'),e.message,'err')}},action==='retry'));host.append(actions);queue.querySelectorAll('[data-queue-id]').forEach(r=>r.classList.toggle('is-active',r.dataset.queueId===id))};queue.querySelectorAll('[data-queue-id]').forEach(r=>selectable(r,()=>select(r.dataset.queueId)));select(visible.some(x=>x.id===queueSelected)?queueSelected:visible[0]?.id)}
  refreshOutbound=async function(){const sequence=++queueSequence;try{const data=await api('/api/v1/admin/outbound?limit=30&offset='+outboundOffset);if(sequence!==queueSequence)return;queueRows=data.items||[];if(!queueRows.length&&outboundOffset>0){outboundOffset=Math.max(0,outboundOffset-30);return refreshOutbound()}renderQueue();const pager=$('outbound-pager');pager.replaceChildren(button('‹',()=>{outboundOffset=Math.max(0,outboundOffset-30);refreshOutbound()}),document.createTextNode((queueRows.length?outboundOffset+1:0)+'—'+(outboundOffset+queueRows.length)+' / '+data.total),button('›',()=>{outboundOffset+=30;refreshOutbound()}));pager.firstElementChild.disabled=outboundOffset===0;pager.lastElementChild.disabled=outboundOffset+queueRows.length>=data.total;setMsg($('outbound-msg'),'')}catch(e){setMsg($('outbound-msg'),e.message,'err')}};
  $('workspace-queue-refresh').onclick=()=>refreshOutbound();$('workspace-queue-search').oninput=renderQueue;queue.querySelectorAll('[data-queue-filter]').forEach(b=>b.onclick=()=>{queueFilter=b.dataset.queueFilter;queue.querySelectorAll('[data-queue-filter]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));renderQueue()});
- // Mail logs have structured fields from the API; preserve raw lines in details.
- const oldLog=$('maillog-lines'),log=document.createElement('div');log.id='maillog-lines';log.className='workspace-mail-log';oldLog.replaceWith(log);
- refreshMailLog=async function(reset=true){if(reset)maillogOffset=0;const request=++maillogRequest;try{const params=new URLSearchParams({limit:String(maillogPageSize+1),offset:String(maillogOffset)}),query=$('maillog-q').value.trim();if(query)params.set('q',query);const data=await api('/api/v1/admin/mail-log?'+params);if(request!==maillogRequest)return;const items=(data.items||[]).slice(0,maillogPageSize);log.innerHTML='<div class="workspace-record-table"><table><thead><tr><th>'+words('Время','Time')+'</th><th>'+words('Отправитель','Sender')+'</th><th>'+words('Получатель','Recipient')+'</th><th>'+words('Событие','Event')+'</th><th>Message-ID</th></tr></thead><tbody>'+items.map((it,i)=>'<tr data-log-row="'+i+'"><td>'+esc(new Date(it.created_at).toLocaleTimeString(calLocale(),{hour:'2-digit',minute:'2-digit'}))+'</td><td>'+esc(it.mail_from||'—')+'</td><td>'+esc(it.rcpt_to||'—')+'</td><td><span class="badge">'+esc(it.event)+'</span></td><td>'+esc(it.message_id||'—')+'</td></tr>').join('')+(!items.length?'<tr><td colspan="5" class="workspace-table-empty">'+words('Записей пока нет','No log entries')+'</td></tr>':'')+'</tbody></table></div><section class="workspace-log-detail"></section>';const select=i=>{const it=items[i],host=log.lastElementChild;host.replaceChildren();if(!it)return;host.append(detail(words('Детали доставки','Delivery details'),[[words('Время','Time'),new Date(it.created_at).toLocaleString(calLocale())],[words('Направление','Direction'),it.direction],[words('Отправитель','Sender'),it.mail_from],[words('Получатель','Recipient'),it.rcpt_to],['Message-ID',it.message_id],[words('Размер','Size'),fmtBytes(it.size)]]));const raw=document.createElement('details');raw.innerHTML='<summary>'+words('Строка журнала','Raw log entry')+'</summary>';const pre=document.createElement('pre');pre.textContent=it.line||it.detail;raw.append(pre);host.append(raw);log.querySelectorAll('[data-log-row]').forEach(r=>r.classList.toggle('is-active',Number(r.dataset.logRow)===i))};log.querySelectorAll('[data-log-row]').forEach(r=>selectable(r,()=>select(Number(r.dataset.logRow))));select(0);$('maillog-prev').disabled=maillogOffset===0;$('maillog-next').disabled=(data.items||[]).length<=maillogPageSize;setMsg($('maillog-msg'),items.length?(maillogOffset+1)+'—'+(maillogOffset+items.length):'0')}catch(e){setMsg($('maillog-msg'),e.message,'err')}};
  // User policy controls belong in the selected profile, not in every table row.
  const userLevel=$('tenant-level-users'),userTable=$('admin-user-list').closest('.admin-table-scroll'),userAside=document.createElement('aside'),userLayout=document.createElement('div');userLayout.className='workspace-record-layout workspace-users-layout';userAside.className='workspace-record-aside';userTable.before(userLayout);userLayout.append(userTable,userAside);let selectedUser='';
  new MutationObserver(()=>{const rows=[...$('admin-user-list').children].filter(r=>r.cells.length>1);for(const r of rows)r.dataset.workspaceUser=r.querySelector('[data-user-cos]')?.dataset.userCos||'';const select=id=>{selectedUser=id;userAside.replaceChildren();const row=rows.find(r=>r.dataset.workspaceUser===id);if(!row)return;const name=row.cells[0].textContent,email=row.cells[1].textContent;userAside.append(detail(name, [['Email',email],[words('Статус','Status'),[row.cells[2].querySelector('.badge')?.textContent,row.cells[2].querySelector('.meta')?.textContent].filter(Boolean).join(' · ')],[words('Квота','Quota'),row.cells[3].textContent]]));for(const i of [4,5,6]){const cell=row.cells[i];if(!cell)continue;const wrap=document.createElement('div');wrap.className='workspace-user-policy';while(cell.firstChild)wrap.append(cell.firstChild);const stored=row._workspaceControls?.[i];if(stored){wrap.replaceChildren(stored)}else{row._workspaceControls||={};row._workspaceControls[i]=wrap.firstElementChild}userAside.append(wrap)}userAside.querySelectorAll('.user-action-icons button').forEach(b=>{if(!b.querySelector('.workspace-action-label')){const span=document.createElement('span');span.className='workspace-action-label';span.textContent=b.getAttribute('aria-label');b.append(span)}});rows.forEach(r=>r.classList.toggle('is-active',r===row))};for(const r of rows)selectable(r,()=>select(r.dataset.workspaceUser));select(rows.some(r=>r.dataset.workspaceUser===selectedUser)?selectedUser:rows[0]?.dataset.workspaceUser)}).observe($('admin-user-list'),{childList:true});
@@ -11373,6 +11492,95 @@ function workspaceFolderIcon(folder){return workspaceIcon(String(folder.role||fo
  const scopeDescription=mmCard.querySelector(':scope>.meta');if(scopeDescription){const details=document.createElement('details');details.className='workspace-mm-help';details.innerHTML='<summary>'+words('Наследование настроек','Settings inheritance')+'</summary>';scopeDescription.before(details);details.append(scopeDescription)}
  // Domains use the same table and detail pattern as users and certificates.
  const oldDomains=refreshTenantDomains;refreshTenantDomains=async function(){await oldDomains();const host=$('admin-domain-list'),items=[...host.children].filter(el=>el.tagName==='LI'&&el.querySelector('[data-open-domain]'));if(!items.length)return;const records=items.map(li=>({name:li.querySelector('strong')?.textContent||'',users:li.querySelector('.meta')?.textContent||'',actions:li.querySelector('.actions')}));const wrap=document.createElement('div');wrap.className='workspace-record-layout';const table=document.createElement('table');table.innerHTML='<thead><tr><th>'+words('Домен','Domain')+'</th><th>'+words('Пользователи','Users')+'</th><th>'+words('Миграция','Migration')+'</th></tr></thead><tbody>'+records.map((r,i)=>'<tr data-domain-record="'+i+'"><td>'+esc(r.name)+'</td><td>'+esc(r.users)+'</td><td>'+esc(r.actions?.querySelector('[data-dom-mig]')?.selectedOptions[0]?.textContent||'—')+'</td></tr>').join('')+'</tbody>';const aside=document.createElement('aside');aside.className='workspace-record-aside';wrap.append(table,aside);host.replaceChildren(wrap);function select(i){const record=records[i];aside.replaceChildren(detail(record.name,[[words('Организация','Organization'),tenantNav.tenantName],[words('Пользователи','Users'),record.users]]));record.actions?.querySelector('[data-domain-xmpp-gal]')?.closest('label').remove();if(record.actions)aside.append(record.actions);table.querySelectorAll('[data-domain-record]').forEach(row=>row.classList.toggle('is-active',Number(row.dataset.domainRecord)===i))}table.querySelectorAll('[data-domain-record]').forEach(row=>selectable(row,()=>select(Number(row.dataset.domainRecord))));select(0)};
+})();
+/* Protection overview, quarantine and policy controls use separate calm panels. */
+(() => {
+  const card=document.querySelector('#app-antispam>.card');
+  const settings=card?.querySelector('.protection-settings');
+  if(!card||!settings)return;
+  const words=workspaceWords,existing=$('protection-diagnostics');
+  const quarantine=document.createElement('section');quarantine.id='protection-quarantine';
+  const tail=[];for(let node=settings.nextSibling;node;node=node.nextSibling)if(node!==existing)tail.push(node);
+  quarantine.append(...tail);
+  const overview=document.createElement('section');overview.id='protection-overview';if(existing)overview.append(existing);
+  const policy=document.createElement('section');policy.id='protection-policy';
+  const heading=document.createElement('h3');heading.textContent=words('Правила защиты','Protection policies');
+  const note=document.createElement('p');note.className='meta';note.textContent=words('Настройки проверки входящих писем и обработки нежелательной почты.','Configure incoming message checks and unwanted mail handling.');
+  policy.append(heading,note,settings);
+  const tabs=document.createElement('nav');tabs.className='workspace-view-tabs protection-view-tabs';tabs.setAttribute('role','tablist');tabs.setAttribute('aria-label',words('Разделы антиспама','Protection sections'));
+  const panels=[overview,quarantine,policy],labels=[words('Обзор','Overview'),words('Карантин','Quarantine'),words('Настройки','Settings')];
+  function select(index,focus=false){panels.forEach((panel,i)=>{panel.hidden=i!==index;const tab=tabs.children[i];tab.setAttribute('aria-selected',String(i===index));tab.setAttribute('aria-pressed',String(i===index));tab.tabIndex=i===index?0:-1});if(focus)tabs.children[index].focus()}
+  panels.forEach((panel,index)=>{panel.setAttribute('role','tabpanel');panel.setAttribute('aria-labelledby','protection-tab-'+index);const tab=document.createElement('button');tab.type='button';tab.id='protection-tab-'+index;tab.setAttribute('role','tab');tab.setAttribute('aria-controls',panel.id);tab.textContent=labels[index];tab.onclick=()=>select(index);tab.onkeydown=e=>{let next=index;if(e.key==='ArrowRight')next=(index+1)%3;else if(e.key==='ArrowLeft')next=(index+2)%3;else if(e.key==='Home')next=0;else if(e.key==='End')next=2;else return;e.preventDefault();select(next,true)};tabs.append(tab)});
+  card.append(tabs,...panels);select(0);
+})();
+/* A selected delivery entry opens a visible, keyboard-accessible status sheet. */
+(() => {
+  const words=workspaceWords,esc=escapeHtml,old=$('maillog-lines');if(!old)return;
+  const host=document.createElement('div');host.id='maillog-lines';host.className='workspace-mail-log';old.replaceWith(host);
+  const dialog=document.createElement('dialog');dialog.className='workspace-delivery-dialog';dialog.setAttribute('aria-labelledby','delivery-detail-title');document.body.append(dialog);
+  let generation=0,opener=null,selected='',identity='',watch=null;
+  const statuses={
+    delivered:['Доставлено в ящик','Delivered to mailbox','success'],sent:['Принято сервером получателя','Accepted by recipient server','success'],
+    queued:['В очереди','Queued','pending'],deferred:['Ожидает повтора','Retry scheduled','warning'],failed:['Не доставлено','Delivery failed','error'],rejected:['Отклонено','Rejected','error'],
+    smtp_dialogue:['SMTP-сеанс','SMTP session','neutral'],quarantined:['В карантине','Quarantined','warning'],quarantine:['В карантине','Quarantined','warning'],accepted:['Принято','Accepted','neutral']
+  };
+  function status(entry){const value=statuses[entry.event];return value?{label:words(value[0],value[1]),tone:value[2]}:{label:entry.event||'—',tone:'neutral'}}
+  function badge(entry){const value=status(entry);const span=document.createElement('span');span.className='mail-log-event';span.dataset.tone=value.tone;span.textContent=value.label;return span}
+  function date(entry){return new Date(entry.created_at).toLocaleString(calLocale())}
+  function facts(entries){const dl=document.createElement('dl');dl.className='delivery-facts';for(const [label,value]of entries){if(value==null||value==='')continue;const row=document.createElement('div'),dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;dd.textContent=String(value);row.append(dt,dd);dl.append(row)}return dl}
+  function correlation(entry){const match=/^(transaction_id|queue_id)=([0-9a-f-]{36})(?:\s|$)/.exec(entry.detail||'');return match?{key:match[1],id:match[2]}:null}
+  function metadata(entry,key){return new RegExp('(?:^|\\s)'+key+'=([^\\s]+)').exec(entry.detail||'')?.[1]||''}
+  function reason(entry){return (entry.detail||'').replace(/^(?:transaction_id|queue_id)=[^\s]+\s*/, '').replace(/^attempt=\d+\s*/, '').trim()}
+  function render(entry,events,loading=false,error='',truncated=false){
+    dialog.replaceChildren();
+    const header=document.createElement('header');header.className='delivery-detail-heading';const title=document.createElement('h2');title.id='delivery-detail-title';title.textContent=words('Статус письма','Message status');const close=document.createElement('button');close.type='button';close.className='btn-secondary action-icon';close.textContent='×';close.setAttribute('aria-label',words('Закрыть подробности','Close details'));close.onclick=()=>dialog.close();header.append(title,close);dialog.append(header);
+    const ordered=[...events].sort((a,b)=>new Date(a.created_at)-new Date(b.created_at)||a.id.localeCompare(b.id));
+    const latest=[...ordered].reverse().find(item=>item.event!=='smtp_dialogue')||entry;
+    const summary=document.createElement('section');summary.className='delivery-summary';summary.dataset.tone=status(latest).tone;
+    const caption=document.createElement('p');caption.className='meta';caption.textContent=words('Последний зафиксированный статус','Latest recorded status');summary.append(caption,badge(latest));
+    const when=document.createElement('p');when.className='meta';when.textContent=date(latest);summary.append(when);
+    if(latest.event==='sent'){const note=document.createElement('p');note.className='meta';note.textContent=words('Удалённый SMTP-сервер подтвердил приём. Доставка в конечную папку и прочтение этим статусом не подтверждаются.','The remote SMTP server confirmed acceptance. This does not confirm the final folder or reading.');summary.append(note)}
+    if(['failed','rejected','deferred'].includes(latest.event)&&reason(latest)){const cause=document.createElement('p');cause.className='delivery-cause';cause.textContent=reason(latest);summary.append(cause)}
+    dialog.append(summary);
+    const link=correlation(entry);const attempt=metadata(latest,'attempt'),duration=metadata(latest,'duration_ms');
+    dialog.append(facts([[words('Отправитель','Sender'),entry.mail_from||'<>'],[words('Получатель','Recipient'),entry.rcpt_to],['Message-ID',entry.message_id],
+      [words('Направление','Direction'),entry.direction==='inbound'?words('Входящее','Incoming'):entry.direction==='outbound'?words('Исходящее','Outgoing'):entry.direction],
+      [words('Сервер / IP','Server / IP'),latest.peer||metadata(latest,'peer')||entry.peer],[words('Размер','Size'),entry.size>0?fmtBytes(entry.size):words('Не записан','Not recorded')],
+      [words('Попытка','Attempt'),attempt],[words('Длительность','Duration'),duration?duration+' '+words('мс','ms'):''],[words('Следующая попытка','Next attempt'),metadata(latest,'next_attempt')||metadata(latest,'next')],
+      [link?.key==='queue_id'?'Queue ID':'Transaction ID',link?.id]]));
+    const section=document.createElement('section');section.className='delivery-history';const heading=document.createElement('h3');heading.textContent=words('История обработки','Processing history');section.append(heading);
+    const notice=document.createElement('p');notice.className='meta';notice.setAttribute('role','status');notice.textContent=loading?words('Загружаю связанные события…','Loading related events…'):error?words('Не удалось загрузить историю: ','Could not load history: ')+error:truncated?words('Показаны последние 200 событий.','Showing the latest 200 events.'):!link&&!entry.message_id?words('У записи нет идентификатора для поиска связанных событий.','This entry has no identifier for related event lookup.'):words('Сохранённые события для этого письма и получателя.','Recorded events for this message and recipient.');section.append(notice);
+    const timeline=document.createElement('ol');timeline.className='delivery-timeline';
+    for(const item of ordered){const li=document.createElement('li');li.dataset.tone=status(item).tone;const row=document.createElement('div');row.className='delivery-timeline-heading';const time=document.createElement('time');time.dateTime=item.created_at;time.textContent=date(item);row.append(badge(item),time);li.append(row);
+      if(item.detail||item.line){const technical=document.createElement('details');if(item.event!=='smtp_dialogue')technical.open=true;const label=document.createElement('summary');label.textContent=item.event==='smtp_dialogue'?words('Диалог SMTP','SMTP dialogue'):words('Диагностика сервера','Server diagnostics');const pre=document.createElement('pre');pre.textContent=item.detail||item.line;technical.append(label,pre);li.append(technical)}timeline.append(li)}
+    section.append(timeline);dialog.append(section);if(dialog.open)close.focus({preventScroll:true});
+  }
+  async function open(entry,button){identity=state.email;clearInterval(watch);watch=setInterval(()=>{if(state.email!==identity||!state.tokens?.access_token)dialog.close()},300);const check=()=>{if(state.email!==identity||!state.tokens?.access_token)throw Error('Учётная запись изменилась')};const request=++generation;opener=button||document.activeElement;selected=entry.id;render(entry,[entry],true);if(!dialog.open)dialog.showModal();
+    host.querySelectorAll('[data-log-id]').forEach(row=>row.classList.toggle('is-active',row.dataset.logId===entry.id));
+    const link=correlation(entry);if(!link&&!entry.message_id){render(entry,[entry]);return}
+    try{const params=new URLSearchParams({limit:'201',mail_from:entry.mail_from||'',rcpt_to:entry.rcpt_to||''});if(entry.direction)params.set('direction',entry.direction);if(entry.tenant_id)params.set('tenant_id',entry.tenant_id);if(entry.domain)params.set('domain',entry.domain);
+      if(link){params.set('correlation_key',link.key);params.set('correlation_id',link.id)}else params.set('message_id',entry.message_id);
+      const data=await api('/api/v1/admin/mail-log?'+params,{_guard:check});if(request!==generation||!dialog.open)return;
+      const list=(data.items||[]).slice(0,200);if(!list.some(item=>item.id===entry.id))list.push(entry);
+      render(entry,list,false,'',(data.items||[]).length>200);
+    }catch(error){if(request===generation&&dialog.open)render(entry,[entry],false,error.message)}
+  }
+  dialog.addEventListener('close',()=>{generation++;clearInterval(watch);dialog.replaceChildren();if(opener?.isConnected)opener.focus()});
+  dialog.addEventListener('click',event=>{const rect=dialog.getBoundingClientRect();if(event.target===dialog&&(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom))dialog.close()});
+  refreshMailLog=async function(reset=true){if(reset)maillogOffset=0;const request=++maillogRequest;
+    try{const params=new URLSearchParams({limit:String(maillogPageSize+1),offset:String(maillogOffset)}),query=$('maillog-q').value.trim();if(query)params.set('q',query);
+      const data=await api('/api/v1/admin/mail-log?'+params);if(request!==maillogRequest)return;const items=(data.items||[]).slice(0,maillogPageSize);
+      host.innerHTML='<div class="workspace-record-table"><table><thead><tr><th>'+words('Время','Time')+'</th><th>'+words('Отправитель','Sender')+'</th><th>'+words('Получатель','Recipient')+'</th><th>'+words('Статус','Status')+'</th><th>Message-ID</th></tr></thead><tbody></tbody></table></div>';
+      const tbody=host.querySelector('tbody');
+      for(const item of items){const row=document.createElement('tr');row.dataset.logId=item.id;row.classList.toggle('is-active',item.id===selected);
+        const when=document.createElement('td'),button=document.createElement('button');button.type='button';button.className='workspace-log-open';button.textContent=new Date(item.created_at).toLocaleTimeString(calLocale(),{hour:'2-digit',minute:'2-digit'});button.setAttribute('aria-haspopup','dialog');button.setAttribute('aria-label',words('Подробный статус письма: ','Detailed message status: ')+(item.mail_from||'<>')+' → '+(item.rcpt_to||'—'));when.append(button);row.append(when);
+        for(const value of [item.mail_from||'<>',item.rcpt_to||'—']){const td=document.createElement('td');td.textContent=value;row.append(td)}
+        const state=document.createElement('td');state.append(badge(item));const id=document.createElement('td');id.textContent=item.message_id||'—';id.title=item.message_id||'';row.append(state,id);row.addEventListener('click',()=>open(item,button));tbody.append(row)}
+      if(!items.length){const row=document.createElement('tr');const td=document.createElement('td');td.colSpan=5;td.className='workspace-table-empty';td.textContent=words('Записей пока нет','No log entries');row.append(td);tbody.append(row)}
+      const scope=$('maillog-scope');if(scope)scope.textContent=words('Приём, доставка и исходящая очередь. Нажмите на письмо, чтобы открыть подробный статус.','Incoming mail, delivery and outgoing queue. Select an entry to see its detailed status.');
+      $('maillog-prev').disabled=maillogOffset===0;$('maillog-next').disabled=(data.items||[]).length<=maillogPageSize;setMsg($('maillog-msg'),items.length?(maillogOffset+1)+'—'+(maillogOffset+items.length):'0');
+    }catch(error){if(request===maillogRequest)setMsg($('maillog-msg'),error.message,'err')}
+  };
 })();
 /* Register only presentation labels present at mount time. Message bodies, names,
    user-created notes and other data never pass through the translation map. */

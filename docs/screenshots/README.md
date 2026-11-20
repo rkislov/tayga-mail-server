@@ -117,3 +117,14 @@ node scripts/capture-screenshots.mjs
 - [Кнопки свойств календарей на телефоне](ui-calendar-mobile-202610.png)
 - [Меню статуса чата](ui-chat-presence-202610.png)
 - [Меню статуса на телефоне](ui-chat-presence-mobile-202610.png)
+
+## Обновление 1.0.1
+
+Снимки работающего интерфейса на локальном демонстрационном стенде.
+
+- [Чаты и вложения](v1.0.1/chat.png)
+- [Чтение письма](v1.0.1/mail.png)
+- [Неделя](v1.0.1/calendar-week.png) и [день](v1.0.1/calendar-day.png)
+- [Файлы](v1.0.1/files.png)
+- [Антиспам](v1.0.1/antispam.png)
+- [Подробный статус доставки](v1.0.1/delivery-status.png)

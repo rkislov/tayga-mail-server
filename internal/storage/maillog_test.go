@@ -84,3 +84,51 @@ func TestDomainOfEmail(t *testing.T) {
 		t.Fatal("expected empty")
 	}
 }
+
+// Correlation must never widen the admin's scope, or mix another envelope recipient.
+func TestMailLogExactHistoryScope(t *testing.T) {
+	ctx := context.Background()
+	db, err := storage.Open(ctx, config.StorageConfig{Driver: "sqlite", SQLite: config.SQLiteConfig{Path: filepath.Join(t.TempDir(), "test.db")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	tx := "b9fde9ee-7700-4d52-8695-3179b5ea083f"
+	base := storage.MailLogEntry{TenantID: "t1", Domain: "example.com", Event: "delivered", Direction: "inbound", RcptTo: "bob@example.com", MessageID: "<shared@example.com>", Detail: "transaction_id=" + tx + " accepted"}
+	for i := 0; i < 7; i++ {
+		e := base
+		switch i {
+		case 1:
+			e.TenantID = "t2"
+		case 2:
+			e.Domain = "other.com"
+		case 3:
+			e.RcptTo = "other@example.com"
+		case 4:
+			e.MailFrom = "spoof@example.com"
+		case 5:
+			e.Direction = "outbound"
+		case 6:
+			e.Detail = "transaction_id=" + tx + "evil accepted"
+		}
+		if err := db.InsertMailLog(ctx, &e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sender, recipient := "", "bob@example.com"
+	q := storage.MailLogQuery{TenantID: "t1", Domains: []string{"example.com"}, MessageID: base.MessageID, Direction: "inbound", MailFrom: &sender, RcptTo: &recipient, CorrelationKey: "transaction_id", CorrelationID: tx}
+	for _, term := range []string{"", "accepted"} {
+		q.Q = term
+		hits, err := db.SearchMailLog(ctx, q)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(hits) != 1 || hits[0].Detail != base.Detail {
+			t.Fatalf("scope or exact token violated for %q: %+v", term, hits)
+		}
+	}
+	q.CorrelationKey = "unsafe"
+	if _, err := db.SearchMailLog(ctx, q); err == nil {
+		t.Fatal("invalid correlation key accepted")
+	}
+}

@@ -9,6 +9,7 @@ import (
 )
 
 func (s *Server) handleAdminMailLog(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	admin, ok := s.requireDomainAdmin(w, r)
 	if !ok {
 		return
@@ -38,10 +39,32 @@ func (s *Server) handleAdminMailLog(w http.ResponseWriter, r *http.Request) {
 		Offset: offset,
 	}
 
+	params := r.URL.Query()
+	query.ID = strings.TrimSpace(params.Get("id"))
+	query.MessageID = strings.TrimSpace(params.Get("message_id"))
+	query.Direction = strings.TrimSpace(params.Get("direction"))
+	query.CorrelationKey = params.Get("correlation_key")
+	query.CorrelationID = params.Get("correlation_id")
+	if _, ok := params["mail_from"]; ok {
+		v := params.Get("mail_from")
+		query.MailFrom = &v
+	}
+	if _, ok := params["rcpt_to"]; ok {
+		v := params.Get("rcpt_to")
+		query.RcptTo = &v
+	}
+	if query.CorrelationID != "" && ((query.CorrelationKey != "transaction_id" && query.CorrelationKey != "queue_id") || !storage.ValidFileSpaceID(query.CorrelationID)) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid correlation identifier"})
+		return
+	}
 	scope := "global"
 	if s.isGlobalAdminUser(admin) {
 		// Global admin sees the full mail log (all domains / tenants).
 		scope = "global"
+		query.TenantID = strings.TrimSpace(params.Get("tenant_id"))
+		if domain := strings.TrimSpace(params.Get("domain")); domain != "" {
+			query.Domains = []string{domain}
+		}
 	} else {
 		scope = "domain"
 		names, err := s.adminDomainNames(r, admin)

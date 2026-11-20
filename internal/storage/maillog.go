@@ -27,11 +27,18 @@ type MailLogEntry struct {
 
 // MailLogQuery filters admin mail log search.
 type MailLogQuery struct {
-	TenantID string
-	Domains  []string // empty = all (global); otherwise restrict to these domain names
-	Q        string
-	Limit    int
-	Offset   int
+	ID             string
+	MessageID      string
+	MailFrom       *string
+	RcptTo         *string
+	Direction      string
+	CorrelationKey string
+	CorrelationID  string
+	TenantID       string
+	Domains        []string // empty = all (global); otherwise restrict to these domain names
+	Q              string
+	Limit          int
+	Offset         int
 }
 
 // InsertMailLog stores a log line and updates FTS (sqlite).
@@ -79,64 +86,63 @@ func (s *Store) SearchMailLog(ctx context.Context, q MailLogQuery) ([]MailLogEnt
 	}
 	query := strings.TrimSpace(q.Q)
 
-	var (
-		rows *sql.Rows
-		err  error
-	)
-
+	base := `SELECT id, tenant_id, domain, event, direction, peer, mail_from, rcpt_to,
+        message_id, size, detail, line, created_at FROM mail_log WHERE 1=1`
+	args := []any{}
+	for _, filter := range []struct{ column, value string }{
+		{"tenant_id", q.TenantID}, {"id", q.ID}, {"message_id", q.MessageID}, {"direction", q.Direction},
+	} {
+		if filter.value != "" {
+			base += " AND " + filter.column + " = ?"
+			args = append(args, filter.value)
+		}
+	}
+	for _, filter := range []struct {
+		column string
+		value  *string
+	}{{"mail_from", q.MailFrom}, {"rcpt_to", q.RcptTo}} {
+		if filter.value != nil {
+			base += " AND " + filter.column + " = ?"
+			args = append(args, strings.ToLower(strings.TrimSpace(*filter.value)))
+		}
+	}
+	if len(q.Domains) > 0 {
+		base += " AND domain IN (" + placeholders(len(q.Domains)) + ")"
+		for _, domain := range q.Domains {
+			args = append(args, strings.ToLower(domain))
+		}
+	}
+	if q.CorrelationID != "" {
+		if (q.CorrelationKey != "transaction_id" && q.CorrelationKey != "queue_id") || !ValidFileSpaceID(q.CorrelationID) {
+			return nil, fmt.Errorf("invalid mail log correlation")
+		}
+		token := q.CorrelationKey + "=" + q.CorrelationID
+		base += " AND (detail = ? OR substr(detail, 1, ?) = ?)"
+		args = append(args, token, len(token)+1, token+" ")
+	}
+	var rows *sql.Rows
+	var err error
+	order := " ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?"
 	if s.dialect == DialectSQLite && query != "" {
-		fts := ftsQuery(query)
-		if fts != "" {
-			sqlQ := `
-				SELECT m.id, m.tenant_id, m.domain, m.event, m.direction, m.peer, m.mail_from, m.rcpt_to,
-					m.message_id, m.size, m.detail, m.line, m.created_at
-				FROM mail_log m
-				WHERE m.id IN (SELECT log_id FROM mail_log_fts WHERE mail_log_fts MATCH ?)`
-			args := []any{fts}
-			if q.TenantID != "" {
-				sqlQ += ` AND m.tenant_id = ?`
-				args = append(args, q.TenantID)
-			}
-			if len(q.Domains) > 0 {
-				sqlQ += ` AND m.domain IN (` + placeholders(len(q.Domains)) + `)`
-				for _, d := range q.Domains {
-					args = append(args, strings.ToLower(d))
-				}
-			}
-			sqlQ += ` ORDER BY m.created_at DESC LIMIT ? OFFSET ?`
-			args = append(args, q.Limit, q.Offset)
-			rows, err = s.db.QueryContext(ctx, sqlQ, args...)
+		if fts := ftsQuery(query); fts != "" {
+			ftsArgs := append(append([]any{}, args...), fts, q.Limit, q.Offset)
+			rows, err = s.db.QueryContext(ctx, base+" AND id IN (SELECT log_id FROM mail_log_fts WHERE mail_log_fts MATCH ?)"+order, ftsArgs...)
 			if err != nil {
-				// fall through to LIKE on FTS syntax errors
 				rows = nil
 			}
 		}
 	}
 	if rows == nil {
-		sqlQ := `SELECT id, tenant_id, domain, event, direction, peer, mail_from, rcpt_to,
-			message_id, size, detail, line, created_at FROM mail_log WHERE 1=1`
-		args := []any{}
-		if q.TenantID != "" {
-			sqlQ += ` AND tenant_id = ?`
-			args = append(args, q.TenantID)
-		}
-		if len(q.Domains) > 0 {
-			sqlQ += ` AND domain IN (` + placeholders(len(q.Domains)) + `)`
-			for _, d := range q.Domains {
-				args = append(args, strings.ToLower(d))
-			}
-		}
 		if query != "" {
 			if s.dialect == DialectPostgres {
-				sqlQ += ` AND line ILIKE ?`
+				base += " AND line ILIKE ?"
 			} else {
-				sqlQ += ` AND lower(line) LIKE lower(?)`
+				base += " AND lower(line) LIKE lower(?)"
 			}
 			args = append(args, "%"+query+"%")
 		}
-		sqlQ += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`
 		args = append(args, q.Limit, q.Offset)
-		rows, err = s.db.QueryContext(ctx, s.rebind(sqlQ), args...)
+		rows, err = s.db.QueryContext(ctx, s.rebind(base+order), args...)
 		if err != nil {
 			return nil, err
 		}
