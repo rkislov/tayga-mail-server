@@ -15,7 +15,7 @@ See [docs/architecture.md](docs/architecture.md) and `configs/tayga.example.yaml
 
 **Первоначальная настройка (RU):** [docs/setup.md](docs/setup.md) — bootstrap, seed-админ, DNS, TLS, исходящая почта, чеклист.
 
-**Сравнение решений (RU), 20.11.2026:** [Tayga, TEGU, CommuniGate, Яндекс 360, Р7, VK, Астра и MS Exchange](docs/product-comparison.md) · [Презентация PowerPoint](docs/presentations/tayga-competitors-2026-11-20.pptx) · [Матрица Excel: все 8 решений, 55 параметров](docs/presentations/tayga-comparison-matrix-2026-11-20.xlsx).
+**Сравнение решений (RU), 20.11.2026:** [Tayga, TEGU, CommuniGate, Яндекс 360, Р7, VK, Астра и MS Exchange](docs/product-comparison.md) · [Презентация PowerPoint](docs/presentations/tayga-competitors-2026-11-20.pptx) · [Матрица Excel: все 8 решений, 54 параметра](docs/presentations/tayga-comparison-matrix-2026-11-20.xlsx).
 
 **План разработки (RU):** [Дорожная карта: порядок работ, зависимости и критерии готовности](docs/roadmap.md).
 
