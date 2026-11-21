@@ -63,6 +63,11 @@ jobs:
         with:
           name: linux-native-packages
           path: packages
+      - name: Trust the verified RED OS registry chain for this registry only
+        if: startsWith(matrix.image, 'registry.red-soft.ru/')
+        run: |
+          echo 'be9dcd199576967219f0ff18abe7f513a7f9e02b595b42c8bdaedb3306bf6187  scripts/ci/redos-registry-ca.pem' | sha256sum -c -
+          sudo install -Dm644 scripts/ci/redos-registry-ca.pem /etc/docker/certs.d/registry.red-soft.ru/ca.crt
       - name: Install, run, rotate, upgrade and remove
         env:
           IMAGE: ${{ matrix.image }}

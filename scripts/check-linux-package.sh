@@ -14,7 +14,8 @@ case "$family" in
     apt-get install -y "$package" curl procps su systemd-analyze
     ;;
   rpm)
-    dnf install -y "$package" curl procps-ng
+    dnf install -y "$package" procps-ng
+    if ! command -v curl >/dev/null; then dnf install -y curl; fi
     ;;
   *) exit 2;;
 esac
@@ -91,7 +92,12 @@ test -s /var/log/tayga/tayga.log.1
 if [ ! -d /run/systemd/system ]; then kill -HUP "$pid";fi
 reopened=false
 for attempt in $(seq 1 30); do
-  if su -s /bin/sh tayga -c "ls -l /proc/$pid/fd" | grep -q '/var/log/tayga/tayga.log$'; then reopened=true;break;fi
+  if [ -d /run/systemd/system ]; then
+    descriptors=$(ls -l /proc/"$pid"/fd)
+  else
+    descriptors=$(su -s /bin/sh tayga -c "ls -l /proc/$pid/fd")
+  fi
+  if printf '%s\n' "$descriptors" | grep -q '/var/log/tayga/tayga.log$';then reopened=true;break;fi
   sleep 1
 done
 test "$reopened" = true
