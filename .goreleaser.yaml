@@ -54,6 +54,7 @@ archives:
       - docs/screenshots/v1.0.0/*
       - docs/screenshots/v1.0.1/*
       - docs/screenshots/v1.0.2/*
+      - docs/screenshots/v1.0.4/*
       - frontend/LICENSE
       - frontend/README.md
       - frontend/package*.json
