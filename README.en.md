@@ -3,7 +3,7 @@
 **Mail and teamwork on your own server.**
 
 [Русский](README.md) · **English**
-[Download v1.0.4](https://github.com/rkislov/tayga-mail-server/releases/tag/v1.0.4) · [Setup](docs/setup.md) · [User guide](docs/user-guide.md) · [Administrator guide](docs/admin-guide.md) · [Screenshots](docs/screenshots/README.md)
+[Download v1.0.5](https://github.com/rkislov/tayga-mail-server/releases/tag/v1.0.5) · [Setup](docs/setup.md) · [User guide](docs/user-guide.md) · [Administrator guide](docs/admin-guide.md) · [Screenshots](docs/screenshots/README.md)
 
 Tayga Mail Server is an open-source mail and collaboration server. It brings email, calendars, contacts, tasks, notes, files and chat into one web workspace. Organizations run it on their own infrastructure and manage their domains, accounts, permissions and data storage.
 
@@ -73,19 +73,19 @@ Operational features include Prometheus metrics, data migration and encrypted fu
 - **Mail applications:** SMTP, IMAP and POP3, with Autodiscover and Mozilla autoconfig for client setup.
 - **Calendars, contacts and files:** CalDAV, CardDAV and WebDAV.
 - **FlowSync:** an original implementation of a subset of ActiveSync and EWS. See the [compatibility document](docs/flowsync-compatibility.md) for supported operations and limitations; full Microsoft Exchange compatibility is not claimed.
-- **Thunderbird:** the Tayga extension is included in the [release](https://github.com/rkislov/tayga-mail-server/releases/tag/v1.0.4), with a separate [guide](extensions/thunderbird-tayga/README.md).
+- **Thunderbird:** the Tayga extension is included in the [release](https://github.com/rkislov/tayga-mail-server/releases/tag/v1.0.5), with a separate [guide](extensions/thunderbird-tayga/README.md).
 - **Infrastructure:** LDAP/OIDC, Prometheus, optional S3/MinIO storage and external spam, antivirus, office-editing and video services.
 
 Available integrations depend on configuration. Mattermost API and plugin support have [documented compatibility boundaries](docs/mattermost-plugins.md).
 
 ## Installation
 
-1. Download the archive for your platform and its checksums from [GitHub Releases](https://github.com/rkislov/tayga-mail-server/releases/tag/v1.0.4).
+1. Download the archive for your platform and its checksums from [GitHub Releases](https://github.com/rkislov/tayga-mail-server/releases/tag/v1.0.5).
 2. Prepare your domain, DNS, TLS and data directories using the [setup guide](docs/setup.md).
 3. Create a configuration from the [example](configs/tayga.example.yaml), set your own initial administrator credentials and start the service.
 4. Open the web interface. Most mail and integration settings are under **Administration → Server**.
 
-Release 1.0.4 provides archives for Linux and macOS (amd64/arm64), Windows (amd64/arm64) and FreeBSD (amd64). Native DEB/RPM packages are not included in this release.
+Release 1.0.5 provides archives for Linux and macOS (amd64/arm64), Windows (amd64/arm64) and FreeBSD (amd64). Native amd64/arm64 [DEB/RPM packages for Ubuntu, Astra Linux, ALT, CentOS Stream and RED OS](docs/linux-packages.md) include systemd and logrotate configuration.
 
 The example configuration is intended for initial setup. If you use the demonstration account `admin@example.com` / `changeme`, replace it before exposing the server.
 
@@ -108,7 +108,7 @@ To modify the interface, run `npm --prefix frontend ci` and `npm --prefix fronte
 - [User guide](docs/user-guide.md) — everyday workflows with screenshots.
 - [Administrator guide](docs/admin-guide.md) — configuration and operation.
 - [Interface gallery](docs/screenshots/README.md) — personal workspace and administration.
-- [Release 1.0.4 notes](docs/release-1.0.4.md) and [roadmap](docs/roadmap.md).
+- [Release 1.0.5 notes](docs/release-1.0.5.md) and [roadmap](docs/roadmap.md).
 - [Product comparison](docs/product-comparison.md) — a separate review with dates and sources.
 
 Most detailed guides are currently in Russian; the [architecture overview](docs/architecture.md) is in English. Screenshots show the running application with demonstration data. Roadmap items describe planned work, not features included in the current release.

@@ -153,3 +153,8 @@ node scripts/capture-screenshots.mjs
 - [Список правил](v1.0.4/rules.png)
 - [Визуальный конструктор Sieve](v1.0.4/visual-editor.png)
 - [Фильтры на телефоне](v1.0.4/mobile.png)
+
+## Статусы участников 1.0.5
+
+- [Светлая тема](v1.0.5/calendar-attendees.png)
+- [Тёмная тема](v1.0.5/calendar-attendees-dark.png)

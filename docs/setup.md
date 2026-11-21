@@ -1,5 +1,7 @@
 # Первоначальная настройка сервера
 
+Для новой установки из DEB/RPM используйте [инструкцию пакетов](linux-packages.md).
+
 Пошаговая инструкция: от первого запуска `tayga-mail` до приёма и отправки почты в своём домене.
 
 Смежные документы: [architecture.md](./architecture.md) (обзор), [ca.md](./ca.md) (УЦ / TLS), [xmpp.md](./xmpp.md), [ha.md](./ha.md), [mail-archive-search.md](./mail-archive-search.md). Пример bootstrap: [`configs/tayga.example.yaml`](../configs/tayga.example.yaml).

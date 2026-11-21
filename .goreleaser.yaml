@@ -46,6 +46,7 @@ archives:
       - configs/tayga.example.yaml
       - deploy/systemd/tayga.service
       - deploy/systemd/update-binary.sh
+      - deploy/packages/*
       - deploy/ha/*
       - docs/*.md
       - docs/screenshots/*.png
@@ -55,6 +56,7 @@ archives:
       - docs/screenshots/v1.0.1/*
       - docs/screenshots/v1.0.2/*
       - docs/screenshots/v1.0.4/*
+      - docs/screenshots/v1.0.5/*
       - frontend/LICENSE
       - frontend/README.md
       - frontend/package*.json
@@ -68,6 +70,65 @@ archives:
       - internal/flowsync/LICENSE
       - internal/flowsync/NOTICE
       - internal/flowsync/UNICODE-LICENSE.txt
+
+nfpms:
+  - id: linux
+    ids: [tayga-mail]
+    package_name: tayga-mail
+    file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Arch }}"
+    vendor: Tayga Mail
+    homepage: https://github.com/rkislov/tayga-mail-server
+    maintainer: Tayga Mail maintainers <rkislov@users.noreply.github.com>
+    description: |
+      Self-hosted mail and collaboration server / Почтовый сервер для своей инфраструктуры.
+      Webmail, calendars, contacts, files, chat, administration and mail security integrations.
+    license: GPL-3.0-only
+    formats: [deb, rpm]
+    bindir: /usr/bin
+    section: mail
+    priority: optional
+    dependencies: [ca-certificates, systemd, logrotate]
+    overrides:
+      rpm:
+        dependencies: [ca-certificates, systemd, logrotate, /usr/sbin/useradd, /usr/sbin/groupadd]
+    deb:
+      compression: gzip
+      predepends: [passwd]
+    rpm:
+      compression: gzip
+      group: System/Servers
+    scripts:
+      preinstall: deploy/packages/scripts/preinstall.sh
+      postinstall: deploy/packages/scripts/postinstall.sh
+      preremove: deploy/packages/scripts/preremove.sh
+      postremove: deploy/packages/scripts/postremove.sh
+    contents:
+      - dst: /etc/tayga
+        type: dir
+        file_info:
+          mode: 0750
+          owner: root
+          group: tayga
+      - src: deploy/packages/tayga.yaml
+        dst: /etc/tayga/tayga.yaml
+        type: config|noreplace
+        file_info:
+          mode: 0640
+          owner: root
+          group: tayga
+      - src: deploy/packages/tayga.service
+        dst: /usr/lib/systemd/system/tayga.service
+      - src: deploy/packages/logrotate
+        dst: /etc/logrotate.d/tayga-mail
+        type: config|noreplace
+      - src: LICENSE
+        dst: /usr/share/licenses/tayga-mail/LICENSE
+      - src: NOTICE
+        dst: /usr/share/doc/tayga-mail/NOTICE
+      - src: docs/linux-packages.md
+        dst: /usr/share/doc/tayga-mail/linux-packages.md
+      - src: docs/release-1.0.5.md
+        dst: /usr/share/doc/tayga-mail/release-notes.md
 
 checksum:
   name_template: checksums.txt

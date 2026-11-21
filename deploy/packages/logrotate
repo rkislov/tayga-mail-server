@@ -1,0 +1,17 @@
+/var/log/tayga/tayga.log {
+    daily
+    rotate 14
+    maxsize 100M
+    missingok
+    notifempty
+    compress
+    delaycompress
+    su tayga tayga
+    create 0640 tayga tayga
+    sharedscripts
+    postrotate
+        if [ -d /run/systemd/system ]; then
+            /bin/systemctl kill --kill-who=main --signal=HUP tayga.service >/dev/null 2>&1 || true
+        fi
+    endscript
+}
