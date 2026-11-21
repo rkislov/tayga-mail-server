@@ -11,7 +11,7 @@ case "$family" in
     ;;
   alt)
     apt-get update
-    apt-get install -y "$package" curl procps su
+    apt-get install -y "$package" curl procps su systemd-analyze
     ;;
   rpm)
     dnf install -y "$package" curl procps-ng
