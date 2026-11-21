@@ -142,3 +142,11 @@ function setupMattermostBots(){
  $('mm-bot-create').onsubmit=async event=>{event.preventDefault();const epoch=mmAdmin.epoch,guard=mmCurrentGuard(epoch,state.me?.id),scope={...mmAdmin.selected},form=event.currentTarget;const data=Object.fromEntries(new FormData(form));form.inert=true;try{const bot=await api('/api/v4/bots'+mmQuery(scope),{method:'POST',body:JSON.stringify(data),_guard:guard});form.reset();await loadMattermostBots();guard();showBotCredential(bot)}catch(e){if(mmAdmin.epoch===epoch)setMsg($('mm-msg'),e.data?.message||e.message,'err')}finally{form.inert=false}};
 }
 setupMattermostBots();
+
+function resetMattermostBots(){
+ mmAdmin.epoch++;
+ const dialog=$('mm-bot-secret');
+ if(dialog){dialog.querySelector('input').value='';dialog.querySelector('[data-bot-id]').textContent='';dialog.close();}
+ $('mm-external-bots')?.replaceChildren();
+ $('mm-bot-create')?.reset();
+}

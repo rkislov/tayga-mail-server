@@ -486,6 +486,7 @@ function isAuthPublicPath(path) {
 }
 
 function clearSession() {
+  resetMattermostBots();
   if (typeof omemoCancelOperations === 'function') omemoCancelOperations();
   mmProfileSessions.reset();
   resetBranding();

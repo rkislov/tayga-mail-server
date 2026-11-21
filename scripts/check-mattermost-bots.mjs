@@ -23,5 +23,6 @@ try{
  await page.screenshot({path:'output/ui-fixes/mobile/bots.png'});
  const row=page.locator('.mm-bot-row').filter({hasText:username});await row.getByRole('button',{name:'Отключить',exact:true}).click();await page.waitForFunction(name=>[...document.querySelectorAll('.mm-bot-row')].some(r=>r.textContent.includes(name)&&r.textContent.includes('Выключен')),username);
  assert.equal(await page.evaluate(async token=>(await fetch('/api/v4/users/me',{headers:{Authorization:'Bearer '+token}})).status,token),401);
+ await page.evaluate(()=>{showBotCredential({token:'test-secret',user_id:'test-id'});forceLogin()});assert.equal(await page.inputValue('#mm-bot-secret input'),'');assert.equal(await page.locator('#mm-bot-secret').isVisible(),false);
  assert.deepEqual(errors,[]);console.log('Bots UI: domain scope, creation, one-time credential, actual bot post, disable/revocation passed.');
 }finally{await browser.close()}
