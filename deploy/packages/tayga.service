@@ -1,0 +1,33 @@
+[Unit]
+Description=Tayga Mail Server
+Documentation=https://github.com/rkislov/tayga-mail-server
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=/etc/tayga/tayga.yaml
+
+[Service]
+Type=simple
+User=tayga
+Group=tayga
+WorkingDirectory=/var/lib/tayga
+ExecStart=/usr/bin/tayga-mail -config /etc/tayga/tayga.yaml
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=60
+UMask=0027
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/tayga /var/log/tayga
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

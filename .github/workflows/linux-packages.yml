@@ -1,0 +1,128 @@
+name: Linux packages
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm --prefix frontend ci && npm --prefix frontend run build
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          version: v2.20.3
+          args: release --snapshot --clean --skip=publish,announce,validate
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-native-packages
+          path: |
+            dist/*.deb
+            dist/*.rpm
+          retention-days: 7
+  install:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: Ubuntu 20.04, image: 'ubuntu:20.04', family: deb}
+          - {os: Ubuntu 22.04, image: 'ubuntu:22.04', family: deb}
+          - {os: Ubuntu 24.04, image: 'ubuntu:24.04', family: deb}
+          - {os: Ubuntu 26.04, image: 'ubuntu:26.04', family: deb}
+          - {os: Ubuntu 26.10, image: 'ubuntu:26.10', family: deb}
+          - {os: ALT p10, image: 'alt:p10', family: alt}
+          - {os: ALT p11, image: 'alt:p11', family: alt}
+          - {os: CentOS Stream 9, image: 'quay.io/centos/centos:stream9', family: rpm}
+          - {os: CentOS Stream 10, image: 'quay.io/centos/centos:stream10', family: rpm}
+          - {os: RED OS 7.3, image: 'registry.red-soft.ru/ubi7/ubi:latest', family: rpm}
+          - {os: RED OS 8, image: 'registry.red-soft.ru/ubi8/ubi:latest', family: rpm}
+          - {os: Astra Linux 1.7, image: 'registry.astralinux.ru/library/astra/ubi17:latest', family: deb}
+          - {os: Astra Linux 1.8, image: 'registry.astralinux.ru/library/astra/ubi18:latest', family: deb}
+    name: Install / ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-native-packages
+          path: packages
+      - name: Pull RED OS with its verified registry certificate chain
+        if: startsWith(matrix.image, 'registry.red-soft.ru/')
+        env:
+          IMAGE: ${{ matrix.image }}
+        run: |
+          echo 'be9dcd199576967219f0ff18abe7f513a7f9e02b595b42c8bdaedb3306bf6187  scripts/ci/redos-registry-ca.pem' | sha256sum -c -
+          sudo apt-get update
+          sudo apt-get install -y skopeo
+          mkdir -p /tmp/redos-registry-certs
+          cp scripts/ci/redos-registry-ca.pem /tmp/redos-registry-certs/ca.crt
+          skopeo copy --retry-times 3 --src-cert-dir /tmp/redos-registry-certs \
+            --override-arch amd64 "docker://$IMAGE" "docker-archive:/tmp/redos-image.tar:$IMAGE"
+          docker load -i /tmp/redos-image.tar
+      - name: Install, run, rotate, upgrade and remove
+        env:
+          IMAGE: ${{ matrix.image }}
+          FAMILY: ${{ matrix.family }}
+        run: |
+          format=rpm
+          if [ "$FAMILY" = deb ]; then format=deb; fi
+          package=$(find packages -name "*_amd64.$format" -print -quit)
+          test -n "$package"
+          docker run --rm --platform linux/amd64 \
+            -v "$PWD/packages:/packages:ro" -v "$PWD/scripts:/scripts:ro" \
+            "$IMAGE" sh /scripts/check-linux-package.sh "/packages/$(basename "$package")" "$FAMILY"
+
+  systemd:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-native-packages
+          path: packages
+      - name: Real systemd service lifecycle and logrotate
+        run: sudo sh scripts/check-linux-package.sh "$PWD/$(find packages -name '*_amd64.deb' -print -quit)" deb
+  arm64:
+    needs: build
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: Ubuntu 24.04 ARM64, image: 'ubuntu:24.04', family: deb, format: deb}
+          - {os: ALT p11 ARM64, image: 'alt:p11', family: alt, format: rpm}
+    name: Install / ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-native-packages
+          path: packages
+      - name: Native ARM64 install and lifecycle
+        env:
+          IMAGE: ${{ matrix.image }}
+          FAMILY: ${{ matrix.family }}
+          FORMAT: ${{ matrix.format }}
+        run: |
+          package=$(find packages -name "*_arm64.$FORMAT" -print -quit)
+          test -n "$package"
+          docker run --rm -v "$PWD/packages:/packages:ro" -v "$PWD/scripts:/scripts:ro" \
+            "$IMAGE" sh /scripts/check-linux-package.sh "/packages/$(basename "$package")" "$FAMILY"

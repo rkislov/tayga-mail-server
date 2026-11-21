@@ -1,0 +1,32 @@
+# Bootstrap for DEB/RPM installations. Configure before starting tayga.service.
+# See /usr/share/doc/tayga-mail/linux-packages.md.
+server:
+  hostname: mail.example.com
+storage:
+  driver: sqlite
+  sqlite:
+    path: /var/lib/tayga/data/tayga.db
+mailstore:
+  root: /var/lib/tayga/maildir
+seed:
+  enabled: false
+  tenant: default
+  domain: example.com
+  email: admin@example.com
+  password: ''
+  name: Administrator
+http:
+  listen: ':80'
+  tls_listen: ':443'
+  public_url: https://mail.example.com
+  redirect_http_to_tls: true
+  admins: []
+tls:
+  cert_file: /var/lib/tayga/certs/server.crt
+  key_file: /var/lib/tayga/certs/server.key
+  certs_dir: /var/lib/tayga/certs/store
+  auto_generate: true
+log:
+  level: info
+  format: json
+  file: /var/log/tayga/tayga.log
