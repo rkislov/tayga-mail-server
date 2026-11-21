@@ -1687,8 +1687,41 @@ textarea {
   flex-wrap:wrap
 }
 .cal-partstat {
-  font-size:11px
+  display:flex;
+  align-items:flex-start;
+  gap:8px;
+  min-width:0;
+  font-size:12px;
+  line-height:24px
 }
+.cal-partstat+.cal-partstat {
+  margin-top:8px
+}
+.cal-attendee-label {
+  min-width:0;
+  overflow-wrap:anywhere
+}
+.cal-partstat-icon {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  flex:0 0 24px;
+  width:24px;
+  height:24px;
+  border-radius:50%;
+  background:color-mix(in srgb,currentColor 12%,transparent)
+}
+.cal-partstat-icon svg {
+  width:16px;
+  height:16px;
+  stroke-width:2.2
+}
+.cal-partstat-icon.is-accepted {color:#27804a}
+.cal-partstat-icon.is-pending {color:#a87008}
+.cal-partstat-icon.is-declined {color:#c44747}
+html[data-color-mode="dark"] .cal-partstat-icon.is-accepted {color:#80d8a0}
+html[data-color-mode="dark"] .cal-partstat-icon.is-pending {color:#f0c45c}
+html[data-color-mode="dark"] .cal-partstat-icon.is-declined {color:#f28b8b}
 .calendar-map {
   max-width:100%
 }

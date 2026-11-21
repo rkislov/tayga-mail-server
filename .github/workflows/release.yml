@@ -9,8 +9,11 @@ permissions:
   contents: write
 
 jobs:
+  packages:
+    uses: ./.github/workflows/linux-packages.yml
+
   goreleaser:
-    needs: test
+    needs: [test, packages]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,7 +34,8 @@ jobs:
             echo "published=true" >> "$GITHUB_OUTPUT"
             gh release download "$RELEASE_TAG" --dir /tmp/tayga-release-check
             cd /tmp/tayga-release-check
-            test "$(find . -maxdepth 1 -name 'tayga-mail_*' | wc -l)" -eq 7
+            test "$(find . -maxdepth 1 -name 'tayga-mail_*.tar.gz' -o -name 'tayga-mail_*.zip' | wc -l)" -eq 7
+            test "$(find . -maxdepth 1 -name 'tayga-mail_*.deb' -o -name 'tayga-mail_*.rpm' | wc -l)" -eq 4
             sha256sum --check checksums.txt
           else
             echo "published=false" >> "$GITHUB_OUTPUT"
@@ -59,7 +63,7 @@ jobs:
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
-          version: "~> v2"
+          version: "v2.20.3"
           args: release --clean --release-notes docs/release-${{ steps.notes.outputs.version }}.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

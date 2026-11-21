@@ -4534,6 +4534,14 @@ function partstatLabel(ps) {
   return t("cal_partstat_needs");
 }
 
+function partstatBadge(ps) {
+  const status = String(ps || "NEEDS-ACTION").toUpperCase();
+  const kind = status === "ACCEPTED" ? "accepted" : status === "DECLINED" ? "declined" : "pending";
+  const icon = kind === "accepted" ? "check" : kind === "declined" ? "close" : "question";
+  const label = escapeHtml(partstatLabel(status));
+  return `<span class="cal-partstat-icon is-${kind}" role="img" aria-label="${label}" title="${label}">${designIcon(icon)}</span>`;
+}
+
 function renderCalAttendeeChips() {
   const host = $("cal-attendee-chips");
   if (!host) return;
@@ -5151,9 +5159,11 @@ function showCalReader(ev) {
     } else {
       row.classList.remove("hidden");
       dd.innerHTML = atts.map((a) => {
-        const label = a.name ? `${a.name} <${a.email}>` : a.email;
-        return `<span class="cal-partstat cal-partstat-${escapeHtml(String(a.partstat || "NEEDS-ACTION").toLowerCase())}">${escapeHtml(label)} · ${escapeHtml(partstatLabel(a.partstat))}</span>`;
-      }).join("<br>");
+        const name = String(a.name || "").trim();
+        const email = String(a.email || "").trim();
+        const label = name && name.toLowerCase() !== email.toLowerCase() ? `${name} <${email}>` : email;
+        return `<span class="cal-partstat">${partstatBadge(a.partstat)}<span class="cal-attendee-label">${escapeHtml(label)}</span></span>`;
+      }).join("");
     }
   }
   renderCalReadAttachments(ev.attachments || []);
@@ -8791,7 +8801,7 @@ async function boundedPreviewBlob(response,limit) {
 }
 // Shared stroke language for reader actions and document previews.
 function designIcon(name) {
-  const paths={read:'M3 9l9-6 9 6v12H3zM3 9l9 7 9-7',unread:'M3 5h18v14H3zM3 6l9 7 9-7',settings:'M9 3h6l1 4 4 1v6l-4 1-1 4H9l-1-4-4-1V8l4-1zM9 11a3 3 0 1 0 6 0 3 3 0 0 0-6 0',key:'M15 7a5 5 0 1 0-7 7l-5 5v3h3v-3h3l3-3M15 7h.01',shield:'M12 3 3 7v5c0 5 9 9 9 9s9-4 9-9V7zM9 12l2 2 4-4',refresh:'M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-1l2 6M4 12l2 6a7 7 0 0 0 12-1',disconnect:'M9 5H4v14h5M12 12h9m-4-4 4 4-4 4',forward:'m15 5 6 6-6 6M21 11h-9a8 8 0 0 0-8 8',reply:'M9 5 3 11l6 6M3 11h9a8 8 0 0 1 8 8','reply-all':'m8 4-6 6 6 6m5-12-6 6 6 6M7 10h6a8 8 0 0 1 8 8',trip:'M8 2h8v4H8zM5 6h14v15H5zM9 10v6m6-6v6',spam:'m7 3-4 4v10l4 4h10l4-4V7l-4-4zM12 7v6m0 4h.01',archive:'M3 3h18v5H3zM5 8v13h14V8M9 12h6',delete:'M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7',download:'M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4',close:'m6 6 12 12M18 6 6 18'};
+  const paths={check:'m5 12 4 4L19 6',question:'M9 8a3 3 0 0 1 6 0c0 3-3 2-3 5m0 4h.01',read:'M3 9l9-6 9 6v12H3zM3 9l9 7 9-7',unread:'M3 5h18v14H3zM3 6l9 7 9-7',settings:'M9 3h6l1 4 4 1v6l-4 1-1 4H9l-1-4-4-1V8l4-1zM9 11a3 3 0 1 0 6 0 3 3 0 0 0-6 0',key:'M15 7a5 5 0 1 0-7 7l-5 5v3h3v-3h3l3-3M15 7h.01',shield:'M12 3 3 7v5c0 5 9 9 9 9s9-4 9-9V7zM9 12l2 2 4-4',refresh:'M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-1l2 6M4 12l2 6a7 7 0 0 0 12-1',disconnect:'M9 5H4v14h5M12 12h9m-4-4 4 4-4 4',forward:'m15 5 6 6-6 6M21 11h-9a8 8 0 0 0-8 8',reply:'M9 5 3 11l6 6M3 11h9a8 8 0 0 1 8 8','reply-all':'m8 4-6 6 6 6m5-12-6 6 6 6M7 10h6a8 8 0 0 1 8 8',trip:'M8 2h8v4H8zM5 6h14v15H5zM9 10v6m6-6v6',spam:'m7 3-4 4v10l4 4h10l4-4V7l-4-4zM12 7v6m0 4h.01',archive:'M3 3h18v5H3zM5 8v13h14V8M9 12h6',delete:'M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7',download:'M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4',close:'m6 6 12 12M18 6 6 18'};
   return '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="'+(paths[name]||paths.download)+'"/></svg>';
 }
 function documentPreviewType(name) {

@@ -3411,6 +3411,14 @@ function partstatLabel(ps) {
   return t("cal_partstat_needs");
 }
 
+function partstatBadge(ps) {
+  const status = String(ps || "NEEDS-ACTION").toUpperCase();
+  const kind = status === "ACCEPTED" ? "accepted" : status === "DECLINED" ? "declined" : "pending";
+  const icon = kind === "accepted" ? "check" : kind === "declined" ? "close" : "question";
+  const label = escapeHtml(partstatLabel(status));
+  return `<span class="cal-partstat-icon is-${kind}" role="img" aria-label="${label}" title="${label}">${designIcon(icon)}</span>`;
+}
+
 function renderCalAttendeeChips() {
   const host = $("cal-attendee-chips");
   if (!host) return;
@@ -4028,9 +4036,11 @@ function showCalReader(ev) {
     } else {
       row.classList.remove("hidden");
       dd.innerHTML = atts.map((a) => {
-        const label = a.name ? `${a.name} <${a.email}>` : a.email;
-        return `<span class="cal-partstat cal-partstat-${escapeHtml(String(a.partstat || "NEEDS-ACTION").toLowerCase())}">${escapeHtml(label)} · ${escapeHtml(partstatLabel(a.partstat))}</span>`;
-      }).join("<br>");
+        const name = String(a.name || "").trim();
+        const email = String(a.email || "").trim();
+        const label = name && name.toLowerCase() !== email.toLowerCase() ? `${name} <${email}>` : email;
+        return `<span class="cal-partstat">${partstatBadge(a.partstat)}<span class="cal-attendee-label">${escapeHtml(label)}</span></span>`;
+      }).join("");
     }
   }
   renderCalReadAttachments(ev.attachments || []);
