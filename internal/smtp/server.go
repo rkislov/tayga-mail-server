@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"github.com/tayga/tms/internal/metrics"
 	"io"
 	"log/slog"
 	"net"
@@ -469,6 +470,7 @@ func (b *backend) writeMailLog(e *storage.MailLogEntry) {
 	if b == nil || b.store == nil || e == nil {
 		return
 	}
+	metrics.RecordMailEvent(e.Event, e.Direction)
 	if b.siem != nil {
 		b.siem.EmitMail(e.Event, e.Direction, e.Peer, e.MailFrom, e.RcptTo, e.MessageID, e.Detail, e.Size)
 	}

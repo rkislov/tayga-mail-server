@@ -25,7 +25,7 @@ function fixture(t) {
   close(){this.readyState=3;this.onclose?.();}
   async emit(message){await this.onmessage?.({data:JSON.stringify(message)});}
  }
- Object.assign(w,{$:id=>w.document.getElementById(id),state:{email:'alice@example.test',tokens:{access_token:'secret-session-token'}},lang:'ru',WebSocket:Socket,setMobilePane:()=>{},setMsg:(node,text)=>{if(node)node.textContent=text;}});
+ Object.assign(w,{$:id=>w.document.getElementById(id),state:{email:'alice@example.test',tokens:{access_token:'secret-session-token'}},lang:'ru',WebSocket:Socket,isMobilePane:()=>false,setMobilePane:()=>{},setMsg:(node,text)=>{if(node)node.textContent=text;}});
  w.setInterval=()=>1;w.clearInterval=()=>{};w.setTimeout=(callback,delay)=>{timers.push({callback,delay});return timers.length;};w.clearTimeout=()=>{};
  w.api=async function(route,options={}) {
   options._guard?.();requests.push({route,options});

@@ -680,6 +680,7 @@ function fmtNum(n) {
   return Number(n).toLocaleString();
 }
 
+let monitorLastHistory = null;
 const monitorHistory = {
   max: 48,
   goroutines: [],
@@ -827,7 +828,13 @@ function renderMonitorHistory(history){
  const combined=tenant.map(row=>({...row,values:{...row.values}})),byTime=new Map(combined.map(row=>[row.at,row]));for(const row of server){let point=byTime.get(row.at);if(!point){point={...row,values:{}};combined.push(point)}point.values.server_messages=row.values.messages;point.values.server_bytes=row.values.bytes}combined.sort((a,b)=>a.at-b.at);
  draw('chart-bars','messages',combined,[{key:'messages',label:'Организация'},...(history.global?[{key:'server_messages',label:'Сервер'}]:[])],'Сохранённые письма');
  draw('chart-storage','storage',combined,[{key:'bytes',label:'Организация',divisor:1048576},...(history.global?[{key:'server_bytes',label:'Сервер',divisor:1048576}]:[])],'МиБ');
- if(!history.global){for(const id of ['chart-runtime','chart-sparklines','chart-network','protection-stats'])$(id).textContent='Метрики сервера доступны глобальному администратору.';return}
+ if(!history.global){for(const id of ['chart-runtime','chart-sparklines','chart-network','protection-stats','chart-delivery','chart-host-cpu','chart-host-memory'])$(id).textContent='Метрики сервера доступны глобальному администратору.';return}
+ // Rates use adjacent samples only; restarts and missing history remain gaps.
+ const deltas=server.map((row,i)=>{const old=server[i-1],minutes=old?(row.at-old.at)/60000:0,values={};if(old&&old.boot===row.boot&&minutes>0&&minutes<=2.5){for(const key of ['mail.accepted','mail.rejected','protection.pass','protection.tag','protection.quarantine','protection.reject']){const a=row.values[key],b=old.values[key];if(typeof a==='number'&&typeof b==='number'&&a>=b)values[key]=(a-b)/minutes}const total=row.values['host.cpu_total']-old.values['host.cpu_total'],idle=row.values['host.cpu_idle']-old.values['host.cpu_idle'];if(total>0&&idle>=0&&idle<=total)values.cpu=100*(1-idle/total)}if(['protection.tag','protection.quarantine','protection.reject'].every(k=>typeof values[k]==='number'))values.spam=values['protection.tag']+values['protection.quarantine']+values['protection.reject'];return {...row,values}});
+ draw('chart-delivery','delivery',deltas,[{key:'mail.accepted',label:mailImageText('Принято','Accepted')},{key:'mail.rejected',label:mailImageText('Отклонено','Rejected')},{key:'spam',label:mailImageText('Спам','Spam')},{key:'protection.pass',label:mailImageText('Не спам','Not spam')}],mailImageText('На получателя / мин · спам — результат проверки','Per recipient / min · spam is a scan result'));
+ draw('chart-host-cpu','cpu',deltas,[{key:'cpu',label:'CPU'}],'%');
+ draw('chart-host-memory','ram',server,[{key:'host.memory_used',label:mailImageText('Используется','Used'),divisor:1073741824},{key:'host.memory_total',label:mailImageText('Всего','Total'),divisor:1073741824},{key:'host.swap_used',label:'Swap',divisor:1073741824}],mailImageText('ГиБ · весь сервер','GiB · whole server'));
+ for(const [id,available] of [['chart-host-cpu',deltas.some(r=>Number.isFinite(r.values.cpu))],['chart-host-memory',server.some(r=>Number.isFinite(r.values['host.memory_total']))],['chart-delivery',deltas.some(r=>Number.isFinite(r.values['mail.accepted']))]])if(!available&&$(id))$(id).textContent=mailImageText('Нет данных. Для CPU и почты нужны два наблюдения; метрики машины доступны на Linux.','No data. CPU and mail need two samples; host metrics are available on Linux.');
  draw('chart-runtime','runtime',server,[{key:'goroutines',label:'Горутины'},{key:'queue',label:'В очереди'}],'Количество');
  draw('chart-sparklines','heap',server,[{key:'heap',label:'Память',divisor:1048576}],'МиБ');
  const keys=[...new Set(server.flatMap(row=>Object.keys(row.values).filter(key=>key.startsWith('network.'))))].sort();
@@ -879,6 +886,7 @@ async function refreshMonitor() {
     $("monitor-grid").innerHTML = rows.map(([k, v]) =>
       `<div><span class="meta">${escapeHtml(k)}</span><br/><strong>${escapeHtml(String(v))}</strong></div>`
     ).join("");
+    monitorLastHistory=history;
     renderMonitorHistory(history);
     setMsg($("monitor-msg"), "", "");
   } catch (err) {

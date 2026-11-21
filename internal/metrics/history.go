@@ -38,6 +38,14 @@ func collectHistory(ctx context.Context, store storage.Driver, boot string, now 
 	var mem runtime.MemStats
 	runtime.ReadMemStats(&mem)
 	values := map[string]float64{"messages": float64(st.Messages), "bytes": float64(st.BytesStored), "queue": float64(st.OutboundQueued), "goroutines": float64(runtime.NumGoroutine()), "heap": float64(mem.HeapAlloc)}
+	for key, value := range HostSnapshot() {
+		values[key] = value
+	}
+	values["mail.accepted"] = float64(mailAccepted.Load())
+	values["mail.rejected"] = float64(mailRejected.Load())
+	for _, key := range []string{"pass", "tag", "quarantine", "reject", "greylist", "error"} {
+		values["protection."+key] = 0
+	}
 	protection := ProtectionSnapshot()
 	for name, value := range protection["decisions"].(map[string]uint64) {
 		values["protection."+name] = float64(value)

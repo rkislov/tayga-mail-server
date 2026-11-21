@@ -42,6 +42,7 @@ archives:
       - LICENSE
       - NOTICE
       - README.md
+      - README.en.md
       - configs/tayga.example.yaml
       - deploy/systemd/tayga.service
       - deploy/systemd/update-binary.sh
@@ -52,6 +53,7 @@ archives:
       - docs/screenshots/*.txt
       - docs/screenshots/v1.0.0/*
       - docs/screenshots/v1.0.1/*
+      - docs/screenshots/v1.0.2/*
       - frontend/LICENSE
       - frontend/README.md
       - frontend/package*.json

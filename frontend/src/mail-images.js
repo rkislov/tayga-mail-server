@@ -244,7 +244,7 @@ function renderMailActions(message) {
   for(const action of ['reply','forward']){const item=bar.querySelector('[data-mail-action="'+action+'"]');if(item){item.classList.remove('action-icon');const label=document.createElement('span');label.textContent=item.getAttribute('aria-label');item.append(label);footer.append(item)}}
   const more=document.createElement('details');more.className='workspace-reader-more';const trigger=document.createElement('summary');trigger.textContent='⋮';trigger.setAttribute('aria-label',mailImageText('Другие действия','More actions'));const menu=document.createElement('div');
   for(const action of ['reply-all','spam','trip']){const item=bar.querySelector('[data-mail-action="'+action+'"]');if(item){const label=document.createElement('span');label.textContent=item.getAttribute('aria-label');item.classList.remove('action-icon');item.append(label);menu.append(item)}}
-  more.append(trigger,menu);bar.append(more);footer.append(bar);reader.append(footer);
+  more.append(trigger,menu);bar.append(more);footer.append(bar);reader.prepend(footer);
 }
 
 function renderMailQuickFilters() {
