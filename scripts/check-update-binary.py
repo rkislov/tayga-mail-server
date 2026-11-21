@@ -33,7 +33,7 @@ fi
 exit 1
 '''
     write(target, old_script)
-    write(new, "#!/bin/sh\necho 'tayga-mail 1.0.2 (new)'\n")
+    write(new, "#!/bin/sh\necho 'tayga-mail 1.0.3 (new)'\n")
     write(fake / 'uname', '#!/bin/sh\necho Linux\n')
     write(fake / 'id', '#!/bin/sh\necho 0\n')
     write(fake / 'sleep', '#!/bin/sh\nexit 0\n')
@@ -49,7 +49,7 @@ else:
  if args[0] in ['start','restart']:p.touch()
 ''')
     write(fake / 'curl', '''#!/bin/sh
-if [ "${TEST_READY_FAIL:-0}" = 1 ] && grep -q '1.0.2' "$TAYGA_BINARY"; then exit 22; fi
+if [ "${TEST_READY_FAIL:-0}" = 1 ] && grep -q '1.0.3' "$TAYGA_BINARY"; then exit 22; fi
 exit 0
 ''')
     write(fake / 'readlink', '#!/usr/bin/env python3\nimport os,sys\nprint(os.path.realpath(sys.argv[-1]))\n')
@@ -82,7 +82,7 @@ for path in sys.argv[1:]:print(hashlib.sha256(open(path,'rb').read()).hexdigest(
     result = run('--apply')
     assert result.returncode == 0, result.stderr
     assert target.read_bytes() == new.read_bytes() and state.exists()
-    assert list((install/'bin').glob('tayga-mail.before-1.0.2.*'))
+    assert list((install/'bin').glob('tayga-mail.before-1.0.3.*'))
     # Readiness failure retains the full snapshot and never silently restores a
     # previous binary over a potentially migrated database.
     write(target, old_script)

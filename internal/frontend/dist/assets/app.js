@@ -1609,6 +1609,7 @@ function isAuthPublicPath(path) {
 }
 
 function clearSession() {
+  resetMattermostBots();
   if (typeof omemoCancelOperations === 'function') omemoCancelOperations();
   mmProfileSessions.reset();
   resetBranding();
@@ -7277,6 +7278,14 @@ function setupMattermostBots(){
  $('mm-bot-create').onsubmit=async event=>{event.preventDefault();const epoch=mmAdmin.epoch,guard=mmCurrentGuard(epoch,state.me?.id),scope={...mmAdmin.selected},form=event.currentTarget;const data=Object.fromEntries(new FormData(form));form.inert=true;try{const bot=await api('/api/v4/bots'+mmQuery(scope),{method:'POST',body:JSON.stringify(data),_guard:guard});form.reset();await loadMattermostBots();guard();showBotCredential(bot)}catch(e){if(mmAdmin.epoch===epoch)setMsg($('mm-msg'),e.data?.message||e.message,'err')}finally{form.inert=false}};
 }
 setupMattermostBots();
+
+function resetMattermostBots(){
+ mmAdmin.epoch++;
+ const dialog=$('mm-bot-secret');
+ if(dialog){dialog.querySelector('input').value='';dialog.querySelector('[data-bot-id]').textContent='';dialog.close();}
+ $('mm-external-bots')?.replaceChildren();
+ $('mm-bot-create')?.reset();
+}
 /* Shared TMS/Mattermost chat. No XMPP requests or tokens in WebSocket URLs. */
 const mmChat = (() => {
   let generation = 0, owner = '', boot = null, socket = null, reconnect = null, heartbeat = null, poll = null;
