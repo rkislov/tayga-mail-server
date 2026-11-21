@@ -13,8 +13,9 @@
   --work-line:#e5e7e1;
   --work-panel:#fff;
   --work-raised:#f6f6f3;
-  --work-primary:#4a7139;
-  --work-accent:#48643a;
+  --work-soft:var(--work-raised);
+  --work-primary:var(--user-accent,#4a7139);
+  --work-accent:var(--user-accent,#48643a);
   --work-selected:#e0e7d7;
   --work-amber:#f4e5cb;
   --workspace-nav-width:224px;
@@ -42,14 +43,14 @@
   font-size:14px;
 }
 html[data-color-mode=dark] {
-  --work-text:#e9ede5;
-  --work-muted:#a8b1a0;
-  --work-line:#394337;
-  --work-panel:#20291f;
-  --work-raised:#283126;
-  --work-primary:#739657;
-  --work-accent:#bfd2ab;
-  --work-selected:#3d4e32;
+  --work-text:#e8eee9;
+  --work-muted:#a6b5ab;
+  --work-line:#35423b;
+  --work-panel:#1c2522;
+  --work-raised:#25312c;
+  --work-primary:color-mix(in srgb,var(--user-accent,#4a7139) 72%,#16211b);
+  --work-accent:color-mix(in srgb,var(--user-accent,#4a7139) 35%,#eef4e9);
+  --work-selected:#344b3d;
   --work-amber:#544a31;
   color-scheme:dark
 }
@@ -404,6 +405,17 @@ textarea {
   border:0;
   outline:none;
   color:#222d21
+}
+html[data-color-mode=dark] .workspace-search {
+  background:color-mix(in srgb,var(--work-panel) 94%,transparent);
+  border-color:var(--work-line);
+  color:var(--work-muted)
+}
+html[data-color-mode=dark] .workspace-search input {
+  color:var(--work-text)
+}
+html[data-color-mode=dark] :is(.btn-secondary,.btn-icon,.btn-ico,.field-input,.field-input-mono) {
+  border-color:var(--work-line)
 }
 .workspace-search:focus-within {
   outline:2px solid #bdcea9;
@@ -883,7 +895,7 @@ textarea {
 .reader-actions .btn-secondary {
   border:0;
   background:transparent;
-  color:#6b7365;
+  color:var(--work-muted);
   padding:4px;
   min-width:25px;
   min-height:25px
@@ -1458,11 +1470,11 @@ textarea {
   padding:3px
 }
 .cal-day.is-selected {
-  background:#edf2e7
+  background:var(--work-selected)
 }
 .cal-day.is-outside {
-  color:#a6aca0;
-  background:#fafbf8
+  color:var(--work-muted);
+  background:var(--work-raised)
 }
 .cal-day-events {
   display:flex;
@@ -1471,7 +1483,8 @@ textarea {
   margin-top:4px
 }
 .cal-pill {
-  background:#e0e9d6;
+  background:var(--work-selected);
+  color:var(--work-text);
   padding:2px;
   font-size:9px;
   white-space:nowrap;
@@ -1601,6 +1614,10 @@ textarea {
 }
 .workspace-mini-calendar .cal-day-events {
   display:none
+}
+.workspace-mini-calendar .cal-day:not(.is-outside):hover {
+  background:var(--work-selected);
+  border-radius:8px
 }
 .workspace-mini-calendar .cal-weekdays {
   font-size:9px
