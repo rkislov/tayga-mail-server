@@ -1,6 +1,6 @@
 #!/bin/sh
 # Run only in a disposable Linux container/VM, as root.
-set -eu
+set -eux
 package=$1
 family=$2
 export DEBIAN_FRONTEND=noninteractive
@@ -92,10 +92,13 @@ test -s /var/log/tayga/tayga.log.1
 if [ ! -d /run/systemd/system ]; then kill -HUP "$pid";fi
 reopened=false
 for attempt in $(seq 1 30); do
+  # Startup/rotation may close descriptors while they are being enumerated.
+  # Ignore vanished descriptors, but still require the new log to be open.
+  fd_command='for fd in /proc/'"$pid"'/fd/*; do readlink "$fd" || :; done'
   if [ -d /run/systemd/system ]; then
-    descriptors=$(ls -l /proc/"$pid"/fd)
+    descriptors=$(sh -c "$fd_command")
   else
-    descriptors=$(su -s /bin/sh tayga -c "ls -l /proc/$pid/fd")
+    descriptors=$(su -s /bin/sh tayga -c "$fd_command")
   fi
   if printf '%s\n' "$descriptors" | grep -q '/var/log/tayga/tayga.log$';then reopened=true;break;fi
   sleep 1

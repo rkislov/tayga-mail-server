@@ -1,6 +1,6 @@
 # Registry trust used by package CI
 
-`redos-registry-ca.pem` is used only in the disposable runner's Docker trust directory for `registry.red-soft.ru`. It is not installed by Tayga packages and does not change workstation or OS-wide CA trust. TLS verification remains enabled.
+`redos-registry-ca.pem` is passed explicitly to Skopeo when fetching the official `registry.red-soft.ru` image in a disposable runner. The verified image is loaded into Docker for package tests. This avoids Docker/containerd token clients ignoring per-registry CA configuration. The bundle is not installed by Tayga packages and does not change workstation or OS-wide CA trust. TLS verification remains enabled.
 
 Source: the `ca-certificates-digital.gov.ru` package from the official ALT p11 repository, obtained in the official `alt:p11` container. It contains the Russian Trusted Root CA plus the 2024 and original Russian Trusted Sub CA certificates. Both intermediates were verified against the root with `openssl verify`. The RED OS registry currently sends an older intermediate which does not validate its renewed leaf; the 2024 intermediate completes the verified chain.
 
