@@ -48,7 +48,7 @@ A built-in Mattermost-compatible service provides direct messages, public and pr
 
 ![Tayga Mail chat — avatars, statuses and attachments](docs/screenshots/v1.0.1/chat.png)
 
-[Mattermost compatibility](docs/mattermost-compatibility.md) · [Video meetings](docs/vks.md)
+[Mattermost compatibility](docs/mattermost-compatibility.md) · [Bot setup](docs/mattermost-bots.md) · [Video meetings](docs/vks.md)
 
 ### Mail protection and sign-in
 

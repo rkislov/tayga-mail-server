@@ -22,7 +22,7 @@ async function loadMattermostScope() {
   $('mm-policy-form').inert = true; $('mm-plugin-upload').disabled = true;
   try {
     const value = await api('/api/v1/admin/mattermost' + mmQuery(item.scope), {_guard: guard});
-    mmAdmin.value = value; renderMattermostScope(value); setMsg($('mm-msg'), '');
+    mmAdmin.value = value; renderMattermostScope(value); void loadMattermostBots(); setMsg($('mm-msg'), '');
   } catch (error) { if (mmAdmin.epoch === epoch) setMsg($('mm-msg'), error.message, 'err'); }
   finally { if (mmAdmin.epoch === epoch) $('mm-policy-form').inert = false; }
 }
@@ -106,3 +106,39 @@ $('mm-plugin-upload')?.addEventListener('change', async event => {
   } catch (error) { if (mmAdmin.epoch === epoch) setMsg($('mm-msg'), error.message, 'err'); }
   finally { input.value = ''; if (mmAdmin.epoch === epoch) input.disabled = !mmAdmin.value?.global_admin; }
 });
+
+// External bot credentials are returned once and never stored in browser storage.
+async function loadMattermostBots() {
+ const host=$('mm-external-bots');if(!host)return;
+ host.replaceChildren();$('mm-bot-secret')?.close();
+ const epoch=mmAdmin.epoch,guard=mmCurrentGuard(epoch,state.me?.id),scope={...mmAdmin.selected};
+ $('mm-bot-create').hidden=!scope.domain_id;
+ if(!scope.domain_id){host.textContent='Выберите домен в списке областей, чтобы управлять его ботами.';return}
+ try {
+  const bots=await api('/api/v4/bots'+mmQuery(scope),{_guard:guard});
+  for(const bot of bots){
+   const row=document.createElement('div');row.className='mm-bot-row';
+   const text=document.createElement('div'),title=document.createElement('strong'),meta=document.createElement('p');title.textContent=bot.display_name;meta.className='meta';meta.textContent='@'+bot.username+' · '+(bot.enabled?'Включён':'Выключен');text.append(title,meta);row.append(text);
+   for(const [action,label]of [['token','Новый токен'],[bot.enabled?'disable':'enable',bot.enabled?'Отключить':'Включить']]){
+    const button=document.createElement('button');button.type='button';button.className='btn-secondary';button.textContent=label;
+    button.onclick=async()=>{if(action==='token'&&!await askConfirm('Выпустить новый токен? Старый токен сразу перестанет работать.'))return;button.disabled=true;try{guard();const result=await api('/api/v4/bots/'+bot.user_id+'/'+action+mmQuery(scope),{method:'POST',body:'{}',_guard:guard});await loadMattermostBots();guard();if(result.token)showBotCredential(result)}catch(e){if(mmAdmin.epoch===epoch)setMsg($('mm-msg'),e.data?.message||e.message,'err')}finally{button.disabled=false}};
+    row.append(button);
+   }
+   host.append(row);
+  }
+  if(!bots.length)host.textContent='Ботов пока нет. Создайте отдельную учётную запись для вашей интеграции.';
+ }catch(e){if(mmAdmin.epoch===epoch)host.textContent=e.data?.message||e.message}
+}
+function showBotCredential(bot){
+ const dialog=$('mm-bot-secret');dialog.querySelector('input').value=bot.token;dialog.querySelector('[data-bot-id]').textContent=bot.user_id;dialog.showModal();
+}
+function setupMattermostBots(){
+ const section=document.createElement('section');section.id='mm-bots-panel';section.className='mm-bots-panel';section.hidden=true;
+ section.innerHTML='<h3>Боты Mattermost</h3><p class="field-hint">Подключите внешнего бота через API v4 и WebSocket. Создайте бота, скопируйте токен и добавьте его в нужный канал через меню участников чата.</p><form id="mm-bot-create" class="mm-bot-create"><label>Логин бота<input class="field-input" name="username" placeholder="notify-bot" pattern="[a-z0-9][a-z0-9._-]{1,63}" required maxlength="64" autocomplete="off"></label><label>Отображаемое имя<input class="field-input" name="display_name" placeholder="Уведомления" required maxlength="128"></label><button type="submit" class="btn-spray">Создать бота</button></form><p class="field-hint">Бот не получает права администратора. Он видит переписку каналов, в которые добавлен. Токен действует только для чата; его можно заменить или отключить бота.</p><div id="mm-external-bots" role="status"></div><details class="workspace-mm-help"><summary>Вебхуки и подключение</summary><p>Для односторонних уведомлений доступен API входящих вебхуков: POST /api/v4/hooks/incoming. Для двустороннего бота используйте выданный токен в заголовке Authorization: Bearer и подключение /api/v4/websocket.</p><p>Адрес сервера: <code id="mm-bot-origin"></code>. Бот запускается в вашей инфраструктуре; добавление учётной записи не запускает его программу.</p></details>';
+ $('app-mattermost').querySelector('.card').append(section);$('mm-bot-origin').textContent=location.origin;
+ const dialog=document.createElement('dialog');dialog.id='mm-bot-secret';dialog.className='mm-chat-dialog';dialog.innerHTML='<h3>Токен подключения</h3><p>Скопируйте токен сейчас: повторно он не показывается.</p><label>Токен<input class="field-input" readonly autocomplete="off" spellcheck="false"></label><p class="meta">ID бота: <code data-bot-id></code></p><div class="actions"><button type="button" class="btn-secondary" data-copy>Скопировать</button><form method="dialog"><button class="btn-spray">Готово</button></form></div>';document.body.append(dialog);
+ dialog.addEventListener('close',()=>{dialog.querySelector('input').value='';dialog.querySelector('[data-bot-id]').textContent='';dialog.querySelector('[data-copy]').textContent='Скопировать'});
+ dialog.querySelector('[data-copy]').onclick=async()=>{try{await navigator.clipboard.writeText(dialog.querySelector('input').value);dialog.querySelector('[data-copy]').textContent='Скопировано'}catch{dialog.querySelector('input').select()}};
+ $('mm-bot-create').onsubmit=async event=>{event.preventDefault();const epoch=mmAdmin.epoch,guard=mmCurrentGuard(epoch,state.me?.id),scope={...mmAdmin.selected},form=event.currentTarget;const data=Object.fromEntries(new FormData(form));form.inert=true;try{const bot=await api('/api/v4/bots'+mmQuery(scope),{method:'POST',body:JSON.stringify(data),_guard:guard});form.reset();await loadMattermostBots();guard();showBotCredential(bot)}catch(e){if(mmAdmin.epoch===epoch)setMsg($('mm-msg'),e.data?.message||e.message,'err')}finally{form.inert=false}};
+}
+setupMattermostBots();

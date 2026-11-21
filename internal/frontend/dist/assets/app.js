@@ -7157,7 +7157,7 @@ async function loadMattermostScope() {
   $('mm-policy-form').inert = true; $('mm-plugin-upload').disabled = true;
   try {
     const value = await api('/api/v1/admin/mattermost' + mmQuery(item.scope), {_guard: guard});
-    mmAdmin.value = value; renderMattermostScope(value); setMsg($('mm-msg'), '');
+    mmAdmin.value = value; renderMattermostScope(value); void loadMattermostBots(); setMsg($('mm-msg'), '');
   } catch (error) { if (mmAdmin.epoch === epoch) setMsg($('mm-msg'), error.message, 'err'); }
   finally { if (mmAdmin.epoch === epoch) $('mm-policy-form').inert = false; }
 }
@@ -7241,6 +7241,42 @@ $('mm-plugin-upload')?.addEventListener('change', async event => {
   } catch (error) { if (mmAdmin.epoch === epoch) setMsg($('mm-msg'), error.message, 'err'); }
   finally { input.value = ''; if (mmAdmin.epoch === epoch) input.disabled = !mmAdmin.value?.global_admin; }
 });
+
+// External bot credentials are returned once and never stored in browser storage.
+async function loadMattermostBots() {
+ const host=$('mm-external-bots');if(!host)return;
+ host.replaceChildren();$('mm-bot-secret')?.close();
+ const epoch=mmAdmin.epoch,guard=mmCurrentGuard(epoch,state.me?.id),scope={...mmAdmin.selected};
+ $('mm-bot-create').hidden=!scope.domain_id;
+ if(!scope.domain_id){host.textContent='Выберите домен в списке областей, чтобы управлять его ботами.';return}
+ try {
+  const bots=await api('/api/v4/bots'+mmQuery(scope),{_guard:guard});
+  for(const bot of bots){
+   const row=document.createElement('div');row.className='mm-bot-row';
+   const text=document.createElement('div'),title=document.createElement('strong'),meta=document.createElement('p');title.textContent=bot.display_name;meta.className='meta';meta.textContent='@'+bot.username+' · '+(bot.enabled?'Включён':'Выключен');text.append(title,meta);row.append(text);
+   for(const [action,label]of [['token','Новый токен'],[bot.enabled?'disable':'enable',bot.enabled?'Отключить':'Включить']]){
+    const button=document.createElement('button');button.type='button';button.className='btn-secondary';button.textContent=label;
+    button.onclick=async()=>{if(action==='token'&&!await askConfirm('Выпустить новый токен? Старый токен сразу перестанет работать.'))return;button.disabled=true;try{guard();const result=await api('/api/v4/bots/'+bot.user_id+'/'+action+mmQuery(scope),{method:'POST',body:'{}',_guard:guard});await loadMattermostBots();guard();if(result.token)showBotCredential(result)}catch(e){if(mmAdmin.epoch===epoch)setMsg($('mm-msg'),e.data?.message||e.message,'err')}finally{button.disabled=false}};
+    row.append(button);
+   }
+   host.append(row);
+  }
+  if(!bots.length)host.textContent='Ботов пока нет. Создайте отдельную учётную запись для вашей интеграции.';
+ }catch(e){if(mmAdmin.epoch===epoch)host.textContent=e.data?.message||e.message}
+}
+function showBotCredential(bot){
+ const dialog=$('mm-bot-secret');dialog.querySelector('input').value=bot.token;dialog.querySelector('[data-bot-id]').textContent=bot.user_id;dialog.showModal();
+}
+function setupMattermostBots(){
+ const section=document.createElement('section');section.id='mm-bots-panel';section.className='mm-bots-panel';section.hidden=true;
+ section.innerHTML='<h3>Боты Mattermost</h3><p class="field-hint">Подключите внешнего бота через API v4 и WebSocket. Создайте бота, скопируйте токен и добавьте его в нужный канал через меню участников чата.</p><form id="mm-bot-create" class="mm-bot-create"><label>Логин бота<input class="field-input" name="username" placeholder="notify-bot" pattern="[a-z0-9][a-z0-9._-]{1,63}" required maxlength="64" autocomplete="off"></label><label>Отображаемое имя<input class="field-input" name="display_name" placeholder="Уведомления" required maxlength="128"></label><button type="submit" class="btn-spray">Создать бота</button></form><p class="field-hint">Бот не получает права администратора. Он видит переписку каналов, в которые добавлен. Токен действует только для чата; его можно заменить или отключить бота.</p><div id="mm-external-bots" role="status"></div><details class="workspace-mm-help"><summary>Вебхуки и подключение</summary><p>Для односторонних уведомлений доступен API входящих вебхуков: POST /api/v4/hooks/incoming. Для двустороннего бота используйте выданный токен в заголовке Authorization: Bearer и подключение /api/v4/websocket.</p><p>Адрес сервера: <code id="mm-bot-origin"></code>. Бот запускается в вашей инфраструктуре; добавление учётной записи не запускает его программу.</p></details>';
+ $('app-mattermost').querySelector('.card').append(section);$('mm-bot-origin').textContent=location.origin;
+ const dialog=document.createElement('dialog');dialog.id='mm-bot-secret';dialog.className='mm-chat-dialog';dialog.innerHTML='<h3>Токен подключения</h3><p>Скопируйте токен сейчас: повторно он не показывается.</p><label>Токен<input class="field-input" readonly autocomplete="off" spellcheck="false"></label><p class="meta">ID бота: <code data-bot-id></code></p><div class="actions"><button type="button" class="btn-secondary" data-copy>Скопировать</button><form method="dialog"><button class="btn-spray">Готово</button></form></div>';document.body.append(dialog);
+ dialog.addEventListener('close',()=>{dialog.querySelector('input').value='';dialog.querySelector('[data-bot-id]').textContent='';dialog.querySelector('[data-copy]').textContent='Скопировать'});
+ dialog.querySelector('[data-copy]').onclick=async()=>{try{await navigator.clipboard.writeText(dialog.querySelector('input').value);dialog.querySelector('[data-copy]').textContent='Скопировано'}catch{dialog.querySelector('input').select()}};
+ $('mm-bot-create').onsubmit=async event=>{event.preventDefault();const epoch=mmAdmin.epoch,guard=mmCurrentGuard(epoch,state.me?.id),scope={...mmAdmin.selected},form=event.currentTarget;const data=Object.fromEntries(new FormData(form));form.inert=true;try{const bot=await api('/api/v4/bots'+mmQuery(scope),{method:'POST',body:JSON.stringify(data),_guard:guard});form.reset();await loadMattermostBots();guard();showBotCredential(bot)}catch(e){if(mmAdmin.epoch===epoch)setMsg($('mm-msg'),e.data?.message||e.message,'err')}finally{form.inert=false}};
+}
+setupMattermostBots();
 /* Shared TMS/Mattermost chat. No XMPP requests or tokens in WebSocket URLs. */
 const mmChat = (() => {
   let generation = 0, owner = '', boot = null, socket = null, reconnect = null, heartbeat = null, poll = null;
@@ -7259,9 +7295,9 @@ const mmChat = (() => {
     const result = await api('/api/v4' + path, {...options, _guard: check}); check(); return result;
   }
   const errorText = error => error.data?.message || error.message;
-  const visible = () => !document.hidden && !el('thread').closest('#app-chat').classList.contains('hidden') && document.hasFocus();
+  const visible = () => !document.hidden && !el('thread').closest('#app-chat').classList.contains('hidden') && (!isMobilePane() || $('view-account').classList.contains('pane-mode-read')) && document.hasFocus();
   function connection(text) { el('connection').textContent = text; }
-  const iconPaths = {refresh:'M20 7v5h-5 M4 17v-5h5 M6 7a7 7 0 0 1 12-1l2 3 M4 15l2 3a7 7 0 0 0 12-1',new:'M12 20H4V4h12 M15 5l4-4 4 4-4 4 M10 14l9-9',channel:'M8 3 6 21 M16 3l-2 18 M3 8h18 M2 16h18',browse:'M21 11a9 9 0 1 1-9-8 M16 3h5v5 M21 3l-9 9',members:'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M20 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75',call:'M15 8l6-4v16l-6-4 M3 5h12v14H3z',reply:'M9 10 4 5l5-4 M4 5h9a7 7 0 0 1 7 7v7',attach:'M21 11 12 20a6 6 0 0 1-9-9L13 1a4 4 0 0 1 6 6L9 17a2 2 0 0 1-3-3l9-9',close:'M6 6l12 12 M18 6 6 18',download:'M12 3v12 M7 10l5 5 5-5 M4 16v5h16v-5'};
+  const iconPaths = {back:'M15 5l-7 7 7 7',refresh:'M20 7v5h-5 M4 17v-5h5 M6 7a7 7 0 0 1 12-1l2 3 M4 15l2 3a7 7 0 0 0 12-1',new:'M12 20H4V4h12 M15 5l4-4 4 4-4 4 M10 14l9-9',channel:'M8 3 6 21 M16 3l-2 18 M3 8h18 M2 16h18',browse:'M21 11a9 9 0 1 1-9-8 M16 3h5v5 M21 3l-9 9',members:'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M20 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75',call:'M15 8l6-4v16l-6-4 M3 5h12v14H3z',reply:'M9 10 4 5l5-4 M4 5h9a7 7 0 0 1 7 7v7',attach:'M21 11 12 20a6 6 0 0 1-9-9L13 1a4 4 0 0 1 6 6L9 17a2 2 0 0 1-3-3l9-9',close:'M6 6l12 12 M18 6 6 18',download:'M12 3v12 M7 10l5 5 5-5 M4 16v5h16v-5'};
   function iconButton(button, name, title) {
     button.classList.add('mm-icon-button'); button.title = title; button.setAttribute('aria-label',title);
     button.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="'+iconPaths[name]+'"/></svg>';
@@ -7322,6 +7358,7 @@ const mmChat = (() => {
   }
   async function refreshStatus() {try{const status=await request('/users/me/status');el('status').value=status.status;el('status').dataset.status=status.status}catch{} }
   function setupControls() {
+    iconButton(el('thread').querySelector('[data-pane-back]'),'back','К списку чатов');
     for(const [id,name,title] of [['refresh','refresh','Обновить'],['new','new','Новый диалог'],['create','channel','Создать канал'],['browse','browse','Открытые каналы'],['members','members','Участники'],['call','call','Звонок Jitsi'],['reply-cancel','close','Отменить ответ']])iconButton(el(id),name,title);
     const identity=el('self').parentElement, profile=document.createElement('div');profile.className='mm-profile-text';profile.append(el('self'),el('connection'));identity.append(profile);
     const status=document.createElement('select');status.id='mm-chat-status';status.className='mm-status';status.setAttribute('aria-label','Мой статус');
@@ -7336,6 +7373,14 @@ const mmChat = (() => {
     el('send').addEventListener('drop',event=>{event.preventDefault();el('send').classList.remove('is-dragging');addFiles(event.dataTransfer.files)});
   }
   setupControls();
+  function fitMobileViewport() {
+    const root=$('view-account'), viewport=window.visualViewport;
+    if(viewport && isMobilePane() && Math.abs(viewport.scale-1)<0.05) root.style.height=viewport.height+'px';
+    else root.style.removeProperty('height');
+  }
+  window.visualViewport?.addEventListener('resize',fitMobileViewport);
+  window.addEventListener('resize',fitMobileViewport);
+  fitMobileViewport();
   function stop() {
     clearMedia(); clearAttachments(); mediaController.abort(); mediaController=new AbortController();
     avatarCache.forEach(promise=>promise.then(url=>{if(url)URL.revokeObjectURL(url)}));avatarCache.clear();
@@ -11494,10 +11539,10 @@ function workspaceFolderIcon(folder){return workspaceIcon(String(folder.role||fo
  // Domain cards retain their actions; legacy XMPP-only controls are not exposed.
  new MutationObserver(()=>{$('admin-domain-list').querySelectorAll('[data-domain-xmpp-gal]').forEach(input=>input.closest('label').hidden=true)}).observe($('admin-domain-list'),{childList:true});
  // Mattermost policy, notifications and integrations are separate tabs over real controls.
- const mm=$('app-mattermost'),mmCard=mm.querySelector('.card'),mmForm=$('mm-policy-form'),mmPush=mmForm.querySelector('fieldset'),mmPolicy=mmForm.querySelector('.config-fields'),mmEmail=mmForm.querySelector('details'),mmPlugins=mmCard.querySelector(':scope>section');
+ const mm=$('app-mattermost'),mmCard=mm.querySelector('.card'),mmForm=$('mm-policy-form'),mmPush=mmForm.querySelector('fieldset'),mmPolicy=mmForm.querySelector('.config-fields'),mmEmail=mmForm.querySelector(':scope>details'),mmPlugins=mmCard.querySelector(':scope>section');
  const mmTabs=document.createElement('div');mmTabs.className='workspace-mm-tabs';const mmPanels=[mmPolicy,mmPush,mmEmail,mmPlugins];let currentMMTab=0;
- const mmActions=mmForm.querySelector(':scope>.actions');for(const [i,ru,en]of [[0,'Подключение','Connection'],[1,'Уведомления','Notifications'],[2,'Интеграции','Integrations']]){const b=button(words(ru,en),()=>selectMM(i));mmTabs.append(b)}
- function selectMM(index){currentMMTab=index;mmPanels.forEach((node,i)=>{if(node)node.hidden=index===0?i!==0:index===1?i!==1:i<2});[...mmTabs.children].forEach((b,i)=>b.setAttribute('aria-pressed',String(i===index)))}
+ const mmActions=mmForm.querySelector(':scope>.actions');for(const [i,ru,en]of [[0,'Подключение','Connection'],[1,'Уведомления','Notifications'],[2,'Интеграции','Integrations'],[3,'Боты','Bots']]){const b=button(words(ru,en),()=>selectMM(i));mmTabs.append(b)}
+ function selectMM(index){currentMMTab=index;mmForm.hidden=index===3;$('mm-bots-panel').hidden=index!==3;if(mmActions)mmActions.hidden=index===3;mmPanels.forEach((node,i)=>{if(node)node.hidden=index===3|| (index===0?i!==0:index===1?i!==1:i<2)});[...mmTabs.children].forEach((b,i)=>b.setAttribute('aria-pressed',String(i===index)))}
  mmForm.before(mmTabs);mmCard.classList.add('workspace-mm-settings');selectMM(0);
  const scopeDescription=mmCard.querySelector(':scope>.meta');if(scopeDescription){const details=document.createElement('details');details.className='workspace-mm-help';details.innerHTML='<summary>'+words('Наследование настроек','Settings inheritance')+'</summary>';scopeDescription.before(details);details.append(scopeDescription)}
  // Domains use the same table and detail pattern as users and certificates.

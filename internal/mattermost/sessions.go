@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/tayga/tms/internal/auth"
@@ -16,6 +17,9 @@ import (
 // Its persisted authorization is specific to this adapter. General TMS OAuth
 // validation keeps the original access expiry and never accepts this fallback.
 func (s *API) authenticate(ctx context.Context, token string) (*storage.User, error) {
+	if strings.HasPrefix(token, "tmsbot_") {
+		return s.authenticateBot(ctx, token)
+	}
 	if token == "" {
 		return nil, auth.ErrInvalidToken
 	}

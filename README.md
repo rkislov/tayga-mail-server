@@ -48,7 +48,7 @@ Tayga Mail Server — открытый сервер корпоративной �
 
 ![Чаты Tayga Mail — аватары, статусы и вложения](docs/screenshots/v1.0.1/chat.png)
 
-[Совместимость Mattermost](docs/mattermost-compatibility.md) · [Видеовстречи](docs/vks.md)
+[Совместимость Mattermost](docs/mattermost-compatibility.md) · [Подключение ботов](docs/mattermost-bots.md) · [Видеовстречи](docs/vks.md)
 
 ### Защита почты и входа
 

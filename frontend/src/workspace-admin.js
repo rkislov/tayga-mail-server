@@ -38,10 +38,10 @@
  // Domain cards retain their actions; legacy XMPP-only controls are not exposed.
  new MutationObserver(()=>{$('admin-domain-list').querySelectorAll('[data-domain-xmpp-gal]').forEach(input=>input.closest('label').hidden=true)}).observe($('admin-domain-list'),{childList:true});
  // Mattermost policy, notifications and integrations are separate tabs over real controls.
- const mm=$('app-mattermost'),mmCard=mm.querySelector('.card'),mmForm=$('mm-policy-form'),mmPush=mmForm.querySelector('fieldset'),mmPolicy=mmForm.querySelector('.config-fields'),mmEmail=mmForm.querySelector('details'),mmPlugins=mmCard.querySelector(':scope>section');
+ const mm=$('app-mattermost'),mmCard=mm.querySelector('.card'),mmForm=$('mm-policy-form'),mmPush=mmForm.querySelector('fieldset'),mmPolicy=mmForm.querySelector('.config-fields'),mmEmail=mmForm.querySelector(':scope>details'),mmPlugins=mmCard.querySelector(':scope>section');
  const mmTabs=document.createElement('div');mmTabs.className='workspace-mm-tabs';const mmPanels=[mmPolicy,mmPush,mmEmail,mmPlugins];let currentMMTab=0;
- const mmActions=mmForm.querySelector(':scope>.actions');for(const [i,ru,en]of [[0,'Подключение','Connection'],[1,'Уведомления','Notifications'],[2,'Интеграции','Integrations']]){const b=button(words(ru,en),()=>selectMM(i));mmTabs.append(b)}
- function selectMM(index){currentMMTab=index;mmPanels.forEach((node,i)=>{if(node)node.hidden=index===0?i!==0:index===1?i!==1:i<2});[...mmTabs.children].forEach((b,i)=>b.setAttribute('aria-pressed',String(i===index)))}
+ const mmActions=mmForm.querySelector(':scope>.actions');for(const [i,ru,en]of [[0,'Подключение','Connection'],[1,'Уведомления','Notifications'],[2,'Интеграции','Integrations'],[3,'Боты','Bots']]){const b=button(words(ru,en),()=>selectMM(i));mmTabs.append(b)}
+ function selectMM(index){currentMMTab=index;mmForm.hidden=index===3;$('mm-bots-panel').hidden=index!==3;if(mmActions)mmActions.hidden=index===3;mmPanels.forEach((node,i)=>{if(node)node.hidden=index===3|| (index===0?i!==0:index===1?i!==1:i<2)});[...mmTabs.children].forEach((b,i)=>b.setAttribute('aria-pressed',String(i===index)))}
  mmForm.before(mmTabs);mmCard.classList.add('workspace-mm-settings');selectMM(0);
  const scopeDescription=mmCard.querySelector(':scope>.meta');if(scopeDescription){const details=document.createElement('details');details.className='workspace-mm-help';details.innerHTML='<summary>'+words('Наследование настроек','Settings inheritance')+'</summary>';scopeDescription.before(details);details.append(scopeDescription)}
  // Domains use the same table and detail pattern as users and certificates.

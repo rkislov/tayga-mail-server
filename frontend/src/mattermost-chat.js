@@ -16,9 +16,9 @@ const mmChat = (() => {
     const result = await api('/api/v4' + path, {...options, _guard: check}); check(); return result;
   }
   const errorText = error => error.data?.message || error.message;
-  const visible = () => !document.hidden && !el('thread').closest('#app-chat').classList.contains('hidden') && document.hasFocus();
+  const visible = () => !document.hidden && !el('thread').closest('#app-chat').classList.contains('hidden') && (!isMobilePane() || $('view-account').classList.contains('pane-mode-read')) && document.hasFocus();
   function connection(text) { el('connection').textContent = text; }
-  const iconPaths = {refresh:'M20 7v5h-5 M4 17v-5h5 M6 7a7 7 0 0 1 12-1l2 3 M4 15l2 3a7 7 0 0 0 12-1',new:'M12 20H4V4h12 M15 5l4-4 4 4-4 4 M10 14l9-9',channel:'M8 3 6 21 M16 3l-2 18 M3 8h18 M2 16h18',browse:'M21 11a9 9 0 1 1-9-8 M16 3h5v5 M21 3l-9 9',members:'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M20 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75',call:'M15 8l6-4v16l-6-4 M3 5h12v14H3z',reply:'M9 10 4 5l5-4 M4 5h9a7 7 0 0 1 7 7v7',attach:'M21 11 12 20a6 6 0 0 1-9-9L13 1a4 4 0 0 1 6 6L9 17a2 2 0 0 1-3-3l9-9',close:'M6 6l12 12 M18 6 6 18',download:'M12 3v12 M7 10l5 5 5-5 M4 16v5h16v-5'};
+  const iconPaths = {back:'M15 5l-7 7 7 7',refresh:'M20 7v5h-5 M4 17v-5h5 M6 7a7 7 0 0 1 12-1l2 3 M4 15l2 3a7 7 0 0 0 12-1',new:'M12 20H4V4h12 M15 5l4-4 4 4-4 4 M10 14l9-9',channel:'M8 3 6 21 M16 3l-2 18 M3 8h18 M2 16h18',browse:'M21 11a9 9 0 1 1-9-8 M16 3h5v5 M21 3l-9 9',members:'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M20 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75',call:'M15 8l6-4v16l-6-4 M3 5h12v14H3z',reply:'M9 10 4 5l5-4 M4 5h9a7 7 0 0 1 7 7v7',attach:'M21 11 12 20a6 6 0 0 1-9-9L13 1a4 4 0 0 1 6 6L9 17a2 2 0 0 1-3-3l9-9',close:'M6 6l12 12 M18 6 6 18',download:'M12 3v12 M7 10l5 5 5-5 M4 16v5h16v-5'};
   function iconButton(button, name, title) {
     button.classList.add('mm-icon-button'); button.title = title; button.setAttribute('aria-label',title);
     button.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="'+iconPaths[name]+'"/></svg>';
@@ -79,6 +79,7 @@ const mmChat = (() => {
   }
   async function refreshStatus() {try{const status=await request('/users/me/status');el('status').value=status.status;el('status').dataset.status=status.status}catch{} }
   function setupControls() {
+    iconButton(el('thread').querySelector('[data-pane-back]'),'back','К списку чатов');
     for(const [id,name,title] of [['refresh','refresh','Обновить'],['new','new','Новый диалог'],['create','channel','Создать канал'],['browse','browse','Открытые каналы'],['members','members','Участники'],['call','call','Звонок Jitsi'],['reply-cancel','close','Отменить ответ']])iconButton(el(id),name,title);
     const identity=el('self').parentElement, profile=document.createElement('div');profile.className='mm-profile-text';profile.append(el('self'),el('connection'));identity.append(profile);
     const status=document.createElement('select');status.id='mm-chat-status';status.className='mm-status';status.setAttribute('aria-label','Мой статус');
@@ -93,6 +94,14 @@ const mmChat = (() => {
     el('send').addEventListener('drop',event=>{event.preventDefault();el('send').classList.remove('is-dragging');addFiles(event.dataTransfer.files)});
   }
   setupControls();
+  function fitMobileViewport() {
+    const root=$('view-account'), viewport=window.visualViewport;
+    if(viewport && isMobilePane() && Math.abs(viewport.scale-1)<0.05) root.style.height=viewport.height+'px';
+    else root.style.removeProperty('height');
+  }
+  window.visualViewport?.addEventListener('resize',fitMobileViewport);
+  window.addEventListener('resize',fitMobileViewport);
+  fitMobileViewport();
   function stop() {
     clearMedia(); clearAttachments(); mediaController.abort(); mediaController=new AbortController();
     avatarCache.forEach(promise=>promise.then(url=>{if(url)URL.revokeObjectURL(url)}));avatarCache.clear();

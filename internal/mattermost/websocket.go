@@ -76,8 +76,10 @@ func (s *API) serveSocket(ws *websocket.Conn, r *http.Request) {
 		return
 	}
 
-	if err = s.chat.EnsureDefault(ctx, u); err != nil {
-		return
+	if u.AuthSource != "bot" {
+		if err = s.chat.EnsureDefault(ctx, u); err != nil {
+			return
+		}
 	}
 	var writeMu sync.Mutex
 	send := func(value any) error {

@@ -26,6 +26,7 @@ import (
 const CompatibilityVersion = mmplugins.Version
 
 type API struct {
+	botMu               sync.Mutex
 	startChannelCall    ChannelCallStarter
 	canStartChannelCall func(context.Context, *storage.User) (bool, error)
 	fileRequests        chan struct{}
@@ -203,10 +204,16 @@ func (s *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		fail(w, 403, "tms.mattermost.scope_disabled", "Mattermost is disabled for this tenant or domain")
 		return
 	}
-	s.auth.TrackToken(u, token, r.RemoteAddr, r.UserAgent())
-	if err = s.chat.EnsureDefault(r.Context(), u); err != nil {
-		s.failure(w, err)
+	if u.AuthSource == "bot" && !botRequestAllowed(r.Method, path) {
+		s.failure(w, chat.ErrForbidden)
 		return
+	}
+	if u.AuthSource != "bot" {
+		s.auth.TrackToken(u, token, r.RemoteAddr, r.UserAgent())
+		if err = s.chat.EnsureDefault(r.Context(), u); err != nil {
+			s.failure(w, err)
+			return
+		}
 	}
 	if path == "/users/logout" && r.Method == http.MethodPost {
 		if err = s.auth.Tokens.RevokeAccess(r.Context(), token); err != nil {
@@ -224,6 +231,8 @@ func (s *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch {
+	case path == "/bots" || strings.HasPrefix(path, "/bots/"):
+		s.externalBots(w, r, u, path)
 	case path == "/users" || strings.HasPrefix(path, "/users/"):
 		s.users(w, r, u, path)
 	case path == "/teams" || strings.HasPrefix(path, "/teams/"):
