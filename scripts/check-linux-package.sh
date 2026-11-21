@@ -7,11 +7,11 @@ export DEBIAN_FRONTEND=noninteractive
 case "$family" in
   deb)
     apt-get update
-    apt-get install -y "$package" curl procps
+    apt-get install -y --no-install-recommends "$package" curl procps
     ;;
   alt)
     apt-get update
-    apt-get install -y "$package" curl procps
+    apt-get install -y "$package" curl procps su
     ;;
   rpm)
     dnf install -y "$package" curl procps-ng
@@ -91,7 +91,7 @@ test -s /var/log/tayga/tayga.log.1
 if [ ! -d /run/systemd/system ]; then kill -HUP "$pid";fi
 reopened=false
 for attempt in $(seq 1 30); do
-  if ls -l /proc/"$pid"/fd | grep -q '/var/log/tayga/tayga.log$'; then reopened=true;break;fi
+  if su -s /bin/sh tayga -c "ls -l /proc/$pid/fd" | grep -q '/var/log/tayga/tayga.log$'; then reopened=true;break;fi
   sleep 1
 done
 test "$reopened" = true
