@@ -145,3 +145,11 @@ node scripts/capture-screenshots.mjs
 - [Список чатов на телефоне](v1.0.2/chat-mobile.png)
 - [Переписка на телефоне](v1.0.2/chat-mobile-thread.png)
 - [Управление ботами Mattermost](v1.0.2/bots.png)
+
+## Почтовые фильтры 1.0.4
+
+Работающий интерфейс с демонстрационными данными:
+
+- [Список правил](v1.0.4/rules.png)
+- [Визуальный конструктор Sieve](v1.0.4/visual-editor.png)
+- [Фильтры на телефоне](v1.0.4/mobile.png)

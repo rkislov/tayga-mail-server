@@ -3445,9 +3445,12 @@ $("btn-vacation-save")?.addEventListener("click", async () => {
         body: $("vacation-body")?.value || "",
       }),
     });
-    setMsg($("vacation-msg"), "OK", "ok");
+    setMsg($("vacation-msg"), mailImageText("Автоответ сохранён", "Auto-reply saved"), "ok");
   } catch (err) {
-    setMsg($("vacation-msg"), err.message, "err");
+    const message=err.message.includes("unsupported extension: vacation")
+      ? mailImageText("Этот сервер пока не поддерживает автоответ. Настройка не сохранена; действующие почтовые правила не изменены.", "This server does not support auto-replies yet. The setting was not saved; existing mail rules are unchanged.")
+      : err.message;
+    setMsg($("vacation-msg"), message, "err");
   }
 });
 $("btn-sieve-save").addEventListener("click", async () => {
@@ -8724,10 +8727,22 @@ function renderVisualRules(){
  const list=$('visual-rule-list');if(!list)return;list.replaceChildren();
  if(!visualRules.rules.length){const empty=document.createElement('div');empty.className='rule-empty';empty.innerHTML='<strong>'+mailImageText('Правил пока нет','No rules yet')+'</strong><p>'+mailImageText('Например: если отправитель — коллега, переместить письмо в рабочую папку.','For example: if the sender is a colleague, move the message into a work folder.')+'</p>';list.append(empty)}
  visualRules.rules.forEach((rule,index)=>{
-  const row=document.createElement('div');row.className='visual-rule-row';const enabled=document.createElement('input');enabled.type='checkbox';enabled.checked=rule.enabled!==false;enabled.setAttribute('aria-label',mailImageText('Включить правило: ','Enable rule: ')+rule.name);enabled.onchange=()=>{rule.enabled=enabled.checked;visualRules.dirty=true};
+  const row=document.createElement('div');row.className='visual-rule-row';row.classList.toggle('is-disabled',rule.enabled===false);const enabled=document.createElement('input');enabled.type='checkbox';enabled.className='filter-switch';enabled.checked=rule.enabled!==false;enabled.setAttribute('role','switch');enabled.setAttribute('aria-label',mailImageText('Включить правило: ','Enable rule: ')+rule.name);enabled.onchange=()=>{rule.enabled=enabled.checked;visualRules.dirty=true;row.classList.toggle('is-disabled',!enabled.checked);updateVisualRuleStatus()};
   const summary=document.createElement('button');summary.type='button';summary.className='rule-summary';const title=document.createElement('strong');title.textContent=rule.name;const text=document.createElement('small');text.textContent=rule.conditions.map(c=>({From:mailImageText('Отправитель','Sender'),To:mailImageText('Получатель','Recipient'),Cc:mailImageText('Копия','Cc'),Subject:mailImageText('Тема','Subject')}[c.field]||c.field)+' '+c.value).join(rule.match==='any'?' / ':' + ')+' → '+(rule.action==='fileinto'?rule.destination:rule.action==='discard'?mailImageText('Удалить','Discard'):mailImageText('Оставить во входящих','Keep in inbox'));summary.append(title,text);summary.onclick=()=>openVisualRule(index);row.append(enabled,summary);
-  for(const [label,icon,run] of [[mailImageText('Выше','Move up'),'up',()=>{if(index){[visualRules.rules[index-1],visualRules.rules[index]]=[visualRules.rules[index],visualRules.rules[index-1]];visualRules.dirty=true;renderVisualRules()}}],[mailImageText('Удалить правило','Delete rule'),'delete',()=>{visualRules.rules.splice(index,1);visualRules.dirty=true;renderVisualRules()}]]){const button=document.createElement('button');button.type='button';button.className='btn-secondary rule-icon';button.title=label;button.setAttribute('aria-label',label);button.innerHTML=icon==='up'?'<span aria-hidden="true">↑</span>':designIcon(icon);button.onclick=run;row.append(button)}list.append(row);
+  const actions=document.createElement('div');actions.className='filter-rule-actions';
+  for(const [label,icon,run,disabled] of [
+   [mailImageText('Изменить правило','Edit rule'),'edit',()=>openVisualRule(index),false],
+   [mailImageText('Выше','Move up'),'up',()=>{[visualRules.rules[index-1],visualRules.rules[index]]=[visualRules.rules[index],visualRules.rules[index-1]];visualRules.dirty=true;renderVisualRules()},index===0],
+   [mailImageText('Ниже','Move down'),'down',()=>{[visualRules.rules[index+1],visualRules.rules[index]]=[visualRules.rules[index],visualRules.rules[index+1]];visualRules.dirty=true;renderVisualRules()},index===visualRules.rules.length-1],
+   [mailImageText('Удалить правило','Delete rule'),'delete',()=>{visualRules.rules.splice(index,1);visualRules.dirty=true;renderVisualRules()},false]
+  ]){const button=document.createElement('button');button.type='button';button.className='btn-secondary rule-icon';button.title=label;button.setAttribute('aria-label',label);button.disabled=disabled;button.innerHTML=icon==='up'||icon==='down'?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 5v14m-5-5 5 5 5-5"'+(icon==='up'?' transform="rotate(180 12 12)"':'')+'/></svg>':workspaceIcon(icon==='edit'?'compose':icon);button.onclick=run;actions.append(button)}row.append(actions);list.append(row);
  });
+ updateVisualRuleStatus();
+}
+function updateVisualRuleStatus(){
+ const count=$('filter-rule-count'),status=$('filter-save-state');
+ if(count)count.textContent=mailImageText('Включено: ','Enabled: ')+visualRules.rules.filter(rule=>rule.enabled!==false).length+' / '+visualRules.rules.length;
+ if(status){status.textContent=visualRules.dirty?mailImageText('Есть несохранённые изменения','Unsaved changes'):mailImageText('Правила выполняются сверху вниз','Rules run from top to bottom');status.classList.toggle('is-dirty',visualRules.dirty)}
 }
 async function openVisualRule(index=-1){
  const existing=visualRules.rules[index];const rule=existing?JSON.parse(JSON.stringify(existing)):{name:'',enabled:true,match:'all',conditions:[{field:'From',operator:'contains',value:''}],action:'fileinto',destination:'',stop:true};
@@ -8761,10 +8776,12 @@ function mountVisualRuleBuilder(){
 mountVisualRuleBuilder();
 
 function renderOutlookRules(data){
- let host=$('outlook-rules-summary');if(!host){host=document.createElement('section');host.id='outlook-rules-summary';host.className='card';($('app-filters').querySelector('.workspace-settings-content')||$('app-filters')).append(host)}host.replaceChildren();
- const title=document.createElement('h3');title.textContent=mailImageText('Правила Outlook','Outlook rules');const hint=document.createElement('p');hint.className='meta';hint.textContent=mailImageText('Управляются из меню «Правила сервера» в Outlook и выполняются перед правилами веб-конструктора. «Остановить обработку» завершает всю цепочку.','Managed through Server Rules in Outlook and run before web rules. Stop processing ends the entire chain.');host.append(title,hint);
- let rules=[];try{rules=JSON.parse(data?.rules_json||'[]')}catch{}for(const rule of rules){const row=document.createElement('p');row.textContent=(rule.enabled?'✓ ':'— ')+rule.name;host.append(row)}
- if(!rules.length){const empty=document.createElement('p');empty.className='meta';empty.textContent=mailImageText('Правил Outlook пока нет.','No Outlook rules yet.');host.append(empty)}else{const details=document.createElement('details'),summary=document.createElement('summary'),code=document.createElement('pre');summary.textContent=mailImageText('Сгенерированный Sieve','Generated Sieve');code.textContent=data.script;details.append(summary,code);host.append(details)}
+ let host=$('outlook-rules-summary');if(!host){host=document.createElement('details');host.id='outlook-rules-summary';host.className='filter-outlook';($('filter-panel-rules')||$('app-filters').querySelector('.workspace-settings-content')||$('app-filters')).append(host)}host.replaceChildren();
+ let rules=[];try{const parsed=JSON.parse(data?.rules_json||'[]');if(Array.isArray(parsed))rules=parsed}catch{}
+ const title=document.createElement('summary');title.innerHTML=workspaceIcon('mail');const name=document.createElement('span');name.textContent=mailImageText('Правила Outlook','Outlook rules');const count=document.createElement('small');count.textContent=String(rules.length);title.append(name,count);host.append(title);
+ const body=document.createElement('div');body.className='filter-outlook-body';host.append(body);const hint=document.createElement('p');hint.className='meta';hint.textContent=mailImageText('Настраиваются в Outlook → «Правила сервера» и выполняются перед правилами Tayga.','Managed in Outlook → Server Rules and processed before Tayga rules.');body.append(hint);
+ for(const rule of rules){const row=document.createElement('div');row.className='filter-outlook-row';const status=document.createElement('span');status.className='filter-rule-state';status.textContent=rule.enabled?mailImageText('Включено','Enabled'):mailImageText('Выключено','Disabled');const name=document.createElement('strong');name.textContent=rule.name;row.append(name,status);body.append(row)}
+ if(!rules.length){const empty=document.createElement('p');empty.className='meta';empty.textContent=mailImageText('Правил Outlook пока нет.','No Outlook rules yet.');body.append(empty)}else{const details=document.createElement('details'),summary=document.createElement('summary'),code=document.createElement('pre');summary.textContent=mailImageText('Посмотреть скрипт Sieve','View Sieve script');code.textContent=data.script;details.append(summary,code);body.append(details)}
 }
 async function boundedPreviewBlob(response,limit) {
  if(Number(response.headers.get('Content-Length'))>limit){await response.body?.cancel();throw new Error('Файл слишком велик для предпросмотра')}
@@ -11507,6 +11524,57 @@ function workspaceFolderIcon(folder){return workspaceIcon(String(folder.role||fo
  const loginTitle=document.querySelector('#view-login [data-i18n=login_title]');if(loginTitle){loginTitle.removeAttribute('data-i18n');loginTitle.textContent=words('Добро пожаловать','Welcome')}
  const loginLede=document.querySelector('#view-login .lede');if(loginLede){loginLede.removeAttribute('data-i18n');loginLede.textContent=words('Войдите в свою учётную запись Tayga Mail','Sign in to your Tayga Mail account')}
  const loginSubmit=document.querySelector('#form-login button[type=submit]');loginSubmit.removeAttribute('data-i18n');loginSubmit.textContent=words('Войти','Sign in');const artCredit=document.createElement('p');artCredit.className='workspace-login-art';artCredit.textContent='Рисунки © Алиса Кислова · Apache-2.0';$('view-login').append(artCredit);
+})();
+/* Keep the existing rule, vacation and Sieve controllers; compose one settings page. */
+(() => {
+ const root=$('app-filters'),content=root?.querySelector('.workspace-settings-content');
+ if(!content)return;
+ const words=workspaceWords,builder=content.querySelector('.visual-rule-builder');
+ const vacation=$('vacation-enabled')?.closest('.card'),advanced=content.querySelector('.advanced-sieve');
+ if(!builder||!vacation||!advanced)return;
+ const outlook=$('outlook-rules-summary');
+ content.replaceChildren();
+ const heading=document.createElement('header');heading.className='filter-page-heading';
+ heading.innerHTML='<span class="filter-page-symbol" aria-hidden="true">'+workspaceIcon('filter')+'</span><div><h2>'+words('Почтовые фильтры','Mail filters')+'</h2><p>'+words('Порядок во входящих — без лишних действий.','Keep your inbox organised, automatically.')+'</p></div>';
+ const tabs=document.createElement('div');tabs.className='filter-tabs';tabs.setAttribute('role','tablist');tabs.setAttribute('aria-label',words('Настройки почтовых фильтров','Mail filter settings'));
+ const panels=document.createElement('div');panels.className='filter-panels';
+ content.append(heading,tabs,panels);
+ const sections=[['rules',words('Правила','Rules'),builder],['vacation',words('Автоответ','Auto-reply'),vacation],['advanced',words('Дополнительно','Advanced'),advanced]];
+ function selectTab(key,focus=false){
+  for(const [name] of sections){const active=name===key,tab=$('filter-tab-'+name);tab.setAttribute('aria-selected',String(active));tab.tabIndex=active?0:-1;$('filter-panel-'+name).hidden=!active;if(active&&focus)tab.focus()}
+ }
+ for(const [key,label,node] of sections){
+  const tab=document.createElement('button');tab.type='button';tab.id='filter-tab-'+key;tab.textContent=label;tab.setAttribute('role','tab');tab.setAttribute('aria-controls','filter-panel-'+key);tab.onclick=()=>selectTab(key);
+  tab.onkeydown=event=>{const index=sections.findIndex(section=>section[0]===key);let next;
+   if(event.key==='ArrowRight')next=(index+1)%sections.length;else if(event.key==='ArrowLeft')next=(index+sections.length-1)%sections.length;else if(event.key==='Home')next=0;else if(event.key==='End')next=sections.length-1;else return;
+   event.preventDefault();selectTab(sections[next][0],true);
+  };
+  const panel=document.createElement('section');panel.id='filter-panel-'+key;panel.className='filter-panel';panel.setAttribute('role','tabpanel');panel.setAttribute('aria-labelledby',tab.id);panel.tabIndex=0;panel.append(node);tabs.append(tab);panels.append(panel);
+ }
+ if(outlook)$('filter-panel-rules').append(outlook);
+ builder.querySelector('h3').textContent=words('Правила для входящих','Inbox rules');
+ builder.querySelector('header .meta').textContent=words('Письма сами попадут в нужную папку. Нажмите на правило, чтобы изменить его.','Send messages to the right folder automatically. Select a rule to edit it.');
+ const count=document.createElement('span');count.id='filter-rule-count';count.className='filter-count';builder.querySelector('h3').after(count);
+ $('btn-rule-new').innerHTML=workspaceIcon('plus')+'<span>'+words('Создать правило в конструкторе','Create rule in builder')+'</span>';
+ const footer=builder.querySelector('footer'),state=document.createElement('span');state.id='filter-save-state';state.setAttribute('role','status');footer.prepend(state);
+ $('btn-rules-save').textContent=words('Сохранить изменения','Save changes');
+ const reload=$('btn-rules-reload');reload.classList.add('rule-icon');reload.innerHTML=workspaceIcon('refresh');reload.title=words('Обновить правила','Refresh rules');reload.setAttribute('aria-label',reload.title);
+ const toggle=$('vacation-enabled'),subject=$('vacation-subject'),body=$('vacation-body'),save=$('btn-vacation-save'),message=$('vacation-msg');
+ vacation.classList.add('filter-vacation');vacation.replaceChildren();
+ const vacationHead=document.createElement('header');vacationHead.className='filter-vacation-heading';
+ vacationHead.innerHTML='<span class="filter-page-symbol" aria-hidden="true">'+workspaceIcon('mail')+'</span><div><h3>'+words('Пока вас нет','While you’re away')+'</h3><p class="meta">'+words('Оставьте сообщение тем, кто напишет вам во время отсутствия.','Leave a message for people who email you while you’re away.')+'</p></div>';
+ const toggleLabel=document.createElement('label');toggleLabel.className='filter-vacation-toggle';toggle.classList.add('filter-switch');toggle.setAttribute('role','switch');const toggleText=document.createElement('span');toggleText.textContent=words('Включить автоответ','Enable auto-reply');toggleLabel.append(toggleText,toggle);
+ vacation.append(vacationHead,toggleLabel);
+ for(const [field,label,placeholder] of [[subject,words('Тема ответа','Reply subject'),words('Например: я в отпуске','For example: out of office')],[body,words('Сообщение','Message'),words('Когда вы вернётесь и с кем можно связаться в ваше отсутствие','When you’ll return and who to contact while you’re away')]]){
+  const labelNode=document.createElement('label');labelNode.className='filter-field';labelNode.htmlFor=field.id;const caption=document.createElement('span');caption.textContent=label;labelNode.append(caption,field);field.placeholder=placeholder;vacation.append(labelNode);
+ }
+ body.rows=6;
+ const vacationFooter=document.createElement('footer');vacationFooter.className='filter-vacation-footer';message.setAttribute('role','status');vacationFooter.append(message,save);vacation.append(vacationFooter);
+ for(const field of [toggle,subject,body])field.addEventListener('input',()=>setMsg(message,words('Есть несохранённые изменения','Unsaved changes')));
+ advanced.open=true;
+ advanced.querySelector('summary').textContent=words('Скрипты Sieve','Sieve scripts');
+ const advancedHint=document.createElement('p');advancedHint.className='meta';advancedHint.textContent=words('Для сложных сценариев обработки. Активация скрипта заменяет текущие визуальные правила.','For advanced processing. Activating a script replaces the current visual rules.');advanced.querySelector('summary').after(advancedHint);
+ selectTab('rules');updateVisualRuleStatus();
 })();
 /* Administrative views: selectable records, concise tables and real detail panes. */
 (() => {

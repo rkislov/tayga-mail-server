@@ -5788,14 +5788,96 @@ html[data-density=compact] .workspace-preview-list>div {
 .compose-suggestions{position:fixed;z-index:1000;width:min(380px,calc(100vw - 24px));max-height:260px;overflow:auto;border:1px solid var(--work-line);border-radius:14px;background:var(--work-panel);box-shadow:0 12px 36px #13251b26;padding:6px}
 .compose-suggestions button{display:flex;flex-direction:column;width:100%;text-align:left;border:0;background:transparent;border-radius:9px;padding:10px 12px;gap:3px;font-size:13px}.compose-suggestions button span{color:var(--work-muted);font-size:12px}.compose-suggestions button[aria-selected=true],.compose-suggestions button:hover{background:var(--work-selected)}
 .recipient-dialog{width:min(540px,calc(100vw - 24px));padding:24px;border-radius:22px}.recipient-list{max-height:45dvh;overflow:auto;margin:14px 0}.recipient-list label{display:flex;align-items:center;gap:12px;padding:12px;border-radius:12px;cursor:pointer}.recipient-list label:hover{background:var(--work-raised)}.recipient-list span{display:grid;gap:3px;min-width:0}.recipient-list small{color:var(--work-muted);overflow-wrap:anywhere}.recipient-dialog footer{display:flex;justify-content:flex-end;padding-top:14px;border-top:1px solid var(--work-line)}
-#app-filters .workspace-settings-content{min-width:0;overflow:auto;padding:24px 28px}
-#app-filters .card{border:1px solid var(--work-line);border-radius:18px;padding:20px;margin:0 0 20px;background:var(--work-panel)}
-#app-filters h3{font-size:19px;margin:0 0 10px}#app-filters .meta{font-size:13px;line-height:1.6;max-width:68ch;margin:8px 0 16px}
-.visual-rule-builder header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:18px;flex-wrap:wrap}.visual-rule-builder header button{flex:none}
-.visual-rule-row{display:flex;align-items:center;gap:12px;padding:14px 12px;margin:8px 0;border:1px solid var(--work-line);border-radius:13px;background:var(--work-raised)}
-.rule-summary{display:grid;gap:5px;flex:1;min-width:0;text-align:left;padding:0;background:transparent;border:0;cursor:pointer}.rule-summary strong{font-size:14px}.rule-summary small{font-size:12px;font-weight:400;color:var(--work-muted);overflow-wrap:anywhere;line-height:1.5}
-.rule-icon{width:32px;height:32px;padding:6px;flex:none}.rule-icon svg{width:18px;height:18px}
-.visual-rule-builder footer{display:flex;gap:10px;padding-top:16px;margin-top:16px;border-top:1px solid var(--work-line);flex-wrap:wrap;position:sticky;bottom:0;background:var(--work-panel);z-index:2}
+#app-filters .workspace-settings-content{min-width:0;overflow:auto;padding:30px 32px;background:var(--work-panel)}
+#app-filters .workspace-settings-menu{padding-top:26px}
+#app-filters .workspace-settings-link{border-radius:12px;min-height:40px;margin:5px 0}
+.filter-page-heading{display:flex;align-items:center;gap:14px;margin-bottom:24px}
+.filter-page-heading h2{font-size:24px;letter-spacing:-.025em;margin:0 0 6px;line-height:1.25}
+.filter-page-heading p{font-size:13px;line-height:1.6;margin:0;color:var(--work-muted)}
+.filter-page-symbol{display:grid;place-items:center;width:46px;height:46px;border-radius:16px;flex:none;background:var(--work-selected);color:var(--work-primary)}
+.filter-page-symbol svg{width:23px;height:23px}
+.filter-tabs{display:inline-flex;gap:4px;padding:5px;background:var(--work-raised);border:1px solid var(--work-line);border-radius:14px;margin-bottom:24px;max-width:100%}
+.filter-tabs button{padding:9px 18px;border-radius:10px;font-size:13px;color:var(--work-muted);white-space:nowrap}
+.filter-tabs button[aria-selected=true]{background:var(--work-panel);color:var(--work-text);box-shadow:0 2px 5px #1523190d;font-weight:600}
+.filter-tabs button:hover{color:var(--work-primary)}
+html[data-color-mode=dark] #app-filters{--work-primary:#88ad6c;--work-accent:#b4cfa0}
+html[data-color-mode=dark] #app-filters .btn-spray{color:#fff;background:#466439}
+.filter-panels{max-width:1100px;min-width:0}
+.filter-panel[hidden]{display:none!important}
+#app-filters .card{border:1px solid var(--work-line);border-radius:22px;padding:24px;margin:0 0 18px;background:var(--work-panel)}
+#app-filters h3{font-size:17px;line-height:1.4;margin:0 0 8px;letter-spacing:-.015em}
+#app-filters .meta{font-size:13px;line-height:1.6;max-width:68ch;margin:8px 0 16px}
+.visual-rule-builder header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:22px;flex-wrap:wrap}
+.visual-rule-builder header>div{flex:1;min-width:200px}
+.visual-rule-builder header h3{display:inline-block;margin-right:10px!important}
+#app-filters .visual-rule-builder header .meta{margin:4px 0 0;max-width:58ch}
+.visual-rule-builder header button{flex:none;display:inline-flex;align-items:center;gap:7px}
+.visual-rule-builder header button svg{width:16px;height:16px}
+.filter-count{display:inline-block;padding:3px 8px;border-radius:8px;background:var(--work-raised);color:var(--work-muted);font-size:11px;white-space:nowrap;vertical-align:middle}
+.visual-rule-row{display:grid;grid-template-columns:36px minmax(0,1fr) auto;align-items:center;gap:14px;min-height:82px;padding:15px;margin:9px 0;border:1px solid var(--work-line);border-radius:16px;background:var(--work-raised);transition:background .15s}
+.visual-rule-row:hover{background:var(--work-selected)}
+.visual-rule-row.is-disabled{background:var(--work-panel)}
+.visual-rule-row.is-disabled .rule-summary{color:var(--work-muted)}
+.rule-summary{display:grid;gap:6px;min-width:0;text-align:left;padding:4px 0;background:transparent;border:0;cursor:pointer;line-height:1.45}
+.rule-summary strong{font-size:14px;overflow-wrap:anywhere}
+.rule-summary small{font-size:12px;font-weight:400;color:var(--work-muted);overflow-wrap:anywhere;line-height:1.5}
+.filter-rule-actions{display:flex;align-items:center;gap:3px}
+.rule-icon{display:inline-grid;place-items:center;width:34px;height:34px;min-height:34px;padding:7px;flex:none;border-radius:10px}
+.rule-icon svg{width:18px;height:18px}
+.filter-rule-actions .rule-icon{border-color:transparent;background:transparent;color:var(--work-muted)}
+.filter-rule-actions .rule-icon:not(:disabled):hover{background:var(--work-panel);color:var(--work-primary)}
+.filter-rule-actions .rule-icon:disabled{opacity:.28;cursor:default}
+#app-filters input.filter-switch{appearance:none;width:34px;height:20px;min-width:34px;border:1px solid var(--work-line);border-radius:20px;background:#b6bdb3;position:relative;cursor:pointer;margin:0;transition:background .15s}
+#app-filters input.filter-switch::after{content:'';position:absolute;width:14px;height:14px;left:2px;top:2px;border-radius:50%;background:white;box-shadow:0 1px 3px #0002;transition:transform .15s}
+#app-filters input.filter-switch:checked{background:var(--work-primary);border-color:var(--work-primary)}
+#app-filters input.filter-switch:checked::after{transform:translateX(14px)}
+#app-filters :is(button,input,summary):focus-visible{outline:2px solid var(--work-primary);outline-offset:3px}
+.visual-rule-builder footer{display:flex;align-items:center;gap:10px;padding-top:18px;margin-top:20px;border-top:1px solid var(--work-line);flex-wrap:wrap;background:var(--work-panel)}
+#filter-save-state{margin-right:auto;color:var(--work-muted);font-size:12px;line-height:1.5}
+#filter-save-state.is-dirty{color:var(--work-primary);font-weight:600}
+#visual-rule-msg:empty,#vacation-msg:empty{display:none}
+#app-filters .filter-vacation{max-width:760px;padding:26px}
+.filter-vacation-heading{display:flex;gap:14px;align-items:flex-start}
+#app-filters .filter-vacation-heading .meta{margin:0;max-width:48ch}
+.filter-vacation-toggle{display:flex;justify-content:space-between;align-items:center;gap:16px;font-size:13px;padding:16px;border-radius:14px;background:var(--work-raised);margin:22px 0;cursor:pointer}
+.filter-field{display:grid;gap:8px;margin:18px 0;font-size:13px;color:var(--work-muted)}
+.filter-field :is(input,textarea){width:100%;max-width:none!important;min-width:0;font-family:inherit;font-size:14px;color:var(--work-text);border-radius:12px;line-height:1.6}
+.filter-field textarea{resize:vertical;min-height:160px;padding:12px 14px}
+.filter-vacation-footer{display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:12px;padding-top:18px;border-top:1px solid var(--work-line)}
+.filter-vacation-footer .msg{margin:0 auto 0 0;font-size:12px}
+.filter-outlook{border:1px solid var(--work-line);border-radius:18px;background:var(--work-raised);overflow:hidden;margin-bottom:18px}
+.filter-outlook>summary{display:flex;align-items:center;gap:10px;padding:18px 20px;cursor:pointer;font-size:13px;font-weight:600;list-style:none}
+.filter-outlook>summary::-webkit-details-marker{display:none}
+.filter-outlook>summary svg{width:18px;height:18px;color:var(--work-muted)}
+.filter-outlook>summary small{margin-left:auto;background:var(--work-panel);border-radius:7px;padding:3px 8px;font-size:11px;color:var(--work-muted)}
+.filter-outlook>summary::after{content:'';width:7px;height:7px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg);margin:0 3px 3px 6px}
+.filter-outlook[open]>summary::after{transform:rotate(225deg);margin-top:5px}
+.filter-outlook-body{padding:0 20px 20px;font-size:13px}
+.filter-outlook-row{display:flex;align-items:center;justify-content:space-between;gap:16px;background:var(--work-panel);border-radius:12px;padding:14px;margin:10px 0}
+.filter-outlook-row strong{overflow-wrap:anywhere;font-size:13px;font-weight:500;min-width:0}
+.filter-rule-state{padding:4px 8px;background:var(--work-selected);border-radius:7px;font-size:11px;white-space:nowrap}
+#filter-panel-advanced .advanced-sieve{margin-top:0;padding:22px;border-radius:20px}
+#filter-panel-advanced .advanced-sieve>.card{border:0;padding:0;margin:18px 0 0}
+#filter-panel-advanced .advanced-sieve>summary{font-size:16px;font-weight:600}
+@media(max-width:700px){
+ #app-filters .workspace-settings-content{padding:18px 14px}
+ #app-filters .workspace-settings-menu{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;padding:8px}
+ #app-filters .workspace-settings-menu h2{display:none}
+ #app-filters .workspace-settings-link{margin:0;padding:8px 5px;min-width:0;min-height:48px;font-size:10px;gap:5px;line-height:1.4}
+ #app-filters .workspace-settings-link svg{width:14px;height:14px;flex:none}
+ .filter-page-heading{gap:10px;margin-bottom:18px}.filter-page-heading h2{font-size:21px}.filter-page-heading p{font-size:12px}
+ .filter-page-heading>.filter-page-symbol{display:none}
+ .filter-tabs{gap:2px;width:100%;display:flex}.filter-tabs button{padding:9px 5px;flex:1;font-size:11px;min-width:0}
+ #app-filters .card,#app-filters .filter-vacation{padding:16px;border-radius:18px}
+ .visual-rule-builder header{display:flex!important;margin-bottom:16px}.visual-rule-builder header>div{min-width:0;flex-basis:100%}
+ .visual-rule-builder header button{max-width:100%;white-space:normal;text-align:left}.visual-rule-builder header button svg{flex:none}
+ #app-filters .visual-rule-row{grid-template-columns:34px minmax(0,1fr);gap:8px 12px;padding:12px}
+ .filter-rule-actions{grid-column:2;justify-content:flex-end}.filter-rule-actions .rule-icon{width:40px;height:40px}
+ #filter-save-state{flex-basis:100%}.visual-rule-builder footer{gap:10px}
+ .filter-field :is(input,textarea){font-size:16px}
+ .filter-outlook>summary{padding:16px}.filter-outlook-body{padding:0 16px 16px}
+ .filter-outlook-row{align-items:flex-start;flex-direction:column;gap:8px}
+}
 .advanced-sieve{padding:16px;border:1px solid var(--work-line);border-radius:14px;margin:16px 0}.advanced-sieve summary{cursor:pointer;font-size:13px}.advanced-sieve .card{margin-top:14px!important}
 #app-filters pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}.rule-empty{padding:20px;border-radius:12px;background:var(--work-raised);font-size:13px;line-height:1.6}
 .visual-rule-dialog{width:min(720px,calc(100vw - 24px));max-height:90dvh;padding:24px;border-radius:22px;overflow:auto}.visual-rule-dialog form{display:grid;gap:14px;min-width:0}.visual-rule-dialog header{display:flex;justify-content:space-between;align-items:center;font-size:20px}.visual-rule-dialog label{display:grid;gap:8px;font-size:13px}.visual-rule-dialog h4{margin:10px 0 0;font-size:14px}.visual-rule-dialog .rule-check{display:flex;align-items:flex-start;gap:10px;line-height:1.5}.visual-rule-dialog footer{position:sticky;bottom:-24px;padding:16px 0;background:var(--work-panel);display:flex;justify-content:flex-end;gap:10px;border-top:1px solid var(--work-line)}

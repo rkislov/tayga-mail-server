@@ -2322,9 +2322,12 @@ $("btn-vacation-save")?.addEventListener("click", async () => {
         body: $("vacation-body")?.value || "",
       }),
     });
-    setMsg($("vacation-msg"), "OK", "ok");
+    setMsg($("vacation-msg"), mailImageText("Автоответ сохранён", "Auto-reply saved"), "ok");
   } catch (err) {
-    setMsg($("vacation-msg"), err.message, "err");
+    const message=err.message.includes("unsupported extension: vacation")
+      ? mailImageText("Этот сервер пока не поддерживает автоответ. Настройка не сохранена; действующие почтовые правила не изменены.", "This server does not support auto-replies yet. The setting was not saved; existing mail rules are unchanged.")
+      : err.message;
+    setMsg($("vacation-msg"), message, "err");
   }
 });
 $("btn-sieve-save").addEventListener("click", async () => {
