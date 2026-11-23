@@ -190,7 +190,7 @@ func TestOriginalMattermostREST(t *testing.T) {
 			if len(post.Attachments) != 1 {
 				t.Fatal("reverse attachment missing")
 			}
-			_, body, e := local.service.Chat.Attachment(local.ctx, local.user, post.Attachments[0].ID, false)
+			_, body, e := local.service.Chat.Attachment(local.ctx, local.user, post.Attachments[0].ID, true)
 			if e != nil {
 				t.Fatal(e)
 			}
