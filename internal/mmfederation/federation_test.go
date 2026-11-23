@@ -8,12 +8,14 @@ import (
 	"crypto/cipher"
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -428,5 +430,44 @@ func TestNativeSameTimestampRootPrecedesReply(t *testing.T) {
 		if post.Message == "reply" && post.RootID == "" {
 			t.Fatal("same-timestamp reply lost its root")
 		}
+	}
+}
+
+func TestFederationTransportRejectsSpecialAddressesAndRedirects(t *testing.T) {
+	client, err := mmfederation.NewHTTPClient(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ip := range []string{"127.0.0.1", "10.0.0.1", "169.254.169.254", "100.64.0.1", "192.0.2.1", "198.18.0.1", "[::1]", "[2001:db8::1]", "[64:ff9b::a00:1]"} {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		req, _ := http.NewRequestWithContext(ctx, "GET", "https://"+ip+"/api/v4/system/ping", nil)
+		_, err = client.Do(req)
+		cancel()
+		if !errors.Is(err, mmfederation.ErrForbidden) {
+			t.Fatalf("special address %s was not rejected before dialing: %v", ip, err)
+		}
+	}
+	var followed atomic.Bool
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/start" {
+			http.Redirect(w, r, "/secret", http.StatusFound)
+			return
+		}
+		followed.Store(true)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+	client, err = mmfederation.NewHTTPClient([]string{"127.0.0.0/8"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.Transport.(*http.Transport).TLSClientConfig.RootCAs = server.Client().Transport.(*http.Transport).TLSClientConfig.RootCAs
+	res, err := client.Get(server.URL + "/start")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusFound || followed.Load() {
+		t.Fatal("federation followed a redirect")
 	}
 }
