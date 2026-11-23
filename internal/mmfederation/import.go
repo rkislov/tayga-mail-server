@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -245,7 +246,31 @@ func (s *Service) outbound(ctx context.Context, p Peer, l Link) ([]chat.Post, er
 		}
 		out = append(out, item)
 	}
+	// Replies created in the same millisecond must follow their roots even
+	// when random IDs sort in the opposite order. Commit the batch cursor only
+	// after every post succeeds so a failure cannot skip a reordered reply.
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].CreatedAt != out[j].CreatedAt {
+			return out[i].CreatedAt < out[j].CreatedAt
+		}
+		if (out[i].RootID == "") != (out[j].RootID == "") {
+			return out[i].RootID == ""
+		}
+		return out[i].ID < out[j].ID
+	})
 	return out, nil
+}
+func (s *Service) advanceBatch(ctx context.Context, l Link, posts []chat.Post) error {
+	if len(posts) == 0 {
+		return nil
+	}
+	last := posts[0]
+	for _, post := range posts[1:] {
+		if post.CreatedAt > last.CreatedAt || (post.CreatedAt == last.CreatedAt && post.ID > last.ID) {
+			last = post
+		}
+	}
+	return s.advanceLocal(ctx, l, last)
 }
 func (s *Service) skipImported(ctx context.Context, l Link, post chat.Post) (bool, error) {
 	if _, ok := post.Props["tms_federation_origin"]; ok {

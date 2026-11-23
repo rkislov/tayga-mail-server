@@ -309,6 +309,9 @@ func (s *Service) receiveSync(ctx context.Context, p Peer, l Link, msg *model.Sy
 		if posts[j] == nil {
 			return true
 		}
+		if posts[i].CreateAt == posts[j].CreateAt && (posts[i].RootId == "") != (posts[j].RootId == "") {
+			return posts[i].RootId == ""
+		}
 		return posts[i].CreateAt < posts[j].CreateAt
 	})
 	for _, post := range posts {
@@ -394,9 +397,6 @@ func (s *Service) syncNative(ctx context.Context, p Peer, l Link) error {
 			return e
 		}
 		if skip || l.LocalReadOnly {
-			if e = s.advanceLocal(ctx, l, post); e != nil {
-				return e
-			}
 			continue
 		}
 		exported, user, e := s.exportModel(ctx, p, l, post)
@@ -430,11 +430,8 @@ func (s *Service) syncNative(ctx context.Context, p Peer, l Link) error {
 		if e = s.recordExport(ctx, l, post, post.ID); e != nil {
 			return e
 		}
-		if e = s.advanceLocal(ctx, l, post); e != nil {
-			return e
-		}
 	}
-	return nil
+	return s.advanceBatch(ctx, l, posts)
 }
 
 func (s *Service) ConfirmPending(ctx context.Context, p Peer) error {

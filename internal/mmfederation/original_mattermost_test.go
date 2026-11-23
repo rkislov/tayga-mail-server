@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
@@ -98,7 +99,7 @@ func TestOriginalMattermostREST(t *testing.T) {
 	call("POST", "/teams/"+team.Id+"/members", token, map[string]string{"team_id": team.Id, "user_id": bot.UserId}, 201, nil)
 	call("POST", "/channels/"+channel.Id+"/members", token, map[string]string{"user_id": bot.UserId}, 201, nil)
 	var access model.UserAccessToken
-	call("POST", "/users/"+bot.UserId+"/tokens", token, map[string]string{"description": "isolated federation acceptance"}, 201, &access)
+	call("POST", "/users/"+bot.UserId+"/tokens", token, map[string]string{"description": "isolated federation acceptance"}, 200, &access)
 	// Production requires HTTPS. Terminate TLS in the isolated test proxy while
 	// keeping the disposable original server on its loopback-only Docker port.
 	proxy := httptest.NewTLSServer(httputil.NewSingleHostReverseProxy(target))
@@ -138,8 +139,43 @@ func TestOriginalMattermostREST(t *testing.T) {
 	if !strings.Contains(received.Message, "to original") || len(received.FileIds) != 1 {
 		t.Fatal("original Mattermost did not receive the message and file")
 	}
+	request, _ := http.NewRequest("GET", raw+"/api/v4/files/"+received.FileIds[0], nil)
+	request.Header.Set("Authorization", "Bearer "+token)
+	response, e := client.Do(request)
+	if e != nil {
+		t.Fatal(e)
+	}
+	data, e := io.ReadAll(response.Body)
+	response.Body.Close()
+	if e != nil || response.StatusCode != 200 || string(data) != "original Mattermost file bytes" {
+		t.Fatal("original received corrupt file", e)
+	}
+	var upload bytes.Buffer
+	writer := multipart.NewWriter(&upload)
+	_ = writer.WriteField("channel_id", channel.Id)
+	part, e := writer.CreateFormFile("files", "from-original.txt")
+	if e != nil {
+		t.Fatal(e)
+	}
+	_, _ = part.Write([]byte("reverse file bytes"))
+	_ = writer.Close()
+	request, _ = http.NewRequest("POST", raw+"/api/v4/files", &upload)
+	request.Header.Set("Authorization", "Bearer "+token)
+	request.Header.Set("Content-Type", writer.FormDataContentType())
+	response, e = client.Do(request)
+	if e != nil {
+		t.Fatal(e)
+	}
+	var uploaded struct {
+		FileInfos []model.FileInfo `json:"file_infos"`
+	}
+	e = json.NewDecoder(response.Body).Decode(&uploaded)
+	response.Body.Close()
+	if e != nil || response.StatusCode != 201 || len(uploaded.FileInfos) != 1 {
+		t.Fatal("original test upload failed", e)
+	}
 	var reply model.Post
-	call("POST", "/posts", token, map[string]any{"channel_id": channel.Id, "root_id": foreign, "message": "from original"}, 201, &reply)
+	call("POST", "/posts", token, map[string]any{"channel_id": channel.Id, "root_id": foreign, "message": "from original", "file_ids": []string{uploaded.FileInfos[0].Id}}, 201, &reply)
 	if e = local.service.Sync(local.ctx, peer, link); e != nil {
 		t.Fatal(e)
 	}
@@ -151,6 +187,18 @@ func TestOriginalMattermostREST(t *testing.T) {
 	for _, post := range posts {
 		if strings.Contains(post.Message, "from original") {
 			found = post.RootID == sent.ID
+			if len(post.Attachments) != 1 {
+				t.Fatal("reverse attachment missing")
+			}
+			_, body, e := local.service.Chat.Attachment(local.ctx, local.user, post.Attachments[0].ID, false)
+			if e != nil {
+				t.Fatal(e)
+			}
+			data, e := io.ReadAll(body)
+			body.Close()
+			if e != nil || string(data) != "reverse file bytes" {
+				t.Fatal("reverse file corrupt", e)
+			}
 		}
 	}
 	if !found {

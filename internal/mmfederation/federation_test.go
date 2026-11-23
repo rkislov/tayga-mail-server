@@ -395,3 +395,38 @@ func TestNativeReadOnlyDomainAndOwnerRevocation(t *testing.T) {
 		t.Fatal("disabled domain policy still synchronized")
 	}
 }
+
+func TestNativeSameTimestampRootPrecedesReply(t *testing.T) {
+	a, b, pa, _, la, _ := nativePair(t)
+	root, err := a.service.Chat.Send(a.ctx, a.user, a.channel.ID, "", "root", "same-root")
+	if err != nil {
+		t.Fatal(err)
+	}
+	reply, err := a.service.Chat.Send(a.ctx, a.user, a.channel.ID, root.ID, "reply", "same-reply")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Force the chronological ID ordering to place the reply first.
+	rootID, replyID := strings.Repeat("z", 26), strings.Repeat("a", 26)
+	if _, err = a.store.DB().Exec(`UPDATE chat_posts SET id=?,created_at=100 WHERE id=?`, rootID, root.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = a.store.DB().Exec(`UPDATE chat_posts SET id=?,root_id=?,created_at=100 WHERE id=?`, replyID, rootID, reply.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err = a.service.Sync(a.ctx, pa, la); err != nil {
+		t.Fatal(err)
+	}
+	if err = a.service.Sync(a.ctx, pa, la); err != nil {
+		t.Fatal(err)
+	}
+	posts, err := b.service.Chat.Posts(b.ctx, b.user, b.channel.ID, 100, 0, 0)
+	if err != nil || len(posts) != 2 {
+		t.Fatal(posts, err)
+	}
+	for _, post := range posts {
+		if post.Message == "reply" && post.RootID == "" {
+			t.Fatal("same-timestamp reply lost its root")
+		}
+	}
+}

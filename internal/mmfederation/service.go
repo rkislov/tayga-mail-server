@@ -122,7 +122,7 @@ func (s *Service) seal(p Peer, c Credentials) (string, error) {
 	if _, e = rand.Read(nonce); e != nil {
 		return "", e
 	}
-	return base64.StdEncoding.EncodeToString(s.cipher.Seal(nonce, nonce, raw, []byte(p.ID+":"+p.TenantID+":"+p.DomainID))), nil
+	return base64.StdEncoding.EncodeToString(s.cipher.Seal(nonce, nonce, raw, peerAAD(p))), nil
 }
 func (s *Service) credentials(ctx context.Context, p Peer) (Credentials, error) {
 	var c Credentials
@@ -136,7 +136,7 @@ func (s *Service) credentials(ctx context.Context, p Peer) (Credentials, error) 
 		return c, ErrForbidden
 	}
 	n := s.cipher.NonceSize()
-	plain, e := s.cipher.Open(nil, data[:n], data[n:], []byte(p.ID+":"+p.TenantID+":"+p.DomainID))
+	plain, e := s.cipher.Open(nil, data[:n], data[n:], peerAAD(p))
 	if e != nil {
 		return c, ErrForbidden
 	}

@@ -44,9 +44,6 @@ func (s *Service) syncREST(ctx context.Context, p Peer, l Link) error {
 			return e
 		}
 		if skip {
-			if e = s.advanceLocal(ctx, l, post); e != nil {
-				return e
-			}
 			continue
 		}
 		var already int
@@ -54,9 +51,6 @@ func (s *Service) syncREST(ctx context.Context, p Peer, l Link) error {
 			return e
 		}
 		if already > 0 {
-			if e = s.advanceLocal(ctx, l, post); e != nil {
-				return e
-			}
 			continue
 		}
 		// Reconcile delivery using an origin marker before retrying a lost response.
@@ -130,10 +124,10 @@ func (s *Service) syncREST(ctx context.Context, p Peer, l Link) error {
 		if e = s.recordExport(ctx, l, post, foreign); e != nil {
 			return e
 		}
-		if e = s.advanceLocal(ctx, l, post); e != nil {
-			return e
-		}
 		_, _ = s.db.ExecContext(ctx, s.q(`DELETE FROM chat_federation_attempts WHERE link_id=? AND local_post_id=?`), l.ID, post.ID)
+	}
+	if e = s.advanceBatch(ctx, l, posts); e != nil {
+		return e
 	}
 	if l.ReadOnly {
 		return nil
@@ -171,6 +165,9 @@ func (s *Service) syncREST(ctx context.Context, p Peer, l Link) error {
 	}
 	sort.SliceStable(ordered, func(i, j int) bool {
 		if ordered[i].CreateAt == ordered[j].CreateAt {
+			if (ordered[i].RootId == "") != (ordered[j].RootId == "") {
+				return ordered[i].RootId == ""
+			}
 			return ordered[i].Id < ordered[j].Id
 		}
 		return ordered[i].CreateAt < ordered[j].CreateAt
