@@ -274,6 +274,9 @@ func (s *Service) CreateLink(ctx context.Context, p Peer, l Link, backfill bool)
 	if e != nil || creator.DomainID != p.DomainID {
 		return Link{}, ErrForbidden
 	}
+	if e = s.channelScope(ctx, p, l.ChannelID); e != nil {
+		return Link{}, e
+	}
 	l.ID = model.NewId()
 	l.PeerID = p.ID
 	l.CreatedAt = time.Now().UnixMilli()
@@ -317,6 +320,9 @@ func (s *Service) active(ctx context.Context, p Peer, l Link) error {
 		return ErrForbidden
 	}
 
+	if e = s.channelScope(ctx, p, l.ChannelID); e != nil {
+		return e
+	}
 	var count int
 	if l.LeaseToken != "" {
 		var token string
@@ -374,4 +380,18 @@ func (s *Service) Channels(ctx context.Context, p Peer, owner *storage.User) ([]
 		}
 	}
 	return out, nil
+}
+
+// Existing tenant-wide channels may contain members from other domains. Such
+// channels need an explicit domain-local membership before enabling federation.
+func (s *Service) channelScope(ctx context.Context, p Peer, channelID string) error {
+	var count int
+	err := s.db.QueryRowContext(ctx, s.q(`SELECT COUNT(*) FROM chat_members m JOIN users u ON u.id=m.user_id WHERE m.channel_id=? AND (u.tenant_id<>? OR u.domain_id<>?)`), channelID, p.TenantID, p.DomainID).Scan(&count)
+	if err != nil {
+		return err
+	}
+	if count != 0 {
+		return ErrForbidden
+	}
+	return nil
 }

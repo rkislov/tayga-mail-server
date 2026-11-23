@@ -216,6 +216,12 @@ func (s *Service) AddMember(ctx context.Context, u *storage.User, channelID, use
 	if err != nil {
 		return err
 	}
+	if target.AuthSource == "federated" {
+		return ErrForbidden
+	}
+	if err = s.federationMemberAllowed(ctx, channelID, target); err != nil {
+		return err
+	}
 	if c.Kind == "D" || (c.Kind == "P" && c.CreatorID != u.ID) {
 		return ErrForbidden
 	}
@@ -498,6 +504,18 @@ func (s *Service) PublishEvent(event Event) error {
 			close(ch)
 			delete(s.subscribers, ch)
 		}
+	}
+	return nil
+}
+
+func (s *Service) federationMemberAllowed(ctx context.Context, channelID string, user *storage.User) error {
+	var count int
+	err := s.db.QueryRowContext(ctx, s.q(`SELECT COUNT(*) FROM chat_federation_links l JOIN chat_federation_peers p ON p.id=l.peer_id WHERE l.channel_id=? AND l.enabled=1 AND p.enabled=1 AND (p.tenant_id<>? OR p.domain_id<>?)`), channelID, user.TenantID, user.DomainID).Scan(&count)
+	if err != nil {
+		return err
+	}
+	if count != 0 {
+		return ErrForbidden
 	}
 	return nil
 }

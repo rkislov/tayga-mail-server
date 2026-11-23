@@ -305,3 +305,93 @@ func TestFederationScopeAndTransportGuards(t *testing.T) {
 		t.Fatal(response.Status)
 	}
 }
+
+// Simulate a committed remote POST whose response never reaches the bridge.
+type responseLossTransport struct {
+	base http.RoundTripper
+	lost bool
+}
+
+func (r *responseLossTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	res, err := r.base.RoundTrip(req)
+	if err == nil && req.Method == "POST" && req.URL.Path == "/api/v4/posts" && !r.lost {
+		r.lost = true
+		_, _ = io.Copy(io.Discard, res.Body)
+		res.Body.Close()
+		return nil, io.ErrUnexpectedEOF
+	}
+	return res, err
+}
+func TestRESTLostResponseReconcilesAfterRestart(t *testing.T) {
+	a, b := setup(t, "lost-alpha"), setup(t, "lost-beta")
+	peer, err := a.service.CreatePeer(a.ctx, mmfederation.Peer{TenantID: a.user.TenantID, DomainID: a.user.DomainID, OwnerID: a.user.ID, Name: "remote", Mode: "rest", SiteURL: b.server.URL}, mmfederation.Credentials{AccessToken: b.token})
+	if err != nil {
+		t.Fatal(err)
+	}
+	link, err := a.service.CreateLink(a.ctx, peer, mmfederation.Link{ChannelID: a.channel.ID, RemoteChannelID: b.channel.ID}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.service.HTTP = &http.Client{Transport: &responseLossTransport{base: b.server.Client().Transport}}
+	_, err = a.service.Chat.Send(a.ctx, a.user, a.channel.ID, "", "lost response", "retry-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = a.service.Sync(a.ctx, peer, link); err == nil {
+		t.Fatal("expected uncertain delivery")
+	}
+	restarted := mmfederation.New(a.store, a.service.Chat, a.cipher, a.server.URL, b.server.Client(), slog.Default())
+	if err = restarted.Sync(a.ctx, peer, link); err != nil {
+		t.Fatal(err)
+	}
+	posts, err := b.service.Chat.Posts(b.ctx, b.user, b.channel.ID, 100, 0, 0)
+	if err != nil || len(posts) != 1 || !strings.Contains(posts[0].Message, "lost response") {
+		t.Fatal("retry duplicated or lost committed post", posts, err)
+	}
+}
+func TestNativeReadOnlyDomainAndOwnerRevocation(t *testing.T) {
+	a, b, pa, pb, la, lb := nativePair(t)
+	if err := a.service.DisableLink(a.ctx, pa, la.ID); err != nil {
+		t.Fatal(err)
+	}
+	la, err := a.service.CreateLink(a.ctx, pa, mmfederation.Link{ChannelID: a.channel.ID, RemoteChannelID: la.RemoteChannelID, ReadOnly: true}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = a.service.Sync(a.ctx, pa, la); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = b.service.Chat.Send(b.ctx, b.user, b.channel.ID, "", "must reject", "readonly"); err == nil {
+		t.Fatal("remote read-only channel accepted a local message")
+	}
+	sibling, err := a.store.CreateDomain(a.ctx, a.user.TenantID, "sibling-native.example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := a.store.CreateUser(storage.WithoutWelcomeMail(a.ctx), &storage.User{TenantID: a.user.TenantID, DomainID: sibling.ID, Email: "user@" + sibling.Name, LocalPart: "user", Enabled: true, AuthSource: "local"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = a.service.Chat.JoinPublicChannel(a.ctx, other, a.channel.ID); err == nil {
+		t.Fatal("sibling domain joined a federated channel")
+	}
+	if err = a.service.Chat.AddMember(a.ctx, a.user, a.channel.ID, other.ID); err == nil {
+		t.Fatal("sibling domain was added to a federated channel")
+	}
+	// Existing mixed-domain membership cannot be federated, either.
+	mixed, err := a.service.Chat.CreateChannel(a.ctx, a.user, "mixed", "Mixed", "O")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = a.service.Chat.AddMember(a.ctx, a.user, mixed.ID, other.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = a.service.CreateLink(a.ctx, pa, mmfederation.Link{ChannelID: mixed.ID, RemoteChannelID: model.NewId()}, true); err == nil {
+		t.Fatal("mixed domain channel was federated")
+	}
+	// Policy revocation stops an otherwise valid connection.
+	b.service.ScopeAllowed = func(context.Context, string, string) bool { return false }
+	if err = b.service.Sync(b.ctx, pb, lb); err == nil {
+		t.Fatal("disabled domain policy still synchronized")
+	}
+}
