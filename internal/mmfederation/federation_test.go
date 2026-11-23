@@ -375,7 +375,7 @@ func TestNativeReadOnlyDomainAndOwnerRevocation(t *testing.T) {
 	if err = a.service.Chat.JoinPublicChannel(a.ctx, other, a.channel.ID); err == nil {
 		t.Fatal("sibling domain joined a federated channel")
 	}
-	if err = a.service.Chat.AddMember(a.ctx, a.user, a.channel.ID, other.ID); err == nil {
+	if err = a.service.Chat.AddMember(a.ctx, a.user, a.channel.ID, chat.ID(other.ID)); err == nil {
 		t.Fatal("sibling domain was added to a federated channel")
 	}
 	// Existing mixed-domain membership cannot be federated, either.
@@ -383,7 +383,7 @@ func TestNativeReadOnlyDomainAndOwnerRevocation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = a.service.Chat.AddMember(a.ctx, a.user, mixed.ID, other.ID); err != nil {
+	if err = a.service.Chat.AddMember(a.ctx, a.user, mixed.ID, chat.ID(other.ID)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = a.service.CreateLink(a.ctx, pa, mmfederation.Link{ChannelID: mixed.ID, RemoteChannelID: model.NewId()}, true); err == nil {
