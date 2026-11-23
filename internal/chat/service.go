@@ -100,7 +100,7 @@ func (s *Service) User(ctx context.Context, tenantID, id string) (*storage.User,
 		return nil, err
 	}
 	for _, u := range users {
-		if u.Enabled && ID(u.ID) == id {
+		if (u.Enabled || u.AuthSource == "federated") && ID(u.ID) == id {
 			return u, nil
 		}
 	}
@@ -198,6 +198,9 @@ func (s *Service) Direct(ctx context.Context, u *storage.User, otherID string) (
 	other, err := s.User(ctx, u.TenantID, otherID)
 	if err != nil {
 		return Channel{}, err
+	}
+	if other.AuthSource == "federated" {
+		return Channel{}, ErrForbidden
 	}
 	ids := []string{ID(u.ID), ID(other.ID)}
 	sort.Strings(ids)
@@ -307,6 +310,16 @@ func (s *Service) SendWithFiles(ctx context.Context, u *storage.User, channelID,
 func (s *Service) send(ctx context.Context, u *storage.User, channelID, rootID, message, pendingID string, props map[string]any, postType string, fileIDs []string) (Post, error) {
 	if _, err := s.Channel(ctx, u, channelID); err != nil {
 		return Post{}, err
+	}
+	if u.AuthSource != "federated" {
+		var readonly int
+		err := s.db.QueryRowContext(ctx, s.q(`SELECT COUNT(*) FROM chat_federation_links l JOIN chat_federation_peers p ON p.id=l.peer_id WHERE l.channel_id=? AND l.local_readonly=1 AND l.enabled=1 AND p.enabled=1`), channelID).Scan(&readonly)
+		if err != nil {
+			return Post{}, err
+		}
+		if readonly > 0 {
+			return Post{}, ErrForbidden
+		}
 	}
 	if (strings.TrimSpace(message) == "" && len(props) == 0 && len(fileIDs) == 0) || len(message) > 65535 || len(pendingID) > 128 || len(postType) > 64 || len(fileIDs) > MaxFilesPerPost {
 		return Post{}, ErrInvalid

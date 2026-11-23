@@ -100,7 +100,7 @@ func (s *API) directoryUsers(w http.ResponseWriter, r *http.Request, u *storage.
 	out, other, known := []any{}, []any{}, []string{}
 	term := strings.ToLower(strings.TrimSpace(req.Term))
 	for _, target := range users {
-		if !target.Enabled || target.TenantID != u.TenantID || target.AuthSource == "resource" {
+		if !s.federatedUserVisible(r.Context(), u, target) || target.TenantID != u.TenantID || target.AuthSource == "resource" {
 			continue
 		}
 		model := userModel(target, target.ID == u.ID)

@@ -7,6 +7,7 @@ import (
 	"crypto/ecdsa"
 	"encoding/json"
 	"errors"
+	"github.com/tayga/tms/internal/mmfederation"
 	"io"
 	"log/slog"
 	"net/http"
@@ -26,6 +27,7 @@ import (
 const CompatibilityVersion = mmplugins.Version
 
 type API struct {
+	federation          *mmfederation.Service
 	botMu               sync.Mutex
 	startChannelCall    ChannelCallStarter
 	canStartChannelCall func(context.Context, *storage.User) (bool, error)
@@ -126,6 +128,10 @@ func (s *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Version-ID", CompatibilityVersion+".tms-prototype")
 	w.Header().Set("Cache-Control", "no-store")
 	path := strings.TrimPrefix(r.URL.Path, "/api/v4")
+	if strings.HasPrefix(path, "/remotecluster/") && s.federation != nil {
+		s.federation.ServeNative(w, r)
+		return
+	}
 	if path == "/system/ping" && r.Method == http.MethodGet {
 		write(w, 200, map[string]string{"status": "OK", "AndroidLatestVersion": "", "AndroidMinVersion": "", "IosLatestVersion": "", "IosMinVersion": "", "CanReceiveNotifications": s.canReceivePush(r)})
 		return
@@ -208,7 +214,7 @@ func (s *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.failure(w, chat.ErrForbidden)
 		return
 	}
-	if u.AuthSource != "bot" {
+	if u.AuthSource != "bot" && u.AuthSource != "federated" {
 		s.auth.TrackToken(u, token, r.RemoteAddr, r.UserAgent())
 		if err = s.chat.EnsureDefault(r.Context(), u); err != nil {
 			s.failure(w, err)
@@ -320,11 +326,16 @@ func (s *API) login(w http.ResponseWriter, r *http.Request) {
 }
 func userModel(u *storage.User, self bool) map[string]any {
 	username := strings.TrimSpace(u.LocalPart)
-	if local, _, ok := strings.Cut(strings.TrimSpace(u.Email), "@"); ok && local != "" && u.AuthSource != "bot" {
+	if local, _, ok := strings.Cut(strings.TrimSpace(u.Email), "@"); ok && local != "" && u.AuthSource != "bot" && u.AuthSource != "federated" {
 		username = local
 	}
 	m := map[string]any{"id": chat.ID(u.ID), "create_at": u.CreatedAt.UnixMilli(), "update_at": u.CreatedAt.UnixMilli(), "delete_at": int64(0),
 		"username": username, "auth_service": "", "nickname": u.DisplayLabel(), "first_name": strings.TrimSpace(u.DisplayName), "last_name": "", "position": "", "roles": "system_user", "locale": "ru", "timezone": map[string]string{"useAutomaticTimezone": "true", "automaticTimezone": "Europe/Moscow", "manualTimezone": ""}, "notify_props": map[string]string{"desktop": "mention", "push": "mention", "email": "false", "mark_unread": "all", "mention_keys": ""}, "props": map[string]string{}, "is_bot": u.AuthSource == "bot", "last_picture_update": 0}
+	if u.AuthSource == "federated" {
+		m["auth_service"] = "remote"
+		m["is_remote"] = true
+		m["is_bot"] = strings.HasPrefix(u.LocalPart, "bridge-")
+	}
 	if u.AuthSource == "bot" {
 		m["username"] = u.LocalPart
 	}

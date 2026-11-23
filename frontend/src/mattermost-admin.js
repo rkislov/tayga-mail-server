@@ -18,11 +18,11 @@ async function refreshMattermostAdmin() {
 }
 async function loadMattermostScope() {
   const item = mmAdmin.scopes[Number($('mm-scope').value)]; if (!item) return;
-  mmAdmin.selected = {...item.scope}; const epoch = ++mmAdmin.epoch, guard = mmCurrentGuard(epoch, state.me?.id);
+  mmFed.epoch++; mmFedHost()?.replaceChildren(); mmAdmin.selected = {...item.scope}; const epoch = ++mmAdmin.epoch, guard = mmCurrentGuard(epoch, state.me?.id);
   $('mm-policy-form').inert = true; $('mm-plugin-upload').disabled = true;
   try {
     const value = await api('/api/v1/admin/mattermost' + mmQuery(item.scope), {_guard: guard});
-    mmAdmin.value = value; renderMattermostScope(value); void loadMattermostBots(); setMsg($('mm-msg'), '');
+    mmAdmin.value = value; renderMattermostScope(value); void loadMattermostBots(); void loadMattermostFederation(); setMsg($('mm-msg'), '');
   } catch (error) { if (mmAdmin.epoch === epoch) setMsg($('mm-msg'), error.message, 'err'); }
   finally { if (mmAdmin.epoch === epoch) $('mm-policy-form').inert = false; }
 }
@@ -150,3 +150,57 @@ function resetMattermostBots(){
  $('mm-external-bots')?.replaceChildren();
  $('mm-bot-create')?.reset();
 }
+
+
+/* Federation shares only channels explicitly selected in the current domain. */
+const mmFed = { peers: [], selected: '', epoch: 0 };
+function mmFedHost() {
+  let host = $('mm-federation');
+  if (!host) { host = document.createElement('section'); host.id='mm-federation'; host.className='card mt-4'; $('app-mattermost')?.append(host); }
+  return host;
+}
+async function loadMattermostFederation() {
+  const host=mmFedHost(), scope={...mmAdmin.selected}, epoch=++mmFed.epoch, adminEpoch=mmAdmin.epoch, account=state.me?.id;
+  const guard=()=>{ if(epoch!==mmFed.epoch)throw new Error('Область изменилась'); mmCurrentGuard(adminEpoch,account)(); };
+  host.replaceChildren();
+  if(!scope.domain_id){host.textContent='Межсерверная связь: выберите домен в области настроек.';return;}
+  try {
+    const data=await api('/api/v1/admin/mattermost/federation'+mmQuery(scope),{_guard:guard});mmFed.peers=data.peers||[];
+    host.innerHTML=`<h3>Межсерверная связь Mattermost</h3><p>Каждая связь относится только к выбранному домену. В обмен входят только явно подключённые каналы. REST-связь уже двусторонняя: не создавайте встречный мост для той же пары каналов.</p>
+      <div id="mm-fed-list"></div><details><summary>Добавить сервер</summary><form id="mm-fed-create" class="grid gap-2 mt-3">
+      <label>Название связи<input name="name" required maxlength="64" autocomplete="off"></label>
+      <label>Режим<select name="mode"><option value="native">Нативные общие каналы</option><option value="rest">Мост через бота API v4</option></select></label>
+      <label>HTTPS-адрес сервера<input name="site_url" type="url" placeholder="https://chat.example.org"></label>
+      <label>ID локальной учётной записи для доступа к каналам<input name="owner_id" autocomplete="off" placeholder="По умолчанию — текущий администратор"></label>
+      <label>Токен бота (только для API v4)<input name="access_token" type="password" autocomplete="new-password"></label>
+      <label>Пароль приглашения (для нативного режима)<input name="password" type="password" autocomplete="new-password"></label>
+      <label>Код полученного приглашения (оставьте пустым, чтобы создать своё)<textarea name="invite_code" rows="3" autocomplete="off"></textarea></label>
+      <button type="submit" class="btn">Добавить связь</button></form></details>
+      <div id="mm-fed-result" role="status"></div><button id="mm-fed-refresh" class="btn btn-ghost mt-2">Обновить состояние</button><div id="mm-fed-links"></div>`;
+    const list=$('mm-fed-list');
+    for(const p of mmFed.peers){
+      const row=document.createElement('div');row.className='flex gap-2 flex-wrap items-center mt-3';
+      const text=document.createElement('span');text.textContent=`${p.name} · ${p.mode==='native'?'Нативная связь':'Мост API v4'} · ${!p.enabled?'Отключена':p.confirmed?'Подтверждена':'Ожидает подтверждения'}${p.last_error?' · Обмен отложен':''}`;row.append(text);
+      const open=document.createElement('button');open.className='btn btn-ghost';open.textContent='Каналы';open.onclick=()=>loadMattermostFederationLinks(p,scope,guard);row.append(open);
+      if(p.enabled){const off=document.createElement('button');off.className='btn btn-ghost';off.textContent='Отключить связь';off.onclick=async()=>{try{await api('/api/v1/admin/mattermost/federation/'+encodeURIComponent(p.id)+mmQuery(scope),{method:'DELETE',_guard:guard});await loadMattermostFederation();}catch(e){if(epoch===mmFed.epoch)setMsg($('mm-fed-result'),e.message,'err');}};row.append(off);}
+      list.append(row);
+    }
+    $('mm-fed-refresh').onclick=loadMattermostFederation;
+    $('mm-fed-create').onsubmit=async event=>{
+      event.preventDefault();const form=event.currentTarget,values=Object.fromEntries(new FormData(form));const button=form.querySelector('button');button.disabled=true;
+      try {const result=await api('/api/v1/admin/mattermost/federation'+mmQuery(scope),{method:'POST',body:JSON.stringify(values),_guard:guard});form.reset();await loadMattermostFederation();if(result.invite_code){const output=document.createElement('textarea');output.readOnly=true;output.rows=6;output.value=result.invite_code;const label=document.createElement('p');label.textContent='Передайте этот код администратору второго сервера. Пароль передайте отдельно. Код исчезнет при смене области или обновлении страницы.';$('mm-fed-result').replaceChildren(label,output);}}
+      catch(e){if(epoch===mmFed.epoch)setMsg($('mm-fed-result'),e.message,'err');}finally{button.disabled=false;}
+    };
+  }catch(e){if(epoch===mmFed.epoch)host.textContent='Межсерверная связь недоступна: '+e.message;}
+}
+async function loadMattermostFederationLinks(peer,scope,guard) {
+  try {
+    const data=await api('/api/v1/admin/mattermost/federation/'+encodeURIComponent(peer.id)+'/links'+mmQuery(scope),{_guard:guard});
+    const host=$('mm-fed-links');host.innerHTML=`<h4 class="mt-4">Каналы: ${escapeHtml(peer.name)}</h4><div id="mm-fed-link-list"></div><form id="mm-fed-link-form" class="grid gap-2 mt-3"><label>Локальный канал<select name="channel_id" required>${(data.channels||[]).map(c=>`<option value="${escapeHtml(c.id)}">${escapeHtml(c.display_name||c.name)}</option>`).join('')}</select></label><label>ID канала второго сервера<input name="remote_channel_id" placeholder="В нативном режиме: пусто для нового канала"></label><label><input name="readonly" type="checkbox"> Только отправка на второй сервер</label><label><input name="backfill" type="checkbox"> Включить предыдущую историю</label><button class="btn" type="submit">Разрешить обмен каналом</button></form><div id="mm-fed-link-msg" role="status"></div>`;
+    for(const l of data.links||[]){const row=document.createElement('div');row.className='mt-2';row.textContent=`${l.channel_id} ↔ ${l.remote_channel_id} · ${l.enabled?'Включён':'Отключён'} `;if(l.enabled){const off=document.createElement('button');off.className='btn btn-ghost';off.textContent='Отключить';off.onclick=async()=>{try{await api('/api/v1/admin/mattermost/federation/'+encodeURIComponent(peer.id)+'/links/'+encodeURIComponent(l.id)+mmQuery(scope),{method:'DELETE',_guard:guard});await loadMattermostFederationLinks(peer,scope,guard);}catch(e){setMsg($('mm-fed-link-msg'),e.message,'err');}};row.append(off);}$('mm-fed-link-list').append(row);}
+    for(const invite of data.pending||[]){if((data.links||[]).some(l=>l.enabled&&l.remote_channel_id===invite.remote_channel_id))continue;const row=document.createElement('button');row.className='btn btn-ghost mt-2';row.textContent='Входящее приглашение: '+invite.name;row.onclick=()=>{$('mm-fed-link-form').elements.remote_channel_id.value=invite.remote_channel_id;};host.append(row);}
+    $('mm-fed-link-form').onsubmit=async event=>{event.preventDefault();const form=event.currentTarget;const body={channel_id:form.elements.channel_id.value,remote_channel_id:form.elements.remote_channel_id.value.trim(),readonly:form.elements.readonly.checked,backfill:form.elements.backfill.checked};try{await api('/api/v1/admin/mattermost/federation/'+encodeURIComponent(peer.id)+'/links'+mmQuery(scope),{method:'POST',body:JSON.stringify(body),_guard:guard});await loadMattermostFederationLinks(peer,scope,guard);}catch(e){setMsg($('mm-fed-link-msg'),e.message,'err');}};
+  }catch(e){setMsg($('mm-fed-result'),e.message,'err');}
+}
+
+window.addEventListener('tms-session-ended',()=>{mmFed.epoch++;mmAdmin.epoch++;mmFed.peers=[];document.getElementById('mm-federation')?.replaceChildren();});

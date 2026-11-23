@@ -510,6 +510,7 @@ function clearSession() {
 }
 
 function forceLogin(msg) {
+  window.dispatchEvent(new Event('tms-session-ended'));
   clearSession();
   show("view-login");
   if (msg) setMsg($("login-msg"), msg, "err");
