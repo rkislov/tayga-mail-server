@@ -100,7 +100,7 @@ func (s *Service) User(ctx context.Context, tenantID, id string) (*storage.User,
 		return nil, err
 	}
 	for _, u := range users {
-		if (u.Enabled || u.AuthSource == "federated") && ID(u.ID) == id {
+		if (u.Enabled || u.AuthSource == "federated") && ID(u.ID) == id && (DomainScope(ctx) == "" || u.DomainID == DomainScope(ctx)) {
 			return u, nil
 		}
 	}
@@ -118,10 +118,10 @@ func scanChannel(row interface{ Scan(...any) error }) (Channel, error) {
 const channelColumns = "c.id,c.tenant_id,c.name,c.display_name,c.kind,c.creator_id,c.created_at,(SELECT COALESCE(MAX(p.created_at),0) FROM chat_posts p WHERE p.channel_id=c.id),(SELECT COUNT(*) FROM chat_posts p WHERE p.channel_id=c.id),(SELECT COUNT(*) FROM chat_posts p WHERE p.channel_id=c.id AND p.root_id='')"
 
 func (s *Service) Channel(ctx context.Context, u *storage.User, id string) (Channel, error) {
-	return scanChannel(s.db.QueryRowContext(ctx, s.q(`SELECT `+channelColumns+` FROM chat_channels c JOIN chat_members m ON m.channel_id=c.id WHERE c.id=? AND c.tenant_id=? AND m.user_id=?`), id, u.TenantID, u.ID))
+	return scanChannel(s.db.QueryRowContext(ctx, s.q(`SELECT `+channelColumns+` FROM chat_channels c JOIN chat_members m ON m.channel_id=c.id WHERE c.id=? AND c.tenant_id=? AND m.user_id=?`+channelDomainPredicate), id, u.TenantID, u.ID, DomainScope(ctx), DomainScope(ctx)))
 }
 func (s *Service) Channels(ctx context.Context, u *storage.User) ([]Channel, error) {
-	rows, err := s.db.QueryContext(ctx, s.q(`SELECT `+channelColumns+` FROM chat_channels c JOIN chat_members m ON m.channel_id=c.id WHERE c.tenant_id=? AND m.user_id=? ORDER BY c.created_at,c.id`), u.TenantID, u.ID)
+	rows, err := s.db.QueryContext(ctx, s.q(`SELECT `+channelColumns+` FROM chat_channels c JOIN chat_members m ON m.channel_id=c.id WHERE c.tenant_id=? AND m.user_id=?`+channelDomainPredicate+` ORDER BY c.created_at,c.id`), u.TenantID, u.ID, DomainScope(ctx), DomainScope(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -139,6 +139,20 @@ func (s *Service) Channels(ctx context.Context, u *storage.User) ([]Channel, err
 
 // EnsureDefault joins the tenant's common channel, atomically and idempotently.
 func (s *Service) EnsureDefault(ctx context.Context, u *storage.User) error {
+	if domain := DomainScope(ctx); domain != "" {
+		if domain != u.DomainID {
+			return ErrForbidden
+		}
+		var ownerDomain string
+		err := s.db.QueryRowContext(ctx, s.q(`SELECT owner.domain_id FROM chat_channels c JOIN users owner ON owner.id=c.creator_id WHERE c.id=?`), ID("town-square:"+u.TenantID)).Scan(&ownerDomain)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		if err == nil && ownerDomain != domain {
+			return nil
+		}
+	}
+
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -149,7 +163,7 @@ func (s *Service) EnsureDefault(ctx context.Context, u *storage.User) error {
 	if err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, s.q(`INSERT INTO chat_members(channel_id,user_id) VALUES(?,?) ON CONFLICT DO NOTHING`), id, u.ID)
+	err = s.addMembership(ctx, tx, id, u.ID)
 	if err != nil {
 		return err
 	}
@@ -167,6 +181,9 @@ func (s *Service) CreateChannel(ctx context.Context, u *storage.User, name, disp
 	return s.create(ctx, u, newID(), name, display, kind, []string{u.ID})
 }
 func (s *Service) create(ctx context.Context, u *storage.User, id, name, display, kind string, members []string) (Channel, error) {
+	if domain := DomainScope(ctx); domain != "" && domain != u.DomainID {
+		return Channel{}, ErrForbidden
+	}
 	c := Channel{ID: id, TenantID: u.TenantID, Name: name, DisplayName: display, Kind: kind, CreatorID: u.ID, CreatedAt: time.Now().UnixMilli()}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -187,7 +204,7 @@ func (s *Service) create(ctx context.Context, u *storage.User, id, name, display
 	}
 	c = existing
 	for _, member := range members {
-		_, err = tx.ExecContext(ctx, s.q(`INSERT INTO chat_members(channel_id,user_id) VALUES(?,?) ON CONFLICT DO NOTHING`), c.ID, member)
+		err = s.addMembership(ctx, tx, c.ID, member)
 		if err != nil {
 			return c, err
 		}
@@ -225,14 +242,21 @@ func (s *Service) AddMember(ctx context.Context, u *storage.User, channelID, use
 	if c.Kind == "D" || (c.Kind == "P" && c.CreatorID != u.ID) {
 		return ErrForbidden
 	}
-	_, err = s.db.ExecContext(ctx, s.q(`INSERT INTO chat_members(channel_id,user_id) VALUES(?,?) ON CONFLICT DO NOTHING`), channelID, target.ID)
-	return err
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err = s.addMembership(ctx, tx, channelID, target.ID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 func (s *Service) Members(ctx context.Context, u *storage.User, channelID string) ([]Member, error) {
 	if _, err := s.Channel(ctx, u, channelID); err != nil {
 		return nil, err
 	}
-	rows, err := s.db.QueryContext(ctx, s.q(`SELECT m.user_id,m.last_viewed_at,(SELECT COUNT(*) FROM chat_posts p WHERE p.channel_id=m.channel_id AND p.created_at<=m.last_viewed_at) FROM chat_members m WHERE m.channel_id=? ORDER BY m.user_id`), channelID)
+	rows, err := s.db.QueryContext(ctx, s.q(`SELECT m.user_id,m.last_viewed_at,(SELECT COUNT(*) FROM chat_posts p WHERE p.channel_id=m.channel_id AND p.created_at<=m.last_viewed_at) FROM chat_members m WHERE m.channel_id=? AND (?='' OR EXISTS(SELECT 1 FROM users scope_user WHERE scope_user.id=m.user_id AND scope_user.domain_id=?)) ORDER BY m.user_id`), channelID, DomainScope(ctx), DomainScope(ctx))
 	if err != nil {
 		return nil, err
 	}

@@ -92,6 +92,9 @@ func runFullBackup(command string, args []string) error {
 		} else {
 			fmt.Printf("restored and verified: %s; config: %s; service was not started\n", *target, filepath.Join(*target, m.Header.Config))
 		}
+		if m.Header.Products != nil && !verify {
+			fmt.Printf("product PostgreSQL dumps: %d; restore credentials quarantined in %s.restore-pending; provision fresh isolated databases with restore-product-dbs.py before enabling products\n", len(m.Header.Products.Databases), m.Header.Products.Bindings)
+		}
 		return nil
 	}
 	return errors.New("unknown full backup command")

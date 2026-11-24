@@ -96,5 +96,5 @@ func botUsername(u *storage.User) string {
 	if u.AuthSource == "bot" {
 		return u.LocalPart
 	}
-	return u.LocalPart + "-" + chat.ID(u.ID)[:8]
+	return u.LocalPart
 }

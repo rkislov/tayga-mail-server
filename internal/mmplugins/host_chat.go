@@ -249,8 +249,207 @@ func (a *hostAPI) HasPermissionToTeam(userID, teamID string, p *model.Permission
 		return false
 	}
 	switch p.Id {
-	case "view_team", "list_team_channels", "create_public_channel", "create_private_channel":
+	case "view_team", "list_team_channels", "create_public_channel", "create_private_channel", model.PermissionPublicPlaybookCreate.Id, model.PermissionPrivatePlaybookCreate.Id, model.PermissionRunCreate.Id:
 		return true
 	}
 	return false
+}
+
+func (a *hostAPI) CreateChannel(channel *model.Channel) (*model.Channel, *model.AppError) {
+	if channel == nil || a.runtime.options.TenantID == "" || channel.TeamId != chat.ID(a.runtime.options.TenantID) {
+		return nil, appError(chat.ErrForbidden)
+	}
+	creatorID := channel.CreatorId
+	if creatorID == "" {
+		// Server-side plugins create channels without an interactive user. Attribute
+		// those channels to a service account owned by this plugin and domain.
+		id, err := a.serviceBotUserID()
+		if err != nil {
+			return nil, appError(err)
+		}
+		creatorID = id
+	}
+	user, err := a.user(creatorID)
+	if err != nil {
+		return nil, appError(err)
+	}
+	created, err := a.runtime.options.Chat.CreateChannel(context.Background(), user, channel.Name, channel.DisplayName, string(channel.Type))
+	if err != nil {
+		return nil, appError(err)
+	}
+	return a.GetChannel(created.ID)
+}
+
+func (a *hostAPI) GetChannelMember(channelID, userID string) (*model.ChannelMember, *model.AppError) {
+	user, err := a.user(userID)
+	if err != nil {
+		return nil, appError(err)
+	}
+	if _, appErr := a.GetChannel(channelID); appErr != nil {
+		return nil, appErr
+	}
+	members, err := a.runtime.options.Chat.Members(context.Background(), user, channelID)
+	if err != nil {
+		return nil, appError(err)
+	}
+	for _, member := range members {
+		if chat.ID(member.UserID) == userID {
+			roles := "channel_user"
+			channel, e := a.GetChannel(channelID)
+			if e != nil {
+				return nil, e
+			}
+			admin := channel.CreatorId == userID
+			if admin {
+				roles += " channel_admin"
+			}
+			return &model.ChannelMember{ChannelId: channelID, UserId: userID, Roles: roles, SchemeUser: true, SchemeAdmin: admin, LastViewedAt: member.LastViewedAt, MsgCount: member.ReadCount, NotifyProps: model.StringMap{}}, nil
+		}
+	}
+	return nil, appError(storage.ErrNotFound)
+}
+
+func (a *hostAPI) GetTeamMember(teamID, userID string) (*model.TeamMember, *model.AppError) {
+	user, err := a.user(userID)
+	if err != nil {
+		return nil, appError(err)
+	}
+	if teamID != chat.ID(user.TenantID) {
+		return nil, appError(chat.ErrForbidden)
+	}
+	return &model.TeamMember{TeamId: teamID, UserId: userID, Roles: "team_user", SchemeUser: true}, nil
+}
+
+// TMS membership follows the user's tenant. A plugin cannot move users between
+// tenants; adding an existing member is an idempotent lookup.
+func (a *hostAPI) CreateTeamMember(teamID, userID string) (*model.TeamMember, *model.AppError) {
+	return a.GetTeamMember(teamID, userID)
+}
+
+func (a *hostAPI) AddUserToChannel(channelID, userID, asUserID string) (*model.ChannelMember, *model.AppError) {
+	if asUserID != "" {
+		if _, err := a.user(asUserID); err != nil {
+			return nil, appError(err)
+		}
+	}
+	return a.AddChannelMember(channelID, userID)
+}
+
+func (a *hostAPI) GetChannelMembers(channelID string, page, perPage int) (model.ChannelMembers, *model.AppError) {
+	if page < 0 || perPage < 1 || perPage > 1000 || page > 100000 {
+		return nil, appError(ErrInvalid)
+	}
+	channel, err := a.GetChannel(channelID)
+	if err != nil {
+		return nil, err
+	}
+	creator, e := a.user(channel.CreatorId)
+	if e != nil {
+		return nil, appError(e)
+	}
+	members, e := a.runtime.options.Chat.Members(context.Background(), creator, channelID)
+	if e != nil {
+		return nil, appError(e)
+	}
+	visible := model.ChannelMembers{}
+	for _, member := range members {
+		id := chat.ID(member.UserID)
+		if _, e = a.user(id); e != nil {
+			continue
+		}
+		roles := "channel_user"
+		admin := channel.CreatorId == id
+		if admin {
+			roles += " channel_admin"
+		}
+		visible = append(visible, model.ChannelMember{ChannelId: channelID, UserId: id, Roles: roles, SchemeAdmin: admin, SchemeUser: true, LastViewedAt: member.LastViewedAt, MsgCount: member.ReadCount, NotifyProps: model.StringMap{}})
+	}
+	start := page * perPage
+	if start >= len(visible) {
+		return model.ChannelMembers{}, nil
+	}
+	end := start + perPage
+	if end > len(visible) {
+		end = len(visible)
+	}
+	return visible[start:end], nil
+}
+
+// TMS currently models channel administration through its creator. Promote the
+// owner of a plugin-created run by transferring that real authority, rather than
+// merely returning an admin role that the chat service would not enforce.
+func (a *hostAPI) UpdateChannelMemberRoles(channelID, userID, roles string) (*model.ChannelMember, *model.AppError) {
+	if roles != "channel_user channel_admin" && roles != "channel_admin channel_user" {
+		return nil, appError(ErrInvalid)
+	}
+	user, err := a.user(userID)
+	if err != nil {
+		return nil, appError(err)
+	}
+	member, appErr := a.GetChannelMember(channelID, userID)
+	if appErr != nil {
+		return nil, appErr
+	}
+	channel, appErr := a.GetChannel(channelID)
+	if appErr != nil {
+		return nil, appErr
+	}
+	if channel.CreatorId != userID {
+		creator, err := a.user(channel.CreatorId)
+		if err != nil {
+			return nil, appError(err)
+		}
+		owner, ok, err := a.runtime.options.Store.GetSetting(context.Background(), "mmplugin.bot_owner:"+creator.ID)
+		if err != nil {
+			return nil, appError(err)
+		}
+		if !ok || creator.AuthSource != "bot" || owner != a.runtime.options.Scope+":"+a.manifest.Id {
+			return nil, appError(chat.ErrForbidden)
+		}
+		result, err := a.runtime.options.Store.DB().ExecContext(context.Background(), a.runtime.bind(`UPDATE chat_channels SET creator_id=? WHERE id=? AND creator_id=?`), user.ID, channelID, creator.ID)
+		if err != nil {
+			return nil, appError(err)
+		}
+		changed, err := result.RowsAffected()
+		if err != nil || changed != 1 {
+			return nil, appError(chat.ErrForbidden)
+		}
+	}
+	member.Roles = "channel_user channel_admin"
+	member.SchemeAdmin = true
+	return member, nil
+}
+
+func (a *hostAPI) serviceBotUserID() (string, error) {
+	users, err := a.runtime.options.Store.ListUsersByDomain(context.Background(), a.runtime.options.DomainID)
+	if err != nil {
+		return "", err
+	}
+	for _, user := range users {
+		if user.AuthSource != "bot" || !a.userInScope(user) {
+			continue
+		}
+		owner, ok, err := a.runtime.options.Store.GetSetting(context.Background(), "mmplugin.bot_owner:"+user.ID)
+		if err != nil {
+			return "", err
+		}
+		if ok && owner == a.runtime.options.Scope+":"+a.manifest.Id {
+			return chat.ID(user.ID), nil
+		}
+	}
+	return a.EnsureBotUser(&model.Bot{Username: "svc-" + chat.ID(a.manifest.Id)[:16], DisplayName: a.manifest.Name})
+}
+func (a *hostAPI) DeleteChannelMember(channelID, userID string) *model.AppError {
+	if _, err := a.user(userID); err != nil {
+		return appError(err)
+	}
+	channel, e := a.GetChannel(channelID)
+	if e != nil {
+		return e
+	}
+	creator, err := a.user(channel.CreatorId)
+	if err != nil {
+		return appError(err)
+	}
+	return appError(a.runtime.options.Chat.RemoveMember(context.Background(), creator, channelID, userID))
 }

@@ -81,8 +81,16 @@ func Restore(ctx context.Context, opts RestoreOptions) (*Manifest, error) {
 	if err = verifyRestored(ctx, stage, m); err != nil {
 		return nil, err
 	}
+	if err = verifyProductBackup(stage, m); err != nil {
+		return nil, err
+	}
 	if opts.VerifyOnly {
 		return m, nil
+	}
+	if p := m.Header.Products; p != nil {
+		if err = os.Rename(filepath.Join(stage, p.Bindings), filepath.Join(stage, p.Bindings)+".restore-pending"); err != nil {
+			return nil, err
+		}
 	}
 	if err = relocate(ctx, stage, target, m); err != nil {
 		return nil, err
@@ -186,8 +194,11 @@ func extract(ctx context.Context, reader io.Reader, stage string, maxBytes int64
 			if err = json.NewDecoder(tr).Decode(&header); err != nil {
 				return nil, err
 			}
-			if header.Format != format || !safeName(header.Config) || !safeName(header.Database) || !filepath.IsAbs(header.Root) {
+			if (header.Format != format && header.Format != productFormat) || (header.Format == productFormat && header.Products == nil) || !safeName(header.Config) || !safeName(header.Database) || !filepath.IsAbs(header.Root) {
 				return nil, errors.New("unsupported snapshot format or layout")
+			}
+			if err = validateProductBackup(header.Products); err != nil {
+				return nil, err
 			}
 			continue
 		}

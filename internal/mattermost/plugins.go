@@ -11,10 +11,15 @@ import (
 )
 
 func (s *API) EnablePlugins(directory string, admins []string) error {
+	bindings, err := mmplugins.LoadDatabaseBindings(directory)
+	if err != nil {
+		return err
+	}
 	runtime, err := mmplugins.New(mmplugins.Options{Directory: directory, SiteURL: s.siteURL, Store: s.store, Chat: s.chat, Logger: s.log, Scope: "catalog"})
 	if err != nil {
 		return err
 	}
+	s.pluginDatabases = bindings
 	s.plugins = runtime
 	s.pluginDirectory = directory
 	s.policy.Defaults.PluginsEnabled = true

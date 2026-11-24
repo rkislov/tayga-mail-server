@@ -1,0 +1,62 @@
+name: Original Boards and community Playbooks
+on:
+  pull_request:
+    paths:
+      - 'internal/mmplugins/**'
+      - 'internal/mattermost/**'
+      - 'internal/chat/**'
+      - 'internal/backup/full/**'
+      - '.github/workflows/original-products.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  original-products:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: isolated-product-ci-only
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd 'pg_isready -U postgres'
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      TMS_TEST_PLUGIN_POSTGRES: postgres://postgres:isolated-product-ci-only@127.0.0.1:5432/postgres?sslmode=disable
+      CGO_ENABLED: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: rkislov/tms-playbooks
+          ref: 967bdf1d132582a49ca1d840fb29fe5a1709394d
+          path: .product-fixture/playbooks
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build pinned community Playbooks without enterprise source
+        working-directory: .product-fixture/playbooks
+        env:
+          GOOS: linux
+          GOARCH: amd64
+        run: scripts/build-tms.sh
+      - name: Fetch and verify untouched official Boards binary
+        run: |
+          mkdir -p .product-fixture/bundles
+          curl --fail --location --retry 3 --output .product-fixture/bundles/mattermost-plugin-boards-v10.1.0-linux-amd64.tar.gz https://github.com/mattermost/mattermost-plugin-boards/releases/download/v10.1.0/mattermost-plugin-boards-v10.1.0-linux-amd64.tar.gz
+          echo '26382259874a1aa297150ab767f13bf48400387f1f70daed454d6ed1b69c71f7  .product-fixture/bundles/mattermost-plugin-boards-v10.1.0-linux-amd64.tar.gz' | sha256sum --check
+      - name: Exercise real product migrations, scoped database roles and workflows
+        run: |
+          export TMS_TEST_ORIGINAL_PLUGINS="$PWD/.product-fixture/bundles"
+          export TMS_TEST_PLAYBOOKS_FORK="$PWD/.product-fixture/playbooks/dist/tayga-playbooks-2.9.7-tms.1-linux-amd64.tar.gz"
+          export TMS_TEST_PLAYBOOKS_FORK_SHA256="$(sha256sum "$TMS_TEST_PLAYBOOKS_FORK" | cut -d ' ' -f 1)"
+          go test ./internal/mmplugins -run '^TestOriginalProductBundles$' -count=1 -v -timeout=5m
+      - name: Exercise encrypted backup and quarantined product connections
+        run: |
+          command -v pg_dump
+          go test ./internal/backup/full -run 'TestFullProduct|TestProductBackup' -count=1 -v -timeout=5m
