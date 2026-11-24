@@ -44,6 +44,9 @@ func TestOutlookMacCalendarCreatePropertiesAndAttachments(t *testing.T) {
 	if item.value("ReminderIsSet") != "false" || item.value("ReminderMinutesBeforeStart") != "15" {
 		t.Fatal("Outlook reminder settings changed", got.render())
 	}
+	if item.value("IsOrganizer") != "true" || item.child("EffectiveRights").value("Modify") != "true" {
+		t.Fatal("owner item reopened read-only", got.render())
+	}
 	count := 0
 	for _, n := range item.Children {
 		if n.Name.Local == "ExtendedProperty" {
@@ -146,5 +149,31 @@ func TestOutlookCalendarExtendedUpdateDeleteAndTypeMismatch(t *testing.T) {
 	props, _ = calendarMetadata(item.Data)
 	if len(props) != 0 {
 		t.Fatal("deleted extended property survived", props)
+	}
+}
+
+func TestOutlookCalendarEffectiveRightsFollowACL(t *testing.T) {
+	ctx, st, owner, eas, _, _ := syncFixture(t)
+	h := &ewsHandler{store: st, ms: eas.ms}
+	cal, _ := st.GetCalendarByName(ctx, owner.ID, "default")
+	viewer := standardMeetingPeer(t, ctx, st, owner, "calendar-viewer")
+	created := calendarSOAP(t, h, ctx, owner, standardMeetingCreate(cal.ID, "SendToNone", ""))
+	id := nodeAttr(created.find("ItemId"), "Id")
+	for _, rights := range []string{"read", "write"} {
+		if err := st.SetCalendarACL(ctx, cal.ID, viewer.ID, rights); err != nil {
+			t.Fatal(err)
+		}
+		got := calendarSOAP(t, h, ctx, viewer, `<m:GetItem><m:ItemIds><t:ItemId Id="`+id+`"/></m:ItemIds></m:GetItem>`)
+		item := got.find("CalendarItem")
+		if item == nil {
+			t.Fatal(got.render())
+		}
+		want := "false"
+		if rights == "write" {
+			want = "true"
+		}
+		if item.child("EffectiveRights").value("Modify") != want || item.child("EffectiveRights").value("Delete") != want || item.value("IsOrganizer") != "false" {
+			t.Fatal("advertised rights differ from ACL", rights, got.render())
+		}
 	}
 }
