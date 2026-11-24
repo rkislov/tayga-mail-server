@@ -36,6 +36,9 @@ func TestOutlookMacCalendarCreatePropertiesAndAttachments(t *testing.T) {
 	if saved.UID != "outlook-calendar-test-20261124" || davTextProperty(saved.Data, "CLASS") != "PRIVATE" || davTextProperty(saved.Data, "TRANSP") != "TRANSPARENT" {
 		t.Fatal(saved.Data)
 	}
+	if !strings.Contains(saved.Data, "PRIORITY:5\r\n") {
+		t.Fatal("iCalendar priority must remain INTEGER", saved.Data)
+	}
 	got := calendarSOAP(t, h, ctx, owner, `<m:GetItem><m:ItemIds><t:ItemId Id="`+id+`"/></m:ItemIds></m:GetItem>`)
 	item := got.find("CalendarItem")
 	if item == nil || item.value("Sensitivity") != "Private" || item.value("Importance") != "Normal" || item.value("LegacyFreeBusyStatus") != "Free" {

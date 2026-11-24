@@ -168,7 +168,7 @@ func applyCalendarMetadata(data string, edits []ewsCalendarEdit) (string, error)
 		if v == "Low" {
 			priority = "9"
 		}
-		event.Props.SetText("PRIORITY", priority)
+		event.Props.Set(&ical.Prop{Name: "PRIORITY", Value: priority})
 	} else {
 		for _, e := range edits {
 			if e.name == "Importance" {
