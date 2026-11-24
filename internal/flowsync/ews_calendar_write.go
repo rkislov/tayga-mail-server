@@ -3,6 +3,7 @@ package flowsync
 
 import (
 	"context"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"strings"
@@ -45,8 +46,11 @@ func ewsCalendarDeliveryContext(ctx context.Context, body, op string) (context.C
 
 var ewsCalendarFields = map[string]string{
 	"item:Subject": "Subject", "item:Body": "Body", "calendar:Location": "Location",
-	"calendar:Start": "Start", "calendar:End": "End", "calendar:IsAllDayEvent": "IsAllDayEvent",
+	"calendar:UID": "UID", "calendar:Start": "Start", "calendar:End": "End", "calendar:IsAllDayEvent": "IsAllDayEvent",
 	"calendar:Recurrence": "Recurrence", "calendar:StartTimeZone": "StartTimeZone", "calendar:EndTimeZone": "EndTimeZone",
+	"item:Sensitivity": "Sensitivity", "item:Importance": "Importance", "item:Categories": "Categories",
+	"item:ReminderIsSet": "ReminderIsSet", "item:ReminderMinutesBeforeStart": "ReminderMinutesBeforeStart",
+	"calendar:LegacyFreeBusyStatus": "LegacyFreeBusyStatus", "calendar:IsResponseRequested": "IsResponseRequested", "calendar:AllowNewTimeProposal": "AllowNewTimeProposal",
 	"calendar:RequiredAttendees": "RequiredAttendees", "calendar:OptionalAttendees": "OptionalAttendees", "calendar:Resources": "Resources",
 }
 
@@ -63,10 +67,18 @@ func ewsCalendarEdits(doc *protocolNode, create bool) ([]ewsCalendarEdit, error)
 		}
 		seen := map[string]bool{}
 		for _, field := range item.Children {
-			if seen[field.Name.Local] {
-				return fmt.Errorf("duplicate calendar property")
+			key := field.Name.Local
+			if calendarMetadataField(key) {
+				var err error
+				key, err = calendarMetadataKey(field)
+				if err != nil {
+					return err
+				}
 			}
-			seen[field.Name.Local] = true
+			if seen[key] {
+				return fmt.Errorf("duplicate calendar property: %s", field.Name.Local)
+			}
+			seen[key] = true
 			if path != "" && (len(item.Children) != 1 || ewsCalendarFields[path] != field.Name.Local) {
 				return fmt.Errorf("calendar field path does not match value")
 			}
@@ -89,13 +101,35 @@ func ewsCalendarEdits(doc *protocolNode, create bool) ([]ewsCalendarEdit, error)
 	for _, update := range updates.Children {
 		seen := map[string]bool{}
 		for _, child := range update.Children {
-			if (child.Name.Local != "FieldURI" && child.Name.Local != "CalendarItem") || seen[child.Name.Local] {
+			if (child.Name.Local != "FieldURI" && child.Name.Local != "ExtendedFieldURI" && child.Name.Local != "CalendarItem") || seen[child.Name.Local] {
 				return nil, fmt.Errorf("unsupported or duplicate calendar update element")
 			}
 			seen[child.Name.Local] = true
 		}
 		if update.Name.Local == "DeleteItemField" && update.child("CalendarItem") != nil {
 			return nil, fmt.Errorf("delete requires only a field path")
+		}
+		if selector := update.child("ExtendedFieldURI"); selector != nil {
+			identity, selectorType, err := attachedExtendedIdentity(selector)
+			if err != nil || update.child("FieldURI") != nil {
+				return nil, fmt.Errorf("invalid extended calendar path")
+			}
+			if update.Name.Local == "DeleteItemField" {
+				out = append(out, ewsCalendarEdit{update.Name.Local, "ExtendedProperty", &protocolNode{Name: xml.Name{Local: "ExtendedProperty"}, Children: []*protocolNode{selector}}})
+				continue
+			}
+			item := update.child("CalendarItem")
+			if update.Name.Local != "SetItemField" || item == nil || len(item.Children) != 1 || item.Children[0].Name.Local != "ExtendedProperty" {
+				return nil, fmt.Errorf("invalid extended calendar update")
+			}
+			prop := item.Children[0]
+			key, err := validateAttachedExtended(prop)
+			_, valueType, valueErr := attachedExtendedIdentity(prop.child("ExtendedFieldURI"))
+			if err != nil || valueErr != nil || valueType != selectorType || key != identity {
+				return nil, fmt.Errorf("extended calendar path does not match value")
+			}
+			out = append(out, ewsCalendarEdit{update.Name.Local, "ExtendedProperty", prop})
+			continue
 		}
 		field := update.child("FieldURI")
 		path := nodeAttr(field, "FieldURI")
@@ -175,6 +209,22 @@ func parseEWSAttendees(node *protocolNode, group string) ([]calutil.Attendee, er
 }
 func applyEWSCalendarEdits(event calutil.Event, edits []ewsCalendarEdit, u *storage.User, create bool) (calutil.Event, error) {
 	for _, edit := range edits {
+		if calendarMetadataField(edit.name) {
+			if edit.kind == "AppendToItemField" {
+				return event, fmt.Errorf("calendar metadata cannot be appended")
+			}
+			continue
+		}
+		if edit.name == "UID" {
+			if edit.kind != "SetItemField" || edit.node == nil || len(edit.node.Children) > 0 || len(edit.node.Text) > 1024 || strings.TrimSpace(edit.node.Text) == "" || strings.ContainsAny(edit.node.Text, "\r\n\x00") {
+				return event, fmt.Errorf("invalid calendar UID")
+			}
+			if !create && event.UID != edit.node.Text {
+				return event, fmt.Errorf("calendar UID cannot change")
+			}
+			event.UID = edit.node.Text
+			continue
+		}
 		if edit.name == "Recurrence" || edit.name == "StartTimeZone" || edit.name == "EndTimeZone" {
 			continue
 		}
@@ -330,6 +380,9 @@ func (h *ewsHandler) createCalendarItem(ctx context.Context, u *storage.User, bo
 		return "", err
 	}
 	data, err = finishEWSRecurrence(data, zone, edits)
+	if err == nil {
+		data, err = applyCalendarMetadata(data, edits)
+	}
 	if err != nil {
 		return ewsOperationError("CreateItem", "ErrorInvalidPropertySet", err.Error()), nil
 	}

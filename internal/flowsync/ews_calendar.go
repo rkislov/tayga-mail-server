@@ -59,6 +59,10 @@ func (h *ewsHandler) calendarItemXML(ctx context.Context, u *storage.User, o *st
 	if subject == "" {
 		subject = o.UID
 	}
+	metadata, err := calendarMetadataXML(o.Data)
+	if err != nil {
+		return "", err
+	}
 	start, end := ev.Start, ev.End
 	if start == nil {
 		start = o.DTStart
@@ -68,6 +72,7 @@ func (h *ewsHandler) calendarItemXML(ctx context.Context, u *storage.User, o *st
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, `<t:CalendarItem><t:ItemId Id="%s" ChangeKey="%s"/><t:ParentFolderId Id="%s"/><t:ItemClass>IPM.Appointment</t:ItemClass><t:Subject>%s</t:Subject>`, xmlEscape(o.ID), xmlEscape(ewsCalendarChangeKey(o, files)), xmlEscape(o.CalendarID), xmlEscape(subject))
+	canModify := h.calendarObjectWrite(ctx, u.ID, o) == nil
 	if includeBody {
 		links, err := h.store.CalendarAttachmentLinks(ctx, o.ID, u.ID)
 		if err != nil {
@@ -80,12 +85,28 @@ func (h *ewsHandler) calendarItemXML(ctx context.Context, u *storage.User, o *st
 	for _, f := range files {
 		fmt.Fprintf(&b, `<t:%s><t:AttachmentId Id="%s"/><t:Name>%s</t:Name><t:ContentType>%s</t:ContentType><t:Size>%d</t:Size><t:IsInline>false</t:IsInline></t:%s>`, ewsCalendarAttachmentTag(f.EWSItemType, f.EWSItemXML), xmlEscape("calendar:"+o.ID+":"+f.ID), xmlEscape(f.Filename), xmlEscape(f.ContentType), f.Size, ewsCalendarAttachmentTag(f.EWSItemType, f.EWSItemXML))
 	}
-	fmt.Fprintf(&b, `</t:Attachments><t:HasAttachments>%t</t:HasAttachments><t:UID>%s</t:UID><t:Start>%s</t:Start><t:End>%s</t:End><t:IsAllDayEvent>%t</t:IsAllDayEvent>`, len(files) > 0, xmlEscape(o.UID), ewsDate(start), ewsDate(end), ev.AllDay)
+	fmt.Fprintf(&b, `</t:Attachments><t:HasAttachments>%t</t:HasAttachments>`, len(files) > 0)
+	b.WriteString(metadata)
+	fmt.Fprintf(&b, `<t:EffectiveRights><t:CreateAssociated>false</t:CreateAssociated><t:CreateContents>false</t:CreateContents><t:CreateHierarchy>false</t:CreateHierarchy><t:Delete>%t</t:Delete><t:Modify>%t</t:Modify><t:Read>true</t:Read></t:EffectiveRights>`, canModify, canModify)
+
+	fmt.Fprintf(&b, `<t:UID>%s</t:UID><t:Start>%s</t:Start><t:End>%s</t:End><t:IsAllDayEvent>%t</t:IsAllDayEvent>`, xmlEscape(o.UID), ewsDate(start), ewsDate(end), ev.AllDay)
 	busy := "Busy"
 	if strings.EqualFold(davTextProperty(o.Data, "TRANSP"), "TRANSPARENT") || strings.EqualFold(ev.Status, "CANCELLED") {
 		busy = "Free"
 	} else if strings.EqualFold(ev.Status, "TENTATIVE") {
 		busy = "Tentative"
+	}
+	if busy != "Free" {
+		switch strings.ToUpper(davTextProperty(o.Data, "X-MICROSOFT-CDO-BUSYSTATUS")) {
+		case "OOF":
+			busy = "OOF"
+		case "WORKINGELSEWHERE":
+			busy = "WorkingElsewhere"
+		case "NODATA":
+			busy = "NoData"
+		case "TENTATIVE":
+			busy = "Tentative"
+		}
 	}
 	fmt.Fprintf(&b, `<t:LegacyFreeBusyStatus>%s</t:LegacyFreeBusyStatus><t:Location>%s</t:Location><t:IsMeeting>%t</t:IsMeeting><t:IsCancelled>%t</t:IsCancelled>`, busy, xmlEscape(ev.Location), len(ev.Attendees) > 0, strings.EqualFold(ev.Status, "CANCELLED"))
 	if !isRecurringCalendar(o.Data) {
@@ -159,6 +180,16 @@ func (h *ewsHandler) calendarItemXML(ctx context.Context, u *storage.User, o *st
 		}
 		fmt.Fprintf(&b, `</t:%s>`, group)
 	}
-	fmt.Fprintf(&b, `<t:AppointmentSequenceNumber>%d</t:AppointmentSequenceNumber></t:CalendarItem>`, ev.Sequence)
+	state := 0
+	if len(ev.Attendees) > 0 {
+		state |= 1
+		if response != "Organizer" {
+			state |= 2
+		}
+	}
+	if strings.EqualFold(ev.Status, "CANCELLED") {
+		state |= 4
+	}
+	fmt.Fprintf(&b, `<t:AppointmentSequenceNumber>%d</t:AppointmentSequenceNumber><t:AppointmentState>%d</t:AppointmentState><t:IsOrganizer>%t</t:IsOrganizer></t:CalendarItem>`, ev.Sequence, state, response == "Organizer")
 	return b.String(), nil
 }

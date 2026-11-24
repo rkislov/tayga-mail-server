@@ -730,3 +730,6 @@ TestEWSAttachedTaskBadRecurrenceIsAtomic. Приёмка в настоящем O
 
 Справочники Microsoft: [ExtendedFieldURI](https://learn.microsoft.com/en-us/exchange/client-developer/web-service-reference/extendedfielduri),
 [TaskRecurrenceType](https://learn.microsoft.com/en-us/exchange/client-developer/web-service-reference/recurrence-taskrecurrencetype).
+
+
+Приёмка конкретного Outlook: [сценарии и изолированный серверный отчёт](outlook-itemattachment-acceptance.md). Проверка подключения EWS не закрывает сценарии вложений в приложении.
