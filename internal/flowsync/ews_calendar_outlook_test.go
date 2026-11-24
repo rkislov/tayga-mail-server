@@ -44,7 +44,7 @@ func TestOutlookMacCalendarCreatePropertiesAndAttachments(t *testing.T) {
 	if item.value("ReminderIsSet") != "false" || item.value("ReminderMinutesBeforeStart") != "15" {
 		t.Fatal("Outlook reminder settings changed", got.render())
 	}
-	if item.value("IsOrganizer") != "true" || item.child("EffectiveRights").value("Modify") != "true" {
+	if item.value("AppointmentState") != "0" || item.value("IsOrganizer") != "true" || item.child("EffectiveRights").value("Modify") != "true" {
 		t.Fatal("owner item reopened read-only", got.render())
 	}
 	count := 0

@@ -180,6 +180,16 @@ func (h *ewsHandler) calendarItemXML(ctx context.Context, u *storage.User, o *st
 		}
 		fmt.Fprintf(&b, `</t:%s>`, group)
 	}
-	fmt.Fprintf(&b, `<t:AppointmentSequenceNumber>%d</t:AppointmentSequenceNumber><t:IsOrganizer>%t</t:IsOrganizer></t:CalendarItem>`, ev.Sequence, response == "Organizer")
+	state := 0
+	if len(ev.Attendees) > 0 {
+		state |= 1
+		if response != "Organizer" {
+			state |= 2
+		}
+	}
+	if strings.EqualFold(ev.Status, "CANCELLED") {
+		state |= 4
+	}
+	fmt.Fprintf(&b, `<t:AppointmentSequenceNumber>%d</t:AppointmentSequenceNumber><t:AppointmentState>%d</t:AppointmentState><t:IsOrganizer>%t</t:IsOrganizer></t:CalendarItem>`, ev.Sequence, state, response == "Organizer")
 	return b.String(), nil
 }
