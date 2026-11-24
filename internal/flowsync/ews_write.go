@@ -203,6 +203,9 @@ func (h *ewsHandler) updateItem(ctx context.Context, u *storage.User, body strin
 			return ewsOperationError("UpdateItem", "ErrorInvalidPropertySet", "Invalid calendar edit"), nil
 		}
 		data, err = finishEWSRecurrence(data, zone, edits)
+		if err == nil {
+			data, err = applyCalendarMetadata(data, edits)
+		}
 		if err != nil {
 			return ewsOperationError("UpdateItem", "ErrorInvalidPropertySet", err.Error()), nil
 		}

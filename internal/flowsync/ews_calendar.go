@@ -59,6 +59,10 @@ func (h *ewsHandler) calendarItemXML(ctx context.Context, u *storage.User, o *st
 	if subject == "" {
 		subject = o.UID
 	}
+	metadata, err := calendarMetadataXML(o.Data)
+	if err != nil {
+		return "", err
+	}
 	start, end := ev.Start, ev.End
 	if start == nil {
 		start = o.DTStart
@@ -81,11 +85,24 @@ func (h *ewsHandler) calendarItemXML(ctx context.Context, u *storage.User, o *st
 		fmt.Fprintf(&b, `<t:%s><t:AttachmentId Id="%s"/><t:Name>%s</t:Name><t:ContentType>%s</t:ContentType><t:Size>%d</t:Size><t:IsInline>false</t:IsInline></t:%s>`, ewsCalendarAttachmentTag(f.EWSItemType, f.EWSItemXML), xmlEscape("calendar:"+o.ID+":"+f.ID), xmlEscape(f.Filename), xmlEscape(f.ContentType), f.Size, ewsCalendarAttachmentTag(f.EWSItemType, f.EWSItemXML))
 	}
 	fmt.Fprintf(&b, `</t:Attachments><t:HasAttachments>%t</t:HasAttachments><t:UID>%s</t:UID><t:Start>%s</t:Start><t:End>%s</t:End><t:IsAllDayEvent>%t</t:IsAllDayEvent>`, len(files) > 0, xmlEscape(o.UID), ewsDate(start), ewsDate(end), ev.AllDay)
+	b.WriteString(metadata)
 	busy := "Busy"
 	if strings.EqualFold(davTextProperty(o.Data, "TRANSP"), "TRANSPARENT") || strings.EqualFold(ev.Status, "CANCELLED") {
 		busy = "Free"
 	} else if strings.EqualFold(ev.Status, "TENTATIVE") {
 		busy = "Tentative"
+	}
+	if busy != "Free" {
+		switch strings.ToUpper(davTextProperty(o.Data, "X-MICROSOFT-CDO-BUSYSTATUS")) {
+		case "OOF":
+			busy = "OOF"
+		case "WORKINGELSEWHERE":
+			busy = "WorkingElsewhere"
+		case "NODATA":
+			busy = "NoData"
+		case "TENTATIVE":
+			busy = "Tentative"
+		}
 	}
 	fmt.Fprintf(&b, `<t:LegacyFreeBusyStatus>%s</t:LegacyFreeBusyStatus><t:Location>%s</t:Location><t:IsMeeting>%t</t:IsMeeting><t:IsCancelled>%t</t:IsCancelled>`, busy, xmlEscape(ev.Location), len(ev.Attendees) > 0, strings.EqualFold(ev.Status, "CANCELLED"))
 	if !isRecurringCalendar(o.Data) {
