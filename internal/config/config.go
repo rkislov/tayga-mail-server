@@ -14,10 +14,16 @@ import (
 )
 
 // MattermostConfig enables the experimental client compatibility API.
+type MattermostFederationConfig struct {
+	Enabled    bool     `yaml:"enabled"`
+	AllowCIDRs []string `yaml:"allow_cidrs"`
+}
+
 type MattermostConfig struct {
-	PluginsEnabled  bool   `yaml:"plugins_enabled"`
-	PluginDirectory string `yaml:"plugin_directory"`
-	Enabled         bool   `yaml:"enabled"`
+	Federation      MattermostFederationConfig `yaml:"federation"`
+	PluginsEnabled  bool                       `yaml:"plugins_enabled"`
+	PluginDirectory string                     `yaml:"plugin_directory"`
+	Enabled         bool                       `yaml:"enabled"`
 }
 
 // VKSConfig connects TMS to native or containerized conferencing services.

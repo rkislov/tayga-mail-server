@@ -48,7 +48,9 @@ func (s *API) users(w http.ResponseWriter, r *http.Request, u *storage.User, pat
 				s.failure(w, err)
 				return
 			}
-			out = append(out, userModel(user, user.ID == u.ID))
+			if s.federatedUserVisible(r.Context(), u, user) {
+				out = append(out, userModel(user, user.ID == u.ID))
+			}
 		}
 		write(w, 200, out)
 		return
@@ -115,7 +117,7 @@ func (s *API) users(w http.ResponseWriter, r *http.Request, u *storage.User, pat
 		})
 		out := []any{}
 		for _, user := range users {
-			if !user.Enabled || user.AuthSource == "resource" || (allowedUsers == nil && user.DomainID != u.DomainID) || (allowedUsers != nil && !allowedUsers[user.ID]) {
+			if !s.federatedUserVisible(r.Context(), u, user) || user.AuthSource == "resource" || (allowedUsers == nil && user.DomainID != u.DomainID) || (allowedUsers != nil && !allowedUsers[user.ID]) {
 				continue
 			}
 			if offset > 0 {
@@ -144,6 +146,10 @@ func (s *API) users(w http.ResponseWriter, r *http.Request, u *storage.User, pat
 				s.failure(w, err)
 				return
 			}
+		}
+		if !s.federatedUserVisible(r.Context(), u, target) {
+			s.failure(w, storage.ErrNotFound)
+			return
 		}
 		model := userModel(target, self)
 		if self {

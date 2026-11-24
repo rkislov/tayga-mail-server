@@ -44,6 +44,9 @@ func (s *Service) PublicChannels(ctx context.Context, u *storage.User, term stri
 // JoinPublicChannel adds only the caller and only to a public channel in the
 // caller's tenant. The INSERT predicate keeps those checks atomic.
 func (s *Service) JoinPublicChannel(ctx context.Context, u *storage.User, id string) error {
+	if err := s.federationMemberAllowed(ctx, id, u); err != nil {
+		return err
+	}
 	_, err := s.db.ExecContext(ctx, s.q(`INSERT INTO chat_members(channel_id,user_id)
         SELECT id,? FROM chat_channels WHERE id=? AND tenant_id=? AND kind='O'
         ON CONFLICT DO NOTHING`), u.ID, id, u.TenantID)

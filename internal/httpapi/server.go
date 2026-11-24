@@ -114,6 +114,16 @@ func (s *Server) Handler() http.Handler {
 			}
 
 			s.mattermostAPI.SetScopeAuthorizer(s.canManageMattermostScope)
+			if cfg.Mattermost.Federation.Enabled {
+				key, e := s.federationCipher()
+				if e == nil {
+					e = s.mattermostAPI.EnableFederation(key, cfg.Mattermost.Federation.AllowCIDRs)
+				}
+				if e != nil {
+					s.log.Error("federation initialization failed")
+				}
+			}
+
 			if cfg.VKS.PublicURL != "" && cfg.VKS.SigningKeyFile != "" {
 				s.mattermostAPI.SetChannelCallStarter(s.startMattermostChannelCall, s.mattermostChannelCallsAllowed)
 			}
@@ -238,6 +248,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/admin/backup/restore", s.handleAdminBackupRestore)
 	mux.HandleFunc("/api/v1/admin/dkim/generate", s.handleAdminDKIM)
 	mux.HandleFunc("/api/v1/admin/dkim", s.handleDomainDKIM)
+	mux.HandleFunc("/api/v1/admin/mattermost/federation", s.handleMattermostFederation)
+	mux.HandleFunc("/api/v1/admin/mattermost/federation/", s.handleMattermostFederation)
 	mux.HandleFunc("/api/v1/admin/mattermost", s.handleMattermostSettings)
 	mux.HandleFunc("/api/v1/admin/mattermost/", s.handleMattermostSettings)
 	mux.HandleFunc("/api/v1/admin/settings", s.handleAdminSettings)
@@ -287,6 +299,7 @@ func (s *Server) Start(ctx context.Context) error {
 	if s.mattermostAPI != nil {
 		s.mattermostAPI.RepairAttachmentImageDimensions(ctx)
 		s.mattermostAPI.StartPush(ctx)
+		s.mattermostAPI.StartFederation(ctx)
 	}
 	go s.runCalendarSubscriptions(ctx)
 	go s.runCalendarDeliveries(ctx)

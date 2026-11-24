@@ -25,6 +25,10 @@ func (s *API) userMetadata(w http.ResponseWriter, r *http.Request, u *storage.Us
 			return true
 		}
 	}
+	if !s.federatedUserVisible(r.Context(), u, target) {
+		s.failure(w, storage.ErrNotFound)
+		return true
+	}
 	switch parts[2] {
 	case "image":
 		if r.Method != http.MethodGet {

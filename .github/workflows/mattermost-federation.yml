@@ -1,0 +1,54 @@
+name: Mattermost federation
+on:
+  pull_request:
+    paths:
+      - 'internal/mmfederation/**'
+      - 'internal/mattermost/**'
+      - 'internal/chat/**'
+      - 'internal/storage/**'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/mattermost-federation.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  original-mattermost-rest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: mmtest
+          POSTGRES_PASSWORD: isolated-test-only
+          POSTGRES_DB: mattermost
+        options: >-
+          --health-cmd "pg_isready -U mmtest -d mattermost"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+      mattermost:
+        image: mattermost/mattermost-enterprise-edition:12.0.0
+        env:
+          MM_SQLSETTINGS_DRIVERNAME: postgres
+          MM_SQLSETTINGS_DATASOURCE: 'postgres://mmtest:isolated-test-only@postgres:5432/mattermost?sslmode=disable&connect_timeout=10'
+          MM_SERVICESETTINGS_SITEURL: 'http://localhost:8065'
+          MM_TEAMSETTINGS_ENABLEOPENSERVER: 'true'
+          MM_SERVICESETTINGS_ENABLEBOTACCOUNTCREATION: 'true'
+          MM_SERVICESETTINGS_ENABLEUSERACCESSTOKENS: 'true'
+          MM_EMAILSETTINGS_REQUIREEMAILVERIFICATION: 'false'
+          MM_EMAILSETTINGS_SENDEMAILNOTIFICATIONS: 'false'
+          MM_LOGSETTINGS_CONSOLELEVEL: ERROR
+        ports:
+          - 8065/tcp
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Test two TMS servers and original Mattermost REST
+        env:
+          TMS_TEST_MATTERMOST_URL: 'http://127.0.0.1:${{ job.services.mattermost.ports[8065] }}'
+          CGO_ENABLED: '0'
+        run: go test ./internal/mmfederation -count=1 -timeout=10m
