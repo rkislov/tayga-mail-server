@@ -244,6 +244,19 @@ const mmChat = (() => {
         text.textContent = post.message || '';text.hidden=!post.message;
       }
       article.append(text);
+      if (users.get(post.user_id)?.is_bot && Array.isArray(post.props?.attachments)) {
+        const actions=document.createElement('div');actions.className='mm-bot-actions';
+        for (const attachment of post.props.attachments.slice(0,10)) {
+          if (!Array.isArray(attachment.actions)) continue;
+          for (const action of attachment.actions.slice(0,10)) {
+            if (action.type!=='button' || !/^[a-zA-Z0-9_-]{1,64}$/.test(action.id||'') || typeof action.name!=='string') continue;
+            const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.textContent=action.name.slice(0,100);
+            button.onclick=async()=>{button.disabled=true;try{await request('/posts/'+encodeURIComponent(post.id)+'/actions/'+encodeURIComponent(action.id),{method:'POST',body:'{}'});}catch(error){setMsg(el('send-error'),errorText(error),'err')}finally{button.disabled=false}};
+            actions.append(button);
+          }
+        }
+        if(actions.childNodes.length)article.append(actions);
+      }
       if(post.file_ids?.length){const files=document.createElement('div');files.className='mm-post-files';article.append(files);void renderFiles(post,files,epoch)}
       const time = document.createElement('time'); time.dateTime = new Date(post.create_at).toISOString(); time.textContent = new Date(post.create_at).toLocaleString(lang === 'en' ? 'en-GB' : 'ru-RU'); article.append(time);
       const answer = document.createElement('button'); answer.type = 'button'; answer.className = 'btn-secondary btn-sm mm-chat-answer'; iconButton(answer,'reply','Ответить'); answer.onclick = () => { reply = post.root_id || post.id; el('reply-label').textContent = 'Ответ: ' + post.message.slice(0,120); el('reply').classList.remove('hidden'); el('body').focus(); }; article.append(answer);
