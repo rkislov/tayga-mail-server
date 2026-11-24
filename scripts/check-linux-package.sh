@@ -6,12 +6,14 @@ family=$2
 export DEBIAN_FRONTEND=noninteractive
 case "$family" in
   deb)
-    apt-get update
-    apt-get install -y --no-install-recommends "$package" curl procps
+    apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 update
+    apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 install -y --no-install-recommends "$package" curl procps
     ;;
   alt)
-    apt-get update
-    apt-get install -y "$package" curl procps su systemd-analyze
+    # Use the official ALT mirror in this disposable test environment.
+    find /etc/apt -type f -name "*.list" -exec sed -i 's|http://ftp.altlinux.org/pub/distributions/ALTLinux|http://mirror.yandex.ru/altlinux|g' {} +
+    apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 update
+    apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 install -y "$package" curl procps su systemd-analyze
     ;;
   rpm)
     dnf install -y "$package" procps-ng
