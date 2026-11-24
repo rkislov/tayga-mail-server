@@ -14,7 +14,7 @@
 
 Исправлена ошибка `duplicate calendar property` при сохранении личной встречи Outlook Mac: разные ExtendedProperty различаются по селекторам, а настоящие дубли и несовпадающие типы отклоняются. Сохраняются UID, приватность, важность, занятость и метаданные напоминания; исправлены признаки организатора, состояния встречи и эффективных прав для повторного редактирования владельцем. Права читателя календаря не расширяются.
 
-В Outlook Mac 16.115.1 (Legacy/EWS) проверены сохранение и повторное изменение тестовой встречи, загрузка и чтение ItemAttachment<Message>, открытие вложенного письма и сохранность темы/текста. Встреча без участников и рассылки; подтверждена одна серверная копия UID. Вложенные CalendarItem/Contact/Task и расширенная клиентская матрица остаются отдельной приёмкой. Добавлены обезличенный SOAP-запрос, регрессии и воспроизводимый серверный отчёт; SOAP-тесты не подменяют проверку приложения. [Протокол](https://github.com/rkislov/tayga-mail-server/blob/v1.1.0/docs/outlook-calendar-hotfix-20261124.md).
+В Outlook Mac 16.115.1 (Legacy/EWS) проверены сохранение и повторное изменение тестовой встречи, загрузка и чтение `ItemAttachment<Message>`, открытие вложенного письма и сохранность темы/текста. Встреча без участников и рассылки; подтверждена одна серверная копия UID. Вложенные CalendarItem/Contact/Task и расширенная клиентская матрица остаются отдельной приёмкой. Добавлены обезличенный SOAP-запрос, регрессии и воспроизводимый серверный отчёт; SOAP-тесты не подменяют проверку приложения. [Протокол](https://github.com/rkislov/tayga-mail-server/blob/v1.1.0/docs/outlook-calendar-hotfix-20261124.md).
 
 ### Поставка
 
@@ -30,6 +30,6 @@ Native TMS-to-TMS shared channels preserve separate remote identities. A bidirec
 
 Outlook calendar ExtendedProperty values are identified by selector rather than XML element name. Distinct properties round-trip; duplicate selectors and mismatched types are rejected. Client UID, privacy, importance, availability and reminder metadata are preserved. Organizer, appointment state and effective access rights allow owners to edit reopened events without granting write access to readers.
 
-The live Outlook Mac 16.115.1 Legacy/EWS check confirmed event creation, editing, ItemAttachment<Message> upload/read and opening the attached message with its original subject/body. Typed nested calendar events, contacts and tasks still need separate client acceptance. An anonymized SOAP regression fixture and a reproducible server report are included.
+The live Outlook Mac 16.115.1 Legacy/EWS check confirmed event creation, editing, `ItemAttachment<Message>` upload/read and opening the attached message with its original subject/body. Typed nested calendar events, contacts and tasks still need separate client acceptance. An anonymized SOAP regression fixture and a reproducible server report are included.
 
 Release assets include seven platform archives, four native DEB/RPM packages, the Thunderbird extension and SHA-256 checksums. Back up data, configuration and the secrets key before updating. Migration 082 adds federation storage; keep federation disabled on restored copies to prevent unintended external delivery.
