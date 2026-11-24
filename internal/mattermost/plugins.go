@@ -212,13 +212,26 @@ func (s *API) ServePluginHTTP(w http.ResponseWriter, r *http.Request) {
 	runtime.ServeHTTP(w, r, chat.ID(u.ID))
 }
 func (s *API) commands(w http.ResponseWriter, r *http.Request, u *storage.User, path string) {
-	if path == "/commands" && r.Method == http.MethodGet {
+	if path == "/commands" && r.Method == http.MethodPost {
+		s.registerBotCommand(w, r, u)
+		return
+	}
+	if (path == "/commands" || path == "/commands/autocomplete") && r.Method == http.MethodGet {
 		team := r.URL.Query().Get("team_id")
 		if team != "" && team != chat.ID(u.TenantID) {
 			s.failure(w, chat.ErrForbidden)
 			return
 		}
 		commands := []*model.Command{}
+		rows, err := s.botCommands(r.Context(), u)
+		if err != nil {
+			s.failure(w, err)
+			return
+		}
+		for _, row := range rows {
+			command := row.Command
+			commands = append(commands, &command)
+		}
 		if s.startChannelCall != nil {
 			commands = append(commands, &model.Command{Trigger: "meet", AutoComplete: true, AutoCompleteDesc: "Начать групповой звонок Jitsi в канале", DisplayName: "Звонок Jitsi", TeamId: chat.ID(u.TenantID)})
 		}
@@ -229,6 +242,25 @@ func (s *API) commands(w http.ResponseWriter, r *http.Request, u *storage.User, 
 				}
 				commands = append(commands, command)
 			}
+		}
+		if path == "/commands/autocomplete" {
+			input := strings.TrimPrefix(r.URL.Query().Get("user_input"), "/")
+			suggestions := []model.AutocompleteSuggestion{}
+			for _, command := range commands {
+				values := []string{command.Trigger}
+				if command.PluginId == "tms.bot" {
+					for _, sub := range []string{"help", "new", "chats", "use", "web on", "web off", "web status"} {
+						values = append(values, command.Trigger+" "+sub)
+					}
+				}
+				for _, value := range values {
+					if strings.HasPrefix(value, input) {
+						suggestions = append(suggestions, model.AutocompleteSuggestion{Complete: value, Suggestion: value, Hint: command.AutoCompleteHint, Description: command.AutoCompleteDesc})
+					}
+				}
+			}
+			write(w, 200, suggestions)
+			return
 		}
 		write(w, 200, commands)
 		return
@@ -268,6 +300,22 @@ func (s *API) commands(w http.ResponseWriter, r *http.Request, u *storage.User, 
 		}
 		write(w, 200, response)
 		return
+	}
+	rows, botErr := s.botCommands(r.Context(), u)
+	if botErr != nil {
+		s.failure(w, botErr)
+		return
+	}
+	for _, row := range rows {
+		fields := strings.Fields(args.Command)
+		if len(fields) > 0 && fields[0] == "/"+row.Command.Trigger {
+			if err = s.dispatchBotCommand(r, u, args, row); err != nil {
+				s.failure(w, err)
+				return
+			}
+			write(w, 200, &model.CommandResponse{ResponseType: model.CommandResponseTypeEphemeral, Text: "Команда отправлена помощнику."})
+			return
+		}
 	}
 	runtime, err := s.pluginRuntimeForScope(r.Context(), userScope(u))
 	if err != nil {

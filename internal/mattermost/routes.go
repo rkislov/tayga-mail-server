@@ -523,6 +523,11 @@ func postList(posts []chat.Post) map[string]any {
 	return map[string]any{"order": order, "posts": items, "next_post_id": "", "prev_post_id": "", "has_next": false}
 }
 func (s *API) posts(w http.ResponseWriter, r *http.Request, u *storage.User, path string) {
+	actionParts := strings.Split(strings.Trim(path, "/"), "/")
+	if len(actionParts) == 4 && actionParts[2] == "actions" && r.Method == http.MethodPost {
+		s.botPostAction(w, r, u, actionParts[1], actionParts[3])
+		return
+	}
 	if path == "/posts" {
 		if r.Method != http.MethodPost {
 			wrongMethod(w)

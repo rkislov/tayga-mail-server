@@ -227,10 +227,10 @@ func botRequestAllowed(method, path string) bool {
 				return true
 			}
 		}
-		return path == "/users" || path == "/teams"
+		return path == "/users" || path == "/teams" || path == "/commands" || path == "/commands/autocomplete"
 	}
 	if method == http.MethodPost {
-		return path == "/posts" || path == "/files" || path == "/users/ids" || path == "/users/search" || path == "/users/status/ids" || path == "/channels/direct" || path == "/channels/members/me/view"
+		return path == "/commands" || path == "/posts" || path == "/files" || path == "/users/ids" || path == "/users/search" || path == "/users/status/ids" || path == "/channels/direct" || path == "/channels/members/me/view"
 	}
 	return method == http.MethodPut && path == "/users/me/status"
 }

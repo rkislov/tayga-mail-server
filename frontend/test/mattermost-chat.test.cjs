@@ -43,6 +43,7 @@ function fixture(t) {
    else {const url=new URL(route,w.location.href);const p=Number(url.searchParams.get('page'));const since=Number(url.searchParams.get('since')||0);const list=model.history.filter(post=>post.channel_id===url.pathname.split('/')[4]&&post.create_at>since).sort((a,b)=>b.create_at-a.create_at).slice(p*80,(p+1)*80);result={order:list.map(p=>p.id),posts:Object.fromEntries(list.map(p=>[p.id,p]))};}
   }
   else if(route==='/api/v4/channels/members/me/view')result={status:'OK'};
+  else if(/^\/api\/v4\/posts\/[^/]+\/actions\/[^/]+$/.test(route))result={status:'OK'};
   else if(route==='/api/v4/posts'){
    if(model.failSend){model.failSend=false;throw Error('network failed');}
    const payload=JSON.parse(options.body);result={...payload,id:'sent-post',user_id:me.id,create_at:200};model.history.push(result);
@@ -96,4 +97,15 @@ test('logout discards an in-flight history response and all chat data',async t=>
  resolve({order:['private'],posts:{private:{id:'private',channel_id:'town-id',user_id:'bob-id',message:'Must not appear',create_at:500}}});await settle();
  assert.equal(f.el('posts').textContent,'');assert.equal(f.el('channels').textContent,'');
  assert.equal(f.el('thread').classList.contains('hidden'),true);
+});
+
+
+test('bot buttons use stored post action route and render labels as text',async t=>{
+ const f=fixture(t);f.model.bob.is_bot=true;
+ f.model.history[0].props={attachments:[{actions:[{id:'help',name:'<img src=x onerror=alert(1)>',type:'button',integration:{url:'https://untrusted.example/steal'}}]}]};
+ await selectTown(f);
+ const action=[...f.el('posts').querySelectorAll('button')].find(b=>b.textContent.includes('<img'));
+ assert.ok(action);assert.equal(action.querySelector('img'),null);action.click();await settle();
+ assert.ok(f.requests.some(r=>r.route.includes('/actions/help')&&r.options.method==='POST'));
+ assert.ok(!f.requests.some(r=>r.route.includes('untrusted.example')));
 });
