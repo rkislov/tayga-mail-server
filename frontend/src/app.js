@@ -323,7 +323,7 @@ $("color-mode-select")?.addEventListener("change",event=>applyColorMode(event.ta
 const APPS = [
   "mail", "calendar", "contacts", "notes", "tasks", "files", "chat",
   "profile", "security", "appearance", "filters", "language", "migration",
-  "monitor", "outbound", "antispam", "maillog", "tenants", "tls", "xmpp", "mattermost", "vks", "server", "cos",
+  "monitor", "backups", "sessions", "devices", "outbound", "antispam", "maillog", "tenants", "tls", "xmpp", "mattermost", "vks", "server", "cos",
 ];
 
 const mailState = { mailboxID: "", messageID: "", mailboxes: [], order: [], searchQ: "", offset: 0, pageSize: 25, request: 0, sort: "date", sortOrder: "desc", filter: "all" };
@@ -381,6 +381,9 @@ const APP_I18N = {
   language: "nav_language",
   migration: "nav_migration",
   monitor: "nav_monitor",
+  backups: "nav_backups",
+  sessions: "nav_sessions",
+  devices: "nav_devices",
  outbound: "monitor_queue",
   antispam: "nav_antispam",
   maillog: "nav_maillog",
@@ -444,6 +447,8 @@ function showApp(name) {
   if(app === "outbound") refreshOutbound();
   if (app === "monitor") { refreshMonitor(); startMonitorLive(); }
   else stopMonitorLive();
+  if (app === "sessions" && state.me?.is_admin) void openAdminSessions();
+  if (app === "devices" && state.me?.is_admin) void openAdminDevices($("app-devices"));
   if (app === "antispam") refreshQuarantine();
   if (app === "maillog") refreshMailLog();
   if (app === "tenants") refreshTenantNav();
@@ -486,6 +491,8 @@ function isAuthPublicPath(path) {
 }
 
 function clearSession() {
+  $("admin-session-content")?.replaceChildren();
+  $("admin-device-content")?.replaceChildren();
   window.dispatchEvent(new Event("tms-products-session-ended"));
   resetMattermostBots();
   if (typeof omemoCancelOperations === 'function') omemoCancelOperations();
@@ -1021,7 +1028,7 @@ async function refreshOutbound() {
 $("btn-monitor-refresh").addEventListener("click", () => refreshMonitor());
 
 async function downloadBackup(includeMail) {
-  setMsg($("monitor-msg"), "Preparing backup…");
+  setMsg($("backup-msg"), mailImageText("Готовим архив…","Preparing backup…"));
   try {
     const q = includeMail ? "?include_mail=1" : "";
     const headers = {};
@@ -1037,9 +1044,9 @@ async function downloadBackup(includeMail) {
     a.download = "tayga-backup.tar.gz";
     a.click();
     URL.revokeObjectURL(a.href);
-    setMsg($("monitor-msg"), "Backup downloaded.", "ok");
+    setMsg($("backup-msg"), mailImageText("Архив скачан.","Backup downloaded."), "ok");
   } catch (err) {
-    setMsg($("monitor-msg"), err.message, "err");
+    setMsg($("backup-msg"), err.message, "err");
   }
 }
 $("btn-backup").addEventListener("click", () => downloadBackup(false));
@@ -1048,11 +1055,11 @@ $("btn-backup-mail").addEventListener("click", () => downloadBackup(true));
 $("btn-restore").addEventListener("click", async () => {
   const input = $("restore-file");
   if (!input.files || !input.files[0]) {
-    setMsg($("monitor-msg"), "choose a backup file", "err");
+    setMsg($("backup-msg"), mailImageText("Выберите архив резервной копии","Choose a backup archive"), "err");
     return;
   }
   if (!await askConfirm("Restore will create missing tenants/users and may update existing accounts. Continue?", { danger: true })) return;
-  setMsg($("monitor-msg"), "Restoring…");
+  setMsg($("backup-msg"), mailImageText("Восстановление…","Restoring…"));
   try {
     const fd = new FormData();
     fd.append("file", input.files[0]);
@@ -1064,7 +1071,7 @@ $("btn-restore").addEventListener("click", async () => {
     let data;
     try { data = JSON.parse(text); } catch { data = { error: text }; }
     if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
-    setMsg($("monitor-msg"),
+    setMsg($("backup-msg"),
       "Restored: +" + (data.users_created || 0) + " users, " +
       (data.users_skipped || 0) + " skipped, " +
       (data.scripts_restored || 0) + " scripts, " +
@@ -1072,7 +1079,7 @@ $("btn-restore").addEventListener("click", async () => {
     refreshMonitor();
     refreshTenantNav();
   } catch (err) {
-    setMsg($("monitor-msg"), err.message, "err");
+    setMsg($("backup-msg"), err.message, "err");
   }
 });
 
@@ -1273,44 +1280,6 @@ $("form-create-domain")?.addEventListener("submit", async (e) => {
   }
 });
 
-async function refreshAdminResources() {
-  const list = $("admin-resource-list");
-  if (!list || !tenantNav.domainID) {
-    if (list) list.innerHTML = "";
-    return;
-  }
-  if ($("nr-local") && tenantNav.domainName) {
-    $("nr-local").placeholder = "room-201";
-  }
-  try {
-    const data = await api("/api/v1/admin/resources?domain_id=" + encodeURIComponent(tenantNav.domainID));
-    const items = data.resources || [];
-    list.innerHTML = items.map((r) => `
-      <li>
-        <span>
-          <strong>${escapeHtml(r.display_name || r.local_part)}</strong>
-          <span class="meta"> · ${escapeHtml(r.email)} · ${escapeHtml(r.kind)}${r.capacity ? " · " + r.capacity : ""}${r.auto_accept ? " · auto" : ""}</span>
-        </span>
-        <span class="actions">
-          <button type="button" class="btn-secondary" data-res-del="${escapeHtml(r.id)}">${escapeHtml(t("resources_delete"))}</button>
-        </span>
-      </li>`).join("") || `<li><span class="meta">${escapeHtml(t("resources_empty"))}</span></li>`;
-    list.querySelectorAll("[data-res-del]").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        if (!await askConfirm(t("resources_delete") + "?", { danger: true })) return;
-        try {
-          await api("/api/v1/admin/resources/" + encodeURIComponent(btn.dataset.resDel), { method: "DELETE" });
-          await refreshAdminResources();
-        } catch (err) {
-          setMsg($("admin-msg"), err.message, "err");
-        }
-      });
-    });
-  } catch (err) {
-    list.innerHTML = `<li><span class="meta">${escapeHtml(err.message)}</span></li>`;
-  }
-}
-
 $("form-create-resource")?.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!tenantNav.domainID) {
@@ -1334,7 +1303,7 @@ $("form-create-resource")?.addEventListener("submit", async (e) => {
     setMsg($("admin-msg"), "OK", "ok");
     $("form-create-resource").reset();
     if ($("nr-auto")) $("nr-auto").checked = true;
-    await refreshAdminResources();
+    await refreshAdminUsers();
   } catch (err) {
     setMsg($("admin-msg"), err.message, "err");
   }
@@ -1352,18 +1321,27 @@ async function refreshAdminUsers() {
   if ($("nu-email") && tenantNav.domainName && !$("nu-email").value) {
     $("nu-email").placeholder = "user@" + tenantNav.domainName;
   }
-  refreshAdminResources();
+
   try {
-    const q = tenantNav.domainID
+    const search = $("admin-user-search")?.value.trim() || "";
+    const scope = tenantNav.domainID
       ? "?domain_id=" + encodeURIComponent(tenantNav.domainID)
       : "?tenant_id=" + encodeURIComponent(tenantNav.tenantID);
-    const [data, cosData] = await Promise.all([
-      api("/api/v1/admin/users" + q+"&q="+encodeURIComponent($("admin-user-search")?.value.trim()||"")),
+    const [data, cosData, resourceData] = await Promise.all([
+      api("/api/v1/admin/users" + scope + "&q=" + encodeURIComponent(search)),
       api("/api/v1/admin/service-classes").catch(() => ({ service_classes: [] })),
+      api("/api/v1/admin/resources" + scope),
     ]);
     if (!list || request!==adminUserRequest) return;
     const users = data.users || [];
- if($("admin-user-search-status"))$("admin-user-search-status").textContent="Найдено: "+users.length;
+    const term = search.toLocaleLowerCase();
+    const resources = (resourceData.resources || []).filter(resource =>
+      (resource.display_name+" "+resource.email).toLocaleLowerCase().includes(term));
+    function accountIcon(icon, label) {
+      const safeLabel=escapeHtml(label);
+      return `<span class="ico" role="img" aria-label="${safeLabel}" title="${safeLabel}">${designIcon(icon)}</span>`;
+    }
+ if($("admin-user-search-status"))$("admin-user-search-status").textContent="Найдено: "+(users.length+resources.length);
     const classes = cosData.service_classes || [];
     const cosOptions = (selected) => [
       `<option value="">${escapeHtml(t("cos_none"))}</option>`,
@@ -1371,7 +1349,7 @@ async function refreshAdminUsers() {
         `<option value="${escapeHtml(sc.id)}" ${sc.id === selected ? "selected" : ""}>${escapeHtml(sc.name || sc.id)}</option>`
       ),
     ].join("");
-    list.innerHTML = users.map((u) => `<tr><td>${escapeHtml(u.display_name||"—")}</td><td>${escapeHtml(u.email)}</td><td><span class="badge">${t(u.enabled?"users_active":"users_disabled")}</span><div class="meta">${escapeHtml((u.is_global_admin||u.roles?.includes("global_admin"))?mailImageText("Глобальный администратор","Global administrator"):u.roles?.includes("tenant_admin")?mailImageText("Администратор организации","Organization administrator"):u.roles?.includes("domain_admin")?mailImageText("Администратор домена","Domain administrator"):mailImageText("Пользователь","User"))}</div></td><td>${fmtBytes(u.used_bytes)} / ${u.quota_bytes>0?fmtBytes(u.quota_bytes):"∞"}</td><td>          <label class="mig-policy-label" title="${escapeHtml(t("cos_lede"))}">
+    list.innerHTML = users.map((u) => `<tr data-account-id="${escapeHtml(u.id)}"><td><span class="account-kind">${u.auth_source==="bot"?accountIcon("bot",mailImageText("Бот","Bot")):""}${escapeHtml(u.display_name||"—")}</span></td><td>${escapeHtml(u.email)}</td><td><span class="badge ${u.enabled?"":"account-disabled"}">${t(u.enabled?"users_active":"users_disabled")}</span><div class="meta">${escapeHtml((u.is_global_admin||u.roles?.includes("global_admin"))?mailImageText("Глобальный администратор","Global administrator"):u.roles?.includes("tenant_admin")?mailImageText("Администратор организации","Organization administrator"):u.roles?.includes("domain_admin")?mailImageText("Администратор домена","Domain administrator"):mailImageText("Пользователь","User"))}</div></td><td>${fmtBytes(u.used_bytes)} / ${u.quota_bytes>0?fmtBytes(u.quota_bytes):"∞"}</td><td>          <label class="mig-policy-label" title="${escapeHtml(t("cos_lede"))}">
             <span>${escapeHtml(t("cos_assign"))}</span>
             <select class="field-input" data-user-cos="${escapeHtml(u.id)}" style="max-width:9rem">
               ${cosOptions(u.service_class_id || "")}
@@ -1387,7 +1365,27 @@ async function refreshAdminUsers() {
           </label>
 </td><td><div class="user-action-icons">
  ${[['quota','download',t('users_quota_action')],['toggle','disconnect',t(u.enabled?'users_disable':'users_enable')],['pass','key',t('users_reset_pw')],...(state.me?.is_global_admin?[['user-role','shield',mailImageText('Роль и права пользователя','User role and permissions')]]:[]),['mailbox-aliases','reply',mailImageText('Алиасы ящика','Mailbox aliases')],['mail-access','reply',mailImageText('Доступ к ящику','Mailbox access')],...((u.id!==state.me?.id&&!u.is_global_admin)?[['delete-user','delete',mailImageText('Удалить пользователя','Delete user')]]:[])].map(([action,icon,label])=>`<button type="button" class="btn-secondary user-action-icon" data-${action}="${escapeHtml(u.id)}" data-enabled="${u.enabled?'1':'0'}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${designIcon(icon)}</button>`).join('')}
- </div></td></tr>`).join("") || `<tr><td colspan="7" class="meta">${t("users_empty")}</td></tr>`;
+ </div></td></tr>`).join("");
+    list.insertAdjacentHTML("beforeend",resources.map(resource=>`
+      <tr data-account-id="resource-${escapeHtml(resource.id)}">
+        <td><span class="account-kind">${accountIcon(resource.kind==="room"?"calendar":"files",mailImageText("Ресурс календаря","Calendar resource"))}${escapeHtml(resource.display_name || resource.local_part)}</span></td>
+        <td>${escapeHtml(resource.email)}</td>
+        <td><span class="badge">${escapeHtml(t("resources_kind_"+resource.kind))}</span></td><td>—</td><td></td><td></td>
+        <td><div class="user-action-icons"><button type="button" class="btn-secondary" data-res-del="${escapeHtml(resource.id)}" aria-label="${escapeHtml(t("resources_delete"))}">${designIcon("delete")}</button></div></td>
+      </tr>`).join(""));
+    if (!list.children.length) list.innerHTML = `<tr><td colspan="7" class="meta">${t("users_empty")}</td></tr>`;
+    const sorted = Array.from(list.rows).filter(row=>row.dataset.accountId);
+    sorted.sort((a,b)=>a.cells[0].textContent.localeCompare(b.cells[0].textContent,lang));
+    list.append(...sorted);
+    list.querySelectorAll("[data-res-del]").forEach(button => {
+      button.onclick = async () => {
+        if (!await askConfirm(t("resources_delete")+"?", {danger:true})) return;
+        try {
+          await api("/api/v1/admin/resources/" + encodeURIComponent(button.dataset.resDel), {method:"DELETE"});
+          await refreshAdminUsers();
+        } catch (err) { setMsg($("admin-msg"), err.message, "err"); }
+      };
+    });
     list.querySelectorAll('[data-mailbox-aliases]').forEach(button=>button.onclick=()=>openAdminAliases('mailbox',users.find(u=>u.id===button.dataset.mailboxAliases)));
     list.querySelectorAll('[data-delete-user]').forEach(button=>button.onclick=async()=>{const user=users.find(u=>u.id===button.dataset.deleteUser);if(!await askConfirm(mailImageText('Удалить пользователя и его данные: ','Delete user and their data: ')+user.email+'?',{danger:true}))return;button.disabled=true;try{await api('/api/v1/admin/users/'+encodeURIComponent(user.id),{method:'DELETE'});await refreshAdminUsers()}catch(err){setMsg($('admin-msg'),err.message,'err');button.disabled=false}});
     list.querySelectorAll("[data-mail-access]").forEach(button=>button.onclick=()=>openMailboxAccess(button.dataset.mailAccess));list.querySelectorAll("[data-user-role]").forEach(button=>button.onclick=()=>openUserRole(users.find(u=>u.id===button.dataset.userRole)));

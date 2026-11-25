@@ -25,3 +25,5 @@ tayga-mail menu -config /etc/tayga/tayga.yaml
 См. также: [setup.md](./setup.md), [ha.md](./ha.md), [migration.md](./migration.md) (пользовательский IMAP/DAV импорт).
 
 [Подготовка, отчёт сверки и переключение](storage-migration.md). Логический backup/restore не заменяет полный перенос.
+
+Для первой установки подготовьте PostgreSQL по [инструкции](setup.md) и передайте мастеру DSN. Мастер создаёт новый закрытый YAML. Для управления уже запущенным сервером используйте его существующий конфиг.

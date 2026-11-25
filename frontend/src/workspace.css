@@ -6143,3 +6143,53 @@ html[data-color-mode=dark] #app-filters .btn-spray{color:#fff;background:#466439
  .chat-workspace-tabs .chat-workspace-tab { flex-direction:column; gap:4px; width:100%; min-width:0; min-height:54px; padding:7px 2px; font-size:11px; }
  .chat-workspace-tab svg { width:17px; height:17px; }
 }
+
+/* Administrative controls and semantic statuses need contrast on every surface. */
+html[data-color-mode=dark] {
+  --tayga-control-line:#6c8273;
+  --tayga-success-fg:#c0ebc8;
+  --tayga-success-bg:#2d4e3c;
+  --tayga-error-fg:#ffd1cb;
+  --tayga-error-bg:#593634;
+  --tayga-warning-fg:#f9dea0;
+  --tayga-warning-bg:#554523;
+}
+html[data-color-mode=dark] :is(.btn-secondary,.btn-ico,.btn-icon,.agents-actions button,.agents-main button:not(.agents-primary)) {
+  color:var(--work-text);
+  border-color:var(--tayga-control-line);
+}
+html[data-color-mode=dark] :is(.btn-secondary,.btn-ico,.btn-icon):enabled:hover {
+  background:var(--work-selected);
+}
+html[data-color-mode=dark] :is(.badge:not(.warn),.chip:not(.warn),.mail-log-event[data-tone=success]) {
+  color:var(--tayga-success-fg);
+  background:var(--tayga-success-bg);
+}
+html[data-color-mode=dark] :is(.badge.warn,.chip.warn,.mail-log-event[data-tone=warning],.mail-log-event[data-tone=pending]) {
+  color:var(--tayga-warning-fg);
+  background:var(--tayga-warning-bg);
+}
+html[data-color-mode=dark] :is(.mail-log-event[data-tone=error],.agents-error:not(:empty),.msg.err) {
+  color:var(--tayga-error-fg);
+  background:var(--tayga-error-bg);
+}
+html[data-color-mode=dark] .badge.account-disabled {background:var(--work-raised);color:var(--work-text);}
+html[data-color-mode=dark] :is(button,input,select,textarea):focus-visible {
+  outline:2px solid #b8d99f;
+  outline-offset:2px;
+}
+.account-kind {display:inline-flex;align-items:center;gap:.4rem;}
+.account-kind .ico svg {width:17px;height:17px;}
+.admin-operation-content {overflow-x:auto;}
+.admin-operation-content .data-toolbar {display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.admin-operation-content .data-toolbar input {flex:1 1 220px;}
+.admin-operation-content .data-toolbar select {width:auto;}
+.admin-operation-content .admin-users-table {min-width:740px;}
+.admin-operation-content .admin-users-table td {overflow-wrap:anywhere;}
+@media(min-width:901px) {
+  .tms-agents>.agents-sidebar {width:var(--agents-sidebar-width,240px);border-right:0;}
+  .agents-divider {position:relative;width:10px;flex:none;cursor:col-resize;touch-action:none;background:var(--work-raised);}
+  .agents-divider::after {content:"";position:absolute;inset:0 auto 0 4px;width:1px;background:var(--work-line);}
+  .agents-divider:is(:hover,:focus-visible)::after {width:2px;background:var(--work-accent);}
+}
+@media(max-width:900px) {.agents-divider {display:none;}}

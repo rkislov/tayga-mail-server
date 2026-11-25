@@ -7,7 +7,7 @@
   <link rel="manifest" href="/manifest.webmanifest" />
   <meta name="theme-color" content="#375d2c" />
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=1.0.5" />
-  <link rel="stylesheet" href="/assets/app.css?v=1.0.5" />
+  <link rel="stylesheet" href="/assets/app.css?v=1.3.0-admin" />
   <link rel="stylesheet" href="/assets/ckeditor5/ckeditor5.css" />
 </head>
 <body>
@@ -871,17 +871,40 @@ keep;</textarea>
           <div class="chart-card"><h4 class="chart-title">Защита от спама и рассылок</h4><p class="meta">Решения антиспама с запуска сервера, по получателям. Рассылки определяются по заголовку List-Unsubscribe.</p><div id="protection-stats" class="chart-host"></div><button type="button" class="btn-secondary" data-app="antispam" id="monitor-open-antispam">Открыть антиспам</button></div>
           <div class="actions">
             <button type="button" class="btn-secondary" id="btn-monitor-refresh" data-i18n="refresh">Обновить</button>
-            <button type="button" class="btn-spray" id="btn-backup">Backup</button>
-            <button type="button" class="btn-secondary" id="btn-backup-mail">Backup + mail</button>
-          </div>
-          <label class="field-label" for="restore-file">Restore</label>
-          <input class="field-input" id="restore-file" type="file" accept=".gz,application/gzip" />
-          <div class="actions">
-            <button type="button" class="btn-secondary" id="btn-restore">Restore</button>
           </div>
           <p id="monitor-msg" class="msg"></p>
         </div>
       </div>
+
+      <section id="app-backups" class="app-page hidden panel-page panel-page-wide">
+        <div class="card">
+          <h3 class="heading" data-i18n="nav_backups">Резервные копии</h3>
+          <p class="meta">Экспорт данных организации. Для восстановления всей установки используйте резервную копию PostgreSQL и файлов сервера.</p>
+          <div class="actions">
+            <button type="button" class="btn-secondary" id="btn-backup">Скачать настройки и учётные записи</button>
+            <button type="button" class="btn-spray" id="btn-backup-mail">Скачать вместе с письмами</button>
+          </div>
+          <h4 class="heading heading-gap">Восстановление из архива</h4>
+          <label class="field-label" for="restore-file">Архив .tar.gz</label>
+          <input class="field-input" id="restore-file" type="file" accept=".gz,application/gzip">
+          <div class="actions"><button type="button" class="btn-secondary" id="btn-restore">Восстановить</button></div>
+          <p id="backup-msg" class="msg" role="status"></p>
+        </div>
+      </section>
+      <section id="app-sessions" class="app-page hidden panel-page panel-page-wide">
+        <div class="card">
+          <div class="pane-head"><h3 class="heading" data-i18n="nav_sessions">Сессии</h3><button id="admin-session-refresh" type="button" class="btn-secondary" data-i18n="refresh">Обновить</button></div>
+          <div id="admin-session-content" class="admin-operation-content"></div>
+          <p id="admin-session-status" class="msg" role="status"></p>
+        </div>
+      </section>
+      <section id="app-devices" class="app-page hidden panel-page panel-page-wide">
+        <div class="card">
+          <div class="pane-head"><h3 class="heading" data-i18n="nav_devices">Устройства</h3><div class="actions"><button id="admin-device-archive" type="button" class="btn-secondary">Показать забытые</button><button id="admin-device-refresh" type="button" class="btn-secondary" data-i18n="refresh">Обновить</button></div></div>
+          <div id="admin-device-content" class="admin-operation-content"></div>
+          <p id="admin-device-status" class="msg" role="status"></p>
+        </div>
+      </section>
 
       <div id="app-antispam" class="app-page hidden panel-page panel-page-wide"><div class="card"><h3 class="heading" data-i18n="nav_antispam">Антиспам</h3><p class="meta">Проверка входящих писем, карантин и правила защиты.</p><div class="actions protection-settings"><button type="button" class="btn-secondary" data-protection-config="spam">Rspamd / DNSBL</button><button type="button" class="btn-secondary" data-protection-config="scan">Антивирус</button><button type="button" class="btn-secondary" data-protection-config="spf">SPF</button><button type="button" class="btn-secondary" data-protection-config="dkim_verify">DKIM</button><button type="button" class="btn-secondary" data-protection-config="dmarc">DMARC</button><button type="button" class="btn-secondary" data-protection-config="greylist">Серый список</button></div>          <h3 class="heading heading-gap">Карантин и спам</h3>
           <div class="filter-bar">
@@ -972,7 +995,7 @@ keep;</textarea>
               <label class="field-check"><input type="checkbox" id="nr-auto" checked /> <span data-i18n="resources_auto">Автопринятие</span></label>
               <div class="actions"><button type="submit" class="btn-spray" data-i18n="resources_add">Добавить ресурс</button></div>
             </form></details>
-            <ul class="creds" id="admin-resource-list"></ul>
+
           </div>
 
           <p id="admin-msg" class="msg"></p>
@@ -1179,6 +1202,6 @@ keep;</textarea>
             </div>
             <p id="branding-msg" class="msg" role="status"></p>
           </form></template>
-  <script src="/assets/app.js?v=1.0.5"></script>
+  <script src="/assets/app.js?v=1.3.0-admin"></script>
 </body>
 </html>

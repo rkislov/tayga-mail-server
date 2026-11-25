@@ -4,7 +4,43 @@
   const paths={spark:'M12 3l2.2 6.8L21 12l-6.8 2.2L12 21l-2.2-6.8L3 12l6.8-2.2L12 3z',catalog:'M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15 M16 16l5 5',history:'M4 5h16v12H8l-4 4V5z',skills:'M12 3l-8 4 8 4 8-4-8-4z M4 12l8 4 8-4 M4 17l8 4 8-4',settings:'M5 4v16 M12 4v16 M19 4v16 M2 8h6 M9 15h6 M16 10h6',close:'M6 6l12 12 M18 6L6 18',plus:'M12 5v14 M5 12h14',arrow:'M5 12h14 M13 6l6 6-6 6',shield:'M12 3l8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3z M8 12l3 3 5-6'};
   function icon(name){const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('fill','none');svg.setAttribute('stroke','currentColor');svg.setAttribute('stroke-width','1.6');svg.setAttribute('stroke-linecap','round');svg.setAttribute('stroke-linejoin','round');svg.setAttribute('aria-hidden','true');const path=document.createElementNS(svg.namespaceURI,'path');path.setAttribute('d',paths[name]||paths.spark);svg.append(path);return svg;}
   const section=document.createElement('section');section.id='app-agents';section.className='app-page hidden';
-  section.innerHTML=`<div class="tms-agents"><aside class="agents-sidebar"><div class="agents-brand"><span class="agents-brand-icon"></span><div><strong>Агенты</strong><span>Помощники для работы</span></div></div><nav class="agents-navigation" aria-label="Разделы агентов"><button type="button" data-view="catalog">Все агенты</button><button type="button" data-view="history">Мои диалоги</button><button type="button" data-view="skills">Навыки</button><button type="button" data-view="settings">Настройки</button></nav><div class="agents-side-history"></div><div class="agents-account"><span class="agents-account-icon"></span><div><small>Рабочее пространство</small><p class="agents-scope"></p></div></div></aside><div class="agents-workspace"><div class="agents-error" role="alert"></div><main class="agents-main"></main></div></div>`;
+  section.innerHTML=`<div class="tms-agents"><aside id="agents-sidebar" class="agents-sidebar"><div class="agents-brand"><span class="agents-brand-icon"></span><div><strong>Агенты</strong><span>Помощники для работы</span></div></div><nav class="agents-navigation" aria-label="Разделы агентов"><button type="button" data-view="catalog">Все агенты</button><button type="button" data-view="history">Мои диалоги</button><button type="button" data-view="skills">Навыки</button><button type="button" data-view="settings">Настройки</button></nav><div class="agents-side-history"></div><div class="agents-account"><span class="agents-account-icon"></span><div><small>Рабочее пространство</small><p class="agents-scope"></p></div></div></aside><div class="agents-divider" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Ширина панели диалогов" aria-controls="agents-sidebar"></div><div class="agents-workspace"><div class="agents-error" role="alert"></div><main class="agents-main"></main></div></div>`;
+  const layout=section.querySelector('.tms-agents');
+  const divider=section.querySelector('.agents-divider');
+  const leftPanel=section.querySelector('.agents-sidebar');
+  const widthPreference='tayga.agentsSidebarWidth';
+  let preferredWidth=Number(localStorage.getItem(widthPreference))||240;
+  function resizePanels(remember=false) {
+    if(!layout.clientWidth)return;
+    const minimum=180;
+    const maximum=Math.max(minimum,Math.min(560,layout.clientWidth-340));
+    const width=Math.round(Math.max(minimum,Math.min(maximum,preferredWidth)));
+    layout.style.setProperty('--agents-sidebar-width',width+'px');
+    divider.setAttribute('aria-valuemin',minimum);
+    divider.setAttribute('aria-valuemax',maximum);
+    divider.setAttribute('aria-valuenow',width);
+    if(remember){preferredWidth=width;localStorage.setItem(widthPreference,String(width));}
+  }
+  divider.addEventListener('pointerdown',event=>{
+    if(event.button!==0)return;
+    event.preventDefault();
+    divider.focus();
+    divider.setPointerCapture(event.pointerId);
+  });
+  divider.addEventListener('pointermove',event=>{
+    if(!divider.hasPointerCapture(event.pointerId))return;
+    preferredWidth=event.clientX-layout.getBoundingClientRect().left;
+    resizePanels(true);
+  });
+  divider.addEventListener('keydown',event=>{
+    const current=leftPanel.getBoundingClientRect().width;
+    const widths={ArrowLeft:current-16,ArrowRight:current+16,Home:180,End:560};
+    if(!(event.key in widths))return;
+    event.preventDefault();
+    preferredWidth=widths[event.key];
+    resizePanels(true);
+  });
+  if(typeof ResizeObserver!=='undefined')new ResizeObserver(()=>resizePanels()).observe(layout);
   section.querySelector('.agents-brand-icon').append(icon('spark'));section.querySelector('.agents-account-icon').append(icon('shield'));
   section.querySelectorAll('[data-view]').forEach(b=>b.prepend(icon(b.dataset.view)));
 
@@ -34,7 +70,7 @@
     for(const agent of boot.catalog.agents){
       const heading=node('div',undefined,'agents-history-heading');heading.append(node('span',agent.name),action('+',()=>run(()=>newChat(agent.id))));heading.lastChild.setAttribute('aria-label','Новый диалог: '+agent.name);heading.lastChild.title='Новый диалог';sidebar.append(heading);
       for(const chat of history.filter(c=>c.agent_id===agent.id).sort((a,b)=>b.updated_at-a.updated_at)){
-        const b=action(chat.title,()=>run(()=>openChat(chat.id)),'agents-history-link');b.classList.toggle('is-selected',active===chat.id);sidebar.append(b);
+        const b=action(chat.title,()=>run(()=>openChat(chat.id)),'agents-history-link');b.classList.toggle('is-selected',active===chat.id);b.title=chat.title;sidebar.append(b);
       }
     }
   }
@@ -80,6 +116,7 @@
   async function newChat(id){const check=guard();const chat=await request('/conversations',{method:'POST',body:JSON.stringify({agent_id:id})});check();history.push(chat);await openChat(chat.id);}
   async function openChat(id){clearInterval(pollTimer);
     const version=++revision;const chat=await request('/conversations/'+encodeURIComponent(id));if(version!==revision)return;
+    const historyEntry=history.find(entry=>entry.id===id);if(historyEntry)historyEntry.title=chat.title;
     active=id;view='chat';main.replaceChildren();main.classList.add('is-conversation');renderSidebar();
     const agent=boot.catalog.agents.find(a=>a.id===chat.agent_id);const header=title(agent?.name||'Агент','Личный диалог');
     header.append(action('Новый диалог',()=>run(()=>newChat(chat.agent_id))),action('Убрать из списка',()=>run(async()=>{if(!window.confirm('Убрать диалог из списка? История ветки останется в Mattermost.'))return;await request('/conversations/'+encodeURIComponent(id),{method:'DELETE'});history=history.filter(c=>c.id!==id);await show('catalog');})));
@@ -93,9 +130,21 @@
     form.onsubmit=event=>{event.preventDefault();if(sending||!input.value.trim())return;const content=input.value;run(async()=>{
       sending=true;send.disabled=true;input.disabled=true;status.textContent='Агент готовит ответ…';const check=guard();
       try{const updated=await request('/conversations/'+encodeURIComponent(id)+'/messages',{method:'POST',body:JSON.stringify({content})});check();const i=history.findIndex(c=>c.id===id);if(i>=0)history[i]=updated;if(active===id&&version===revision){chat.messages=updated.messages;chat.actions=updated.actions;drawActions();input.value='';draw();renderSidebar();}}
+      catch(err){
+        if(active===id&&version===revision){
+          const latest=await request('/conversations/'+encodeURIComponent(id)).catch(()=>null);
+          if(latest&&active===id&&version===revision){
+            chat.messages=latest.messages;
+            if(historyEntry)historyEntry.title=latest.title;
+            draw();
+            renderSidebar();
+          }
+        }
+        throw err;
+      }
       finally{check();sending=false;send.disabled=false;input.disabled=false;status.textContent='';}
     });};
-    pollTimer=setInterval(async()=>{if(sending||section.classList.contains('hidden')||active!==id||version!==revision)return;try{const updated=await request('/conversations/'+encodeURIComponent(id));if(active!==id||version!==revision)return;if(JSON.stringify(chat.messages)!==JSON.stringify(updated.messages)){chat.messages=updated.messages;draw();}chat.actions=updated.actions;drawActions();}catch{ /* Keep the draft when temporarily offline. */ }},4000);
+    pollTimer=setInterval(async()=>{if(sending||section.classList.contains('hidden')||active!==id||version!==revision)return;try{const updated=await request('/conversations/'+encodeURIComponent(id));if(active!==id||version!==revision)return;if(historyEntry&&historyEntry.title!==updated.title){historyEntry.title=updated.title;renderSidebar();}if(JSON.stringify(chat.messages)!==JSON.stringify(updated.messages)){chat.messages=updated.messages;draw();}chat.actions=updated.actions;drawActions();}catch{ /* Keep the draft when temporarily offline. */ }},4000);
     input.onkeydown=event=>{if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();form.requestSubmit();}};
   }
   function modal(titleText){

@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/netip"
@@ -332,6 +333,9 @@ func (s *API) agentsHTTP(w http.ResponseWriter, r *http.Request, u *storage.User
 		if r.Method == http.MethodGet {
 			out := []agentConversation{}
 			for _, c := range h.Conversations {
+				if c.Title == newAgentConversationTitle && c.RootID != "" {
+					_ = s.refreshAgentConversation(r.Context(), u, &c)
+				}
 				c.Messages = nil
 				c.Pending = ""
 				c.PendingAt = 0
@@ -369,7 +373,7 @@ func (s *API) agentsHTTP(w http.ResponseWriter, r *http.Request, u *storage.User
 			fail(w, 409, "tms.agents.history_full", "Удалите один из 100 диалогов перед созданием нового")
 			return
 		}
-		conversation := agentConversation{ID: agentID(), AgentID: req.AgentID, Title: "Новый диалог", Updated: time.Now().UnixMilli(), Messages: []agentMessage{}}
+		conversation := agentConversation{ID: agentID(), AgentID: req.AgentID, Title: newAgentConversationTitle, Updated: time.Now().UnixMilli(), Messages: []agentMessage{}}
 		if err := s.linkAgentConversation(r.Context(), u, &conversation); err != nil {
 			s.failure(w, err)
 			return
@@ -585,6 +589,12 @@ func (s *API) agentTurn(w http.ResponseWriter, r *http.Request, u *storage.User,
 			}
 			v.Pending = ""
 			v.PendingAt = 0
+			if v.Title == newAgentConversationTitle {
+				v.Title = conv.Title
+				if v.Title == newAgentConversationTitle {
+					v.Title = agentConversationTitle(req.Content)
+				}
+			}
 			// A revoked login cannot commit a model response after logout.
 			_, authErr := s.authenticate(ctx, bearer(r))
 			if authErr != nil {
@@ -609,9 +619,6 @@ func (s *API) agentTurn(w http.ResponseWriter, r *http.Request, u *storage.User,
 					v.Actions = append(v.Actions, actions...)
 					v.Messages = append(v.Messages, agentMessage{Role: "user", Content: req.Content}, agentMessage{Role: "assistant", Content: answer})
 					v.Updated = time.Now().UnixMilli()
-					if len(v.Messages) == 2 {
-						v.Title = string([]rune(req.Content)[:min(60, len([]rune(req.Content)))])
-					}
 				}
 			}
 			if err = s.agentSave(ctx, key, current); err != nil {
@@ -620,7 +627,12 @@ func (s *API) agentTurn(w http.ResponseWriter, r *http.Request, u *storage.User,
 			}
 			if providerErr != nil {
 				s.agentAudit(u, "turn_failed", id)
-				fail(w, 502, "tms.agents.provider_error", "Модель не ответила. Проверьте подключение и настройки провайдера")
+				var rejection agentProviderError
+				message := "Модель не ответила. Проверьте подключение и настройки провайдера"
+				if errors.As(providerErr, &rejection) {
+					message = rejection.message()
+				}
+				fail(w, 502, "tms.agents.provider_error", message)
 				return
 			}
 			s.agentAudit(u, "turn_completed", id)
@@ -733,7 +745,13 @@ func agentModelReply(ctx context.Context, p agentProvider, messages []agentMessa
 	}
 	defer res.Body.Close()
 	if res.StatusCode != 200 {
-		return agentMessage{}, errors.New("provider rejected request")
+		var response struct {
+			Error struct {
+				Code string `json:"code"`
+			} `json:"error"`
+		}
+		_ = json.NewDecoder(io.LimitReader(res.Body, 16<<10)).Decode(&response)
+		return agentMessage{}, agentProviderError{status: res.StatusCode, code: response.Error.Code}
 	}
 	data, err := io.ReadAll(io.LimitReader(res.Body, (2<<20)+1))
 	if err != nil || len(data) > 2<<20 {
@@ -762,4 +780,45 @@ func agentModelReply(ctx context.Context, p agentProvider, messages []agentMessa
 		return agentMessage{}, errors.New("invalid model response")
 	}
 	return reply, nil
+}
+
+const newAgentConversationTitle = "Новый диалог"
+
+func agentConversationTitle(firstQuestion string) string {
+	title := []rune(strings.Join(strings.Fields(firstQuestion), " "))
+	if len(title) > 60 {
+		return strings.TrimSpace(string(title[:59])) + "…"
+	}
+	return string(title)
+}
+
+// Keep provider payloads out of both logs and the user-facing error.
+type agentProviderError struct {
+	status int
+	code   string
+}
+
+func (e agentProviderError) Error() string {
+	return fmt.Sprintf("model provider returned HTTP %d", e.status)
+}
+
+func (e agentProviderError) message() string {
+	switch {
+	case e.code == "unsupported_country_region_territory":
+		return "Провайдер отклонил запрос по региону исходящего подключения (HTTP 403)."
+	case e.status == http.StatusUnauthorized:
+		return "Провайдер не принял API-ключ (HTTP 401). Проверьте ключ в настройках подключения."
+	case e.status == http.StatusPaymentRequired:
+		return "Провайдер требует оплату (HTTP 402). Проверьте баланс аккаунта."
+	case e.status == http.StatusForbidden:
+		return "Провайдер запретил запрос (HTTP 403). Проверьте права ключа на модель."
+	case e.status == http.StatusNotFound:
+		return "Провайдер не нашёл модель или endpoint (HTTP 404). Проверьте идентификатор и URL."
+	case e.code == "credit_balance_exhausted" || e.code == "insufficient_quota":
+		return "На API-аккаунте провайдера исчерпан баланс или квота. Проверьте оплату и лимиты."
+	case e.status == http.StatusTooManyRequests:
+		return "Провайдер ограничил запросы (HTTP 429). Проверьте квоту или повторите позже."
+	default:
+		return fmt.Sprintf("Провайдер отклонил запрос (HTTP %d). Проверьте настройки модели.", e.status)
+	}
 }

@@ -42,13 +42,14 @@ test "$(stat -c %a /var/lib/tayga)" = 750
 systemd-analyze verify /usr/lib/systemd/system/tayga.service
 logrotate --debug /etc/logrotate.d/tayga-mail
 # Configure an isolated instance with high ports, no seeded account or outbound mail.
+: "${TAYGA_PACKAGE_DATABASE_DSN:?Provide an isolated PostgreSQL database for this test}"
 cat > /tmp/tayga-package-test.yaml <<'YAML'
 server:
   hostname: localhost
 storage:
-  driver: sqlite
-  sqlite:
-    path: /var/lib/tayga/data/package-test.db
+  driver: postgres
+  postgres:
+    dsn: ""
 mailstore:
   root: /var/lib/tayga/maildir
 seed:
@@ -83,6 +84,9 @@ log:
   format: json
   file: /var/log/tayga/tayga.log
 YAML
+# The matrix supplies a disposable fixture DSN with no production secrets.
+test "$(grep -cx '  driver: postgres' /etc/tayga/tayga.yaml)" = 1
+sed -i "s|^    dsn: \"\"$|    dsn: \"$TAYGA_PACKAGE_DATABASE_DSN\"|" /tmp/tayga-package-test.yaml
 if [ -d /run/systemd/system ]; then
   if systemctl is-active --quiet tayga.service; then echo 'Fresh install unexpectedly started service';exit 1;fi
   cp /tmp/tayga-package-test.yaml /etc/tayga/tayga.yaml
@@ -150,13 +154,14 @@ if [ -d /run/systemd/system ]; then
   systemctl stop tayga.service
   dpkg -i "$package"
   if systemctl is-active --quiet tayga.service;then echo 'Stopped service unexpectedly started';exit 1;fi
+  trap - EXIT
 fi
 case "$family" in
  deb) dpkg --remove tayga-mail ;;
  alt|rpm) rpm -e tayga-mail ;;
 esac
 test -f /var/lib/tayga/maildir/package-test-marker
-test -f /var/lib/tayga/data/package-test.db
+test -d /var/lib/tayga/data
 test -f /var/log/tayga/tayga.log.1
 getent passwd tayga >/dev/null
 if [ "$family" = deb ]; then dpkg --purge tayga-mail; fi

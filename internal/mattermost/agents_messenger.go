@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/tayga/tms/internal/chat"
@@ -140,6 +141,9 @@ func (s *API) refreshAgentConversation(ctx context.Context, u *storage.User, c *
 		} else if p.UserID != u.ID {
 			return chat.ErrForbidden
 		}
+		if role == "user" && c.Title == newAgentConversationTitle && strings.TrimSpace(p.Message) != "" {
+			c.Title = agentConversationTitle(p.Message)
+		}
 		c.Messages = append(c.Messages, agentMessage{Role: role, Content: p.Message})
 		c.Updated = p.CreatedAt
 	}
@@ -222,7 +226,7 @@ func (s *API) nativeAgentPost(w http.ResponseWriter, r *http.Request, u *storage
 		}
 	}
 	if err == nil && selected == "" && rootID == "" && len(h.Conversations) < 100 {
-		c := agentConversation{ID: agentID(), AgentID: definitionID, Title: "Новый диалог", Updated: time.Now().UnixMilli(), Messages: []agentMessage{}}
+		c := agentConversation{ID: agentID(), AgentID: definitionID, Title: newAgentConversationTitle, Updated: time.Now().UnixMilli(), Messages: []agentMessage{}}
 		err = s.linkAgentConversation(ctx, u, &c)
 		if err == nil {
 			h.Conversations = append(h.Conversations, c)

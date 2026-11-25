@@ -46,6 +46,7 @@ archives:
       - configs/tayga.example.yaml
       - deploy/systemd/tayga.service
       - deploy/systemd/update-binary.sh
+      - scripts/postgres/bootstrap.sh
       - deploy/packages/*
       - deploy/ha/*
       - docs/*.md
@@ -118,6 +119,10 @@ nfpms:
           mode: 0640
           owner: root
           group: tayga
+      - src: scripts/postgres/bootstrap.sh
+        dst: /usr/lib/tayga-mail/postgres-bootstrap
+        file_info:
+          mode: 0755
       - src: deploy/packages/tayga.service
         dst: /usr/lib/systemd/system/tayga.service
       - src: deploy/packages/logrotate

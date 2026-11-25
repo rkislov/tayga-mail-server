@@ -16,7 +16,7 @@ Tayga Mail Server is an open-source mail and collaboration server. It brings ema
 - **A calm interface without advertising.** Light panels, soft green accents, artwork by Alisa Kislova, appearance settings and a sidebar that collapses to icons. The interface supports Russian and English.
 - **Familiar email clients.** Standard SMTP, IMAP, POP3 and DAV protocols, with FlowSync for supported ActiveSync and EWS workflows.
 - **Multiple organizations in one installation.** Central management of organizations, domains, users, quotas and administrative roles.
-- **Open code and straightforward deployment.** Written in Go, with the web interface embedded in the executable. Choose SQLite or PostgreSQL and connect additional services as needed.
+- **Open code and straightforward deployment.** Written in Go, with the web interface embedded in the executable. New installations use PostgreSQL. Connect additional services as needed.
 
 ## Features
 
@@ -93,7 +93,7 @@ Available integrations depend on configuration. Mattermost API and plugin suppor
 ## Installation
 
 1. Download the archive for your platform and its checksums from [GitHub Releases](https://github.com/rkislov/tayga-mail-server/releases/tag/v1.3.0).
-2. Prepare your domain, DNS, TLS and data directories using the [setup guide](docs/setup.md).
+2. Prepare PostgreSQL, your domain, DNS, TLS and data directories using the [setup guide](docs/setup.md).
 3. Create a configuration from the [example](configs/tayga.example.yaml), set your own initial administrator credentials and start the service.
 4. Open the web interface. Most mail and integration settings are under **Administration → Server**.
 

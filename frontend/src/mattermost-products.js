@@ -2,7 +2,16 @@
 // Only active products from the current authenticated domain enter the menu.
 (function installMattermostProducts(){
  const workspace=window.tmsChatWorkspace;if(!workspace)return;
- const products=new Map();let catalogToken='';let pending=false;
+ function syncTheme(iframe) {
+  try {
+   if (iframe.contentDocument?.documentElement) {
+    iframe.contentDocument.documentElement.dataset.taygaColor = document.documentElement.dataset.colorMode === 'dark' ? 'dark' : 'light';
+   }
+  } catch { /* A product that navigated off origin cannot inherit the theme. */ }
+ }
+ const products=new Map();
+ new MutationObserver(() => { for (const product of products.values()) syncTheme(product.iframe); })
+  .observe(document.documentElement,{attributes:true,attributeFilter:['data-color-mode']});let catalogToken='';let pending=false;
  function endSession(product){fetch(product.url.replace(/\/(boards|playbooks)$/,'/products/session'),{method:'DELETE',credentials:'same-origin',keepalive:true}).catch(()=>{})}
  function clear(){for(const product of products.values()){endSession(product);workspace.unregister(product.id)}products.clear();catalogToken=''}
  async function refresh(){
@@ -19,7 +28,7 @@
     if(products.has(item.id))continue
     if(!['boards','playbooks'].includes(item.id)||!new RegExp('^/mm/[a-z0-9]{26}/'+item.id+'$').test(item.url))continue;
     const section=document.createElement('section');section.id='app-'+item.id;section.className='app-page chat-product-page hidden';
-    const iframe=document.createElement('iframe');iframe.title=item.title;iframe.className='chat-product-frame';iframe.referrerPolicy='same-origin';section.append(iframe);
+    const iframe=document.createElement('iframe');iframe.title=item.title;iframe.className='chat-product-frame';iframe.referrerPolicy='same-origin';iframe.addEventListener('load',()=>syncTheme(iframe));section.append(iframe);
     workspace.register(item.id,{label:item.id==='boards'?'Доски':'Сценарии',title:item.id==='boards'?'Boards — доски задач':'Playbooks — рабочие сценарии',section});
     products.set(item.id,{...item,section,iframe});
    }

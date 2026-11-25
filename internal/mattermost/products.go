@@ -128,7 +128,11 @@ func (s *API) serveProductHTTP(w http.ResponseWriter, r *http.Request, rt *mmplu
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Write([]byte(`<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Tayga · Boards / Playbooks</title><style>:root{--font-family:Arial,sans-serif;--heading-font:Arial,sans-serif;--body-font:Arial,sans-serif}html,body,#root{height:100%;margin:0}body{font-family:Arial,sans-serif;color:#303342;background:#fff}*{box-sizing:border-box}</style><div id="root">Загрузка…</div><script defer src="` + base + `/static/plugins/playbooks/tms-host.js"></script></html>`))
+		product := "boards"
+		if strings.HasPrefix(path, "playbooks") {
+			product = "playbooks"
+		}
+		w.Write([]byte(`<!doctype html><html lang="ru" data-tayga-product="` + product + `"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Tayga · Boards / Playbooks</title><link rel="stylesheet" href="/assets/tayga-products.css"><style>:root{--font-family:Arial,sans-serif;--heading-font:Arial,sans-serif;--body-font:Arial,sans-serif}html,body,#root{height:100%;margin:0}body{font-family:Arial,sans-serif;color:var(--tayga-product-text);background:var(--tayga-product-panel)}*{box-sizing:border-box}</style><div id="root">Загрузка…</div><script defer src="` + base + `/static/plugins/playbooks/tms-host.js"></script></html>`))
 		return true
 	}
 	return false
