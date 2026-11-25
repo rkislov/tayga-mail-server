@@ -31,7 +31,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: rkislov/tms-playbooks
-          ref: 967bdf1d132582a49ca1d840fb29fe5a1709394d
+          ref: 1c3325351bff980c4e7ccda07cbf72c98781f4eb
           path: .product-fixture/playbooks
       - uses: actions/setup-go@v5
         with:
