@@ -19,17 +19,19 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/lib/pq"
 	"github.com/tayga/tms/internal/maintenance"
 )
 
 type TransferTable struct {
-	Source   string `json:"source"`
-	Target   string `json:"target"`
-	Rows     int64  `json:"rows"`
-	Digest   string `json:"sha256_multiset"`
-	Verified bool   `json:"verified"`
+	NormalizedSearchFields int64  `json:"normalized_search_fields,omitempty"`
+	Source                 string `json:"source"`
+	Target                 string `json:"target"`
+	Rows                   int64  `json:"rows"`
+	Digest                 string `json:"sha256_multiset"`
+	Verified               bool   `json:"verified"`
 }
 type TransferReport struct {
 	Version  int             `json:"version"`
@@ -54,7 +56,7 @@ type transferTrigger struct{ table, name, enabled string }
 // does NOT need superuser privileges. All data and temporary constraint/trigger
 // changes are committed together, only after complete content verification.
 func TransferSQLiteToPostgres(ctx context.Context, path string, target *Store, progress func(TransferTable)) (report TransferReport, err error) {
-	report = TransferReport{Version: 1, Tables: []TransferTable{}, Derived: []string{"mail_log_fts is rebuilt from mail_log by PostgreSQL queries", "message_search.tsv is regenerated with the PostgreSQL simple dictionary", "SQL timestamps are normalized to UTC at PostgreSQL microsecond precision; raw calendar/JSON/MIME data remains unchanged"}, Excluded: []string{}}
+	report = TransferReport{Version: 1, Tables: []TransferTable{}, Derived: []string{"mail_log_fts is rebuilt from mail_log by PostgreSQL queries", "message_search.tsv is regenerated with the PostgreSQL simple dictionary; invalid UTF-8 and NUL are normalized only in derived search text and counted per table", "SQL timestamps are normalized to UTC at PostgreSQL microsecond precision; raw calendar/JSON/MIME data remains unchanged"}, Excluded: []string{}}
 	if target == nil || target.dialect != DialectPostgres {
 		return report, errors.New("target must be PostgreSQL")
 	}
@@ -346,7 +348,11 @@ func copyTransferTable(ctx context.Context, source, target *sql.Tx, plan transfe
 	defer statement.Close()
 	var sourceHash transferDigest
 	for rows.Next() {
-		values, err := scanTransferRow(rows, plan.columns)
+		var corrections *int64
+		if plan.source == "message_fts" {
+			corrections = &record.NormalizedSearchFields
+		}
+		values, err := scanTransferRow(rows, plan.columns, corrections)
 		if err != nil {
 			return record, err
 		}
@@ -391,7 +397,7 @@ func copyTransferTable(ctx context.Context, source, target *sql.Tx, plan transfe
 	record.Verified = true
 	return record, nil
 }
-func scanTransferRow(rows *sql.Rows, columns []transferColumn) ([]any, error) {
+func scanTransferRow(rows *sql.Rows, columns []transferColumn, searchCorrections ...*int64) ([]any, error) {
 	values := make([]any, len(columns))
 	pointers := make([]any, len(columns))
 	for i := range values {
@@ -401,6 +407,23 @@ func scanTransferRow(rows *sql.Rows, columns []transferColumn) ([]any, error) {
 		return nil, err
 	}
 	for i, c := range columns {
+		if len(searchCorrections) > 0 && searchCorrections[0] != nil && (c.name == "subject" || c.name == "from_addr" || c.name == "to_addr" || c.name == "body") {
+			var text string
+			var ok bool
+			switch v := values[i].(type) {
+			case string:
+				text, ok = v, true
+			case []byte:
+				text, ok = string(v), true
+			}
+			if ok {
+				clean := normalizeSearchText(text)
+				if clean != text {
+					(*searchCorrections[0])++
+				}
+				values[i] = clean
+			}
+		}
 		value, err := normalizeTransferValue(values[i], c.kind)
 		if err != nil {
 			return nil, fmt.Errorf("invalid value in column %s (contents suppressed)", c.name)
@@ -455,8 +478,8 @@ func normalizeTransferValue(value any, kind string) (any, error) {
 		data, err := json.Marshal(raw)
 		return string(data), err
 	}
-	if text, ok := value.(string); ok && strings.ContainsRune(text, 0) {
-		return nil, errors.New("PostgreSQL text cannot contain NUL")
+	if text, ok := value.(string); ok && (strings.ContainsRune(text, 0) || !utf8.ValidString(text)) {
+		return nil, errors.New("PostgreSQL text requires valid UTF-8 without NUL")
 	}
 	return value, nil
 }

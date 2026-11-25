@@ -21,8 +21,15 @@ type SearchHit struct {
 	Rank        float64
 }
 
+// normalizeSearchText sanitizes only derived search documents; original MIME and
+// message metadata are never rewritten by indexing.
+func normalizeSearchText(text string) string {
+	return strings.ToValidUTF8(strings.ReplaceAll(text, "\x00", " "), "\uFFFD")
+}
+
 // UpsertMessageSearch indexes or refreshes FTS document for a message.
 func (s *Store) UpsertMessageSearch(ctx context.Context, messageID, subject, fromAddr, toAddr, body string) error {
+	subject, fromAddr, toAddr, body = normalizeSearchText(subject), normalizeSearchText(fromAddr), normalizeSearchText(toAddr), normalizeSearchText(body)
 	if s.dialect == DialectPostgres {
 		q := `INSERT INTO message_search(message_id, subject, from_addr, to_addr, body, tsv)
 			VALUES ($1, $2, $3, $4, $5, to_tsvector('simple', coalesce($2,'') || ' ' || coalesce($3,'') || ' ' || coalesce($4,'') || ' ' || coalesce($5,'')))

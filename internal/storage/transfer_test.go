@@ -45,6 +45,10 @@ func TestFullSQLitePostgresTransfer(t *testing.T) {
 	if err = source.UpsertMessageSearch(ctx, message.ID, message.Subject, message.FromAddr, message.ToAddr, "unique-search-needle"); err != nil {
 		t.Fatal(err)
 	}
+	// Historical SQLite FTS could retain malformed MIME charset bytes and NUL.
+	if _, err = source.DB().ExecContext(ctx, `UPDATE message_fts SET body=? WHERE message_id=?`, "unique-search-needle \xd0\xee\x00 remains", message.ID); err != nil {
+		t.Fatal(err)
+	}
 	if err = source.PutSetting(ctx, "mattermost.agents.history:private", `{"messages":["PRIVATE_CONTENT_SENTINEL"]}`); err != nil {
 		t.Fatal(err)
 	}
@@ -80,6 +84,20 @@ func TestFullSQLitePostgresTransfer(t *testing.T) {
 	}
 	if !report.Verified || len(report.Tables) < 80 {
 		t.Fatalf("incomplete coverage: %d tables", len(report.Tables))
+	}
+	var corrected int64
+	for _, table := range report.Tables {
+		corrected += table.NormalizedSearchFields
+	}
+	if corrected != 1 {
+		t.Fatalf("search corrections: %d", corrected)
+	}
+	var indexed string
+	if err = target.DB().QueryRowContext(ctx, `SELECT body FROM message_search WHERE message_id=$1`, message.ID).Scan(&indexed); err != nil || indexed != normalizeSearchText("unique-search-needle \xd0\xee\x00 remains") {
+		t.Fatal("derived index encoding", err)
+	}
+	if err = target.UpsertMessageSearch(ctx, message.ID, message.Subject, message.FromAddr, message.ToAddr, "unique-search-needle \xff\x00 fresh"); err != nil {
+		t.Fatal("live search indexing", err)
 	}
 	after, err := os.ReadFile(path)
 	if err != nil {
@@ -133,6 +151,9 @@ func TestTransferNormalizationAndFingerprint(t *testing.T) {
 	}
 	if _, err = normalizeTransferValue("unsafe\x00text", "text"); err == nil {
 		t.Fatal("NUL text silently changed")
+	}
+	if _, err = normalizeTransferValue("bad\xff", "text"); err == nil {
+		t.Fatal("invalid original UTF-8 silently changed")
 	}
 	var first, second transferDigest
 	first.add([]any{"abc", int64(2), nil})
