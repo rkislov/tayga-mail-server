@@ -67,3 +67,18 @@ test('empty catalog gives the administrator a direct model setup action',async t
  const connect=[...w.document.querySelectorAll('.agents-empty button')].find(b=>b.textContent==='Подключить модель');assert.ok(connect);connect.click();await settle();assert.ok(w.document.querySelector('dialog').open);
  assert.equal(w.document.querySelector('dialog input[type="password"]').value,'');
 });
+
+test('Ollama and OpenAI presets select native connection fields without carrying another key',async t=>{
+ for(const kind of ['ollama','openai']){
+  const {w,requests}=fixture(t,true);w.showApp('agents');await settle();w.document.querySelector('[data-view="settings"]').click();await settle();
+  [...w.document.querySelectorAll('button')].find(b=>b.textContent==='+ Подключить модель').click();await settle();
+  const dialog=w.document.querySelector('dialog'),labels=[...dialog.querySelectorAll('label')],field=text=>labels.find(el=>el.firstChild.textContent===text).querySelector('input,select');
+  const key=dialog.querySelector('input[type="password"]');key.value='must-not-follow-provider-switch';const select=field('Провайдер');select.value=kind;select.dispatchEvent(new w.Event('change'));
+  assert.equal(key.value,'');assert.equal(key.required,kind==='openai');
+  assert.equal(field('Базовый URL API').value,kind==='ollama'?'http://127.0.0.1:11434':'https://api.openai.com/v1');
+  if(kind==='ollama'){assert.equal(field('Идентификатор модели').value,'');field('Идентификатор модели').value='fixture-local:latest';}
+  else{assert.equal(field('Идентификатор модели').value,'gpt-6.2-sol');assert.equal(field('Базовый URL API').readOnly,true);key.value='openai-fixture-key';}
+  dialog.querySelector('form').dispatchEvent(new w.Event('submit',{cancelable:true}));await settle();
+  const put=requests.find(r=>r.url.endsWith('/config')&&r.options.method==='PUT');assert.ok(put);const provider=JSON.parse(put.options.body).providers[0];assert.equal(provider.kind,kind);assert.equal(provider.thinking,false);assert.equal(provider.api_key,kind==='ollama'?'':'openai-fixture-key');
+ }
+});
