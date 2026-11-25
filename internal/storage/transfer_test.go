@@ -52,7 +52,7 @@ func TestFullSQLitePostgresTransfer(t *testing.T) {
 	if _, err = source.DB().ExecContext(ctx, `INSERT INTO message_fts(message_id,subject,from_addr,to_addr,body) SELECT message_id,subject,from_addr,to_addr,body FROM message_fts WHERE message_id=?`, message.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = source.DB().ExecContext(ctx, `UPDATE messages SET subject=?,from_addr=?,to_addr=? WHERE id=?`, "old\xff subject", "from\xd0\xee", "to\x00recipient", message.ID); err != nil {
+	if _, err = source.DB().ExecContext(ctx, `UPDATE messages SET subject=?,from_addr=?,to_addr=?,internal_date=? WHERE id=?`, "old\xff subject", "from\xd0\xee", "to\x00recipient", "2020-02-27 14:04:40 +0500 +0500", message.ID); err != nil {
 		t.Fatal(err)
 	}
 	if err = source.PutSetting(ctx, "mattermost.agents.history:private", `{"messages":["PRIVATE_CONTENT_SENTINEL"]}`); err != nil {
@@ -76,6 +76,14 @@ func TestFullSQLitePostgresTransfer(t *testing.T) {
 	target := targetDriver.(*Store)
 	if _, err = TransferSQLiteToPostgres(ctx, path, target, nil); err == nil {
 		t.Fatal("accepted a running source")
+	}
+	preflight, err := CheckSQLitePostgresTransfer(ctx, path, target, nil)
+	if err != nil || !preflight.Verified || !preflight.CheckOnly {
+		t.Fatal("live source preflight", err)
+	}
+	var untouched int
+	if err = target.DB().QueryRowContext(ctx, `SELECT count(*) FROM users`).Scan(&untouched); err != nil || untouched != 0 {
+		t.Fatal("preflight copied application data", err)
 	}
 	if err = source.Close(); err != nil {
 		t.Fatal(err)
@@ -133,6 +141,10 @@ func TestFullSQLitePostgresTransfer(t *testing.T) {
 	copied, err := target.GetUserByID(ctx, user.ID)
 	if err != nil || copied.Email != user.Email {
 		t.Fatal("user/identity lost")
+	}
+	migratedMessage, err := target.GetMessageByID(ctx, message.ID)
+	if err != nil || !migratedMessage.InternalDate.Equal(time.Date(2020, 2, 27, 9, 4, 40, 0, time.UTC)) {
+		t.Fatal("legacy numeric timezone lost", err)
 	}
 	token, err := target.GetOAuthTokenByAccess(ctx, "fixture-access")
 	if err != nil || token.UserID != user.ID {
