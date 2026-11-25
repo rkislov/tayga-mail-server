@@ -482,6 +482,37 @@ const mmChat = (() => {
     try { const channel = await request('/channels',{method:'POST',body:JSON.stringify({team_id:team.id,name:'channel-' + crypto.randomUUID(),display_name:el('create-name').value.trim(),type:el('create-type').value})}); el('create-dialog').close(); await syncChannels(); await open(channel.id); }
     catch (error) { setMsg(el('create-error'),errorText(error),'err'); } finally { button.disabled = false; }
   };
+  el('reminders')?.addEventListener('click', async () => {
+    const dialog = el('reminders-dialog'), status = el('reminders-status'), toggle = el('reminders-toggle');
+    if (dialog.open) return;
+    const check = guard();
+    let enabled = false;
+    function display(info) {
+      enabled = info.enabled;
+      toggle.hidden = !info.available && !enabled;
+      toggle.textContent = enabled ? 'Выключить' : 'Включить';
+      setMsg(status, info.available ? (enabled ? 'Личные напоминания включены.' : 'Личные напоминания выключены.') : 'Администратор домена выключил эту функцию.');
+    }
+    toggle.hidden = true;
+    setMsg(status, 'Загрузка…');
+    dialog.showModal();
+    const onLogout = new AbortController();
+    window.addEventListener('tms-products-session-ended', () => dialog.close(), {signal:onLogout.signal});
+    dialog.addEventListener('close', () => { onLogout.abort(); toggle.onclick = null; }, {once:true});
+    try {
+      const info = await request('/tms/calendar-reminders');
+      check(); if (!dialog.open) return;
+      display(info);
+      toggle.onclick = async () => {
+        toggle.disabled = true;
+        try {
+          const result = await request('/tms/calendar-reminders', {method:'PUT', body:JSON.stringify({enabled:!enabled})});
+          check(); if (dialog.open) display(result);
+        } catch(error) { if (dialog.open && current()) setMsg(status,errorText(error),'err'); }
+        finally { toggle.disabled = false; }
+      };
+    } catch(error) { if (dialog.open && current()) setMsg(status,errorText(error),'err'); }
+  });
   window.addEventListener('focus',() => { if (current() && me) { void syncChannels().then(() => selected ? loadHistory(true) : null).catch(report); } });
   document.addEventListener('visibilitychange',() => { if (!document.hidden && current() && me) { void syncChannels().then(() => selected ? loadHistory(true) : null).catch(report); } });
   return {start,stop,refresh,openPeer};

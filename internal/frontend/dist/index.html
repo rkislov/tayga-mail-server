@@ -7,7 +7,7 @@
   <link rel="manifest" href="/manifest.webmanifest" />
   <meta name="theme-color" content="#375d2c" />
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=1.0.5" />
-  <link rel="stylesheet" href="/assets/app.css?v=1.3.0-agent-access" />
+  <link rel="stylesheet" href="/assets/app.css?v=1.3.0-domain-plugin-settings" />
   <link rel="stylesheet" href="/assets/ckeditor5/ckeditor5.css" />
 </head>
 <body>
@@ -637,7 +637,7 @@
         <aside class="mail-list panel-pane mail-list-pane chat-roster-pane">
           <div class="pane-head"><strong>Чаты</strong><button type="button" id="mm-chat-refresh" class="btn-secondary btn-sm">Обновить</button></div>
           <div class="mm-chat-identity"><strong id="mm-chat-self"></strong><span id="mm-chat-connection" class="meta" role="status"></span></div>
-          <div class="actions mm-chat-actions"><button type="button" id="mm-chat-new" class="btn-spray btn-sm">Новый диалог</button><button type="button" id="mm-chat-create" class="btn-secondary btn-sm">Создать канал</button><button type="button" id="mm-chat-browse" class="btn-secondary btn-sm">Открытые каналы</button></div>
+          <div class="actions mm-chat-actions"><button type="button" id="mm-chat-new" class="btn-spray btn-sm">Новый диалог</button><button type="button" id="mm-chat-create" class="btn-secondary btn-sm">Создать канал</button><button type="button" id="mm-chat-browse" class="btn-secondary btn-sm">Открытые каналы</button><button type="button" id="mm-chat-reminders" class="btn-secondary btn-sm">Напоминания</button></div>
           <label class="sr-only" for="mm-chat-filter">Поиск каналов и диалогов</label><input id="mm-chat-filter" class="field-input" placeholder="Найти канал или диалог…" type="search">
           <nav id="mm-chat-channels" aria-label="Каналы и личные сообщения"></nav>
           <p id="mm-chat-error" class="msg" role="status"></p>
@@ -654,6 +654,12 @@
         </section>
       </div>
       <dialog id="mm-chat-people" class="mm-chat-dialog"><form method="dialog" class="pane-head"><h3 id="mm-chat-people-title" class="heading">Новый диалог</h3><button class="btn-secondary">Закрыть</button></form><label class="field-label" for="mm-chat-search">Имя, почта или логин</label><input id="mm-chat-search" class="field-input" type="search" maxlength="256" autocomplete="off"><p id="mm-chat-people-error" class="msg" role="status"></p><div id="mm-chat-people-list"></div></dialog>
+      <dialog id="mm-chat-reminders-dialog" class="mm-chat-dialog">
+        <form method="dialog" class="pane-head"><h3 class="heading">Напоминания календаря</h3><button class="btn-secondary">Закрыть</button></form>
+        <p>Бот «Календарь» пишет вам лично примерно за 15 минут до события.</p>
+        <p id="mm-chat-reminders-status" class="msg" role="status"></p>
+        <button type="button" id="mm-chat-reminders-toggle" class="btn-primary" hidden></button>
+      </dialog>
       <dialog id="mm-chat-create-dialog" class="mm-chat-dialog"><form id="mm-chat-create-form"><h3 class="heading">Создать канал</h3><label class="field-label" for="mm-chat-create-name">Название</label><input id="mm-chat-create-name" class="field-input" required maxlength="64"><label class="field-label" for="mm-chat-create-type">Доступ</label><select id="mm-chat-create-type" class="field-input"><option value="P">Закрытый — по приглашению создателя</option><option value="O">Открытый — доступен для вступления в организации</option></select><p id="mm-chat-create-error" class="msg" role="status"></p><div class="actions"><button type="submit" class="btn-spray">Создать</button><button type="button" id="mm-chat-create-cancel" class="btn-secondary">Отмена</button></div></form></dialog>
 
       <dialog id="mm-chat-browse-dialog" class="mm-chat-dialog">
@@ -1106,6 +1112,7 @@ keep;</textarea>
             <div class="config-fields">
               <label class="field-label" for="mm-enabled">Доступ к Mattermost</label><select id="mm-enabled" class="field-input"><option value="inherit">Наследовать</option><option value="on">Включить</option><option value="off">Выключить</option></select>
               <label class="field-label" for="mm-plugins-enabled">Серверные плагины</label><select id="mm-plugins-enabled" class="field-input"><option value="inherit">Наследовать</option><option value="on">Включить</option><option value="off">Выключить</option></select>
+              <label class="field-label" for="mm-calendar-reminders">Личные напоминания календаря</label><select id="mm-calendar-reminders" class="field-input"><option value="inherit">Наследовать</option><option value="on">Разрешить</option><option value="off">Выключить</option></select>
               <label class="field-check"><input type="checkbox" id="mm-name-inherit" checked> Наследовать название</label>
               <label class="field-label" for="mm-name">Название сервера в приложении</label><input id="mm-name" class="field-input" maxlength="128" disabled>
               <details><summary>Параметры плагинов выбранной области</summary><p class="field-hint">JSON с идентификаторами установленных плагинов, enabled и configuration. Секреты скрыты как ***; неизменённые значения сохраняются. Пустой объект наследует настройки родителя.</p><label class="sr-only" for="mm-plugin-config">Параметры плагинов JSON</label><textarea id="mm-plugin-config" class="field-input" rows="10" spellcheck="false">{}</textarea></details>
@@ -1121,7 +1128,7 @@ keep;</textarea>
             </details>
             <div class="actions"><button type="submit" class="btn-primary" id="mm-save">Сохранить область</button><button type="button" class="btn-secondary" id="mm-reset">Наследовать все настройки</button><button type="button" class="btn-secondary" id="mm-host-settings">Запуск API и хоста плагинов</button></div>
           </form>
-          <section style="margin-top:1.5rem"><h4 class="heading">Пакеты плагинов</h4><p class="field-hint">Пакет устанавливается на сервере. Конфигурация, состояние и данные плагина разделены по тенантам и доменам. Для запуска выберите домен.</p><div id="mm-plugin-list"></div><label class="field-label" for="mm-plugin-upload">Загрузить пакет Mattermost (.tar.gz)</label><input type="file" id="mm-plugin-upload" accept=".gz,.tgz" class="field-input"></section>
+          <section style="margin-top:1.5rem"><h4 class="heading">Пакеты плагинов</h4><p class="field-hint">Пакет устанавливается на сервере. Конфигурация, состояние и данные плагина разделены по тенантам и доменам. Для запуска выберите домен.</p><div id="mm-plugin-list"></div><div id="mm-plugin-installer" hidden><label class="field-label" for="mm-plugin-upload">Загрузить пакет Mattermost (.tar.gz)</label><input type="file" id="mm-plugin-upload" accept=".gz,.tgz" class="field-input"></div></section>
           <p id="mm-msg" class="msg" role="status"></p>
         </div>
       </div>
@@ -1202,6 +1209,6 @@ keep;</textarea>
             </div>
             <p id="branding-msg" class="msg" role="status"></p>
           </form></template>
-  <script src="/assets/app.js?v=1.3.0-agent-access"></script>
+  <script src="/assets/app.js?v=1.3.0-domain-plugin-settings"></script>
 </body>
 </html>

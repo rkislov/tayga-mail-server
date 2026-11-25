@@ -160,6 +160,15 @@ func (r *Runtime) List() (map[string]any, error) {
 	}
 	return map[string]any{"active": active, "inactive": inactive}, nil
 }
+func (r *Runtime) Manifest(id string) (*model.Manifest, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !pluginID.MatchString(id) || r.closed {
+		return nil, ErrInvalid
+	}
+	return r.env.GetManifest(id)
+}
+
 func (r *Runtime) Webapp() []*model.Manifest {
 	result := []*model.Manifest{}
 	for _, b := range r.env.Active() {

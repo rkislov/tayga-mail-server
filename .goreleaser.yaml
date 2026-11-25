@@ -150,6 +150,8 @@ nfpms:
         dst: /usr/share/doc/tayga-mail/mattermost-agents.md
       - src: docs/storage-migration.md
         dst: /usr/share/doc/tayga-mail/storage-migration.md
+      - src: docs/mattermost-plugins.md
+        dst: /usr/share/doc/tayga-mail/mattermost-plugins.md
       - src: docs/mattermost-products.md
         dst: /usr/share/doc/tayga-mail/mattermost-products.md
       - src: scripts/mattermost/provision-product-db.py

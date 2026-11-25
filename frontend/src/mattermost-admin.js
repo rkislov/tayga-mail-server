@@ -19,6 +19,7 @@ async function refreshMattermostAdmin() {
 async function loadMattermostScope() {
   const item = mmAdmin.scopes[Number($('mm-scope').value)]; if (!item) return;
   mmFed.epoch++; mmFedHost()?.replaceChildren(); mmAdmin.selected = {...item.scope}; const epoch = ++mmAdmin.epoch, guard = mmCurrentGuard(epoch, state.me?.id);
+  $('mm-plugin-editor')?.close();
   $('mm-policy-form').inert = true; $('mm-plugin-upload').disabled = true;
   try {
     const value = await api('/api/v1/admin/mattermost' + mmQuery(item.scope), {_guard: guard});
@@ -29,6 +30,8 @@ async function loadMattermostScope() {
 function renderMattermostScope(value) {
   const own = value.overrides || {}, effective = value.effective || {};
   $('mm-enabled').value = mmBool(own.enabled); $('mm-plugins-enabled').value = mmBool(own.plugins_enabled);
+  $('mm-calendar-reminders').value = mmBool(own.calendar_reminders);
+  $('mm-plugin-installer').hidden = !value.global_admin;
   $('mm-name-inherit').checked = own.site_name === undefined;
   $('mm-name').value = own.site_name ?? effective.site_name ?? ''; $('mm-name').disabled = $('mm-name-inherit').checked;
   $('mm-plugin-config').value = JSON.stringify(own.plugins || {}, null, 2);
@@ -51,13 +54,106 @@ function renderMattermostScope(value) {
   const seen = new Set(); const items = manifests.filter(item => { if (seen.has(item.id)) return false; seen.add(item.id); return true; });
   $('mm-plugin-list').innerHTML = items.map(item => {
     const enabled = effective.plugins?.[item.id]?.enabled === true;
-    return `<div class="config-collection-item"><strong>${escapeHtml(item.name || item.id)}</strong><p class="meta">${escapeHtml(item.id)} · ${escapeHtml(item.version || '')}</p><div class="actions"><button type="button" class="btn-secondary" data-mm-plugin="${escapeHtml(item.id)}" data-mm-action="${enabled ? 'disable' : 'enable'}" ${!value.scope?.domain_id || !value.plugin_host_enabled || !effective.plugins_enabled ? 'disabled' : ''}>${enabled ? 'Отключить в домене' : 'Запустить в домене'}</button></div></div>`;
+    const domain = !!value.scope?.domain_id;
+    const available = domain && value.plugin_host_enabled;
+    return `<div class="config-collection-item"><strong>${escapeHtml(item.name || item.id)}</strong>
+      <p class="meta">${escapeHtml(item.id)} · ${escapeHtml(item.version || '')}${domain ? (enabled ? ' · Разрешён' : ' · Выключен') : ''}</p>
+      <div class="actions" ${domain ? '' : 'hidden'}>
+        <button type="button" class="btn-secondary" data-mm-config="${escapeHtml(item.id)}" ${available ? '' : 'disabled'}>Настроить</button>
+        <button type="button" class="btn-secondary" data-mm-plugin="${escapeHtml(item.id)}" data-mm-action="${enabled ? 'disable' : 'enable'}" ${available && effective.enabled && effective.plugins_enabled ? '' : 'disabled'}>${enabled ? 'Отключить в домене' : 'Запустить в домене'}</button>
+      </div></div>`;
   }).join('') || '<p class="meta">Пакеты ещё не установлены. Наличие пакета не подтверждает совместимость всех его функций.</p>';
+  $('mm-plugin-list').querySelectorAll('[data-mm-config]').forEach(button => {
+    button.onclick = () => {
+      const item = items.find(manifest => manifest.id === button.dataset.mmConfig);
+      if (item) editMattermostPlugin(item);
+    };
+  });
   $('mm-plugin-list').querySelectorAll('[data-mm-plugin]').forEach(button => button.addEventListener('click', async () => {
     const scope = {...mmAdmin.selected}, epoch = mmAdmin.epoch, guard = mmCurrentGuard(epoch, state.me?.id); button.disabled = true;
     try { await api('/api/v4/plugins/' + encodeURIComponent(button.dataset.mmPlugin) + '/' + button.dataset.mmAction + mmQuery(scope), {method: 'POST', body: '{}', _guard: guard}); guard(); await loadMattermostScope(); }
     catch (error) { if (mmAdmin.epoch === epoch) { setMsg($('mm-msg'), error.data?.message || error.message, 'err'); button.disabled = false; } }
   }));
+}
+function editMattermostPlugin(manifest) {
+  if (!mmAdmin.selected?.domain_id || $('mm-plugin-editor')?.open) return;
+  const scope = {...mmAdmin.selected}, epoch = mmAdmin.epoch, guard = mmCurrentGuard(epoch, state.me?.id);
+  const own = mmAdmin.value.overrides?.plugins?.[manifest.id]?.configuration || {};
+  const effective = mmAdmin.value.effective?.plugins?.[manifest.id]?.configuration || {};
+  const schema = manifest.settings_schema || {};
+  const fields = [...(schema.settings || []), ...(schema.sections || []).flatMap(section => section?.settings || [])];
+  const dialog = document.createElement('dialog'); dialog.id = 'mm-plugin-editor'; dialog.className = 'mm-chat-dialog';
+  const form = document.createElement('form');
+  const add = (parent, tag, text, className) => {
+    const node = document.createElement(tag); node.textContent = text || '';
+    if (className) node.className = className;
+    parent.append(node); return node;
+  };
+  add(form, 'h3', manifest.name || manifest.id, 'heading');
+  add(form, 'p', $('mm-scope').selectedOptions[0]?.textContent || '', 'meta');
+  if (schema.header) add(form, 'p', schema.header, 'field-hint');
+  const edits = new Map();
+  const supported = new Set(['text', 'longtext', 'number', 'bool', 'dropdown', 'radio', 'username', 'generated']);
+  for (const field of fields) {
+    if (!field?.key || !supported.has(field.type) || field.hosting === 'cloud' || edits.has(field.key)) continue;
+    const key = field.key, current = effective[key] ?? field.default, owned = Object.hasOwn(own, key);
+    const secret = field.secret || field.type === 'generated' || current === '***';
+    const row = add(form, 'div', '', 'config-collection-item');
+    const label = add(row, 'label', field.display_name || key, 'field-label');
+    let input;
+    if (!secret && ['dropdown', 'radio', 'bool'].includes(field.type)) {
+      input = add(label, 'select', '', 'field-input');
+      const options = field.type === 'bool' ? [{display_name:'Да',value:'true'},{display_name:'Нет',value:'false'}] : field.options || [];
+      for (const option of options) if (option) input.add(new Option(option.display_name, option.value));
+      if (current != null && !Array.from(input.options).some(option => option.value === String(current))) {
+        input.add(new Option(String(current), String(current)));
+      }
+    } else {
+      input = add(label, field.type === 'longtext' && !secret ? 'textarea' : 'input', '', 'field-input');
+      if (secret) { input.type = 'password'; input.autocomplete = 'new-password'; }
+      else if (field.type === 'number') { input.type = 'number'; input.step = '1'; }
+      input.placeholder = secret && current ? 'Значение задано' : field.placeholder || '';
+    }
+    if (!secret && current != null) input.value = String(current);
+    const inheritLabel = add(row, 'label', ' Переопределить в этом домене', 'field-check');
+    const override = document.createElement('input'); override.type = 'checkbox'; override.checked = owned;
+    inheritLabel.prepend(override); input.disabled = !owned;
+    override.onchange = () => { input.disabled = !override.checked; };
+    if (field.help_text) add(row, 'p', field.help_text, 'field-hint');
+    edits.set(key, {input, override, secret, type: field.type, owned, previous: input.value});
+  }
+  if (!edits.size) add(form, 'p', 'Пакет не описывает поля настройки. Используйте JSON параметров области по инструкции к плагину.', 'meta');
+  const status = add(form, 'p', '', 'msg'); status.setAttribute('role', 'status');
+  const actions = add(form, 'div', '', 'actions');
+  const cancel = add(actions, 'button', 'Закрыть', 'btn-secondary'); cancel.type = 'button'; cancel.onclick = () => dialog.close();
+  const submit = add(actions, 'button', 'Сохранить настройки', 'btn-primary'); submit.type = 'submit'; submit.hidden = !edits.size;
+  dialog.append(form); document.body.append(dialog); dialog.showModal();
+  const onLogout = new AbortController();
+  window.addEventListener('tms-products-session-ended', () => dialog.close(), {signal:onLogout.signal});
+  dialog.addEventListener('close', () => {onLogout.abort(); dialog.remove();}, {once:true});
+  form.onsubmit = async event => {
+    event.preventDefault();
+    if (submit.disabled || submit.hidden) return;
+    const set = Object.create(null), inherit = [];
+    try {
+      guard();
+      for (const [key, field] of edits) {
+        const {input, override, type, secret, owned, previous} = field;
+        if (!override.checked) { if (owned) inherit.push(key); continue; }
+        if ((secret && !input.value) || (owned && input.value === previous)) continue;
+        if (type === 'number' && (!input.value || !Number.isSafeInteger(Number(input.value)))) throw new Error('Введите целое число');
+        set[key] = type === 'bool' ? input.value === 'true' : type === 'number' ? Number(input.value) : input.value;
+      }
+      if (!Object.keys(set).length && !inherit.length) { dialog.close(); return; }
+      submit.disabled = true;
+      await api('/api/v4/plugins/'+encodeURIComponent(manifest.id)+'/configuration'+mmQuery(scope), {
+        method:'PATCH', body:JSON.stringify({set, inherit}), _guard:guard,
+      });
+      dialog.close(); await loadMattermostScope();
+    } catch (error) {
+      if (dialog.open && mmAdmin.epoch === epoch) setMsg(status, error.data?.message || error.message, 'err');
+    } finally { submit.disabled = false; }
+  };
 }
 $('mm-push-inherit')?.addEventListener('change', () => { $('mm-push-url').disabled = $('mm-push-inherit').checked; });
 $('mm-scope')?.addEventListener('change', loadMattermostScope);
@@ -86,7 +182,7 @@ $('mm-policy-form')?.addEventListener('submit', async event => {
   value.push = {};
   if (!$('mm-push-inherit').checked) value.push.proxy_url = $('mm-push-url').value;
   if ($('mm-push-enabled').value !== 'inherit') value.push.enabled = $('mm-push-enabled').value === 'on';
-  for (const [field, id] of [['enabled','mm-enabled'], ['plugins_enabled','mm-plugins-enabled']]) if ($(id).value !== 'inherit') value[field] = $(id).value === 'on';
+  for (const [field, id] of [['enabled','mm-enabled'], ['plugins_enabled','mm-plugins-enabled'], ['calendar_reminders','mm-calendar-reminders']]) if ($(id).value !== 'inherit') value[field] = $(id).value === 'on';
   if (!$('mm-name-inherit').checked) { value.site_name = $('mm-name').value.trim(); if (!value.site_name) { setMsg($('mm-msg'), 'Укажите название или включите наследование', 'err'); return; } }
   try { value.plugins = JSON.parse($('mm-plugin-config').value || '{}'); if (!value.plugins || Array.isArray(value.plugins) || typeof value.plugins !== 'object') throw new Error(); }
   catch { setMsg($('mm-msg'), 'Параметры плагинов должны быть JSON-объектом', 'err'); return; }
@@ -145,6 +241,7 @@ setupMattermostBots();
 
 function resetMattermostBots(){
  mmAdmin.epoch++;
+ $('mm-plugin-editor')?.close();
  const dialog=$('mm-bot-secret');
  if(dialog){dialog.querySelector('input').value='';dialog.querySelector('[data-bot-id]').textContent='';dialog.close();}
  $('mm-external-bots')?.replaceChildren();

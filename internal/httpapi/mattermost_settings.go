@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/tayga/tms/internal/mmsettings"
 	"github.com/tayga/tms/internal/storage"
 )
@@ -132,5 +133,34 @@ func (s *Server) handleMattermostSettings(w http.ResponseWriter, r *http.Request
 			catalog = value
 		}
 	}
-	writeJSON(w, 200, map[string]any{"catalog": catalog, "scope": scope, "overrides": mmsettings.Redact(overrides), "effective": mmsettings.Redact(effective), "global_admin": s.isGlobalAdminUser(admin), "host_enabled": s.cfgLive().Mattermost.Enabled, "plugin_host_enabled": s.cfgLive().Mattermost.PluginsEnabled})
+	secrets := mattermostPluginSecrets(catalog)
+	writeJSON(w, 200, map[string]any{"catalog": catalog, "scope": scope, "overrides": mmsettings.RedactPluginFields(overrides, secrets), "effective": mmsettings.RedactPluginFields(effective, secrets), "global_admin": s.isGlobalAdminUser(admin), "host_enabled": s.cfgLive().Mattermost.Enabled, "plugin_host_enabled": s.cfgLive().Mattermost.PluginsEnabled})
+}
+
+func mattermostPluginSecrets(catalog map[string]any) map[string]map[string]bool {
+	secrets := map[string]map[string]bool{}
+	for _, state := range []string{"active", "inactive"} {
+		items, _ := catalog[state].([]*model.Manifest)
+		for _, item := range items {
+			if item.SettingsSchema == nil {
+				continue
+			}
+			fields := map[string]bool{}
+			add := func(settings []*model.PluginSetting) {
+				for _, field := range settings {
+					if field != nil && (field.Secret || field.Type == "generated") {
+						fields[strings.ToLower(field.Key)] = true
+					}
+				}
+			}
+			add(item.SettingsSchema.Settings)
+			for _, section := range item.SettingsSchema.Sections {
+				if section != nil {
+					add(section.Settings)
+				}
+			}
+			secrets[item.Id] = fields
+		}
+	}
+	return secrets
 }

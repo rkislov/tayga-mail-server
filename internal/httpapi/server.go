@@ -300,6 +300,7 @@ func (s *Server) Start(ctx context.Context) error {
 		s.mattermostAPI.RepairAttachmentImageDimensions(ctx)
 		s.mattermostAPI.StartPush(ctx)
 		s.mattermostAPI.StartFederation(ctx)
+		s.mattermostAPI.StartCalendarChatReminders(ctx)
 	}
 	go s.runCalendarSubscriptions(ctx)
 	go s.runCalendarDeliveries(ctx)

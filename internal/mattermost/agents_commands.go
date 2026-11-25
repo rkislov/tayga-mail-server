@@ -12,7 +12,7 @@ import (
 
 func (s *API) nativeProductCommands(u *storage.User) []*model.Command {
 	out := []*model.Command{}
-	for _, c := range []struct{ name, description string }{{"agents", "Доступные агенты этого домена"}, {"agent-web", "Веб-поиск агента: on, off, status"}, {"agent-confirm", "Подтвердить конкретный черновик агента"}, {"boards", "Открыть Boards и создать доску"}} {
+	for _, c := range []struct{ name, description string }{{"agents", "Доступные агенты этого домена"}, {"agent-web", "Веб-поиск агента: on, off, status"}, {"agent-confirm", "Подтвердить конкретный черновик агента"}, {"boards", "Открыть Boards и создать доску"}, {"calendar-reminders", "Личные напоминания календаря: on, off, status"}} {
 		out = append(out, &model.Command{Trigger: c.name, AutoComplete: true, AutoCompleteDesc: c.description, TeamId: chat.ID(u.TenantID)})
 	}
 	return out
@@ -23,6 +23,9 @@ func (s *API) nativeProductCommand(w http.ResponseWriter, r *http.Request, u *st
 		return false
 	}
 	switch fields[0] {
+	case "/calendar-reminders":
+		s.calendarReminderCommand(w, r, u, fields[1:])
+		return true
 	case "/agents":
 		if err := s.nativeAgentsReady(r, u); err != nil {
 			s.failure(w, err)

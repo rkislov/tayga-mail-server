@@ -78,6 +78,9 @@ func (s *API) pluginAPI(w http.ResponseWriter, r *http.Request, u *storage.User,
 		fail(w, 503, "tms.plugins.disabled", "The Mattermost plugin host is disabled")
 		return
 	}
+	if s.patchDomainPluginConfiguration(w, r, scope, path) {
+		return
+	}
 	runtime, err := s.pluginRuntimeForScope(r.Context(), scope)
 	if err != nil {
 		fail(w, 503, "tms.plugins.scope_disabled", err.Error())
@@ -255,6 +258,9 @@ func (s *API) commands(w http.ResponseWriter, r *http.Request, u *storage.User, 
 				values := []string{command.Trigger}
 				if command.Trigger == "agent-web" {
 					values = append(values, "agent-web on", "agent-web off", "agent-web status")
+				}
+				if command.Trigger == "calendar-reminders" {
+					values = append(values, "calendar-reminders on", "calendar-reminders off", "calendar-reminders status")
 				}
 				if command.PluginId == "tms.bot" {
 					for _, sub := range []string{"help", "new", "chats", "use", "web on", "web off", "web status"} {

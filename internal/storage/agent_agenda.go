@@ -2,11 +2,13 @@ package storage
 
 import (
 	"context"
+	"strings"
 	"time"
 )
 
 // AgendaCandidate carries only the source fields needed to expand an event.
 type AgendaCandidate struct {
+	ObjectID     string
 	CalendarName string
 	Data         string
 }
@@ -18,7 +20,7 @@ func (s *Store) ListOwnAgendaCandidates(ctx context.Context, userID string, from
 	// Recurrences and detached instances have to be considered even if their
 	// master event lies outside the requested period. Oversized records count
 	// toward the result boundary but their contents are never read into memory.
-	const candidateQuery = `SELECT c.display_name, CASE WHEN o.size <= 131072 THEN o.data ELSE '' END
+	const candidateQuery = `SELECT o.id, c.display_name, CASE WHEN o.size <= 131072 THEN o.data ELSE '' END
 		FROM calendars c JOIN calendar_objects o ON o.calendar_id = c.id
 		WHERE c.user_id = ? AND o.component IN ('', 'VEVENT') AND (
 			o.dtstart IS NULL OR (o.dtstart < ? AND COALESCE(o.dtend, o.dtstart) >= ?)
@@ -33,10 +35,35 @@ func (s *Store) ListOwnAgendaCandidates(ctx context.Context, userID string, from
 	out := make([]AgendaCandidate, 0)
 	for rows.Next() {
 		var event AgendaCandidate
-		if err := rows.Scan(&event.CalendarName, &event.Data); err != nil {
+		if err := rows.Scan(&event.ObjectID, &event.CalendarName, &event.Data); err != nil {
 			return nil, err
 		}
 		out = append(out, event)
 	}
 	return out, rows.Err()
 }
+
+// CalendarChatSubscribers queries only opt-in keys, using the settings primary key.
+func (s *Store) CalendarChatSubscribers(ctx context.Context, after string, limit int) ([]string, error) {
+	const prefix = CalendarChatSubscriptionPrefix
+	rows, err := s.db.QueryContext(ctx, s.rebind(
+		"SELECT key FROM settings WHERE key > ? AND key LIKE ? AND value = 'true' ORDER BY key LIMIT ?"),
+		prefix+after, prefix+"%", limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	users := make([]string, 0)
+	for rows.Next() {
+		var key string
+		if err = rows.Scan(&key); err != nil {
+			return nil, err
+		}
+		if strings.HasPrefix(key, prefix) {
+			users = append(users, strings.TrimPrefix(key, prefix))
+		}
+	}
+	return users, rows.Err()
+}
+
+const CalendarChatSubscriptionPrefix = "mattermost.calendar.reminder.user:"

@@ -256,6 +256,7 @@ type Driver interface {
 	DeleteCalendar(ctx context.Context, userID, name string) error
 	ListCalendarObjects(ctx context.Context, calendarID string) ([]*CalendarObject, error)
 	ListOwnAgendaCandidates(ctx context.Context, userID string, from, to time.Time, limit int) ([]AgendaCandidate, error)
+	CalendarChatSubscribers(ctx context.Context, after string, limit int) ([]string, error)
 	GetCalendarObject(ctx context.Context, calendarID, hrefName string) (*CalendarObject, error)
 	GetCalendarObjectByID(ctx context.Context, id string) (*CalendarObject, error)
 	GetCalendarObjectByUID(ctx context.Context, calendarID, uid string) (*CalendarObject, error)

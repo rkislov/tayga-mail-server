@@ -34,25 +34,27 @@ type Plugin struct {
 	Configuration map[string]any `json:"configuration,omitempty"`
 }
 type Overrides struct {
-	Push           *PushOverrides    `json:"push,omitempty"`
-	Email          *EmailOverrides   `json:"email,omitempty"`
-	Enabled        *bool             `json:"enabled,omitempty"`
-	PluginsEnabled *bool             `json:"plugins_enabled,omitempty"`
-	SiteName       *string           `json:"site_name,omitempty"`
-	Plugins        map[string]Plugin `json:"plugins,omitempty"`
+	CalendarReminders *bool             `json:"calendar_reminders,omitempty"`
+	Push              *PushOverrides    `json:"push,omitempty"`
+	Email             *EmailOverrides   `json:"email,omitempty"`
+	Enabled           *bool             `json:"enabled,omitempty"`
+	PluginsEnabled    *bool             `json:"plugins_enabled,omitempty"`
+	SiteName          *string           `json:"site_name,omitempty"`
+	Plugins           map[string]Plugin `json:"plugins,omitempty"`
 }
 type EffectivePlugin struct {
 	Enabled       bool           `json:"enabled"`
 	Configuration map[string]any `json:"configuration"`
 }
 type Effective struct {
-	Push           PushEffective              `json:"push"`
-	Email          EmailEffective             `json:"email"`
-	Enabled        bool                       `json:"enabled"`
-	PluginsEnabled bool                       `json:"plugins_enabled"`
-	SiteName       string                     `json:"site_name"`
-	Plugins        map[string]EffectivePlugin `json:"plugins"`
-	Sources        map[string]string          `json:"sources"`
+	CalendarReminders bool                       `json:"calendar_reminders"`
+	Push              PushEffective              `json:"push"`
+	Email             EmailEffective             `json:"email"`
+	Enabled           bool                       `json:"enabled"`
+	PluginsEnabled    bool                       `json:"plugins_enabled"`
+	SiteName          string                     `json:"site_name"`
+	Plugins           map[string]EffectivePlugin `json:"plugins"`
+	Sources           map[string]string          `json:"sources"`
 }
 type Defaults struct {
 	Enabled, PluginsEnabled bool
@@ -120,6 +122,10 @@ func (s *Service) Resolve(ctx context.Context, scope Scope) (Effective, error) {
 		override, err := s.Read(ctx, level)
 		if err != nil {
 			return Effective{}, err
+		}
+		if override.CalendarReminders != nil {
+			result.CalendarReminders = *override.CalendarReminders
+			result.Sources["calendar_reminders"] = level.Key()
 		}
 		if override.Enabled != nil {
 			result.Enabled = *override.Enabled
@@ -230,6 +236,58 @@ func (s *Service) SetPluginConfig(ctx context.Context, scope Scope, id string, c
 	value.Plugins[id] = p
 	return s.save(ctx, scope, value)
 }
+
+// PatchPluginConfig updates only the selected plugin in the selected domain.
+func (s *Service) PatchPluginConfig(ctx context.Context, scope Scope, id string, fields map[string]any, inherit []string) error {
+	if scope.DomainID == "" || !validPlugin.MatchString(id) || len(fields)+len(inherit) > 256 {
+		return ErrInvalid
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	value, err := s.Read(ctx, scope)
+	if err != nil {
+		return err
+	}
+	if value.Plugins == nil {
+		value.Plugins = map[string]Plugin{}
+	}
+	p := value.Plugins[id]
+	if p.Configuration == nil {
+		p.Configuration = map[string]any{}
+	}
+	for key, field := range fields {
+		if key == "" || len(key) > 200 {
+			return ErrInvalid
+		}
+		p.Configuration[key] = field
+	}
+	for _, key := range inherit {
+		if _, conflict := fields[key]; conflict || key == "" || len(key) > 200 {
+			return ErrInvalid
+		}
+		delete(p.Configuration, key)
+	}
+	value.Plugins[id] = p
+	return s.save(ctx, scope, value)
+}
+
+// RedactPluginFields includes explicit secret flags from installed manifests.
+func RedactPluginFields(value any, secrets map[string]map[string]bool) any {
+	out := Redact(value)
+	root, _ := out.(map[string]any)
+	plugins, _ := root["plugins"].(map[string]any)
+	for id, names := range secrets {
+		plugin, _ := plugins[id].(map[string]any)
+		config, _ := plugin["configuration"].(map[string]any)
+		for key, value := range config {
+			if names[strings.ToLower(key)] && value != nil && value != "" {
+				config[key] = "***"
+			}
+		}
+	}
+	return out
+}
+
 func preserveMasked(next, old map[string]any) map[string]any {
 	if next == nil {
 		return nil
@@ -237,7 +295,7 @@ func preserveMasked(next, old map[string]any) map[string]any {
 	out := map[string]any{}
 	for k, v := range next {
 		masked, _ := v.(string)
-		if secretKey.MatchString(k) && masked == "***" {
+		if masked == "***" {
 			if previous, ok := old[k]; ok {
 				out[k] = previous
 			}

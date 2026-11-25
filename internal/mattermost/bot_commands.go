@@ -63,7 +63,7 @@ func (s *API) registerBotCommand(w http.ResponseWriter, r *http.Request, u *stor
 	if !decode(w, r, &req) {
 		return
 	}
-	if !req.Mailbox || req.TeamId != chat.ID(u.TenantID) || !botTrigger.MatchString(req.Trigger) || (req.Trigger == "meet" || req.Trigger == "agents" || req.Trigger == "agent-web" || req.Trigger == "agent-confirm" || req.Trigger == "boards") || req.URL != "" || len(req.AutoCompleteDesc) > 256 || len(req.AutoCompleteHint) > 256 {
+	if !req.Mailbox || req.TeamId != chat.ID(u.TenantID) || !botTrigger.MatchString(req.Trigger) || (req.Trigger == "meet" || req.Trigger == "agents" || req.Trigger == "agent-web" || req.Trigger == "agent-confirm" || req.Trigger == "boards" || req.Trigger == "calendar-reminders") || req.URL != "" || len(req.AutoCompleteDesc) > 256 || len(req.AutoCompleteHint) > 256 {
 		s.failure(w, chat.ErrInvalid)
 		return
 	}

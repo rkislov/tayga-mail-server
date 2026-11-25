@@ -268,6 +268,10 @@ func (s *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.revokeSessionHTTP(w, r, u)
 		return
 	}
+	if path == "/tms/calendar-reminders" {
+		s.calendarReminderHTTP(w, r, u)
+		return
+	}
 	if s.pushHTTP(w, r, u, path) {
 		return
 	}
