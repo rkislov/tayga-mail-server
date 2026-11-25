@@ -49,6 +49,9 @@ func TestFullSQLitePostgresTransfer(t *testing.T) {
 	if _, err = source.DB().ExecContext(ctx, `UPDATE message_fts SET body=? WHERE message_id=?`, "unique-search-needle \xd0\xee\x00 remains", message.ID); err != nil {
 		t.Fatal(err)
 	}
+	if _, err = source.DB().ExecContext(ctx, `INSERT INTO message_fts(message_id,subject,from_addr,to_addr,body) SELECT message_id,subject,from_addr,to_addr,body FROM message_fts WHERE message_id=?`, message.ID); err != nil {
+		t.Fatal(err)
+	}
 	if _, err = source.DB().ExecContext(ctx, `UPDATE messages SET subject=?,from_addr=?,to_addr=? WHERE id=?`, "old\xff subject", "from\xd0\xee", "to\x00recipient", message.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -87,6 +90,13 @@ func TestFullSQLitePostgresTransfer(t *testing.T) {
 	}
 	if !report.Verified || len(report.Tables) < 80 {
 		t.Fatalf("incomplete coverage: %d tables", len(report.Tables))
+	}
+	var duplicates int64
+	for _, table := range report.Tables {
+		duplicates += table.SkippedDuplicateSearchRows
+	}
+	if duplicates != 1 {
+		t.Fatalf("duplicate search rows: %d", duplicates)
 	}
 	var corrected int64
 	for _, table := range report.Tables {

@@ -26,13 +26,14 @@ import (
 )
 
 type TransferTable struct {
-	PreservedHeaderFields  int64  `json:"preserved_header_fields,omitempty"`
-	NormalizedSearchFields int64  `json:"normalized_search_fields,omitempty"`
-	Source                 string `json:"source"`
-	Target                 string `json:"target"`
-	Rows                   int64  `json:"rows"`
-	Digest                 string `json:"sha256_multiset"`
-	Verified               bool   `json:"verified"`
+	SkippedDuplicateSearchRows int64  `json:"skipped_duplicate_search_rows,omitempty"`
+	PreservedHeaderFields      int64  `json:"preserved_header_fields,omitempty"`
+	NormalizedSearchFields     int64  `json:"normalized_search_fields,omitempty"`
+	Source                     string `json:"source"`
+	Target                     string `json:"target"`
+	Rows                       int64  `json:"rows"`
+	Digest                     string `json:"sha256_multiset"`
+	Verified                   bool   `json:"verified"`
 }
 type TransferReport struct {
 	Version  int             `json:"version"`
@@ -57,7 +58,7 @@ type transferTrigger struct{ table, name, enabled string }
 // does NOT need superuser privileges. All data and temporary constraint/trigger
 // changes are committed together, only after complete content verification.
 func TransferSQLiteToPostgres(ctx context.Context, path string, target *Store, progress func(TransferTable)) (report TransferReport, err error) {
-	report = TransferReport{Version: 1, Tables: []TransferTable{}, Derived: []string{"mail_log_fts is rebuilt from mail_log by PostgreSQL queries", "message_search.tsv is regenerated with the PostgreSQL simple dictionary; invalid UTF-8 and NUL are normalized only in derived search text and counted per table", "Malformed subject/from_addr/to_addr display metadata is normalized only with exact original bytes verified in message_header_bytes; counts are reported per table", "SQL timestamps are normalized to UTC at PostgreSQL microsecond precision; raw calendar/JSON/MIME data remains unchanged"}, Excluded: []string{}}
+	report = TransferReport{Version: 1, Tables: []TransferTable{}, Derived: []string{"mail_log_fts is rebuilt from mail_log by PostgreSQL queries", "message_search.tsv is regenerated with the PostgreSQL simple dictionary; duplicate SQLite search documents use their latest rowid and skipped duplicates are counted; orphan document references still fail; invalid UTF-8 and NUL are normalized only in derived search text and counted per table", "Malformed subject/from_addr/to_addr display metadata is normalized only with exact original bytes verified in message_header_bytes; counts are reported per table", "SQL timestamps are normalized to UTC at PostgreSQL microsecond precision; raw calendar/JSON/MIME data remains unchanged"}, Excluded: []string{}}
 	if target == nil || target.dialect != DialectPostgres {
 		return report, errors.New("target must be PostgreSQL")
 	}
@@ -337,7 +338,11 @@ func copyTransferTable(ctx context.Context, source, target *sql.Tx, plan transfe
 		quoted = append(quoted, pq.QuoteIdentifier(c.name))
 	}
 	selectColumns := strings.Join(quoted, ",")
-	rows, err := source.QueryContext(ctx, "SELECT "+selectColumns+" FROM "+pq.QuoteIdentifier(plan.source))
+	sourceQuery := "SELECT " + selectColumns + " FROM " + pq.QuoteIdentifier(plan.source)
+	if plan.source == "message_fts" {
+		sourceQuery += " WHERE rowid IN (SELECT max(rowid) FROM message_fts GROUP BY message_id)"
+	}
+	rows, err := source.QueryContext(ctx, sourceQuery)
 	if err != nil {
 		return record, err
 	}
@@ -374,6 +379,13 @@ func copyTransferTable(ctx context.Context, source, target *sql.Tx, plan transfe
 		return record, err
 	}
 	rows.Close()
+	if plan.source == "message_fts" {
+		var total int64
+		if err = source.QueryRowContext(ctx, `SELECT count(*) FROM message_fts`).Scan(&total); err != nil {
+			return record, err
+		}
+		record.SkippedDuplicateSearchRows = total - record.Rows
+	}
 	if _, err = statement.ExecContext(ctx); err != nil {
 		return record, errors.New("COPY completion failed (contents suppressed)")
 	}

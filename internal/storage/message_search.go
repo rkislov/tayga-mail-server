@@ -42,13 +42,18 @@ func (s *Store) UpsertMessageSearch(ctx context.Context, messageID, subject, fro
 		_, err := s.db.ExecContext(ctx, q, messageID, subject, fromAddr, toAddr, body)
 		return err
 	}
-	if _, err := s.db.ExecContext(ctx, `DELETE FROM message_fts WHERE message_id = ?`, messageID); err != nil {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
 		return err
 	}
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO message_fts(message_id, subject, from_addr, to_addr, body) VALUES (?, ?, ?, ?, ?)`,
-		messageID, subject, fromAddr, toAddr, body)
-	return err
+	defer tx.Rollback()
+	if _, err = tx.ExecContext(ctx, `DELETE FROM message_fts WHERE message_id = ?`, messageID); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO message_fts(message_id,subject,from_addr,to_addr,body) VALUES(?,?,?,?,?)`, messageID, subject, fromAddr, toAddr, body); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // DeleteMessageSearch removes FTS rows for a message.
