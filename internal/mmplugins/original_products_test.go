@@ -303,7 +303,7 @@ func TestOriginalProductBundles(t *testing.T) {
 				if shortcut.Code != 200 || !strings.Contains(shortcut.Body.String(), "Доска из письма") {
 					t.Fatal("create private board from a source", shortcut.Code, shortcut.Body.String())
 				}
-				list := call("GET", "/teams/"+team+"/templates", "", uid)
+				list := call("GET", "/teams/0/templates", "", uid)
 				var templates []struct {
 					ID    string `json:"id"`
 					Title string `json:"title"`

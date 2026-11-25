@@ -7714,12 +7714,67 @@ const mmChat = (() => {
       }
       if(post.file_ids?.length){const files=document.createElement('div');files.className='mm-post-files';article.append(files);void renderFiles(post,files,epoch)}
       const time = document.createElement('time'); time.dateTime = new Date(post.create_at).toISOString(); time.textContent = new Date(post.create_at).toLocaleString(lang === 'en' ? 'en-GB' : 'ru-RU'); article.append(time);
-      const answer = document.createElement('button'); answer.type = 'button'; answer.className = 'btn-secondary btn-sm mm-chat-answer'; iconButton(answer,'reply','Ответить'); answer.onclick = () => { reply = post.root_id || post.id; el('reply-label').textContent = 'Ответ: ' + post.message.slice(0,120); el('reply').classList.remove('hidden'); el('body').focus(); }; article.append(answer);
+      const actions=document.createElement('div');actions.className='mm-message-actions';
+      const discuss=()=>beginDiscussion(post);
+      const answer=document.createElement('button');answer.type='button';answer.className='btn-secondary btn-sm mm-chat-answer';iconButton(answer,'reply',lang==='en'?'Reply':'Ответить');answer.onclick=discuss;
+      const more=window.tmsProductActions?.chatActions({title:post.message||'',discuss});
+      actions.append(answer);if(more)actions.append(more);article.append(actions);
       box.append(article);
     }
     if (!ordered.length) { const hint = document.createElement('p'); hint.className = 'meta'; hint.textContent = 'Сообщений пока нет'; box.append(hint); }
     if (keepScroll) box.scrollTop = previousTop + box.scrollHeight - previousHeight;
     else if (nearBottom || previousHeight <= box.clientHeight) box.scrollTop = box.scrollHeight;
+  }
+  function beginDiscussion(post) {
+    reply=post.root_id||post.id;
+    el('reply-label').textContent=(lang==='en'?'Reply: ':'Ответ: ')+(post.message||'').slice(0,120);
+    el('reply').classList.remove('hidden');el('body').focus();
+  }
+  async function discussMail(subject) {
+    const english=lang==='en';
+    const text=(ru,en)=>english?en:ru;
+    if(!await ensure()){
+      showApp('chat');
+      setMsg(el('error'),text('Чат сейчас недоступен','Chat is currently unavailable'),'err');
+      return;
+    }
+    const check=guard();
+    const dialog=document.createElement('dialog');dialog.className='mm-chat-dialog product-create-dialog';
+    const form=document.createElement('form');
+    const heading=document.createElement('h2');heading.className='heading';heading.textContent=text('Начать обсуждение в чате','Start a chat discussion');
+    const label=document.createElement('label');label.className='field-label';label.textContent=text('Диалог или канал','Conversation or channel');
+    const select=document.createElement('select');select.className='field-input';select.required=true;
+    for(const channel of channels)select.add(new Option(channelName(channel),channel.id));
+    select.value=channels.some(channel=>channel.id===selected)?selected:select.options[0]?.value||'';
+    label.append(select);
+    const controls=document.createElement('div');controls.className='actions';
+    const cancel=document.createElement('button');cancel.type='button';cancel.className='btn-secondary';cancel.textContent=text('Отмена','Cancel');cancel.onclick=()=>dialog.close();
+    const submit=document.createElement('button');submit.type='submit';submit.className='btn-spray';submit.textContent=text('Открыть черновик','Open draft');submit.disabled=!select.value;
+    const direct=document.createElement('button');direct.type='button';direct.className='btn-secondary';direct.textContent=text('Новый личный чат','New direct message');
+    const draft=subject.trim()?text('Обсудим письмо «','Let’s discuss the email “')+subject.trim().slice(0,240)+text('».','”.'):'';
+    const putDraft=()=>{
+      check();
+      if(reply){
+        reply='';el('reply').classList.add('hidden');
+      }
+      setMobilePane('read');
+      if(draft)el('body').value=[el('body').value.trimEnd(),draft].filter(Boolean).join('\n\n');
+      el('body').focus();
+    };
+    direct.onclick=()=>{check();dialog.close();showApp('chat');void people('direct',putDraft);};
+    controls.append(cancel,direct,submit);form.append(heading,label,controls);dialog.append(form);document.body.append(dialog);
+    const controller=new AbortController();
+    dialog.addEventListener('close',()=>{controller.abort();dialog.remove();},{once:true});
+    window.addEventListener('tms-products-session-ended',()=>dialog.close(),{once:true,signal:controller.signal});
+    form.onsubmit=async event=>{
+      event.preventDefault();
+      try {
+        check();const channel=select.value;dialog.close();showApp('chat');
+        if(channel!==selected)await open(channel);
+        check();if(selected===channel)putDraft();
+      } catch(error) {if(current())report(error);}
+    };
+    dialog.showModal();
   }
   async function markViewed() {
     if (!selected || !visible() || viewBusy) return;
@@ -7799,7 +7854,7 @@ const mmChat = (() => {
           button.disabled = true;
           try {
             if (peopleMode === 'member') { await request('/channels/' + peopleChannel + '/members',{method:'POST',body:JSON.stringify({user_id:user.id})}); el('people').close(); }
-            else { const channel = await request('/channels/direct',{method:'POST',body:JSON.stringify([me.id,user.id])}); el('people').close(); await syncChannels(); await open(channel.id); }
+            else { const channel = await request('/channels/direct',{method:'POST',body:JSON.stringify([me.id,user.id])}); const after=peopleAfterOpen;el('people').close(); await syncChannels(); await open(channel.id);if(selected===channel.id)after?.(); }
           } catch (error) { setMsg(el('people-error'),errorText(error),'err'); button.disabled = false; }
         };
         el('people-list').append(button);
@@ -7807,8 +7862,10 @@ const mmChat = (() => {
       if (!list.length) { const hint = document.createElement('p'); hint.className = 'meta'; hint.textContent = 'Пользователи не найдены'; el('people-list').append(hint); }
     } catch (error) { if (revision === searchRevision && current()) setMsg(el('people-error'),errorText(error),'err'); }
   }
-  async function people(mode = 'direct') {
+  let peopleAfterOpen=null;
+  async function people(mode = 'direct',afterOpen=null) {
     if (!await ensure()) return;
+    peopleAfterOpen=afterOpen;
     peopleMode = mode; peopleChannel = selected; el('search').hidden = false; el('people-list').replaceChildren(); el('search').value = ''; setMsg(el('people-error'),'');
     el('people-title').textContent = mode === 'member' ? 'Добавить участника' : 'Новый диалог'; el('people').showModal(); el('search').focus(); await searchPeople();
   }
@@ -7926,7 +7983,7 @@ const mmChat = (() => {
   el('filter').addEventListener('input',renderChannels);
   el('refresh').onclick = refresh; el('new').onclick = () => people(); el('members').onclick = members;
   el('search').oninput = () => { clearTimeout(searchTimer); searchRevision++; searchTimer = setTimeout(searchPeople,200); };
-  el('people').addEventListener('close',() => { searchRevision++; clearTimeout(searchTimer); el('search').hidden = false; });
+  el('people').addEventListener('close',() => { searchRevision++; clearTimeout(searchTimer); peopleAfterOpen=null;el('search').hidden = false; });
   el('send').onsubmit = send;
   el('body').addEventListener('keydown',event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); el('send').requestSubmit(); } });
   el('reply-cancel').onclick = () => { reply = ''; el('reply').classList.add('hidden'); clearAttachments(); };
@@ -7970,7 +8027,7 @@ const mmChat = (() => {
   });
   window.addEventListener('focus',() => { if (current() && me) { void syncChannels().then(() => selected ? loadHistory(true) : null).catch(report); } });
   document.addEventListener('visibilitychange',() => { if (!document.hidden && current() && me) { void syncChannels().then(() => selected ? loadHistory(true) : null).catch(report); } });
-  return {start,stop,refresh,openPeer};
+  return {start,stop,refresh,openPeer,discussMail};
 })();
 const mmProfileSessions = (() => {
   const list = $('mm-sessions-list');
@@ -8361,6 +8418,7 @@ function renderMailActions(message) {
   const more=document.createElement('details');more.className='workspace-reader-more';const trigger=document.createElement('summary');trigger.textContent='⋮';trigger.setAttribute('aria-label',mailImageText('Другие действия','More actions'));const menu=document.createElement('div');
   for(const action of ['reply-all','spam','trip']){const item=bar.querySelector('[data-mail-action="'+action+'"]');if(item){const label=document.createElement('span');label.textContent=item.getAttribute('aria-label');item.classList.remove('action-icon');item.append(label);menu.append(item)}}
   more.append(trigger,menu);bar.append(more);footer.append(bar);reader.prepend(footer);
+  window.tmsProductActions?.appendActions(menu,{title:message.subject||'',discuss:()=>mmChat.discussMail(message.subject||'')});
 }
 
 function renderMailQuickFilters() {
@@ -12042,6 +12100,17 @@ window.tmsChatWorkspace = (() => {
   const nav=document.createElement('nav');nav.className='chat-workspace-tabs';nav.setAttribute('role','tablist');nav.setAttribute('aria-label','Разделы чатов');header.append(heading,nav);
   const panels=document.createElement('div');panels.className='chat-workspace-panels';shell.append(header,panels);chat.before(shell);
   const paths={chat:'M4 4h16v12H9l-5 5V4z',boards:'M4 4h16v16H4z M9 4v16 M15 4v16 M4 9h5 M9 14h6 M15 11h5',playbooks:'M8 4h12v16H8 M4 7h1 M4 12h1 M4 17h1 M11 8h6 M11 12h6 M11 16h4',agents:'M12 3l2.2 6.8L21 12l-6.8 2.2L12 21l-2.2-6.8L3 12l6.8-2.2L12 3z'};
+  const englishLabels={chat:'Conversations',boards:'Boards',playbooks:'Playbooks',agents:'Agents'};
+  function localize(){
+    const english=document.documentElement.lang==='en';
+    title.textContent=english?'Chats':'Чаты';subtitle.textContent=english?'Messaging and collaboration':'Общение и совместная работа';
+    nav.setAttribute('aria-label',english?'Chat sections':'Разделы чатов');
+    for(const [id,{button,label,description}] of entries){
+      button.lastElementChild.textContent=english?englishLabels[id]:label;
+      button.title=english?englishLabels[id]:description;
+    }
+  }
+  new MutationObserver(localize).observe(document.documentElement,{attributes:true,attributeFilter:['lang']});
   function icon(id){const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('fill','none');svg.setAttribute('stroke','currentColor');svg.setAttribute('stroke-width','1.6');svg.setAttribute('stroke-linecap','round');svg.setAttribute('stroke-linejoin','round');svg.setAttribute('aria-hidden','true');const path=document.createElementNS(svg.namespaceURI,'path');path.setAttribute('d',paths[id]);svg.append(path);return svg;}
   function select(name){active=name;for(const [id,entry] of entries){const selected=id===name;entry.button.setAttribute('aria-selected',String(selected));entry.button.tabIndex=selected?0:-1;entry.button.classList.toggle('is-selected',selected);}}
   function register(id,{label,title=label,section}){
@@ -12050,55 +12119,218 @@ window.tmsChatWorkspace = (() => {
     const button=document.createElement('button');button.type='button';button.className='chat-workspace-tab';button.id='chat-workspace-tab-'+id;button.dataset.chatApp=id;button.title=title;button.setAttribute('role','tab');button.setAttribute('aria-controls',section.id);button.append(icon(id));const text=document.createElement('span');text.textContent=label;button.append(text);
     section.setAttribute('role','tabpanel');section.setAttribute('aria-labelledby',button.id);panels.append(section);
     const next=order.slice(order.indexOf(id)+1).map(name=>entries.get(name)?.button).find(Boolean);nav.insertBefore(button,next||null);
-    entries.set(id,{button,section});button.onclick=()=>showApp(id);select(active);
+    entries.set(id,{button,section,label,description:title});button.onclick=()=>showApp(id);select(active);localize();
   }
   function unregister(id){const entry=entries.get(id);if(!entry)return;entry.button.remove();entry.section.remove();entries.delete(id);if(active===id){const visible=!shell.classList.contains('hidden');select('chat');if(visible&&state.tokens?.access_token)showApp('chat');}}
   nav.addEventListener('keydown',event=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;const tabs=[...nav.querySelectorAll('[role="tab"]')];const current=tabs.indexOf(event.target.closest('[role="tab"]'));if(current<0)return;event.preventDefault();const index=event.key==='Home'?0:event.key==='End'?tabs.length-1:(current+(event.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;tabs[index].focus();tabs[index].click();});
   register('chat',{label:'Диалоги',section:chat});
-  const previous=showApp;showApp=function(name){const inside=entries.has(name);previous(inside?'chat':name);if(inside)for(const [id,entry]of entries)entry.section.classList.toggle('hidden',id!==name);shell.classList.toggle('hidden',!inside);if(inside){select(name);document.querySelectorAll('.nav-btn[data-app="chat"]').forEach(button=>button.classList.add('is-active'));const top=document.getElementById('app-topbar-title');if(top){top.removeAttribute('data-i18n');top.textContent='Чаты';}}};
+  const previous=showApp;showApp=function(name){const inside=entries.has(name);previous(inside?'chat':name);if(inside)for(const [id,entry]of entries)entry.section.classList.toggle('hidden',id!==name);shell.classList.toggle('hidden',!inside);if(inside){select(name);document.querySelectorAll('.nav-btn[data-app="chat"]').forEach(button=>button.classList.add('is-active'));const top=document.getElementById('app-topbar-title');if(top){top.removeAttribute('data-i18n');top.textContent=title.textContent;}}};
   window.addEventListener('tms-products-session-ended',()=>{shell.classList.add('hidden');select('chat');});
   return {register,unregister,panels};
 })();
-// Original product interfaces are supplied by the installed plugin bundles.
-// Only active products from the current authenticated domain enter the menu.
-(function installMattermostProducts(){
- const workspace=window.tmsChatWorkspace;if(!workspace)return;
- function syncTheme(iframe) {
-  try {
-   if (iframe.contentDocument?.documentElement) {
-    iframe.contentDocument.documentElement.dataset.taygaColor = document.documentElement.dataset.colorMode === 'dark' ? 'dark' : 'light';
-   }
-  } catch { /* A product that navigated off origin cannot inherit the theme. */ }
- }
- const products=new Map();
- new MutationObserver(() => { for (const product of products.values()) syncTheme(product.iframe); })
-  .observe(document.documentElement,{attributes:true,attributeFilter:['data-color-mode']});let catalogToken='';let pending=false;
- function endSession(product){fetch(product.url.replace(/\/(boards|playbooks)$/,'/products/session'),{method:'DELETE',credentials:'same-origin',keepalive:true}).catch(()=>{})}
- function clear(){for(const product of products.values()){endSession(product);workspace.unregister(product.id)}products.clear();catalogToken=''}
- async function refresh(){
-  const token=state.tokens?.access_token||'';
-  if(!token){clear();return}
-  if(pending||catalogToken===token)return;pending=true;
-  try{
-   const response=await fetch('/api/v4/tms/products',{headers:{Authorization:'Bearer '+token}});
-   if(!response.ok)return;
-   const list=await response.json();if(state.tokens?.access_token!==token)return;
-   catalogToken=token;
-   for(const [id,existing] of products){if(!list.some(item=>item.id===id&&item.url===existing.url&&item.user_id===existing.user_id)){endSession(existing);workspace.unregister(id);products.delete(id)}}
-   for(const item of list){
-    if(products.has(item.id))continue
-    if(!['boards','playbooks'].includes(item.id)||!new RegExp('^/mm/[a-z0-9]{26}/'+item.id+'$').test(item.url))continue;
-    const section=document.createElement('section');section.id='app-'+item.id;section.className='app-page chat-product-page hidden';
-    const iframe=document.createElement('iframe');iframe.title=item.title;iframe.className='chat-product-frame';iframe.referrerPolicy='same-origin';iframe.addEventListener('load',()=>syncTheme(iframe));section.append(iframe);
-    workspace.register(item.id,{label:item.id==='boards'?'Доски':'Сценарии',title:item.id==='boards'?'Boards — доски задач':'Playbooks — рабочие сценарии',section});
-    products.set(item.id,{...item,section,iframe});
-   }
-  }catch(error){console.warn('Tayga products discovery failed',error.message)}finally{pending=false;if(state.tokens?.access_token&&state.tokens.access_token!==token)queueMicrotask(refresh)}
- }
- const previous=showApp;
- showApp=function(name){previous(name);refresh();const product=products.get(name);if(product){if(product.iframe.getAttribute('src')!==product.url)product.iframe.src=product.url;}};
- window.addEventListener('tms-products-session-ended',clear);
- refresh();window.addEventListener('storage',event=>{if(event.key==='tayga.tokens')refresh()});
+/* Bridge original products and shortcuts in mail and chat. */
+(function installMattermostProducts() {
+  const workspace=window.tmsChatWorkspace;
+  if(!workspace)return;
+  const products=new Map();
+  const language=()=>document.documentElement.lang==='en'?'en':'ru';
+  const words=(ru,en)=>language()==='en'?en:ru;
+  let catalogToken='',pending=null,openDialog=null;
+
+  function syncTheme(iframe) {
+    try {
+      if(iframe.contentDocument?.documentElement){
+        iframe.contentDocument.documentElement.dataset.taygaColor=document.documentElement.dataset.colorMode==='dark'?'dark':'light';
+      }
+    }catch{ /* Frames must be same-origin to inherit the theme. */ }
+  }
+  function frameURL(path) {
+    const url=new URL(path,location.href);
+    if(language()==='en')url.searchParams.set('lang','en');
+    else url.searchParams.delete('lang');
+    return url.pathname+url.search+url.hash;
+  }
+  function openFrame(product,path) {
+    product.loadedLanguage=language();
+    product.iframe.src=frameURL(path);
+  }
+  function relocalize(product) {
+    const {iframe,url}=product;
+    iframe.title=product.id==='boards'?words('Доски','Boards'):words('Сценарии','Playbooks');
+    if(!iframe.hasAttribute('src')||product.loadedLanguage===language())return;
+    let current=iframe.getAttribute('src');
+    try {
+      const route=new URL(iframe.contentWindow.location.href);
+      if(route.origin===location.origin&&(route.pathname===url||route.pathname.startsWith(url+'/')))current=route.href;
+    }catch{ /* Keep the last same-origin route. */ }
+    openFrame(product,current);
+  }
+  new MutationObserver(records=>{
+    for(const product of products.values()){
+      if(records.some(record=>record.attributeName==='lang'))relocalize(product);
+      syncTheme(product.iframe);
+    }
+  }).observe(document.documentElement,{attributes:true,attributeFilter:['data-color-mode','lang']});
+
+  function endSession(product){
+    fetch(product.url.replace(/\/(boards|playbooks)$/,'/products/session'),{method:'DELETE',credentials:'same-origin',keepalive:true}).catch(()=>{});
+  }
+  function clear(){
+    if(openDialog?.open)openDialog.close();
+    for(const product of products.values()){endSession(product);workspace.unregister(product.id);}
+    products.clear();catalogToken='';pending=null;
+  }
+  function refresh(){
+    const token=state.tokens?.access_token||'';
+    if(!token){clear();return Promise.resolve();}
+    if(catalogToken===token)return Promise.resolve();
+    if(pending?.token===token)return pending.promise;
+    const request={token};
+    pending=request;
+    request.promise=(async()=>{
+      try{
+        const response=await fetch('/api/v4/tms/products',{headers:{Authorization:'Bearer '+token}});
+        if(!response.ok)return;
+        const list=await response.json();
+        if(state.tokens?.access_token!==token||pending!==request)return;
+        catalogToken=token;
+        for(const [id,existing] of products){
+          if(!list.some(item=>item.id===id&&item.url===existing.url&&item.user_id===existing.user_id)){
+            endSession(existing);workspace.unregister(id);products.delete(id);
+          }
+        }
+        for(const item of list){
+          if(products.has(item.id))continue;
+          if(!['boards','playbooks'].includes(item.id)||!new RegExp('^/mm/[a-z0-9]{26}/'+item.id+'$').test(item.url))continue;
+          const section=document.createElement('section');section.id='app-'+item.id;section.className='app-page chat-product-page hidden';
+          const iframe=document.createElement('iframe');iframe.title=item.title;iframe.className='chat-product-frame';iframe.referrerPolicy='same-origin';
+          iframe.addEventListener('load',()=>syncTheme(iframe));section.append(iframe);
+          workspace.register(item.id,{label:item.id==='boards'?'Доски':'Сценарии',section});
+          const product={...item,section,iframe};products.set(item.id,product);relocalize(product);
+        }
+      }catch(error){console.warn('Tayga products discovery failed',error.message);}
+      finally{if(pending===request)pending=null;}
+    })();
+    return request.promise;
+  }
+
+  function element(tag,text,className){
+    const node=document.createElement(tag);if(text!==undefined)node.textContent=text;if(className)node.className=className;return node;
+  }
+  function button(text,handler){
+    const node=element('button',text,'btn-secondary btn-sm');node.type='button';node.addEventListener('click',handler);return node;
+  }
+  function createTitle(id){
+    return id==='boards'?words('Создать доску','Create board'):words('Создать сценарий','Create playbook');
+  }
+  async function scopedRequest(path,options,product,token) {
+    const check=()=>{
+      if(state.tokens?.access_token!==token||products.get(product.id)!==product)throw Error(words('Сессия изменилась','Session changed'));
+    };
+    check();
+    const result=await api(product.url.slice(0,-product.id.length-1)+path,{...options,_guard:check});
+    check();return result;
+  }
+  function create(product,sourceTitle) {
+    if(openDialog?.open)return;
+    const token=state.tokens?.access_token;
+    const dialog=element('dialog',undefined,'mm-chat-dialog product-create-dialog');
+    openDialog=dialog;
+    const form=element('form');
+    const titleLabel=element('label',words('Название','Title'),'field-label');
+    const title=element('input',undefined,'field-input');
+    title.required=true;title.maxLength=120;title.value=sourceTitle.replace(/\s+/g,' ').trim().slice(0,120);
+    titleLabel.append(title);
+    const descriptionLabel=element('label',words('Описание','Description'),'field-label');
+    const description=element('textarea',undefined,'field-input');description.rows=3;description.maxLength=1000;
+    descriptionLabel.append(description);
+    const controls=element('div',undefined,'actions');
+    const cancel=button(words('Отмена','Cancel'),()=>dialog.close());
+    const submit=element('button',words('Создать','Create'),'btn-spray');submit.type='submit';
+    controls.append(cancel,submit);
+    const status=element('p',undefined,'msg');status.setAttribute('role','status');
+    form.append(element('h2',createTitle(product.id),'heading'),titleLabel,descriptionLabel,status,controls);
+    dialog.append(form);document.body.append(dialog);dialog.showModal();title.focus();title.select();
+    dialog.addEventListener('close',()=>{dialog.remove();if(openDialog===dialog)openDialog=null;},{once:true});
+    dialog.addEventListener('cancel',event=>{if(submit.disabled)event.preventDefault();});
+    form.addEventListener('submit',async event=>{
+      event.preventDefault();if(submit.disabled||!title.value.trim())return;
+      submit.disabled=cancel.disabled=true;status.textContent='';
+      try{
+        const call=(path,options)=>scopedRequest(path,options,product,token);
+        const {team}=await call('/products/bootstrap');
+        const route=await createProductItem(product.id,team.id,title.value.trim(),description.value.trim(),call);
+        if(!dialog.open)return;
+        dialog.close();
+        openFrame(product,product.url+route);
+        showApp(product.id);
+      }catch(error){
+        if(dialog.open)status.textContent=error.data?.message||error.data?.error||error.message;
+      }finally{submit.disabled=cancel.disabled=false;}
+    });
+  }
+  async function createProductItem(id,team,title,description,request){
+    const post=body=>({method:'POST',body:JSON.stringify(body),headers:{'X-Requested-With':'XMLHttpRequest'}});
+    const validID=value=>typeof value==='string'&&/^[a-z0-9]{26,27}$/.test(value);
+    if(!validID(team))throw Error(words('Команда недоступна','Team is unavailable'));
+    if(id==='playbooks'){
+      const playbook=await request('/plugins/playbooks/api/v0/playbooks',post({
+        title,description,team_id:team,public:false,reminder_timer_default_seconds:86400,
+        checklists:[{title:words('Задачи','Tasks'),items:[]}],
+      }));
+      if(validID(playbook.id))return '/playbooks/'+playbook.id+'/outline';
+    }else{
+      const newID=prefix=>prefix+Array.from(crypto.getRandomValues(new Uint8Array(26)),n=>'abcdefghijklmnopqrstuvwxyz234567'[n&31]).join('');
+      const boardID=newID('b'),statusID=newID('a'),now=Date.now();
+      const result=await request('/plugins/focalboard/api/v2/boards-and-blocks',post({
+        boards:[{id:boardID,title,description,showDescription:!!description,teamId:team,type:'P',minimumRole:'',isTemplate:false,properties:{},cardProperties:[{id:statusID,name:words('Статус','Status'),type:'select',options:[]}]}],
+        blocks:[{id:newID('v'),boardId:boardID,parentId:boardID,schema:1,type:'view',title:words('Доска','Board view'),createAt:now,updateAt:now,fields:{viewType:'board',groupById:statusID}}],
+      }));
+      const board=result.boards?.[0];
+      if(validID(board?.id))return '/team/'+team+'/'+board.id;
+    }
+    throw Error(words('Модуль не вернул идентификатор','The product did not return an ID'));
+  }
+
+  function appendActions(menu,{title,discuss}) {
+    const group=element('div',undefined,'product-source-actions');
+    const discussion=button(words('Начать обсуждение в чате','Start a chat discussion'),()=>{
+      menu.closest('details')?.removeAttribute('open');
+      void discuss();
+    });
+    const items=new Map(['boards','playbooks'].map(id=>[id,button(createTitle(id),()=>{
+      menu.closest('details')?.removeAttribute('open');
+      const product=products.get(id);if(product)create(product,title);
+    })]));
+    group.append(...items.values(),discussion);menu.append(group);
+    function update(){
+      for(const [id,item] of items){
+        item.textContent=createTitle(id);
+        item.hidden=!products.has(id);
+      }
+      discussion.textContent=words('Начать обсуждение в чате','Start a chat discussion');
+    }
+    const details=menu.closest('details');
+    details?.addEventListener('toggle',()=>{if(details.open){update();void refresh().then(update);}});
+    update();
+  }
+  function chatActions(source) {
+    const details=element('details',undefined,'chat-source-menu');
+    const summary=element('summary','⋯');
+    summary.setAttribute('aria-label',words('Действия сообщения','Message actions'));
+    const menu=element('div',undefined,'chat-source-menu-panel');
+    details.append(summary,menu);appendActions(menu,source);return details;
+  }
+  window.tmsProductActions={appendActions,chatActions};
+  const previous=showApp;
+  showApp=function(name){
+    previous(name);void refresh();
+    const product=products.get(name);
+    if(product&&!product.iframe.hasAttribute('src'))openFrame(product,product.url);
+  };
+  window.addEventListener('tms-products-session-ended',clear);
+  void refresh();
+  window.addEventListener('storage',event=>{if(event.key==='tayga.tokens')void refresh();});
 })();
 /* Native TMS Agents product. Tenant, domain and user are bound by the server. */
 (function installAgents() {

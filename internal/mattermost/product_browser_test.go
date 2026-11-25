@@ -19,6 +19,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/tayga/tms/internal/chat"
+	"github.com/tayga/tms/internal/frontend"
 	"github.com/tayga/tms/internal/mmplugins"
 )
 
@@ -98,10 +99,15 @@ func TestProductBrowserStand(t *testing.T) {
 	stop := make(chan struct{})
 	mux := http.NewServeMux()
 	mux.Handle("/api/v4/", f.api)
+	mux.Handle("/assets/", frontend.Handler())
 	mux.HandleFunc("/mm/", f.api.ServeScopedPluginHTTP)
 	mux.HandleFunc("/test-login", func(w http.ResponseWriter, r *http.Request) {
 		value, _ := json.Marshal(map[string]string{"access_token": f.tokens[0]})
-		url := "/mm/" + chat.ID(scope.Key()) + "/playbooks"
+		product := "playbooks"
+		if r.URL.Query().Get("product") == "boards" {
+			product = "boards"
+		}
+		url := "/mm/" + chat.ID(scope.Key()) + "/" + product + "?lang=" + productLocale(r)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		fmt.Fprintf(w, `<script>localStorage.setItem('tayga.tokens',%q);location.replace(%q)</script>`, string(value), url)
 	})
