@@ -1,17 +1,14 @@
 /* Native TMS Agents product. Tenant, domain and user are bound by the server. */
 (function installAgents() {
-  const anchor=document.querySelector('[data-app="chat"]'),parent=document.getElementById('app-chat')?.parentElement;
-  if(!anchor||!parent)return;
-  if(!APPS.includes('agents'))APPS.push('agents');
+  const workspace=window.tmsChatWorkspace;if(!workspace)return;
   const paths={spark:'M12 3l2.2 6.8L21 12l-6.8 2.2L12 21l-2.2-6.8L3 12l6.8-2.2L12 3z',catalog:'M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15 M16 16l5 5',history:'M4 5h16v12H8l-4 4V5z',skills:'M12 3l-8 4 8 4 8-4-8-4z M4 12l8 4 8-4 M4 17l8 4 8-4',settings:'M5 4v16 M12 4v16 M19 4v16 M2 8h6 M9 15h6 M16 10h6',close:'M6 6l12 12 M18 6L6 18',plus:'M12 5v14 M5 12h14',arrow:'M5 12h14 M13 6l6 6-6 6',shield:'M12 3l8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3z M8 12l3 3 5-6'};
   function icon(name){const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('fill','none');svg.setAttribute('stroke','currentColor');svg.setAttribute('stroke-width','1.6');svg.setAttribute('stroke-linecap','round');svg.setAttribute('stroke-linejoin','round');svg.setAttribute('aria-hidden','true');const path=document.createElementNS(svg.namespaceURI,'path');path.setAttribute('d',paths[name]||paths.spark);svg.append(path);return svg;}
-  const button=document.createElement('button');button.type='button';button.className=anchor.className;button.classList.remove('is-active');button.dataset.app='agents';button.title='Агенты';button.setAttribute('aria-label','Агенты');const navIcon=document.createElement('span');navIcon.className='nav-ico';navIcon.setAttribute('aria-hidden','true');navIcon.append(icon('spark'));const navLabel=document.createElement('span');navLabel.textContent='Агенты';button.append(navIcon,navLabel);anchor.after(button);
   const section=document.createElement('section');section.id='app-agents';section.className='app-page hidden';
   section.innerHTML=`<div class="tms-agents"><aside class="agents-sidebar"><div class="agents-brand"><span class="agents-brand-icon"></span><div><strong>Агенты</strong><span>Помощники для работы</span></div></div><nav class="agents-navigation" aria-label="Разделы агентов"><button type="button" data-view="catalog">Все агенты</button><button type="button" data-view="history">Мои диалоги</button><button type="button" data-view="skills">Навыки</button><button type="button" data-view="settings">Настройки</button></nav><div class="agents-side-history"></div><div class="agents-account"><span class="agents-account-icon"></span><div><small>Рабочее пространство</small><p class="agents-scope"></p></div></div></aside><div class="agents-workspace"><div class="agents-error" role="alert"></div><main class="agents-main"></main></div></div>`;
   section.querySelector('.agents-brand-icon').append(icon('spark'));section.querySelector('.agents-account-icon').append(icon('shield'));
   section.querySelectorAll('[data-view]').forEach(b=>b.prepend(icon(b.dataset.view)));
 
-  parent.append(section);
+  workspace.register('agents',{label:'Агенты',section});
   const main=section.querySelector('.agents-main'),error=section.querySelector('.agents-error'),sidebar=section.querySelector('.agents-side-history');
   let pollTimer=null;
   let owner='',ownerToken='',epoch=0,revision=0,loadRevision=0,boot=null,config=null,history=[],active='',view='catalog',sending=false,controller=new AbortController();
@@ -146,6 +143,6 @@
     finishEditor(dialog,form,async()=>{next.providers=next.providers.filter(v=>v.id!==p.id);next.providers.push({id:p.id,kind:kind.value,thinking:kind.value==='deepseek'&&thinking.checked,name:name.value,url:url.value,model:model.value,api_key:key.value});await saveConfig(next);},original?async()=>{if(next.agents.some(a=>a.provider_id===p.id))throw Error('Сначала переключите или удалите агентов этой модели');next.providers=next.providers.filter(v=>v.id!==p.id);await saveConfig(next);}:null);
   }
   section.querySelectorAll('[data-view]').forEach(b=>{b.onclick=()=>run(()=>show(b.dataset.view));});
-  const previous=showApp;showApp=function(name){previous(name);if(name==='agents'){const title=document.getElementById('app-topbar-title');if(title){title.removeAttribute('data-i18n');title.textContent='Агенты';}run(load);}};button.onclick=()=>showApp('agents');
+  const previous=showApp;showApp=function(name){previous(name);if(name==='agents'){run(load);}};
   window.addEventListener('tms-products-session-ended',reset);window.addEventListener('storage',event=>{if(event.key==='tayga.tokens'){reset();if(!section.classList.contains('hidden'))run(load);}});
 })();

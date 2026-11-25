@@ -11854,12 +11854,42 @@ function workspaceFolderIcon(folder){return workspaceIcon(String(folder.role||fo
  for(const root of roots){const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);let text;while(text=walker.nextNode()){const pair=workspaceLexicon.get(text.textContent.trim());if(pair)labels.set(text,pair)}for(const el of [root,...root.querySelectorAll('*')])for(const name of ['title','aria-label','placeholder']){const pair=workspaceLexicon.get(el.getAttribute(name));if(pair)attributes.push({el,name,pair})}}
  const original=applyLang;applyLang=function(next){original(next);for(const [node,pair]of labels)if(node.isConnected)node.textContent=pair[lang];for(const {el,name,pair}of attributes)if(el.isConnected)el.setAttribute(name,pair[lang]);const search=$('workspace-search');if(search){search.placeholder=workspaceWords('Поиск писем','Search mail');search.setAttribute('aria-label',workspaceWords('Поиск писем','Search mail'))}document.querySelectorAll('.workspace-nav .nav-btn').forEach(b=>{b.setAttribute('aria-label',b.lastElementChild?.textContent.trim()||b.textContent.trim());b.title=b.getAttribute('aria-label')});renderThemeGallery(normalizeThemeKey(localStorage.getItem('tayga.theme')||'tayga'))};
 })();
+/* Shared navigation for conversations, original products and personal agents. */
+window.tmsChatWorkspace = (() => {
+  const chat=document.getElementById('app-chat');
+  if(!chat)return null;
+  const order=['chat','boards','playbooks','agents'],entries=new Map();let active='chat';
+  const shell=document.createElement('section');shell.id='app-chat-workspace';shell.className='app-page chat-workspace hidden';
+  const header=document.createElement('header');header.className='chat-workspace-header';
+  const heading=document.createElement('div');heading.className='chat-workspace-heading';
+  const title=document.createElement('strong');title.textContent='Чаты';const subtitle=document.createElement('span');subtitle.textContent='Общение и совместная работа';heading.append(title,subtitle);
+  const nav=document.createElement('nav');nav.className='chat-workspace-tabs';nav.setAttribute('role','tablist');nav.setAttribute('aria-label','Разделы чатов');header.append(heading,nav);
+  const panels=document.createElement('div');panels.className='chat-workspace-panels';shell.append(header,panels);chat.before(shell);
+  const paths={chat:'M4 4h16v12H9l-5 5V4z',boards:'M4 4h16v16H4z M9 4v16 M15 4v16 M4 9h5 M9 14h6 M15 11h5',playbooks:'M8 4h12v16H8 M4 7h1 M4 12h1 M4 17h1 M11 8h6 M11 12h6 M11 16h4',agents:'M12 3l2.2 6.8L21 12l-6.8 2.2L12 21l-2.2-6.8L3 12l6.8-2.2L12 3z'};
+  function icon(id){const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('fill','none');svg.setAttribute('stroke','currentColor');svg.setAttribute('stroke-width','1.6');svg.setAttribute('stroke-linecap','round');svg.setAttribute('stroke-linejoin','round');svg.setAttribute('aria-hidden','true');const path=document.createElementNS(svg.namespaceURI,'path');path.setAttribute('d',paths[id]);svg.append(path);return svg;}
+  function select(name){active=name;for(const [id,entry] of entries){const selected=id===name;entry.button.setAttribute('aria-selected',String(selected));entry.button.tabIndex=selected?0:-1;entry.button.classList.toggle('is-selected',selected);}}
+  function register(id,{label,title=label,section}){
+    if(!order.includes(id)||entries.has(id))return;
+    if(!APPS.includes(id))APPS.push(id);
+    const button=document.createElement('button');button.type='button';button.className='chat-workspace-tab';button.id='chat-workspace-tab-'+id;button.dataset.chatApp=id;button.title=title;button.setAttribute('role','tab');button.setAttribute('aria-controls',section.id);button.append(icon(id));const text=document.createElement('span');text.textContent=label;button.append(text);
+    section.setAttribute('role','tabpanel');section.setAttribute('aria-labelledby',button.id);panels.append(section);
+    const next=order.slice(order.indexOf(id)+1).map(name=>entries.get(name)?.button).find(Boolean);nav.insertBefore(button,next||null);
+    entries.set(id,{button,section});button.onclick=()=>showApp(id);select(active);
+  }
+  function unregister(id){const entry=entries.get(id);if(!entry)return;entry.button.remove();entry.section.remove();entries.delete(id);if(active===id){const visible=!shell.classList.contains('hidden');select('chat');if(visible&&state.tokens?.access_token)showApp('chat');}}
+  nav.addEventListener('keydown',event=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;const tabs=[...nav.querySelectorAll('[role="tab"]')];const current=tabs.indexOf(event.target.closest('[role="tab"]'));if(current<0)return;event.preventDefault();const index=event.key==='Home'?0:event.key==='End'?tabs.length-1:(current+(event.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;tabs[index].focus();tabs[index].click();});
+  register('chat',{label:'Диалоги',section:chat});
+  const previous=showApp;showApp=function(name){const inside=entries.has(name);previous(inside?'chat':name);if(inside)for(const [id,entry]of entries)entry.section.classList.toggle('hidden',id!==name);shell.classList.toggle('hidden',!inside);if(inside){select(name);document.querySelectorAll('.nav-btn[data-app="chat"]').forEach(button=>button.classList.add('is-active'));const top=document.getElementById('app-topbar-title');if(top){top.removeAttribute('data-i18n');top.textContent='Чаты';}}};
+  window.addEventListener('tms-products-session-ended',()=>{shell.classList.add('hidden');select('chat');});
+  return {register,unregister,panels};
+})();
 // Original product interfaces are supplied by the installed plugin bundles.
 // Only active products from the current authenticated domain enter the menu.
 (function installMattermostProducts(){
+ const workspace=window.tmsChatWorkspace;if(!workspace)return;
  const products=new Map();let catalogToken='';let pending=false;
  function endSession(product){fetch(product.url.replace(/\/(boards|playbooks)$/,'/products/session'),{method:'DELETE',credentials:'same-origin',keepalive:true}).catch(()=>{})}
- function clear(){for(const product of products.values()){endSession(product);product.button.remove();product.section.remove()}products.clear();catalogToken=''}
+ function clear(){for(const product of products.values()){endSession(product);workspace.unregister(product.id)}products.clear();catalogToken=''}
  async function refresh(){
   const token=state.tokens?.access_token||'';
   if(!token){clear();return}
@@ -11869,43 +11899,33 @@ function workspaceFolderIcon(folder){return workspaceIcon(String(folder.role||fo
    if(!response.ok)return;
    const list=await response.json();if(state.tokens?.access_token!==token)return;
    catalogToken=token;
-   for(const [id,existing] of products){if(!list.some(item=>item.id===id&&item.url===existing.url&&item.user_id===existing.user_id)){endSession(existing);existing.button.remove();existing.section.remove();products.delete(id)}}
-   const anchor=document.querySelector('[data-app="chat"]');const parent=document.getElementById('app-chat')?.parentElement;
-   if(!anchor||!parent)return;
-   let lastAnchor=anchor;
+   for(const [id,existing] of products){if(!list.some(item=>item.id===id&&item.url===existing.url&&item.user_id===existing.user_id)){endSession(existing);workspace.unregister(id);products.delete(id)}}
    for(const item of list){
-    if(products.has(item.id)){lastAnchor=products.get(item.id).button;continue}
+    if(products.has(item.id))continue
     if(!['boards','playbooks'].includes(item.id)||!new RegExp('^/mm/[a-z0-9]{26}/'+item.id+'$').test(item.url))continue;
-    if(!APPS.includes(item.id))APPS.push(item.id);
-    const button=document.createElement('button');button.type='button';button.className=anchor.className;button.classList.remove('is-active');button.dataset.app=item.id;button.textContent=item.title;button.title=item.title;
-    const section=document.createElement('section');section.id='app-'+item.id;section.className='hidden';section.style.cssText='height:100%;min-height:600px;display:flex;flex-direction:column';
-    // The global hidden utility must win over inline layout.
-    section.style.removeProperty('display');
-    const iframe=document.createElement('iframe');iframe.title=item.title;iframe.style.cssText='border:0;width:100%;height:calc(100vh - 100px);min-height:600px';iframe.referrerPolicy='same-origin';section.append(iframe);parent.append(section);
-    button.addEventListener('click',()=>showApp(item.id));lastAnchor.parentElement.insertBefore(button,lastAnchor.nextSibling);lastAnchor=button;
-    products.set(item.id,{...item,button,section,iframe});
+    const section=document.createElement('section');section.id='app-'+item.id;section.className='app-page chat-product-page hidden';
+    const iframe=document.createElement('iframe');iframe.title=item.title;iframe.className='chat-product-frame';iframe.referrerPolicy='same-origin';section.append(iframe);
+    workspace.register(item.id,{label:item.id==='boards'?'Доски':'Сценарии',title:item.id==='boards'?'Boards — доски задач':'Playbooks — рабочие сценарии',section});
+    products.set(item.id,{...item,section,iframe});
    }
-  }catch(error){console.warn('Tayga products discovery failed',error.message)}finally{pending=false}
+  }catch(error){console.warn('Tayga products discovery failed',error.message)}finally{pending=false;if(state.tokens?.access_token&&state.tokens.access_token!==token)queueMicrotask(refresh)}
  }
  const previous=showApp;
- showApp=function(name){previous(name);refresh();const product=products.get(name);if(product){const title=document.getElementById('app-topbar-title');if(title){title.removeAttribute('data-i18n');title.textContent=product.title}if(product.iframe.getAttribute('src')!==product.url)product.iframe.src=product.url;}};
+ showApp=function(name){previous(name);refresh();const product=products.get(name);if(product){if(product.iframe.getAttribute('src')!==product.url)product.iframe.src=product.url;}};
  window.addEventListener('tms-products-session-ended',clear);
  refresh();window.addEventListener('storage',event=>{if(event.key==='tayga.tokens')refresh()});
 })();
 /* Native TMS Agents product. Tenant, domain and user are bound by the server. */
 (function installAgents() {
-  const anchor=document.querySelector('[data-app="chat"]'),parent=document.getElementById('app-chat')?.parentElement;
-  if(!anchor||!parent)return;
-  if(!APPS.includes('agents'))APPS.push('agents');
+  const workspace=window.tmsChatWorkspace;if(!workspace)return;
   const paths={spark:'M12 3l2.2 6.8L21 12l-6.8 2.2L12 21l-2.2-6.8L3 12l6.8-2.2L12 3z',catalog:'M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15 M16 16l5 5',history:'M4 5h16v12H8l-4 4V5z',skills:'M12 3l-8 4 8 4 8-4-8-4z M4 12l8 4 8-4 M4 17l8 4 8-4',settings:'M5 4v16 M12 4v16 M19 4v16 M2 8h6 M9 15h6 M16 10h6',close:'M6 6l12 12 M18 6L6 18',plus:'M12 5v14 M5 12h14',arrow:'M5 12h14 M13 6l6 6-6 6',shield:'M12 3l8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3z M8 12l3 3 5-6'};
   function icon(name){const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('fill','none');svg.setAttribute('stroke','currentColor');svg.setAttribute('stroke-width','1.6');svg.setAttribute('stroke-linecap','round');svg.setAttribute('stroke-linejoin','round');svg.setAttribute('aria-hidden','true');const path=document.createElementNS(svg.namespaceURI,'path');path.setAttribute('d',paths[name]||paths.spark);svg.append(path);return svg;}
-  const button=document.createElement('button');button.type='button';button.className=anchor.className;button.classList.remove('is-active');button.dataset.app='agents';button.title='Агенты';button.setAttribute('aria-label','Агенты');const navIcon=document.createElement('span');navIcon.className='nav-ico';navIcon.setAttribute('aria-hidden','true');navIcon.append(icon('spark'));const navLabel=document.createElement('span');navLabel.textContent='Агенты';button.append(navIcon,navLabel);anchor.after(button);
   const section=document.createElement('section');section.id='app-agents';section.className='app-page hidden';
   section.innerHTML=`<div class="tms-agents"><aside class="agents-sidebar"><div class="agents-brand"><span class="agents-brand-icon"></span><div><strong>Агенты</strong><span>Помощники для работы</span></div></div><nav class="agents-navigation" aria-label="Разделы агентов"><button type="button" data-view="catalog">Все агенты</button><button type="button" data-view="history">Мои диалоги</button><button type="button" data-view="skills">Навыки</button><button type="button" data-view="settings">Настройки</button></nav><div class="agents-side-history"></div><div class="agents-account"><span class="agents-account-icon"></span><div><small>Рабочее пространство</small><p class="agents-scope"></p></div></div></aside><div class="agents-workspace"><div class="agents-error" role="alert"></div><main class="agents-main"></main></div></div>`;
   section.querySelector('.agents-brand-icon').append(icon('spark'));section.querySelector('.agents-account-icon').append(icon('shield'));
   section.querySelectorAll('[data-view]').forEach(b=>b.prepend(icon(b.dataset.view)));
 
-  parent.append(section);
+  workspace.register('agents',{label:'Агенты',section});
   const main=section.querySelector('.agents-main'),error=section.querySelector('.agents-error'),sidebar=section.querySelector('.agents-side-history');
   let pollTimer=null;
   let owner='',ownerToken='',epoch=0,revision=0,loadRevision=0,boot=null,config=null,history=[],active='',view='catalog',sending=false,controller=new AbortController();
@@ -12040,6 +12060,6 @@ function workspaceFolderIcon(folder){return workspaceIcon(String(folder.role||fo
     finishEditor(dialog,form,async()=>{next.providers=next.providers.filter(v=>v.id!==p.id);next.providers.push({id:p.id,kind:kind.value,thinking:kind.value==='deepseek'&&thinking.checked,name:name.value,url:url.value,model:model.value,api_key:key.value});await saveConfig(next);},original?async()=>{if(next.agents.some(a=>a.provider_id===p.id))throw Error('Сначала переключите или удалите агентов этой модели');next.providers=next.providers.filter(v=>v.id!==p.id);await saveConfig(next);}:null);
   }
   section.querySelectorAll('[data-view]').forEach(b=>{b.onclick=()=>run(()=>show(b.dataset.view));});
-  const previous=showApp;showApp=function(name){previous(name);if(name==='agents'){const title=document.getElementById('app-topbar-title');if(title){title.removeAttribute('data-i18n');title.textContent='Агенты';}run(load);}};button.onclick=()=>showApp('agents');
+  const previous=showApp;showApp=function(name){previous(name);if(name==='agents'){run(load);}};
   window.addEventListener('tms-products-session-ended',reset);window.addEventListener('storage',event=>{if(event.key==='tayga.tokens'){reset();if(!section.classList.contains('hidden'))run(load);}});
 })();
