@@ -52,7 +52,7 @@ A built-in Mattermost-compatible service provides direct messages, public and pr
 
 ### Agents and DeepSeek API
 
-A native TMS workspace provides a searchable agent catalog, private conversations and history, prompt skills and model settings. DeepSeek and other OpenAI-compatible APIs are supported. Configuration belongs to tenant + domain; histories belong to each user. No paid Mattermost license is required. This independent TMS implementation does not include a native iPhone Agents screen or MCP tools.
+A native TMS workspace provides a searchable agent catalog, private conversations and history, prompt skills and model settings. DeepSeek, native Ollama, OpenAI (ChatGPT) and other OpenAI-compatible APIs are supported. Configuration belongs to tenant + domain; histories belong to each user. No paid Mattermost license is required. This independent TMS implementation does not include a native iPhone Agents screen or MCP tools.
 
 [Setup and limits](docs/mattermost-agents.md) · [Domain administrator guide](docs/domain-admin-guide.md)
 

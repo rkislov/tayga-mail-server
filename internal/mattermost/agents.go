@@ -12,6 +12,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strings"
 	"time"
@@ -145,6 +146,32 @@ func validAgentEndpoint(raw string) bool {
 	}
 	return u.Scheme == "https" || u.Scheme == "http" && (u.Hostname() == "127.0.0.1" || u.Hostname() == "::1" || u.Hostname() == "localhost")
 }
+
+// Provider kinds bind both protocol and endpoint policy. Only the native
+// Ollama connector allows unencrypted RFC1918/ULA hosts for private deployments;
+// public HTTP and link-local metadata services remain disallowed.
+func validAgentProviderEndpoint(p agentProvider) bool {
+	switch p.Kind {
+	case "openai":
+		return strings.TrimRight(p.URL, "/") == "https://api.openai.com/v1"
+	case "deepseek":
+		return strings.TrimRight(p.URL, "/") == "https://api.deepseek.com" || strings.TrimRight(p.URL, "/") == "https://api.deepseek.com/v1"
+	case "", "openai-compatible":
+		return validAgentEndpoint(p.URL)
+	case "ollama":
+		if validAgentEndpoint(p.URL) {
+			return true
+		}
+		u, err := url.Parse(p.URL)
+		if err != nil || u.Scheme != "http" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+			return false
+		}
+		ip, err := netip.ParseAddr(u.Hostname())
+		return err == nil && (ip.IsPrivate() || ip.IsLoopback())
+	default:
+		return false
+	}
+}
 func (c *agentConfiguration) validate(old agentConfiguration) bool {
 	if len(c.Providers) > 30 || len(c.Agents) > 100 || len(c.Skills) > 100 {
 		return false
@@ -152,13 +179,7 @@ func (c *agentConfiguration) validate(old agentConfiguration) bool {
 	providers, agents, skills := map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for i := range c.Providers {
 		p := &c.Providers[i]
-		if p.Kind != "" && p.Kind != "openai-compatible" && p.Kind != "deepseek" {
-			return false
-		}
-		if p.Kind == "deepseek" && strings.TrimRight(p.URL, "/") != "https://api.deepseek.com" && strings.TrimRight(p.URL, "/") != "https://api.deepseek.com/v1" {
-			return false
-		}
-		if !validAgentID(p.ID) || providers[p.ID] || strings.TrimSpace(p.Name) == "" || len(p.Name) > 100 || !validAgentEndpoint(p.URL) || len(p.URL) > 2048 || strings.TrimSpace(p.Model) == "" || len(p.Model) > 200 || len(p.APIKey) > 8192 {
+		if !validAgentID(p.ID) || providers[p.ID] || strings.TrimSpace(p.Name) == "" || len(p.Name) > 100 || !validAgentProviderEndpoint(*p) || len(p.URL) > 2048 || strings.TrimSpace(p.Model) == "" || len(p.Model) > 200 || len(p.APIKey) > 8192 {
 			return false
 		}
 		providers[p.ID] = true
@@ -171,7 +192,7 @@ func (c *agentConfiguration) validate(old agentConfiguration) bool {
 			}
 		}
 		p.HasKey = false
-		if p.Kind == "deepseek" && strings.TrimSpace(p.APIKey) == "" {
+		if (p.Kind == "deepseek" || p.Kind == "openai") && strings.TrimSpace(p.APIKey) == "" {
 			return false
 		}
 	}
@@ -519,7 +540,11 @@ func (s *API) agentTurn(w http.ResponseWriter, r *http.Request, u *storage.User,
 	fail(w, 409, "tms.agents.turn_changed", "Состояние диалога изменилось")
 }
 func agentCompletion(ctx context.Context, p agentProvider, messages []agentMessage) (string, error) {
-	if !validAgentEndpoint(p.URL) {
+	client := &http.Client{Timeout: 120 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("provider redirects disabled") }}
+	return agentCompletionWithClient(ctx, p, messages, client)
+}
+func agentCompletionWithClient(ctx context.Context, p agentProvider, messages []agentMessage, client *http.Client) (string, error) {
+	if !validAgentProviderEndpoint(p) {
 		return "", errors.New("invalid provider")
 	}
 	body := map[string]any{"model": p.Model, "messages": messages, "stream": false, "max_tokens": 4096}
@@ -531,13 +556,29 @@ func agentCompletion(ctx context.Context, p agentProvider, messages []agentMessa
 		}
 		body["thinking"] = map[string]string{"type": mode}
 	}
+	endpoint := strings.TrimRight(p.URL, "/") + "/chat/completions"
+	if p.Kind == "openai" {
+		delete(body, "max_tokens")
+		body["max_completion_tokens"] = 16384
+		body["store"] = false
+	}
+	if p.Kind == "ollama" {
+		delete(body, "max_tokens")
+		body["options"] = map[string]int{"num_predict": 4096}
+		base := strings.TrimRight(p.URL, "/")
+		if strings.HasSuffix(base, "/api") {
+			endpoint = base + "/chat"
+		} else {
+			endpoint = base + "/api/chat"
+		}
+	}
 	payload, err := json.Marshal(body)
 	if err != nil {
 		return "", err
 	}
 	ctx, cancel := context.WithTimeout(ctx, 120*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(p.URL, "/")+"/chat/completions", bytes.NewReader(payload))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
 		return "", err
 	}
@@ -545,7 +586,6 @@ func agentCompletion(ctx context.Context, p agentProvider, messages []agentMessa
 	if p.APIKey != "" {
 		req.Header.Set("Authorization", "Bearer "+p.APIKey)
 	}
-	client := &http.Client{Timeout: 120 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("provider redirects disabled") }}
 	res, err := client.Do(req)
 	if err != nil {
 		return "", errors.New("provider unavailable")
@@ -559,12 +599,26 @@ func agentCompletion(ctx context.Context, p agentProvider, messages []agentMessa
 		return "", errors.New("provider response too large")
 	}
 	var result struct {
+		Message agentMessage `json:"message"`
+		Done    bool         `json:"done"`
 		Choices []struct {
 			Message agentMessage `json:"message"`
 		} `json:"choices"`
 	}
-	if json.Unmarshal(data, &result) != nil || len(result.Choices) == 0 || strings.TrimSpace(result.Choices[0].Message.Content) == "" || len(result.Choices[0].Message.Content) > 64000 {
+	if json.Unmarshal(data, &result) != nil {
 		return "", errors.New("invalid model response")
 	}
-	return result.Choices[0].Message.Content, nil
+	answer := ""
+	if p.Kind == "ollama" {
+		if !result.Done {
+			return "", errors.New("incomplete model response")
+		}
+		answer = result.Message.Content
+	} else if len(result.Choices) > 0 {
+		answer = result.Choices[0].Message.Content
+	}
+	if strings.TrimSpace(answer) == "" || len(answer) > 64000 {
+		return "", errors.New("invalid model response")
+	}
+	return answer, nil
 }

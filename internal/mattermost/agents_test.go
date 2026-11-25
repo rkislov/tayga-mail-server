@@ -2,8 +2,11 @@ package mattermost
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -192,7 +195,7 @@ func TestAgentsDeepSeekConfigurationAndRequest(t *testing.T) {
 				write(w, 200, map[string]any{"choices": []any{map[string]any{"message": map[string]any{"content": "Ответ DeepSeek", "reasoning_content": "NOT_STORED"}}}})
 			}))
 			defer server.Close()
-			answer, err := agentCompletion(t.Context(), agentProvider{Kind: "deepseek", URL: server.URL, Model: "deepseek-flash", APIKey: "deepseek-test-key", Thinking: thinking}, []agentMessage{{Role: "user", Content: "Тест"}})
+			answer, err := agentCompletionWithClient(t.Context(), agentProvider{Kind: "deepseek", URL: "https://api.deepseek.com", Model: "deepseek-flash", APIKey: "deepseek-test-key", Thinking: thinking}, []agentMessage{{Role: "user", Content: "Тест"}}, agentFixtureClient(server.URL))
 			if err != nil || answer != "Ответ DeepSeek" {
 				t.Fatalf("DeepSeek adapter: %q %v", answer, err)
 			}
@@ -204,5 +207,115 @@ func TestAgentsDeepSeekConfigurationAndRequest(t *testing.T) {
 		if got := c.validate(emptyAgentConfig()); got != (url != "https://attacker.test") {
 			t.Fatalf("DeepSeek endpoint validation: %s", url)
 		}
+	}
+}
+
+// Only synthetic tests remap a pinned cloud endpoint to a loopback fixture.
+type agentFixtureTransport func(*http.Request) (*http.Response, error)
+
+func (fn agentFixtureTransport) RoundTrip(r *http.Request) (*http.Response, error) { return fn(r) }
+func agentFixtureClient(target string) *http.Client {
+	return &http.Client{Transport: agentFixtureTransport(func(r *http.Request) (*http.Response, error) {
+		local := r.Clone(r.Context())
+		endpoint, _ := url.Parse(target)
+		copyURL := *r.URL
+		copyURL.Scheme = endpoint.Scheme
+		copyURL.Host = endpoint.Host
+		local.URL = &copyURL
+		return http.DefaultTransport.RoundTrip(local)
+	})}
+}
+func TestAgentsOpenAIRequest(t *testing.T) {
+	client := &http.Client{Transport: agentFixtureTransport(func(r *http.Request) (*http.Response, error) {
+		if r.URL.String() != "https://api.openai.com/v1/chat/completions" || r.Header.Get("Authorization") != "Bearer openai-fixture-key" {
+			t.Error("incorrect OpenAI endpoint or authentication")
+		}
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Error(err)
+		}
+		if payload["max_completion_tokens"] != float64(16384) || payload["max_tokens"] != nil || payload["store"] != false || payload["model"] != "gpt-6.2-sol" {
+			t.Error("OpenAI token limit or storage policy was not transmitted")
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"choices":[{"message":{"role":"assistant","content":"OpenAI answer"}}]}`)), Header: make(http.Header)}, nil
+	})}
+	answer, err := agentCompletionWithClient(t.Context(), agentProvider{Kind: "openai", URL: "https://api.openai.com/v1", Model: "gpt-6.2-sol", APIKey: "openai-fixture-key"}, []agentMessage{{Role: "user", Content: "fixture question"}}, client)
+	if err != nil || answer != "OpenAI answer" {
+		t.Fatalf("OpenAI adapter: %q %v", answer, err)
+	}
+}
+func TestAgentsNativeOllamaConversation(t *testing.T) {
+	f, _, _ := agentsFixture(t)
+	var sent []agentMessage
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/chat" || r.Header.Get("Authorization") != "" {
+			t.Error("Ollama native endpoint or optional authentication is incorrect")
+		}
+		var payload struct {
+			Messages []agentMessage `json:"messages"`
+			Stream   bool           `json:"stream"`
+			Options  struct {
+				Predict int `json:"num_predict"`
+			} `json:"options"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Error(err)
+		}
+		if payload.Stream || payload.Options.Predict != 4096 {
+			t.Error("Ollama request did not disable streaming or bound output")
+		}
+		sent = payload.Messages
+		write(w, 200, map[string]any{"message": map[string]any{"role": "assistant", "content": "Ollama answer", "thinking": "NOT_STORED"}, "done": true})
+	}))
+	defer server.Close()
+	c := emptyAgentConfig()
+	if err := f.api.agentLoad(t.Context(), agentConfigKey(f.users[0]), &c); err != nil {
+		t.Fatal(err)
+	}
+	c.Providers[0].Kind = "ollama"
+	c.Providers[0].URL = server.URL
+	c.Providers[0].APIKey = ""
+	f.call(t, "PUT", "/tms/agents/config", f.tokens[0], c, 200)
+	conv := f.call(t, "POST", "/tms/agents/conversations", f.tokens[0], map[string]string{"agent_id": "helper"}, 201)
+	result := f.call(t, "POST", "/tms/agents/conversations/"+conv["id"].(string)+"/messages", f.tokens[0], map[string]string{"content": "only this user's question"}, 200)
+	raw, _ := json.Marshal(result)
+	if !strings.Contains(string(raw), "Ollama answer") || strings.Contains(string(raw), "NOT_STORED") {
+		t.Fatal("incorrect saved Ollama response")
+	}
+	if len(sent) != 2 || sent[1].Content != "only this user's question" {
+		t.Fatal("incorrect private context")
+	}
+	f.call(t, "GET", "/tms/agents/conversations/"+conv["id"].(string), f.tokens[1], nil, 404)
+}
+func TestAgentsProviderEndpointPolicyHTTP(t *testing.T) {
+	f := setup(t)
+	f.api.pluginAdmins = []string{f.users[0].Email}
+	version := int64(0)
+	for i, tc := range []struct {
+		name, kind, endpoint, key string
+		status                    int
+	}{
+		{"OpenAI", "openai", "https://api.openai.com/v1", "fixture", 200},
+		{"OpenAI missing key", "openai", "https://api.openai.com/v1", "", 400},
+		{"OpenAI wrong host", "openai", "https://api.openai.com.attacker.test/v1", "fixture", 400},
+		{"Ollama loopback", "ollama", "http://127.0.0.1:11434", "", 200},
+		{"Ollama private LAN", "ollama", "http://192.168.1.20:11434", "", 200},
+		{"Ollama IPv6 ULA", "ollama", "http://[fd00::1]:11434", "", 200},
+		{"Ollama public HTTP", "ollama", "http://8.8.8.8:11434", "", 400},
+		{"Ollama metadata", "ollama", "http://169.254.169.254", "", 400},
+		{"Ollama credentials in URL", "ollama", "http://user:pass@127.0.0.1:11434", "", 400},
+		{"Ollama HTTPS", "ollama", "https://ollama.example.test", "", 200},
+		{"Compatible private HTTP still denied", "openai-compatible", "http://192.168.1.20:11434/v1", "", 400},
+		{"Unknown kind", "unknown", "https://example.test/v1", "fixture", 400},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			config := emptyAgentConfig()
+			config.Version = version
+			config.Providers = []agentProvider{{ID: fmt.Sprintf("provider-%d", i), Kind: tc.kind, Name: tc.name, URL: tc.endpoint, Model: "fixture", APIKey: tc.key}}
+			result := f.call(t, "PUT", "/tms/agents/config", f.tokens[0], config, tc.status)
+			if tc.status == 200 {
+				version = int64(result["version"].(float64))
+			}
+		})
 	}
 }
