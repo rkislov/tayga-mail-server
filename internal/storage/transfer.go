@@ -26,6 +26,7 @@ import (
 )
 
 type TransferTable struct {
+	PreservedHeaderFields  int64  `json:"preserved_header_fields,omitempty"`
 	NormalizedSearchFields int64  `json:"normalized_search_fields,omitempty"`
 	Source                 string `json:"source"`
 	Target                 string `json:"target"`
@@ -56,7 +57,7 @@ type transferTrigger struct{ table, name, enabled string }
 // does NOT need superuser privileges. All data and temporary constraint/trigger
 // changes are committed together, only after complete content verification.
 func TransferSQLiteToPostgres(ctx context.Context, path string, target *Store, progress func(TransferTable)) (report TransferReport, err error) {
-	report = TransferReport{Version: 1, Tables: []TransferTable{}, Derived: []string{"mail_log_fts is rebuilt from mail_log by PostgreSQL queries", "message_search.tsv is regenerated with the PostgreSQL simple dictionary; invalid UTF-8 and NUL are normalized only in derived search text and counted per table", "SQL timestamps are normalized to UTC at PostgreSQL microsecond precision; raw calendar/JSON/MIME data remains unchanged"}, Excluded: []string{}}
+	report = TransferReport{Version: 1, Tables: []TransferTable{}, Derived: []string{"mail_log_fts is rebuilt from mail_log by PostgreSQL queries", "message_search.tsv is regenerated with the PostgreSQL simple dictionary; invalid UTF-8 and NUL are normalized only in derived search text and counted per table", "Malformed subject/from_addr/to_addr display metadata is normalized only with exact original bytes verified in message_header_bytes; counts are reported per table", "SQL timestamps are normalized to UTC at PostgreSQL microsecond precision; raw calendar/JSON/MIME data remains unchanged"}, Excluded: []string{}}
 	if target == nil || target.dialect != DialectPostgres {
 		return report, errors.New("target must be PostgreSQL")
 	}
@@ -112,7 +113,7 @@ func TransferSQLiteToPostgres(ctx context.Context, path string, target *Store, p
 		return report, err
 	}
 	for _, p := range plans {
-		record, e := copyTransferTable(ctx, read, tx, p)
+		record, e := copyTransferTable(ctx, read, tx, p, target)
 		if e != nil {
 			return report, fmt.Errorf("transfer %s: %w", p.source, e)
 		}
@@ -327,7 +328,7 @@ func deferTransferConstraints(ctx context.Context, tx *sql.Tx) ([]transferConstr
 	_, err = tx.ExecContext(ctx, "SET CONSTRAINTS ALL DEFERRED")
 	return constraints, triggers, err
 }
-func copyTransferTable(ctx context.Context, source, target *sql.Tx, plan transferPlan) (TransferTable, error) {
+func copyTransferTable(ctx context.Context, source, target *sql.Tx, plan transferPlan, store *Store) (TransferTable, error) {
 	record := TransferTable{Source: plan.source, Target: plan.target}
 	names := []string{}
 	quoted := []string{}
@@ -347,10 +348,17 @@ func copyTransferTable(ctx context.Context, source, target *sql.Tx, plan transfe
 	}
 	defer statement.Close()
 	var sourceHash transferDigest
+	var headers []legacyMessageHeaders
+	var headerBytes int64
 	for rows.Next() {
-		var corrections *int64
+		corrections := transferTextCorrections{}
 		if plan.source == "message_fts" {
-			corrections = &record.NormalizedSearchFields
+			corrections.searchFields = &record.NormalizedSearchFields
+		}
+		if plan.source == "messages" {
+			corrections.headerRows = &headers
+			corrections.headerFields = &record.PreservedHeaderFields
+			corrections.headerBytes = &headerBytes
 		}
 		values, err := scanTransferRow(rows, plan.columns, corrections)
 		if err != nil {
@@ -371,6 +379,11 @@ func copyTransferTable(ctx context.Context, source, target *sql.Tx, plan transfe
 	}
 	if err = statement.Close(); err != nil {
 		return record, err
+	}
+	for _, h := range headers {
+		if err = store.preserveMessageHeadersTx(ctx, target, h); err != nil {
+			return record, err
+		}
 	}
 	verified, err := target.QueryContext(ctx, "SELECT "+selectColumns+" FROM "+pq.QuoteIdentifier(plan.target))
 	if err != nil {
@@ -397,7 +410,15 @@ func copyTransferTable(ctx context.Context, source, target *sql.Tx, plan transfe
 	record.Verified = true
 	return record, nil
 }
-func scanTransferRow(rows *sql.Rows, columns []transferColumn, searchCorrections ...*int64) ([]any, error) {
+
+type transferTextCorrections struct {
+	searchFields *int64
+	headerFields *int64
+	headerBytes  *int64
+	headerRows   *[]legacyMessageHeaders
+}
+
+func scanTransferRow(rows *sql.Rows, columns []transferColumn, options ...transferTextCorrections) ([]any, error) {
 	values := make([]any, len(columns))
 	pointers := make([]any, len(columns))
 	for i := range values {
@@ -406,29 +427,64 @@ func scanTransferRow(rows *sql.Rows, columns []transferColumn, searchCorrections
 	if err := rows.Scan(pointers...); err != nil {
 		return nil, err
 	}
+	var fixes transferTextCorrections
+	if len(options) > 0 {
+		fixes = options[0]
+	}
+	h := legacyMessageHeaders{}
 	for i, c := range columns {
-		if len(searchCorrections) > 0 && searchCorrections[0] != nil && (c.name == "subject" || c.name == "from_addr" || c.name == "to_addr" || c.name == "body") {
-			var text string
-			var ok bool
-			switch v := values[i].(type) {
-			case string:
-				text, ok = v, true
-			case []byte:
-				text, ok = string(v), true
-			}
-			if ok {
-				clean := normalizeSearchText(text)
-				if clean != text {
-					(*searchCorrections[0])++
-				}
-				values[i] = clean
+		if c.name == "id" {
+			h.id = fmt.Sprint(values[i])
+			if b, ok := values[i].([]byte); ok {
+				h.id = string(b)
 			}
 		}
+	}
+	for i, c := range columns {
+		if fixes.searchFields != nil || fixes.headerRows != nil {
+			if c.name == "subject" || c.name == "from_addr" || c.name == "to_addr" || (fixes.searchFields != nil && c.name == "body") {
+				var text string
+				var ok bool
+				switch v := values[i].(type) {
+				case string:
+					text, ok = v, true
+				case []byte:
+					text, ok = string(v), true
+				}
+				if ok {
+					clean := normalizeSearchText(text)
+					if clean != text {
+						if fixes.searchFields != nil {
+							(*fixes.searchFields)++
+						} else {
+							(*fixes.headerFields)++
+							*fixes.headerBytes += int64(len(text))
+							if *fixes.headerBytes > 32<<20 {
+								return nil, errors.New("legacy header archive exceeds safe in-memory transfer limit")
+							}
+							switch c.name {
+							case "subject":
+								h.subject = []byte(text)
+							case "from_addr":
+								h.from = []byte(text)
+							case "to_addr":
+								h.to = []byte(text)
+							}
+						}
+					}
+					values[i] = clean
+				}
+			}
+		}
+
 		value, err := normalizeTransferValue(values[i], c.kind)
 		if err != nil {
 			return nil, fmt.Errorf("invalid value in column %s (contents suppressed)", c.name)
 		}
 		values[i] = value
+	}
+	if h.changed() {
+		*fixes.headerRows = append(*fixes.headerRows, h)
 	}
 	return values, nil
 }

@@ -727,6 +727,7 @@ func (s *Store) insertMessageTx(ctx context.Context, tx *sql.Tx, msg *Message, c
 	if msg.Archived {
 		arch = 1
 	}
+	originalHeaders := legacyMessageHeaders{id: msg.ID, subject: preserveHeaderText(&msg.Subject), from: preserveHeaderText(&msg.FromAddr), to: preserveHeaderText(&msg.ToAddr)}
 	ins := s.rebind(`INSERT INTO messages(id, mailbox_id, uid, size, flags, internal_date, file_path, message_id, subject, from_addr, to_addr, date_hdr, archived, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	args := []any{
@@ -735,6 +736,9 @@ func (s *Store) insertMessageTx(ctx context.Context, tx *sql.Tx, msg *Message, c
 	}
 	if _, err := tx.ExecContext(ctx, ins, args...); err != nil {
 		return nil, mapErr(err)
+	}
+	if err := s.preserveMessageHeadersTx(ctx, tx, originalHeaders); err != nil {
+		return nil, err
 	}
 	if err := s.queueTravelMessageTx(ctx, tx, msg); err != nil {
 		return nil, err

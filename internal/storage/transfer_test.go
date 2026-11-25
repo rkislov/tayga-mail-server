@@ -49,6 +49,9 @@ func TestFullSQLitePostgresTransfer(t *testing.T) {
 	if _, err = source.DB().ExecContext(ctx, `UPDATE message_fts SET body=? WHERE message_id=?`, "unique-search-needle \xd0\xee\x00 remains", message.ID); err != nil {
 		t.Fatal(err)
 	}
+	if _, err = source.DB().ExecContext(ctx, `UPDATE messages SET subject=?,from_addr=?,to_addr=? WHERE id=?`, "old\xff subject", "from\xd0\xee", "to\x00recipient", message.ID); err != nil {
+		t.Fatal(err)
+	}
 	if err = source.PutSetting(ctx, "mattermost.agents.history:private", `{"messages":["PRIVATE_CONTENT_SENTINEL"]}`); err != nil {
 		t.Fatal(err)
 	}
@@ -91,6 +94,17 @@ func TestFullSQLitePostgresTransfer(t *testing.T) {
 	}
 	if corrected != 1 {
 		t.Fatalf("search corrections: %d", corrected)
+	}
+	var preserved int64
+	for _, table := range report.Tables {
+		preserved += table.PreservedHeaderFields
+	}
+	if preserved != 3 {
+		t.Fatalf("preserved header fields: %d", preserved)
+	}
+	var subject, from, to []byte
+	if err = target.DB().QueryRowContext(ctx, `SELECT subject,from_addr,to_addr FROM message_header_bytes WHERE message_id=$1`, message.ID).Scan(&subject, &from, &to); err != nil || string(subject) != "old\xff subject" || string(from) != "from\xd0\xee" || string(to) != "to\x00recipient" {
+		t.Fatal("original header bytes lost", err)
 	}
 	var indexed string
 	if err = target.DB().QueryRowContext(ctx, `SELECT body FROM message_search WHERE message_id=$1`, message.ID).Scan(&indexed); err != nil || indexed != normalizeSearchText("unique-search-needle \xd0\xee\x00 remains") {
