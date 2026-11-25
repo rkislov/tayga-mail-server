@@ -1,0 +1,71 @@
+:root[data-tayga-product] {
+  --tayga-product-panel: #fff;
+  --tayga-product-text: #171c17;
+  --tayga-product-muted: #4e5c51;
+  --tayga-product-sidebar: #f0f3ec;
+  --tayga-product-line: #dce3d8;
+  --tayga-product-focus: #547245;
+  --center-channel-bg-rgb: 255,255,255 !important;
+  --center-channel-color-rgb: 23,28,23 !important;
+  --sidebar-bg-rgb: 240,243,236 !important;
+  --sidebar-text-rgb: 34,49,35 !important;
+  --sidebar-text-active-border-rgb: 76,109,60 !important;
+  --button-bg-rgb: 62,92,48 !important;
+  --button-color-rgb: 255,255,255 !important;
+  --link-color-rgb: 52,93,48 !important;
+  --center-channel-bg: var(--tayga-product-panel) !important;
+  --center-channel-color: var(--tayga-product-text) !important;
+  --sidebar-bg: var(--tayga-product-sidebar) !important;
+  --sidebar-text: rgb(var(--sidebar-text-rgb)) !important;
+  --sidebar-text-active-border: rgb(var(--sidebar-text-active-border-rgb)) !important;
+  --sidebar-text-active-color: var(--tayga-product-text) !important;
+  --sidebar-header-bg: var(--tayga-product-sidebar) !important;
+  --sidebar-header-text-color: var(--tayga-product-text) !important;
+  --button-bg: rgb(var(--button-bg-rgb)) !important;
+  --button-color: #fff !important;
+  --link-color: rgb(var(--link-color-rgb)) !important;
+  --link-visited-color-rgb: 73,91,101 !important;
+  --sys-center-channel-bg: var(--tayga-product-panel) !important;
+  --sys-center-channel-color: var(--tayga-product-text) !important;
+  --sys-button-bg: var(--button-bg) !important;
+  --sys-button-color: var(--button-color) !important;
+  --sys-link-color: var(--link-color) !important;
+  --sidebar-white-logo: false !important;
+  --font-family: system-ui, -apple-system, Arial, sans-serif !important;
+  --heading-font: var(--font-family) !important;
+  --body-font: var(--font-family) !important;
+  color-scheme: light;
+}
+:root[data-tayga-product][data-tayga-color="dark"] {
+  color-scheme: dark;
+  --tayga-product-panel: #1b2420;
+  --tayga-product-text: #e8eee9;
+  --tayga-product-muted: #b4c4ba;
+  --tayga-product-sidebar: #22302a;
+  --tayga-product-line: #43554b;
+  --tayga-product-focus: #b8d99f;
+  --center-channel-bg-rgb: 27,36,32 !important;
+  --center-channel-color-rgb: 232,238,233 !important;
+  --sidebar-bg-rgb: 34,48,42 !important;
+  --sidebar-text-rgb: 224,232,226 !important;
+  --sidebar-text-active-border-rgb: 184,217,159 !important;
+  --button-bg-rgb: 70,105,55 !important;
+  --link-color-rgb: 181,219,160 !important;
+  --link-visited-color-rgb: 201,184,227 !important;
+  --prop-default: #2e3e35 !important;
+  --prop-gray: #38453f !important;
+  --prop-green: #355845 !important;
+  --prop-blue: #324e66 !important;
+  --prop-brown: #59472f !important;
+  --prop-orange: #68472f !important;
+  --prop-yellow: #5c522c !important;
+  --prop-purple: #514364 !important;
+  --prop-pink: #603f54 !important;
+  --prop-red: #673c40 !important;
+}
+html[data-tayga-product] body { font-family:var(--font-family); }
+html[data-tayga-product] :is(button, a, input, select, textarea):focus-visible {
+  outline: 2px solid var(--tayga-product-focus);
+  outline-offset: 2px;
+}
+html[data-tayga-product="boards"] .VersionMessage { display:none; }

@@ -387,3 +387,30 @@ func TestAgentsRepliesKeepCausalPostOrder(t *testing.T) {
 		t.Fatalf("causality lost: %#v", posts)
 	}
 }
+
+func TestAgentTitlesSurviveProviderRejection(t *testing.T) {
+	f, _, _ := agentsFixture(t)
+	rejected := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		write(w, 429, map[string]any{"error": map[string]string{"code": "credit_balance_exhausted", "message": "PRIVATE_CREDIT_DETAIL"}})
+	}))
+	defer rejected.Close()
+	cfg := emptyAgentConfig()
+	if err := f.api.agentLoad(t.Context(), agentConfigKey(f.users[0]), &cfg); err != nil {
+		t.Fatal(err)
+	}
+	cfg.Providers[0].URL = rejected.URL + "/v1"
+	f.call(t, "PUT", "/tms/agents/config", f.tokens[0], cfg, 200)
+	conv := f.call(t, "POST", "/tms/agents/conversations", f.tokens[0], map[string]string{"agent_id": "helper"}, 201)
+	path := "/tms/agents/conversations/" + conv["id"].(string)
+	question := "Первый вопрос\n" + strings.Repeat("длинный ", 14)
+	got := f.call(t, "POST", path+"/messages", f.tokens[0], map[string]string{"content": question}, 502)
+	text, _ := got["message"].(string)
+	if !strings.Contains(text, "баланс") || strings.Contains(text, "PRIVATE_CREDIT_DETAIL") {
+		t.Fatalf("unexpected rejection message %q", text)
+	}
+	saved := f.call(t, "GET", path, f.tokens[0], nil, 200)
+	title, _ := saved["title"].(string)
+	if !strings.HasPrefix(title, "Первый вопрос ") || !strings.HasSuffix(title, "…") || len([]rune(title)) > 60 {
+		t.Fatalf("unexpected title %q", title)
+	}
+}

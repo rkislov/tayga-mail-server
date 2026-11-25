@@ -69,7 +69,9 @@ func (s *Server) handleAdminResources(w http.ResponseWriter, r *http.Request) {
 		}
 		out := make([]map[string]any, 0, len(list))
 		for _, res := range list {
-			out = append(out, resourceToJSON(res))
+			if s.adminCanManageDomain(r, admin, res.DomainID) {
+				out = append(out, resourceToJSON(res))
+			}
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"resources": out})
 

@@ -551,6 +551,9 @@ func Load(path string) (*Config, error) {
 	}
 
 	cfg := Default()
+	// A bootstrap without an explicit storage driver must supply a PostgreSQL DSN.
+	// Explicit SQLite configurations remain readable by the migration and restore tools.
+	cfg.Storage.Driver = "postgres"
 	if err := yaml.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("parse config: %w", err)
 	}

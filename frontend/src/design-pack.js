@@ -6,7 +6,7 @@ async function boundedPreviewBlob(response,limit) {
 }
 // Shared stroke language for reader actions and document previews.
 function designIcon(name) {
-  const paths={check:'m5 12 4 4L19 6',question:'M9 8a3 3 0 0 1 6 0c0 3-3 2-3 5m0 4h.01',read:'M3 9l9-6 9 6v12H3zM3 9l9 7 9-7',unread:'M3 5h18v14H3zM3 6l9 7 9-7',settings:'M9 3h6l1 4 4 1v6l-4 1-1 4H9l-1-4-4-1V8l4-1zM9 11a3 3 0 1 0 6 0 3 3 0 0 0-6 0',key:'M15 7a5 5 0 1 0-7 7l-5 5v3h3v-3h3l3-3M15 7h.01',shield:'M12 3 3 7v5c0 5 9 9 9 9s9-4 9-9V7zM9 12l2 2 4-4',refresh:'M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-1l2 6M4 12l2 6a7 7 0 0 0 12-1',disconnect:'M9 5H4v14h5M12 12h9m-4-4 4 4-4 4',forward:'m15 5 6 6-6 6M21 11h-9a8 8 0 0 0-8 8',reply:'M9 5 3 11l6 6M3 11h9a8 8 0 0 1 8 8','reply-all':'m8 4-6 6 6 6m5-12-6 6 6 6M7 10h6a8 8 0 0 1 8 8',trip:'M8 2h8v4H8zM5 6h14v15H5zM9 10v6m6-6v6',spam:'m7 3-4 4v10l4 4h10l4-4V7l-4-4zM12 7v6m0 4h.01',archive:'M3 3h18v5H3zM5 8v13h14V8M9 12h6',delete:'M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7',download:'M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4',close:'m6 6 12 12M18 6 6 18'};
+  const paths={bot:'M12 3v3M7 6h10a4 4 0 0 1 4 4v6a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4v-6a4 4 0 0 1 4-4zM8 12h.01m8 0h.01M9 16h6',calendar:'M4 6h16v14H4zM8 3v6m8-6v6M4 11h16',files:'M4 7h16v13H4zM7 7l2-3h6l2 3M4 12h16',check:'m5 12 4 4L19 6',question:'M9 8a3 3 0 0 1 6 0c0 3-3 2-3 5m0 4h.01',read:'M3 9l9-6 9 6v12H3zM3 9l9 7 9-7',unread:'M3 5h18v14H3zM3 6l9 7 9-7',settings:'M9 3h6l1 4 4 1v6l-4 1-1 4H9l-1-4-4-1V8l4-1zM9 11a3 3 0 1 0 6 0 3 3 0 0 0-6 0',key:'M15 7a5 5 0 1 0-7 7l-5 5v3h3v-3h3l3-3M15 7h.01',shield:'M12 3 3 7v5c0 5 9 9 9 9s9-4 9-9V7zM9 12l2 2 4-4',refresh:'M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-1l2 6M4 12l2 6a7 7 0 0 0 12-1',disconnect:'M9 5H4v14h5M12 12h9m-4-4 4 4-4 4',forward:'m15 5 6 6-6 6M21 11h-9a8 8 0 0 0-8 8',reply:'M9 5 3 11l6 6M3 11h9a8 8 0 0 1 8 8','reply-all':'m8 4-6 6 6 6m5-12-6 6 6 6M7 10h6a8 8 0 0 1 8 8',trip:'M8 2h8v4H8zM5 6h14v15H5zM9 10v6m6-6v6',spam:'m7 3-4 4v10l4 4h10l4-4V7l-4-4zM12 7v6m0 4h.01',archive:'M3 3h18v5H3zM5 8v13h14V8M9 12h6',delete:'M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7',download:'M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4',close:'m6 6 12 12M18 6 6 18'};
   return '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="'+(paths[name]||paths.download)+'"/></svg>';
 }
 function documentPreviewType(name) {
@@ -303,19 +303,62 @@ function enhanceConnectionTable(table) {
   search.oninput=()=>{page=0;render()};size.onchange=()=>{page=0;render()};prev.onclick=()=>{page--;render()};next.onclick=()=>{page++;render()};render();
 }
 
-async function openAdminSessions(){const dialog=document.createElement('dialog');dialog.className='document-preview admin-sessions-dialog';dialog.style.width='min(960px,94vw)';const header=document.createElement('header'),title=document.createElement('strong'),refresh=document.createElement('button'),close=document.createElement('button');title.textContent=mailImageText('Сессии и подключения','Sessions and connections');refresh.className=close.className='btn-secondary btn-sm';refresh.innerHTML=designIcon('refresh');refresh.title=t('refresh');refresh.setAttribute('aria-label',refresh.title);close.innerHTML=designIcon('close');close.title=mailImageText('Закрыть','Close');close.setAttribute('aria-label',close.title);refresh.classList.add('action-icon');close.classList.add('action-icon');close.onclick=()=>dialog.close();header.append(title,refresh,close);const content=document.createElement('div');content.className='document-preview-content';const status=document.createElement('p');status.setAttribute('role','status');dialog.append(header,content,status);document.body.append(dialog);dialog.addEventListener('close',()=>dialog.remove(),{once:true});dialog.showModal();const load=async()=>{try{const data=await api('/api/v1/admin/sessions');content.replaceChildren();const table=document.createElement('table');table.className='admin-users-table';const head=document.createElement('tr');for(const name of [mailImageText('Пользователь','User'),mailImageText('Протокол','Protocol'),'IP',mailImageText('Устройство / клиент','Device / client'),mailImageText('Последняя активность','Last seen'),'']){const cell=document.createElement('th');cell.textContent=name;head.append(cell)}table.append(head);for(const item of data.sessions||[]){const row=document.createElement('tr');for(const value of [item.email,item.protocol,item.address,item.agent||'—',new Date(item.last_seen).toLocaleString()]){const cell=document.createElement('td');cell.textContent=value;row.append(cell)}const cell=document.createElement('td'),button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.innerHTML=designIcon('disconnect');button.title=mailImageText('Разорвать сессию','Disconnect session');button.setAttribute('aria-label',button.title);button.classList.add('action-icon');button.onclick=async()=>{button.disabled=true;try{await api('/api/v1/admin/sessions/'+encodeURIComponent(item.id),{method:'DELETE'});await load()}catch(error){status.textContent=error.message;button.disabled=false}};cell.append(button);row.append(cell);table.append(row)}content.append(table);enhanceConnectionTable(table);const hint=document.createElement('p');hint.className='meta';hint.textContent=mailImageText('Почтовые и XMPP-соединения показаны, пока подключены. Web, EWS и ActiveSync — при активности за последние 15 минут. Разрыв Web отзывает токен, EWS/ActiveSync — прерывает текущие запросы. Вход с паролем остаётся доступен.','Mail and XMPP connections are listed while connected. Web, EWS and ActiveSync show activity in the last 15 minutes. Disconnect revokes Web tokens or cancels current EWS/ActiveSync requests. Password login remains possible.');content.append(hint)}catch(error){status.textContent=error.message}};refresh.onclick=load;await load();}
-const sessionsButton=document.createElement('button');sessionsButton.type='button';sessionsButton.className='btn-secondary';sessionsButton.textContent=mailImageText('Сессии и устройства','Sessions and devices');sessionsButton.onclick=openAdminSessions;$('app-monitor')?.prepend(sessionsButton);
+async function openAdminSessions(){
+  const content=$('admin-session-content'),status=$('admin-session-status'),refresh=$('admin-session-refresh');
+  const account=state.tokens?.access_token;
+  refresh.onclick=()=>openAdminSessions();
+  refresh.disabled=true;
+  setMsg(status,'');
+  try{
+    const data=await api('/api/v1/admin/sessions');
+    if(state.tokens?.access_token!==account||!state.me?.is_admin)return;
+    const table=document.createElement('table');
+    table.className='admin-users-table';
+    const head=table.createTHead().insertRow();
+    for(const name of [mailImageText('Пользователь','User'),mailImageText('Протокол','Protocol'),'IP',mailImageText('Клиент','Client'),mailImageText('Последняя активность','Last activity'),mailImageText('Действия','Actions')]){
+      const heading=document.createElement('th');
+      heading.textContent=name;
+      head.append(heading);
+    }
+    const body=table.createTBody();
+    for(const item of data.sessions||[]){
+      const row=body.insertRow();
+      for(const value of [item.email,item.protocol,item.address||'—',item.agent||'—',new Date(item.last_seen).toLocaleString()]) row.insertCell().textContent=value;
+      const button=document.createElement('button');
+      button.type='button';
+      button.className='btn-secondary btn-sm';
+      button.textContent=mailImageText('Завершить','End session');
+      button.disabled=!!item.is_current;
+      if(item.is_current)button.title=mailImageText('Текущая сессия','Current session');
+      button.onclick=async()=>{
+        if(!await askConfirm(mailImageText('Завершить эту сессию?','End this session?'),{danger:true}))return;
+        button.disabled=true;
+        try{
+          await api('/api/v1/admin/sessions/'+encodeURIComponent(item.id),{method:'DELETE'});
+          await openAdminSessions();
+        }catch(error){setMsg(status,error.message,'err');button.disabled=false;}
+      };
+      row.insertCell().append(button);
+    }
+    content.replaceChildren(table);
+    if(body.rows.length)enhanceConnectionTable(table);
+    else setMsg(status,mailImageText('Активных сессий нет','No active sessions'));
+  }catch(error){setMsg(status,error.message,'err');}
+  finally{refresh.disabled=false;}
+}
 
-async function openAdminDevices(){
-  const dialog=document.createElement('dialog');dialog.className='document-preview admin-sessions-dialog admin-devices-dialog';dialog.style.width='min(1080px,94vw)';
-  const header=document.createElement('header'),title=document.createElement('strong'),refresh=document.createElement('button'),archive=document.createElement('button'),close=document.createElement('button');
-  title.textContent=mailImageText('Мобильные устройства','Mobile devices');let includeRetired=false;
-  for(const button of [refresh,archive,close]){button.type='button';button.className='btn-secondary btn-sm';}
-  refresh.textContent=t('refresh');archive.textContent=mailImageText('Показать забытые','Show forgotten');close.textContent=mailImageText('Закрыть','Close');close.onclick=()=>dialog.close();header.append(title,archive,refresh,close);
-  const body=document.createElement('div');body.className='document-preview-content';const status=document.createElement('p');status.setAttribute('role','status');dialog.append(header,body,status);document.body.append(dialog);dialog.addEventListener('close',()=>dialog.remove(),{once:true});dialog.showModal();
+async function openAdminDevices(panel){
+  const refresh=panel.querySelector('#admin-device-refresh');
+  const archive=panel.querySelector('#admin-device-archive');
+  const body=panel.querySelector('#admin-device-content');
+  const status=panel.querySelector('#admin-device-status');
+  const account=state.tokens?.access_token;
+  let includeRetired=false;
+  refresh.textContent=t('refresh');
+  archive.textContent=mailImageText('Показать забытые','Show forgotten');
   const wipeLabel=value=>({none:mailImageText('Очистка не запрашивалась','No wipe requested'),pending:mailImageText('Очистка ожидает подключения','Wipe waiting for connection'),sent:mailImageText('Очистка отправлена, ждём подтверждения','Wipe sent, awaiting confirmation'),acknowledged:mailImageText('Клиент подтвердил очистку','Client acknowledged wipe'),cancelled:mailImageText('Неотправленная команда отменена','Unsent wipe cancelled')})[value]||value;
   const load=async()=>{
-    const data=await api('/api/v1/admin/devices'+(includeRetired?'?include_retired=true':''));body.replaceChildren();const table=document.createElement('table');table.className='admin-users-table device-table';
+    const data=await api('/api/v1/admin/devices'+(includeRetired?'?include_retired=true':''));if(state.tokens?.access_token!==account||!state.me?.is_admin)return;body.replaceChildren();const table=document.createElement('table');table.className='admin-users-table device-table';
     const thead=document.createElement('thead'),headRow=document.createElement('tr');for(const label of [mailImageText('Пользователь','User'),mailImageText('Устройство / клиент','Device / client'),'IP',mailImageText('Последняя активность','Last activity'),mailImageText('Состояние','State'),mailImageText('Действия','Actions')]){const th=document.createElement('th');th.textContent=label;headRow.append(th);}thead.append(headRow);const tbody=document.createElement('tbody');table.append(thead,tbody);body.append(table);
     for(const item of data.devices||[]){
       const row=document.createElement('tr'),retired=!!item.retired_at;

@@ -1,6 +1,6 @@
 # Linux: пакеты DEB и RPM
 
-Выпуск 1.0.5 добавляет пакеты `tayga-mail_1.0.5_amd64.deb`, `tayga-mail_1.0.5_arm64.deb`, `tayga-mail_1.0.5_amd64.rpm` и `tayga-mail_1.0.5_arm64.rpm`. Бинарный файл статически собран с `CGO_ENABLED=0`; отдельная версия glibc не требуется. Пакеты требуют systemd, logrotate и системные корневые сертификаты. Архитектура RPM внутри пакета — x86_64 / aarch64.
+Выпуск 1.0.5 добавляет пакеты `tayga-mail_VERSION_amd64.deb`, `tayga-mail_1.0.5_arm64.deb`, `tayga-mail_VERSION_amd64.rpm` и `tayga-mail_1.0.5_arm64.rpm`. Бинарный файл статически собран с `CGO_ENABLED=0`; отдельная версия glibc не требуется. Пакеты требуют systemd, logrotate и системные корневые сертификаты. Архитектура RPM внутри пакета — x86_64 / aarch64.
 
 Целевые системы:
 
@@ -14,27 +14,35 @@
 
 ## Новая установка
 
-Скачайте нужный пакет и `checksums.txt` из [выпуска](https://github.com/rkislov/tayga-mail-server/releases/tag/v1.0.5). Проверьте SHA-256 скачанного файла по `checksums.txt` до установки. RPM опубликован без GPG-подписи пакета; контрольные суммы приложены к выпуску. Настройки проверки подписей системных репозиториев менять не нужно.
+Скачайте нужный пакет и `checksums.txt` из [актуального выпуска](https://github.com/rkislov/tayga-mail-server/releases/latest). Проверьте SHA-256 скачанного файла по `checksums.txt` до установки. RPM опубликован без GPG-подписи пакета; контрольные суммы приложены к выпуску. Настройки проверки подписей системных репозиториев менять не нужно.
 
 Ubuntu / Astra (выберите архитектуру своего сервера):
 
 ```sh
-sudo apt-get install ./tayga-mail_1.0.5_amd64.deb
+sudo apt-get install ./tayga-mail_VERSION_amd64.deb
 ```
 
 ALT:
 
 ```sh
-sudo apt-get install ./tayga-mail_1.0.5_amd64.rpm
+sudo apt-get install ./tayga-mail_VERSION_amd64.rpm
 ```
 
 CentOS / РЕД ОС:
 
 ```sh
-sudo dnf install ./tayga-mail_1.0.5_amd64.rpm
+sudo dnf install ./tayga-mail_VERSION_amd64.rpm
 ```
 
 При установке создаётся системная учётная запись `tayga`. Служба **не запускается и не включается автоматически** при первой установке. Пароля администратора по умолчанию нет.
+
+Для локальной установки подготовьте PostgreSQL 13 или новее в пакетах своего дистрибутива и запустите его. Затем выполните:
+
+```sh
+sudo /usr/lib/tayga-mail/postgres-bootstrap /etc/tayga/tayga.yaml
+```
+
+Для внешней базы заполните `storage.postgres.dsn` сами. Параметры памяти и CPU для локальной базы установщик применяет только к роли Tayga в её базе. Проверьте готовность PostgreSQL перед запуском службы. Замените `VERSION` в примерах фактической версией пакета.
 
 Откройте `sudoedit /etc/tayga/tayga.yaml` и задайте:
 

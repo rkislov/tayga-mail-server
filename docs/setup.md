@@ -16,7 +16,7 @@
 | Открытые порты снаружи | минимум `:25` (MX), `:80`/`:443` (UI + ACME), для клиентов — `:587`/`:465`, `:993` |
 | Диск под maildir + БД | путь из `mailstore.root` и `storage.*` |
 
-Для лаборатории достаточно SQLite и `tls.auto_generate: true`. Для продакшена — обычно PostgreSQL, нормальный сертификат (Let’s Encrypt или коммерческий) и осмысленный `server.hostname`.
+Для новой установки требуется PostgreSQL 13 или новее. Для лаборатории можно использовать `tls.auto_generate: true`. Для публичного сервера используйте доверенный сертификат и свой `server.hostname`. Прежние установки на SQLite переносятся по [руководству миграции](storage-migration.md).
 
 ## 1. Установка бинарника
 
@@ -59,6 +59,16 @@ sudo chmod 0700 /var/lib/tayga/backups
 sudo install -o root -g tayga -m 0640 configs/tayga.example.yaml /var/lib/tayga/config/tayga.yaml
 ```
 
+Для локального PostgreSQL на Linux сначала установите и запустите PostgreSQL из репозитория ОС. Например, на Debian и Ubuntu:
+
+```bash
+sudo apt install postgresql
+sudo systemctl enable --now postgresql
+sudo sh scripts/postgres/bootstrap.sh /var/lib/tayga/config/tayga.yaml
+```
+
+Скрипт создаёт роль и базу `tayga`, записывает случайный пароль в закрытый YAML и подбирает `work_mem`, `maintenance_work_mem`, `effective_cache_size` и число параллельных рабочих процессов по RAM и CPU, включая лимиты cgroup v2. Настройки применяются только к роли Tayga в её базе. Для внешней БД создайте отдельную роль и базу у провайдера и заполните DSN вручную. Для удалённого PostgreSQL используйте `sslmode=verify-full` и доверенный корневой сертификат.
+
 Обязательные поля:
 
 ```yaml
@@ -67,11 +77,9 @@ server:
   secrets_key: "<случайный постоянный секрет, минимум 32 байта>"
 
 storage:
-  driver: sqlite               # или postgres
-  sqlite:
-    path: /var/lib/tayga/data/tayga.db
-  # postgres:
-  #   dsn: "postgres://tayga:SECRET@db:5432/tayga?sslmode=require"
+  driver: postgres
+  postgres:
+    dsn: "postgres://tayga:SECRET@db.example.com:5432/tayga?sslmode=verify-full"
 
 mailstore:
   root: /var/lib/tayga/maildir

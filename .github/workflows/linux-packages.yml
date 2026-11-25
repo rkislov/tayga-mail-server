@@ -41,6 +41,20 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: tayga
+          POSTGRES_PASSWORD: package-fixture
+          POSTGRES_DB: tayga
+        ports:
+          - 15432:5432
+        options: >-
+          --health-cmd "pg_isready -U tayga -d tayga"
+          --health-interval 3s --health-timeout 3s --health-retries 15
+    env:
+      TAYGA_PACKAGE_DATABASE_DSN: postgresql://tayga:package-fixture@127.0.0.1:15432/tayga?sslmode=disable
     strategy:
       fail-fast: false
       matrix:
@@ -87,7 +101,7 @@ jobs:
           if [ "$FAMILY" = deb ]; then format=deb; fi
           package=$(find packages -name "*_amd64.$format" -print -quit)
           test -n "$package"
-          docker run --rm --platform linux/amd64 \
+          docker run --rm --network host -e TAYGA_PACKAGE_DATABASE_DSN --platform linux/amd64 \
             -v "$PWD/packages:/packages:ro" -v "$PWD/scripts:/scripts:ro" \
             "$IMAGE" sh /scripts/check-linux-package.sh "/packages/$(basename "$package")" "$FAMILY"
 
@@ -95,6 +109,20 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: tayga
+          POSTGRES_PASSWORD: package-fixture
+          POSTGRES_DB: tayga
+        ports:
+          - 15432:5432
+        options: >-
+          --health-cmd "pg_isready -U tayga -d tayga"
+          --health-interval 3s --health-timeout 3s --health-retries 15
+    env:
+      TAYGA_PACKAGE_DATABASE_DSN: postgresql://tayga:package-fixture@127.0.0.1:15432/tayga?sslmode=disable
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -102,11 +130,25 @@ jobs:
           name: linux-native-packages
           path: packages
       - name: Real systemd service lifecycle and logrotate
-        run: sudo sh scripts/check-linux-package.sh "$PWD/$(find packages -name '*_amd64.deb' -print -quit)" deb
+        run: sudo --preserve-env=TAYGA_PACKAGE_DATABASE_DSN sh scripts/check-linux-package.sh "$PWD/$(find packages -name '*_amd64.deb' -print -quit)" deb
   arm64:
     needs: build
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: tayga
+          POSTGRES_PASSWORD: package-fixture
+          POSTGRES_DB: tayga
+        ports:
+          - 15432:5432
+        options: >-
+          --health-cmd "pg_isready -U tayga -d tayga"
+          --health-interval 3s --health-timeout 3s --health-retries 15
+    env:
+      TAYGA_PACKAGE_DATABASE_DSN: postgresql://tayga:package-fixture@127.0.0.1:15432/tayga?sslmode=disable
     strategy:
       fail-fast: false
       matrix:
@@ -128,5 +170,5 @@ jobs:
         run: |
           package=$(find packages -name "*_arm64.$FORMAT" -print -quit)
           test -n "$package"
-          docker run --rm -v "$PWD/packages:/packages:ro" -v "$PWD/scripts:/scripts:ro" \
+          docker run --rm --network host -e TAYGA_PACKAGE_DATABASE_DSN -v "$PWD/packages:/packages:ro" -v "$PWD/scripts:/scripts:ro" \
             "$IMAGE" sh /scripts/check-linux-package.sh "/packages/$(basename "$package")" "$FAMILY"

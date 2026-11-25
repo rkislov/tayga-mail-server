@@ -201,6 +201,7 @@ const I18N = {
     mig_off: "Выкл",
     nav_admin: "Админ",
     nav_monitor: "Мониторинг",
+    nav_backups: "Резервные копии", nav_sessions: "Сессии", nav_devices: "Устройства",
     nav_maillog: "Лог писем",
     maillog_lede: "Приём, доставка и исходящая очередь. Поиск по строкам лога.",
     maillog_search: "Поиск",
@@ -744,6 +745,7 @@ contacts_search: "Поиск контактов…",
     mig_off: "Off",
     nav_admin: "Admin",
     nav_monitor: "Monitoring",
+    nav_backups: "Backups", nav_sessions: "Sessions", nav_devices: "Devices",
     nav_maillog: "Mail log",
     maillog_lede: "Accept, delivery, and outbound queue. Search by log line.",
     maillog_search: "Search",
@@ -1446,7 +1448,7 @@ $("color-mode-select")?.addEventListener("change",event=>applyColorMode(event.ta
 const APPS = [
   "mail", "calendar", "contacts", "notes", "tasks", "files", "chat",
   "profile", "security", "appearance", "filters", "language", "migration",
-  "monitor", "outbound", "antispam", "maillog", "tenants", "tls", "xmpp", "mattermost", "vks", "server", "cos",
+  "monitor", "backups", "sessions", "devices", "outbound", "antispam", "maillog", "tenants", "tls", "xmpp", "mattermost", "vks", "server", "cos",
 ];
 
 const mailState = { mailboxID: "", messageID: "", mailboxes: [], order: [], searchQ: "", offset: 0, pageSize: 25, request: 0, sort: "date", sortOrder: "desc", filter: "all" };
@@ -1504,6 +1506,9 @@ const APP_I18N = {
   language: "nav_language",
   migration: "nav_migration",
   monitor: "nav_monitor",
+  backups: "nav_backups",
+  sessions: "nav_sessions",
+  devices: "nav_devices",
  outbound: "monitor_queue",
   antispam: "nav_antispam",
   maillog: "nav_maillog",
@@ -1567,6 +1572,8 @@ function showApp(name) {
   if(app === "outbound") refreshOutbound();
   if (app === "monitor") { refreshMonitor(); startMonitorLive(); }
   else stopMonitorLive();
+  if (app === "sessions" && state.me?.is_admin) void openAdminSessions();
+  if (app === "devices" && state.me?.is_admin) void openAdminDevices($("app-devices"));
   if (app === "antispam") refreshQuarantine();
   if (app === "maillog") refreshMailLog();
   if (app === "tenants") refreshTenantNav();
@@ -1609,6 +1616,8 @@ function isAuthPublicPath(path) {
 }
 
 function clearSession() {
+  $("admin-session-content")?.replaceChildren();
+  $("admin-device-content")?.replaceChildren();
   window.dispatchEvent(new Event("tms-products-session-ended"));
   resetMattermostBots();
   if (typeof omemoCancelOperations === 'function') omemoCancelOperations();
@@ -2144,7 +2153,7 @@ async function refreshOutbound() {
 $("btn-monitor-refresh").addEventListener("click", () => refreshMonitor());
 
 async function downloadBackup(includeMail) {
-  setMsg($("monitor-msg"), "Preparing backup…");
+  setMsg($("backup-msg"), mailImageText("Готовим архив…","Preparing backup…"));
   try {
     const q = includeMail ? "?include_mail=1" : "";
     const headers = {};
@@ -2160,9 +2169,9 @@ async function downloadBackup(includeMail) {
     a.download = "tayga-backup.tar.gz";
     a.click();
     URL.revokeObjectURL(a.href);
-    setMsg($("monitor-msg"), "Backup downloaded.", "ok");
+    setMsg($("backup-msg"), mailImageText("Архив скачан.","Backup downloaded."), "ok");
   } catch (err) {
-    setMsg($("monitor-msg"), err.message, "err");
+    setMsg($("backup-msg"), err.message, "err");
   }
 }
 $("btn-backup").addEventListener("click", () => downloadBackup(false));
@@ -2171,11 +2180,11 @@ $("btn-backup-mail").addEventListener("click", () => downloadBackup(true));
 $("btn-restore").addEventListener("click", async () => {
   const input = $("restore-file");
   if (!input.files || !input.files[0]) {
-    setMsg($("monitor-msg"), "choose a backup file", "err");
+    setMsg($("backup-msg"), mailImageText("Выберите архив резервной копии","Choose a backup archive"), "err");
     return;
   }
   if (!await askConfirm("Restore will create missing tenants/users and may update existing accounts. Continue?", { danger: true })) return;
-  setMsg($("monitor-msg"), "Restoring…");
+  setMsg($("backup-msg"), mailImageText("Восстановление…","Restoring…"));
   try {
     const fd = new FormData();
     fd.append("file", input.files[0]);
@@ -2187,7 +2196,7 @@ $("btn-restore").addEventListener("click", async () => {
     let data;
     try { data = JSON.parse(text); } catch { data = { error: text }; }
     if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
-    setMsg($("monitor-msg"),
+    setMsg($("backup-msg"),
       "Restored: +" + (data.users_created || 0) + " users, " +
       (data.users_skipped || 0) + " skipped, " +
       (data.scripts_restored || 0) + " scripts, " +
@@ -2195,7 +2204,7 @@ $("btn-restore").addEventListener("click", async () => {
     refreshMonitor();
     refreshTenantNav();
   } catch (err) {
-    setMsg($("monitor-msg"), err.message, "err");
+    setMsg($("backup-msg"), err.message, "err");
   }
 });
 
@@ -2396,44 +2405,6 @@ $("form-create-domain")?.addEventListener("submit", async (e) => {
   }
 });
 
-async function refreshAdminResources() {
-  const list = $("admin-resource-list");
-  if (!list || !tenantNav.domainID) {
-    if (list) list.innerHTML = "";
-    return;
-  }
-  if ($("nr-local") && tenantNav.domainName) {
-    $("nr-local").placeholder = "room-201";
-  }
-  try {
-    const data = await api("/api/v1/admin/resources?domain_id=" + encodeURIComponent(tenantNav.domainID));
-    const items = data.resources || [];
-    list.innerHTML = items.map((r) => `
-      <li>
-        <span>
-          <strong>${escapeHtml(r.display_name || r.local_part)}</strong>
-          <span class="meta"> · ${escapeHtml(r.email)} · ${escapeHtml(r.kind)}${r.capacity ? " · " + r.capacity : ""}${r.auto_accept ? " · auto" : ""}</span>
-        </span>
-        <span class="actions">
-          <button type="button" class="btn-secondary" data-res-del="${escapeHtml(r.id)}">${escapeHtml(t("resources_delete"))}</button>
-        </span>
-      </li>`).join("") || `<li><span class="meta">${escapeHtml(t("resources_empty"))}</span></li>`;
-    list.querySelectorAll("[data-res-del]").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        if (!await askConfirm(t("resources_delete") + "?", { danger: true })) return;
-        try {
-          await api("/api/v1/admin/resources/" + encodeURIComponent(btn.dataset.resDel), { method: "DELETE" });
-          await refreshAdminResources();
-        } catch (err) {
-          setMsg($("admin-msg"), err.message, "err");
-        }
-      });
-    });
-  } catch (err) {
-    list.innerHTML = `<li><span class="meta">${escapeHtml(err.message)}</span></li>`;
-  }
-}
-
 $("form-create-resource")?.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!tenantNav.domainID) {
@@ -2457,7 +2428,7 @@ $("form-create-resource")?.addEventListener("submit", async (e) => {
     setMsg($("admin-msg"), "OK", "ok");
     $("form-create-resource").reset();
     if ($("nr-auto")) $("nr-auto").checked = true;
-    await refreshAdminResources();
+    await refreshAdminUsers();
   } catch (err) {
     setMsg($("admin-msg"), err.message, "err");
   }
@@ -2475,18 +2446,27 @@ async function refreshAdminUsers() {
   if ($("nu-email") && tenantNav.domainName && !$("nu-email").value) {
     $("nu-email").placeholder = "user@" + tenantNav.domainName;
   }
-  refreshAdminResources();
+
   try {
-    const q = tenantNav.domainID
+    const search = $("admin-user-search")?.value.trim() || "";
+    const scope = tenantNav.domainID
       ? "?domain_id=" + encodeURIComponent(tenantNav.domainID)
       : "?tenant_id=" + encodeURIComponent(tenantNav.tenantID);
-    const [data, cosData] = await Promise.all([
-      api("/api/v1/admin/users" + q+"&q="+encodeURIComponent($("admin-user-search")?.value.trim()||"")),
+    const [data, cosData, resourceData] = await Promise.all([
+      api("/api/v1/admin/users" + scope + "&q=" + encodeURIComponent(search)),
       api("/api/v1/admin/service-classes").catch(() => ({ service_classes: [] })),
+      api("/api/v1/admin/resources" + scope),
     ]);
     if (!list || request!==adminUserRequest) return;
     const users = data.users || [];
- if($("admin-user-search-status"))$("admin-user-search-status").textContent="Найдено: "+users.length;
+    const term = search.toLocaleLowerCase();
+    const resources = (resourceData.resources || []).filter(resource =>
+      (resource.display_name+" "+resource.email).toLocaleLowerCase().includes(term));
+    function accountIcon(icon, label) {
+      const safeLabel=escapeHtml(label);
+      return `<span class="ico" role="img" aria-label="${safeLabel}" title="${safeLabel}">${designIcon(icon)}</span>`;
+    }
+ if($("admin-user-search-status"))$("admin-user-search-status").textContent="Найдено: "+(users.length+resources.length);
     const classes = cosData.service_classes || [];
     const cosOptions = (selected) => [
       `<option value="">${escapeHtml(t("cos_none"))}</option>`,
@@ -2494,7 +2474,7 @@ async function refreshAdminUsers() {
         `<option value="${escapeHtml(sc.id)}" ${sc.id === selected ? "selected" : ""}>${escapeHtml(sc.name || sc.id)}</option>`
       ),
     ].join("");
-    list.innerHTML = users.map((u) => `<tr><td>${escapeHtml(u.display_name||"—")}</td><td>${escapeHtml(u.email)}</td><td><span class="badge">${t(u.enabled?"users_active":"users_disabled")}</span><div class="meta">${escapeHtml((u.is_global_admin||u.roles?.includes("global_admin"))?mailImageText("Глобальный администратор","Global administrator"):u.roles?.includes("tenant_admin")?mailImageText("Администратор организации","Organization administrator"):u.roles?.includes("domain_admin")?mailImageText("Администратор домена","Domain administrator"):mailImageText("Пользователь","User"))}</div></td><td>${fmtBytes(u.used_bytes)} / ${u.quota_bytes>0?fmtBytes(u.quota_bytes):"∞"}</td><td>          <label class="mig-policy-label" title="${escapeHtml(t("cos_lede"))}">
+    list.innerHTML = users.map((u) => `<tr data-account-id="${escapeHtml(u.id)}"><td><span class="account-kind">${u.auth_source==="bot"?accountIcon("bot",mailImageText("Бот","Bot")):""}${escapeHtml(u.display_name||"—")}</span></td><td>${escapeHtml(u.email)}</td><td><span class="badge ${u.enabled?"":"account-disabled"}">${t(u.enabled?"users_active":"users_disabled")}</span><div class="meta">${escapeHtml((u.is_global_admin||u.roles?.includes("global_admin"))?mailImageText("Глобальный администратор","Global administrator"):u.roles?.includes("tenant_admin")?mailImageText("Администратор организации","Organization administrator"):u.roles?.includes("domain_admin")?mailImageText("Администратор домена","Domain administrator"):mailImageText("Пользователь","User"))}</div></td><td>${fmtBytes(u.used_bytes)} / ${u.quota_bytes>0?fmtBytes(u.quota_bytes):"∞"}</td><td>          <label class="mig-policy-label" title="${escapeHtml(t("cos_lede"))}">
             <span>${escapeHtml(t("cos_assign"))}</span>
             <select class="field-input" data-user-cos="${escapeHtml(u.id)}" style="max-width:9rem">
               ${cosOptions(u.service_class_id || "")}
@@ -2510,7 +2490,27 @@ async function refreshAdminUsers() {
           </label>
 </td><td><div class="user-action-icons">
  ${[['quota','download',t('users_quota_action')],['toggle','disconnect',t(u.enabled?'users_disable':'users_enable')],['pass','key',t('users_reset_pw')],...(state.me?.is_global_admin?[['user-role','shield',mailImageText('Роль и права пользователя','User role and permissions')]]:[]),['mailbox-aliases','reply',mailImageText('Алиасы ящика','Mailbox aliases')],['mail-access','reply',mailImageText('Доступ к ящику','Mailbox access')],...((u.id!==state.me?.id&&!u.is_global_admin)?[['delete-user','delete',mailImageText('Удалить пользователя','Delete user')]]:[])].map(([action,icon,label])=>`<button type="button" class="btn-secondary user-action-icon" data-${action}="${escapeHtml(u.id)}" data-enabled="${u.enabled?'1':'0'}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${designIcon(icon)}</button>`).join('')}
- </div></td></tr>`).join("") || `<tr><td colspan="7" class="meta">${t("users_empty")}</td></tr>`;
+ </div></td></tr>`).join("");
+    list.insertAdjacentHTML("beforeend",resources.map(resource=>`
+      <tr data-account-id="resource-${escapeHtml(resource.id)}">
+        <td><span class="account-kind">${accountIcon(resource.kind==="room"?"calendar":"files",mailImageText("Ресурс календаря","Calendar resource"))}${escapeHtml(resource.display_name || resource.local_part)}</span></td>
+        <td>${escapeHtml(resource.email)}</td>
+        <td><span class="badge">${escapeHtml(t("resources_kind_"+resource.kind))}</span></td><td>—</td><td></td><td></td>
+        <td><div class="user-action-icons"><button type="button" class="btn-secondary" data-res-del="${escapeHtml(resource.id)}" aria-label="${escapeHtml(t("resources_delete"))}">${designIcon("delete")}</button></div></td>
+      </tr>`).join(""));
+    if (!list.children.length) list.innerHTML = `<tr><td colspan="7" class="meta">${t("users_empty")}</td></tr>`;
+    const sorted = Array.from(list.rows).filter(row=>row.dataset.accountId);
+    sorted.sort((a,b)=>a.cells[0].textContent.localeCompare(b.cells[0].textContent,lang));
+    list.append(...sorted);
+    list.querySelectorAll("[data-res-del]").forEach(button => {
+      button.onclick = async () => {
+        if (!await askConfirm(t("resources_delete")+"?", {danger:true})) return;
+        try {
+          await api("/api/v1/admin/resources/" + encodeURIComponent(button.dataset.resDel), {method:"DELETE"});
+          await refreshAdminUsers();
+        } catch (err) { setMsg($("admin-msg"), err.message, "err"); }
+      };
+    });
     list.querySelectorAll('[data-mailbox-aliases]').forEach(button=>button.onclick=()=>openAdminAliases('mailbox',users.find(u=>u.id===button.dataset.mailboxAliases)));
     list.querySelectorAll('[data-delete-user]').forEach(button=>button.onclick=async()=>{const user=users.find(u=>u.id===button.dataset.deleteUser);if(!await askConfirm(mailImageText('Удалить пользователя и его данные: ','Delete user and their data: ')+user.email+'?',{danger:true}))return;button.disabled=true;try{await api('/api/v1/admin/users/'+encodeURIComponent(user.id),{method:'DELETE'});await refreshAdminUsers()}catch(err){setMsg($('admin-msg'),err.message,'err');button.disabled=false}});
     list.querySelectorAll("[data-mail-access]").forEach(button=>button.onclick=()=>openMailboxAccess(button.dataset.mailAccess));list.querySelectorAll("[data-user-role]").forEach(button=>button.onclick=()=>openUserRole(users.find(u=>u.id===button.dataset.userRole)));
@@ -8870,7 +8870,7 @@ async function boundedPreviewBlob(response,limit) {
 }
 // Shared stroke language for reader actions and document previews.
 function designIcon(name) {
-  const paths={check:'m5 12 4 4L19 6',question:'M9 8a3 3 0 0 1 6 0c0 3-3 2-3 5m0 4h.01',read:'M3 9l9-6 9 6v12H3zM3 9l9 7 9-7',unread:'M3 5h18v14H3zM3 6l9 7 9-7',settings:'M9 3h6l1 4 4 1v6l-4 1-1 4H9l-1-4-4-1V8l4-1zM9 11a3 3 0 1 0 6 0 3 3 0 0 0-6 0',key:'M15 7a5 5 0 1 0-7 7l-5 5v3h3v-3h3l3-3M15 7h.01',shield:'M12 3 3 7v5c0 5 9 9 9 9s9-4 9-9V7zM9 12l2 2 4-4',refresh:'M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-1l2 6M4 12l2 6a7 7 0 0 0 12-1',disconnect:'M9 5H4v14h5M12 12h9m-4-4 4 4-4 4',forward:'m15 5 6 6-6 6M21 11h-9a8 8 0 0 0-8 8',reply:'M9 5 3 11l6 6M3 11h9a8 8 0 0 1 8 8','reply-all':'m8 4-6 6 6 6m5-12-6 6 6 6M7 10h6a8 8 0 0 1 8 8',trip:'M8 2h8v4H8zM5 6h14v15H5zM9 10v6m6-6v6',spam:'m7 3-4 4v10l4 4h10l4-4V7l-4-4zM12 7v6m0 4h.01',archive:'M3 3h18v5H3zM5 8v13h14V8M9 12h6',delete:'M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7',download:'M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4',close:'m6 6 12 12M18 6 6 18'};
+  const paths={bot:'M12 3v3M7 6h10a4 4 0 0 1 4 4v6a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4v-6a4 4 0 0 1 4-4zM8 12h.01m8 0h.01M9 16h6',calendar:'M4 6h16v14H4zM8 3v6m8-6v6M4 11h16',files:'M4 7h16v13H4zM7 7l2-3h6l2 3M4 12h16',check:'m5 12 4 4L19 6',question:'M9 8a3 3 0 0 1 6 0c0 3-3 2-3 5m0 4h.01',read:'M3 9l9-6 9 6v12H3zM3 9l9 7 9-7',unread:'M3 5h18v14H3zM3 6l9 7 9-7',settings:'M9 3h6l1 4 4 1v6l-4 1-1 4H9l-1-4-4-1V8l4-1zM9 11a3 3 0 1 0 6 0 3 3 0 0 0-6 0',key:'M15 7a5 5 0 1 0-7 7l-5 5v3h3v-3h3l3-3M15 7h.01',shield:'M12 3 3 7v5c0 5 9 9 9 9s9-4 9-9V7zM9 12l2 2 4-4',refresh:'M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-1l2 6M4 12l2 6a7 7 0 0 0 12-1',disconnect:'M9 5H4v14h5M12 12h9m-4-4 4 4-4 4',forward:'m15 5 6 6-6 6M21 11h-9a8 8 0 0 0-8 8',reply:'M9 5 3 11l6 6M3 11h9a8 8 0 0 1 8 8','reply-all':'m8 4-6 6 6 6m5-12-6 6 6 6M7 10h6a8 8 0 0 1 8 8',trip:'M8 2h8v4H8zM5 6h14v15H5zM9 10v6m6-6v6',spam:'m7 3-4 4v10l4 4h10l4-4V7l-4-4zM12 7v6m0 4h.01',archive:'M3 3h18v5H3zM5 8v13h14V8M9 12h6',delete:'M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7',download:'M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4',close:'m6 6 12 12M18 6 6 18'};
   return '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="'+(paths[name]||paths.download)+'"/></svg>';
 }
 function documentPreviewType(name) {
@@ -9167,19 +9167,62 @@ function enhanceConnectionTable(table) {
   search.oninput=()=>{page=0;render()};size.onchange=()=>{page=0;render()};prev.onclick=()=>{page--;render()};next.onclick=()=>{page++;render()};render();
 }
 
-async function openAdminSessions(){const dialog=document.createElement('dialog');dialog.className='document-preview admin-sessions-dialog';dialog.style.width='min(960px,94vw)';const header=document.createElement('header'),title=document.createElement('strong'),refresh=document.createElement('button'),close=document.createElement('button');title.textContent=mailImageText('Сессии и подключения','Sessions and connections');refresh.className=close.className='btn-secondary btn-sm';refresh.innerHTML=designIcon('refresh');refresh.title=t('refresh');refresh.setAttribute('aria-label',refresh.title);close.innerHTML=designIcon('close');close.title=mailImageText('Закрыть','Close');close.setAttribute('aria-label',close.title);refresh.classList.add('action-icon');close.classList.add('action-icon');close.onclick=()=>dialog.close();header.append(title,refresh,close);const content=document.createElement('div');content.className='document-preview-content';const status=document.createElement('p');status.setAttribute('role','status');dialog.append(header,content,status);document.body.append(dialog);dialog.addEventListener('close',()=>dialog.remove(),{once:true});dialog.showModal();const load=async()=>{try{const data=await api('/api/v1/admin/sessions');content.replaceChildren();const table=document.createElement('table');table.className='admin-users-table';const head=document.createElement('tr');for(const name of [mailImageText('Пользователь','User'),mailImageText('Протокол','Protocol'),'IP',mailImageText('Устройство / клиент','Device / client'),mailImageText('Последняя активность','Last seen'),'']){const cell=document.createElement('th');cell.textContent=name;head.append(cell)}table.append(head);for(const item of data.sessions||[]){const row=document.createElement('tr');for(const value of [item.email,item.protocol,item.address,item.agent||'—',new Date(item.last_seen).toLocaleString()]){const cell=document.createElement('td');cell.textContent=value;row.append(cell)}const cell=document.createElement('td'),button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.innerHTML=designIcon('disconnect');button.title=mailImageText('Разорвать сессию','Disconnect session');button.setAttribute('aria-label',button.title);button.classList.add('action-icon');button.onclick=async()=>{button.disabled=true;try{await api('/api/v1/admin/sessions/'+encodeURIComponent(item.id),{method:'DELETE'});await load()}catch(error){status.textContent=error.message;button.disabled=false}};cell.append(button);row.append(cell);table.append(row)}content.append(table);enhanceConnectionTable(table);const hint=document.createElement('p');hint.className='meta';hint.textContent=mailImageText('Почтовые и XMPP-соединения показаны, пока подключены. Web, EWS и ActiveSync — при активности за последние 15 минут. Разрыв Web отзывает токен, EWS/ActiveSync — прерывает текущие запросы. Вход с паролем остаётся доступен.','Mail and XMPP connections are listed while connected. Web, EWS and ActiveSync show activity in the last 15 minutes. Disconnect revokes Web tokens or cancels current EWS/ActiveSync requests. Password login remains possible.');content.append(hint)}catch(error){status.textContent=error.message}};refresh.onclick=load;await load();}
-const sessionsButton=document.createElement('button');sessionsButton.type='button';sessionsButton.className='btn-secondary';sessionsButton.textContent=mailImageText('Сессии и устройства','Sessions and devices');sessionsButton.onclick=openAdminSessions;$('app-monitor')?.prepend(sessionsButton);
+async function openAdminSessions(){
+  const content=$('admin-session-content'),status=$('admin-session-status'),refresh=$('admin-session-refresh');
+  const account=state.tokens?.access_token;
+  refresh.onclick=()=>openAdminSessions();
+  refresh.disabled=true;
+  setMsg(status,'');
+  try{
+    const data=await api('/api/v1/admin/sessions');
+    if(state.tokens?.access_token!==account||!state.me?.is_admin)return;
+    const table=document.createElement('table');
+    table.className='admin-users-table';
+    const head=table.createTHead().insertRow();
+    for(const name of [mailImageText('Пользователь','User'),mailImageText('Протокол','Protocol'),'IP',mailImageText('Клиент','Client'),mailImageText('Последняя активность','Last activity'),mailImageText('Действия','Actions')]){
+      const heading=document.createElement('th');
+      heading.textContent=name;
+      head.append(heading);
+    }
+    const body=table.createTBody();
+    for(const item of data.sessions||[]){
+      const row=body.insertRow();
+      for(const value of [item.email,item.protocol,item.address||'—',item.agent||'—',new Date(item.last_seen).toLocaleString()]) row.insertCell().textContent=value;
+      const button=document.createElement('button');
+      button.type='button';
+      button.className='btn-secondary btn-sm';
+      button.textContent=mailImageText('Завершить','End session');
+      button.disabled=!!item.is_current;
+      if(item.is_current)button.title=mailImageText('Текущая сессия','Current session');
+      button.onclick=async()=>{
+        if(!await askConfirm(mailImageText('Завершить эту сессию?','End this session?'),{danger:true}))return;
+        button.disabled=true;
+        try{
+          await api('/api/v1/admin/sessions/'+encodeURIComponent(item.id),{method:'DELETE'});
+          await openAdminSessions();
+        }catch(error){setMsg(status,error.message,'err');button.disabled=false;}
+      };
+      row.insertCell().append(button);
+    }
+    content.replaceChildren(table);
+    if(body.rows.length)enhanceConnectionTable(table);
+    else setMsg(status,mailImageText('Активных сессий нет','No active sessions'));
+  }catch(error){setMsg(status,error.message,'err');}
+  finally{refresh.disabled=false;}
+}
 
-async function openAdminDevices(){
-  const dialog=document.createElement('dialog');dialog.className='document-preview admin-sessions-dialog admin-devices-dialog';dialog.style.width='min(1080px,94vw)';
-  const header=document.createElement('header'),title=document.createElement('strong'),refresh=document.createElement('button'),archive=document.createElement('button'),close=document.createElement('button');
-  title.textContent=mailImageText('Мобильные устройства','Mobile devices');let includeRetired=false;
-  for(const button of [refresh,archive,close]){button.type='button';button.className='btn-secondary btn-sm';}
-  refresh.textContent=t('refresh');archive.textContent=mailImageText('Показать забытые','Show forgotten');close.textContent=mailImageText('Закрыть','Close');close.onclick=()=>dialog.close();header.append(title,archive,refresh,close);
-  const body=document.createElement('div');body.className='document-preview-content';const status=document.createElement('p');status.setAttribute('role','status');dialog.append(header,body,status);document.body.append(dialog);dialog.addEventListener('close',()=>dialog.remove(),{once:true});dialog.showModal();
+async function openAdminDevices(panel){
+  const refresh=panel.querySelector('#admin-device-refresh');
+  const archive=panel.querySelector('#admin-device-archive');
+  const body=panel.querySelector('#admin-device-content');
+  const status=panel.querySelector('#admin-device-status');
+  const account=state.tokens?.access_token;
+  let includeRetired=false;
+  refresh.textContent=t('refresh');
+  archive.textContent=mailImageText('Показать забытые','Show forgotten');
   const wipeLabel=value=>({none:mailImageText('Очистка не запрашивалась','No wipe requested'),pending:mailImageText('Очистка ожидает подключения','Wipe waiting for connection'),sent:mailImageText('Очистка отправлена, ждём подтверждения','Wipe sent, awaiting confirmation'),acknowledged:mailImageText('Клиент подтвердил очистку','Client acknowledged wipe'),cancelled:mailImageText('Неотправленная команда отменена','Unsent wipe cancelled')})[value]||value;
   const load=async()=>{
-    const data=await api('/api/v1/admin/devices'+(includeRetired?'?include_retired=true':''));body.replaceChildren();const table=document.createElement('table');table.className='admin-users-table device-table';
+    const data=await api('/api/v1/admin/devices'+(includeRetired?'?include_retired=true':''));if(state.tokens?.access_token!==account||!state.me?.is_admin)return;body.replaceChildren();const table=document.createElement('table');table.className='admin-users-table device-table';
     const thead=document.createElement('thead'),headRow=document.createElement('tr');for(const label of [mailImageText('Пользователь','User'),mailImageText('Устройство / клиент','Device / client'),'IP',mailImageText('Последняя активность','Last activity'),mailImageText('Состояние','State'),mailImageText('Действия','Actions')]){const th=document.createElement('th');th.textContent=label;headRow.append(th);}thead.append(headRow);const tbody=document.createElement('tbody');table.append(thead,tbody);body.append(table);
     for(const item of data.devices||[]){
       const row=document.createElement('tr'),retired=!!item.retired_at;
@@ -11472,7 +11515,7 @@ function workspaceFolderIcon(folder){return workspaceIcon(String(folder.role||fo
  button(apps,'mail','Почта','Mail','mail');if(folders){folders.className='workspace-mail-folders';apps.append(folders)}
  for(const row of [['calendar','Календарь','Calendar','calendar'],['contacts','Контакты','Contacts','contacts'],['tasks','Задачи','Tasks','tasks'],['notes','Заметки','Notes','notes'],['files','Файлы','Files','files'],['chat','Чат','Chat','chat']])button(apps,...row);
  const appFooter=document.createElement('div');appFooter.className='workspace-nav-footer';apps.append(appFooter);const settings=button(appFooter,'profile','Настройки','Settings','settings');settings.id='workspace-settings-entry';const adminEntry=button(appFooter,'monitor','Администрирование','Administration','admin');adminEntry.id='workspace-admin-entry';
- for(const row of [['monitor','Обзор','Overview','monitor'],['tenants','Домены и пользователи','Domains & users','contacts'],['outbound','Очередь','Mail queue','queue'],['antispam','Антиспам','Antispam','admin'],['maillog','Лог писем','Mail log','notes'],['migration','Миграция','Migration','migration'],['tls','Сертификаты','Certificates','certificate'],['mattermost','Mattermost','Mattermost','chat'],['server','Сервер','Server','server'],['cos','CoS','CoS','cos']])button(admins,...row);
+ for(const row of [['monitor','Обзор','Overview','monitor'],['backups','Резервные копии','Backups','download'],['sessions','Сессии','Sessions','key'],['devices','Устройства','Devices','contacts'],['tenants','Домены и пользователи','Domains & users','contacts'],['outbound','Очередь','Mail queue','queue'],['antispam','Антиспам','Antispam','admin'],['maillog','Лог писем','Mail log','notes'],['migration','Миграция','Migration','migration'],['tls','Сертификаты','Certificates','certificate'],['mattermost','Mattermost','Mattermost','chat'],['server','Сервер','Server','server'],['cos','CoS','CoS','cos']])button(admins,...row);
  if(extras.length){const more=document.createElement('details');more.className='workspace-admin-more';const title=document.createElement('summary');title.textContent=words('Дополнительно','More');more.append(title,...extras);admins.append(more)}
  const adminFooter=document.createElement('div');adminFooter.className='workspace-nav-footer';admins.append(adminFooter);const back=button(adminFooter,'mail','К приложениям','Back to apps','back');back.id='workspace-apps-entry';
  const collapse=button(nav,null,'Свернуть','Collapse','collapse');collapse.id='sidebar-collapse';
@@ -11483,7 +11526,7 @@ function workspaceFolderIcon(folder){return workspaceIcon(String(folder.role||fo
  for(const row of [['profile','Профиль','Profile','contacts'],['vks','Видеоконференции','Video meetings','chat'],['migration','Перенос данных','Import data','migration']]){const b=button(menu.lastElementChild,...row);b.addEventListener('click',()=>menu.open=false)}menu.lastElementChild.append(logout);
  header.querySelector('form').onsubmit=e=>{e.preventDefault();const query=$('workspace-search').value.trim();showApp('mail');$('mail-search').value=query;mailState.searchQ=query;mailState.offset=0;refreshMailMessages()};
  let collapsed=false;try{collapsed=localStorage.getItem('tayga.sidebarCollapsed')==='true'}catch{}
- const settingsApps=new Set(['profile','security','appearance','filters','language']);const adminApps=new Set(['monitor','tenants','outbound','antispam','maillog','migration','tls','mattermost','server','cos']);
+ const settingsApps=new Set(['profile','security','appearance','filters','language']);const adminApps=new Set(['monitor','backups','sessions','devices','tenants','outbound','antispam','maillog','migration','tls','mattermost','server','cos']);
  function hideTip(){tooltip.hidden=true;nav.querySelectorAll('[aria-describedby]').forEach(b=>b.removeAttribute('aria-describedby'))}
  function sync(){
   const active=document.querySelector('.app-page:not(.hidden)')?.id.replace('app-','')||'mail';const isAdmin=!!state.me?.is_admin;const area=isAdmin&&adminApps.has(active)?'admin':'apps';shell.dataset.workspaceArea=area;shell.dataset.workspaceApp=active;shell.classList.toggle('sidebar-collapsed',collapsed);apps.hidden=area==='admin';admins.hidden=area!=='admin';if(admins.classList.contains('hidden'))admins.classList.remove('hidden');adminEntry.hidden=!isAdmin;settings.classList.toggle('is-active',settingsApps.has(active));if(folders)folders.hidden=active!=='mail';
@@ -11713,7 +11756,7 @@ function workspaceFolderIcon(folder){return workspaceIcon(String(folder.role||fo
  $('workspace-queue-refresh').onclick=()=>refreshOutbound();$('workspace-queue-search').oninput=renderQueue;queue.querySelectorAll('[data-queue-filter]').forEach(b=>b.onclick=()=>{queueFilter=b.dataset.queueFilter;queue.querySelectorAll('[data-queue-filter]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));renderQueue()});
  // User policy controls belong in the selected profile, not in every table row.
  const userLevel=$('tenant-level-users'),userTable=$('admin-user-list').closest('.admin-table-scroll'),userAside=document.createElement('aside'),userLayout=document.createElement('div');userLayout.className='workspace-record-layout workspace-users-layout';userAside.className='workspace-record-aside';userTable.before(userLayout);userLayout.append(userTable,userAside);let selectedUser='';
- new MutationObserver(()=>{const rows=[...$('admin-user-list').children].filter(r=>r.cells.length>1);for(const r of rows)r.dataset.workspaceUser=r.querySelector('[data-user-cos]')?.dataset.userCos||'';const select=id=>{selectedUser=id;userAside.replaceChildren();const row=rows.find(r=>r.dataset.workspaceUser===id);if(!row)return;const name=row.cells[0].textContent,email=row.cells[1].textContent;userAside.append(detail(name, [['Email',email],[words('Статус','Status'),[row.cells[2].querySelector('.badge')?.textContent,row.cells[2].querySelector('.meta')?.textContent].filter(Boolean).join(' · ')],[words('Квота','Quota'),row.cells[3].textContent]]));for(const i of [4,5,6]){const cell=row.cells[i];if(!cell)continue;const wrap=document.createElement('div');wrap.className='workspace-user-policy';while(cell.firstChild)wrap.append(cell.firstChild);const stored=row._workspaceControls?.[i];if(stored){wrap.replaceChildren(stored)}else{row._workspaceControls||={};row._workspaceControls[i]=wrap.firstElementChild}userAside.append(wrap)}userAside.querySelectorAll('.user-action-icons button').forEach(b=>{if(!b.querySelector('.workspace-action-label')){const span=document.createElement('span');span.className='workspace-action-label';span.textContent=b.getAttribute('aria-label');b.append(span)}});rows.forEach(r=>r.classList.toggle('is-active',r===row))};for(const r of rows)selectable(r,()=>select(r.dataset.workspaceUser));select(rows.some(r=>r.dataset.workspaceUser===selectedUser)?selectedUser:rows[0]?.dataset.workspaceUser)}).observe($('admin-user-list'),{childList:true});
+ new MutationObserver(()=>{const rows=[...$('admin-user-list').children].filter(r=>r.cells.length>1);for(const r of rows)r.dataset.workspaceUser=r.dataset.accountId||'';const select=id=>{selectedUser=id;userAside.replaceChildren();const row=rows.find(r=>r.dataset.workspaceUser===id);if(!row)return;const name=row.cells[0].textContent,email=row.cells[1].textContent;userAside.append(detail(name, [['Email',email],[words('Статус','Status'),[row.cells[2].querySelector('.badge')?.textContent,row.cells[2].querySelector('.meta')?.textContent].filter(Boolean).join(' · ')],[words('Квота','Quota'),row.cells[3].textContent]]));for(const i of [4,5,6]){const cell=row.cells[i];if(!cell)continue;const wrap=document.createElement('div');wrap.className='workspace-user-policy';while(cell.firstChild)wrap.append(cell.firstChild);const stored=row._workspaceControls?.[i];if(stored){wrap.replaceChildren(stored)}else{row._workspaceControls||={};row._workspaceControls[i]=wrap.firstElementChild}userAside.append(wrap)}userAside.querySelectorAll('.user-action-icons button').forEach(b=>{if(!b.querySelector('.workspace-action-label')){const span=document.createElement('span');span.className='workspace-action-label';span.textContent=b.getAttribute('aria-label');b.append(span)}});rows.forEach(r=>r.classList.toggle('is-active',r===row))};for(const r of rows)selectable(r,()=>select(r.dataset.workspaceUser));select(rows.some(r=>r.dataset.workspaceUser===selectedUser)?selectedUser:rows[0]?.dataset.workspaceUser)}).observe($('admin-user-list'),{childList:true});
  // Keep creation and search on one row, with occasional tools behind a menu.
  const usersTools=document.createElement('div');usersTools.className='workspace-directory-tools';const search=$('admin-user-search'),searchLabel=search?.closest('label'),createUser=userLevel.querySelector('.admin-create'),org=$('btn-org-structure-admin');if(search){searchLabel?.before(usersTools);usersTools.append(search);searchLabel?.remove();search.setAttribute('aria-label',words('Поиск пользователей','Search users'))}if(createUser){createUser.querySelector('summary').textContent=words('Добавить пользователя','Add user');usersTools.append(createUser)}if(org){const more=document.createElement('details');more.className='workspace-files-more';more.innerHTML='<summary aria-label="'+words('Другие действия','More actions')+'">⋮</summary><div></div>';more.lastElementChild.append(org);usersTools.append(more)}if($('admin-user-search-status'))usersTools.after($('admin-user-search-status'));
  // Certificate catalogue: selected certificate details and existing action handlers.
@@ -11887,7 +11930,16 @@ window.tmsChatWorkspace = (() => {
 // Only active products from the current authenticated domain enter the menu.
 (function installMattermostProducts(){
  const workspace=window.tmsChatWorkspace;if(!workspace)return;
- const products=new Map();let catalogToken='';let pending=false;
+ function syncTheme(iframe) {
+  try {
+   if (iframe.contentDocument?.documentElement) {
+    iframe.contentDocument.documentElement.dataset.taygaColor = document.documentElement.dataset.colorMode === 'dark' ? 'dark' : 'light';
+   }
+  } catch { /* A product that navigated off origin cannot inherit the theme. */ }
+ }
+ const products=new Map();
+ new MutationObserver(() => { for (const product of products.values()) syncTheme(product.iframe); })
+  .observe(document.documentElement,{attributes:true,attributeFilter:['data-color-mode']});let catalogToken='';let pending=false;
  function endSession(product){fetch(product.url.replace(/\/(boards|playbooks)$/,'/products/session'),{method:'DELETE',credentials:'same-origin',keepalive:true}).catch(()=>{})}
  function clear(){for(const product of products.values()){endSession(product);workspace.unregister(product.id)}products.clear();catalogToken=''}
  async function refresh(){
@@ -11904,7 +11956,7 @@ window.tmsChatWorkspace = (() => {
     if(products.has(item.id))continue
     if(!['boards','playbooks'].includes(item.id)||!new RegExp('^/mm/[a-z0-9]{26}/'+item.id+'$').test(item.url))continue;
     const section=document.createElement('section');section.id='app-'+item.id;section.className='app-page chat-product-page hidden';
-    const iframe=document.createElement('iframe');iframe.title=item.title;iframe.className='chat-product-frame';iframe.referrerPolicy='same-origin';section.append(iframe);
+    const iframe=document.createElement('iframe');iframe.title=item.title;iframe.className='chat-product-frame';iframe.referrerPolicy='same-origin';iframe.addEventListener('load',()=>syncTheme(iframe));section.append(iframe);
     workspace.register(item.id,{label:item.id==='boards'?'Доски':'Сценарии',title:item.id==='boards'?'Boards — доски задач':'Playbooks — рабочие сценарии',section});
     products.set(item.id,{...item,section,iframe});
    }
@@ -11921,7 +11973,43 @@ window.tmsChatWorkspace = (() => {
   const paths={spark:'M12 3l2.2 6.8L21 12l-6.8 2.2L12 21l-2.2-6.8L3 12l6.8-2.2L12 3z',catalog:'M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15 M16 16l5 5',history:'M4 5h16v12H8l-4 4V5z',skills:'M12 3l-8 4 8 4 8-4-8-4z M4 12l8 4 8-4 M4 17l8 4 8-4',settings:'M5 4v16 M12 4v16 M19 4v16 M2 8h6 M9 15h6 M16 10h6',close:'M6 6l12 12 M18 6L6 18',plus:'M12 5v14 M5 12h14',arrow:'M5 12h14 M13 6l6 6-6 6',shield:'M12 3l8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3z M8 12l3 3 5-6'};
   function icon(name){const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('fill','none');svg.setAttribute('stroke','currentColor');svg.setAttribute('stroke-width','1.6');svg.setAttribute('stroke-linecap','round');svg.setAttribute('stroke-linejoin','round');svg.setAttribute('aria-hidden','true');const path=document.createElementNS(svg.namespaceURI,'path');path.setAttribute('d',paths[name]||paths.spark);svg.append(path);return svg;}
   const section=document.createElement('section');section.id='app-agents';section.className='app-page hidden';
-  section.innerHTML=`<div class="tms-agents"><aside class="agents-sidebar"><div class="agents-brand"><span class="agents-brand-icon"></span><div><strong>Агенты</strong><span>Помощники для работы</span></div></div><nav class="agents-navigation" aria-label="Разделы агентов"><button type="button" data-view="catalog">Все агенты</button><button type="button" data-view="history">Мои диалоги</button><button type="button" data-view="skills">Навыки</button><button type="button" data-view="settings">Настройки</button></nav><div class="agents-side-history"></div><div class="agents-account"><span class="agents-account-icon"></span><div><small>Рабочее пространство</small><p class="agents-scope"></p></div></div></aside><div class="agents-workspace"><div class="agents-error" role="alert"></div><main class="agents-main"></main></div></div>`;
+  section.innerHTML=`<div class="tms-agents"><aside id="agents-sidebar" class="agents-sidebar"><div class="agents-brand"><span class="agents-brand-icon"></span><div><strong>Агенты</strong><span>Помощники для работы</span></div></div><nav class="agents-navigation" aria-label="Разделы агентов"><button type="button" data-view="catalog">Все агенты</button><button type="button" data-view="history">Мои диалоги</button><button type="button" data-view="skills">Навыки</button><button type="button" data-view="settings">Настройки</button></nav><div class="agents-side-history"></div><div class="agents-account"><span class="agents-account-icon"></span><div><small>Рабочее пространство</small><p class="agents-scope"></p></div></div></aside><div class="agents-divider" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Ширина панели диалогов" aria-controls="agents-sidebar"></div><div class="agents-workspace"><div class="agents-error" role="alert"></div><main class="agents-main"></main></div></div>`;
+  const layout=section.querySelector('.tms-agents');
+  const divider=section.querySelector('.agents-divider');
+  const leftPanel=section.querySelector('.agents-sidebar');
+  const widthPreference='tayga.agentsSidebarWidth';
+  let preferredWidth=Number(localStorage.getItem(widthPreference))||240;
+  function resizePanels(remember=false) {
+    if(!layout.clientWidth)return;
+    const minimum=180;
+    const maximum=Math.max(minimum,Math.min(560,layout.clientWidth-340));
+    const width=Math.round(Math.max(minimum,Math.min(maximum,preferredWidth)));
+    layout.style.setProperty('--agents-sidebar-width',width+'px');
+    divider.setAttribute('aria-valuemin',minimum);
+    divider.setAttribute('aria-valuemax',maximum);
+    divider.setAttribute('aria-valuenow',width);
+    if(remember){preferredWidth=width;localStorage.setItem(widthPreference,String(width));}
+  }
+  divider.addEventListener('pointerdown',event=>{
+    if(event.button!==0)return;
+    event.preventDefault();
+    divider.focus();
+    divider.setPointerCapture(event.pointerId);
+  });
+  divider.addEventListener('pointermove',event=>{
+    if(!divider.hasPointerCapture(event.pointerId))return;
+    preferredWidth=event.clientX-layout.getBoundingClientRect().left;
+    resizePanels(true);
+  });
+  divider.addEventListener('keydown',event=>{
+    const current=leftPanel.getBoundingClientRect().width;
+    const widths={ArrowLeft:current-16,ArrowRight:current+16,Home:180,End:560};
+    if(!(event.key in widths))return;
+    event.preventDefault();
+    preferredWidth=widths[event.key];
+    resizePanels(true);
+  });
+  if(typeof ResizeObserver!=='undefined')new ResizeObserver(()=>resizePanels()).observe(layout);
   section.querySelector('.agents-brand-icon').append(icon('spark'));section.querySelector('.agents-account-icon').append(icon('shield'));
   section.querySelectorAll('[data-view]').forEach(b=>b.prepend(icon(b.dataset.view)));
 
@@ -11951,7 +12039,7 @@ window.tmsChatWorkspace = (() => {
     for(const agent of boot.catalog.agents){
       const heading=node('div',undefined,'agents-history-heading');heading.append(node('span',agent.name),action('+',()=>run(()=>newChat(agent.id))));heading.lastChild.setAttribute('aria-label','Новый диалог: '+agent.name);heading.lastChild.title='Новый диалог';sidebar.append(heading);
       for(const chat of history.filter(c=>c.agent_id===agent.id).sort((a,b)=>b.updated_at-a.updated_at)){
-        const b=action(chat.title,()=>run(()=>openChat(chat.id)),'agents-history-link');b.classList.toggle('is-selected',active===chat.id);sidebar.append(b);
+        const b=action(chat.title,()=>run(()=>openChat(chat.id)),'agents-history-link');b.classList.toggle('is-selected',active===chat.id);b.title=chat.title;sidebar.append(b);
       }
     }
   }
@@ -11997,6 +12085,7 @@ window.tmsChatWorkspace = (() => {
   async function newChat(id){const check=guard();const chat=await request('/conversations',{method:'POST',body:JSON.stringify({agent_id:id})});check();history.push(chat);await openChat(chat.id);}
   async function openChat(id){clearInterval(pollTimer);
     const version=++revision;const chat=await request('/conversations/'+encodeURIComponent(id));if(version!==revision)return;
+    const historyEntry=history.find(entry=>entry.id===id);if(historyEntry)historyEntry.title=chat.title;
     active=id;view='chat';main.replaceChildren();main.classList.add('is-conversation');renderSidebar();
     const agent=boot.catalog.agents.find(a=>a.id===chat.agent_id);const header=title(agent?.name||'Агент','Личный диалог');
     header.append(action('Новый диалог',()=>run(()=>newChat(chat.agent_id))),action('Убрать из списка',()=>run(async()=>{if(!window.confirm('Убрать диалог из списка? История ветки останется в Mattermost.'))return;await request('/conversations/'+encodeURIComponent(id),{method:'DELETE'});history=history.filter(c=>c.id!==id);await show('catalog');})));
@@ -12010,9 +12099,21 @@ window.tmsChatWorkspace = (() => {
     form.onsubmit=event=>{event.preventDefault();if(sending||!input.value.trim())return;const content=input.value;run(async()=>{
       sending=true;send.disabled=true;input.disabled=true;status.textContent='Агент готовит ответ…';const check=guard();
       try{const updated=await request('/conversations/'+encodeURIComponent(id)+'/messages',{method:'POST',body:JSON.stringify({content})});check();const i=history.findIndex(c=>c.id===id);if(i>=0)history[i]=updated;if(active===id&&version===revision){chat.messages=updated.messages;chat.actions=updated.actions;drawActions();input.value='';draw();renderSidebar();}}
+      catch(err){
+        if(active===id&&version===revision){
+          const latest=await request('/conversations/'+encodeURIComponent(id)).catch(()=>null);
+          if(latest&&active===id&&version===revision){
+            chat.messages=latest.messages;
+            if(historyEntry)historyEntry.title=latest.title;
+            draw();
+            renderSidebar();
+          }
+        }
+        throw err;
+      }
       finally{check();sending=false;send.disabled=false;input.disabled=false;status.textContent='';}
     });};
-    pollTimer=setInterval(async()=>{if(sending||section.classList.contains('hidden')||active!==id||version!==revision)return;try{const updated=await request('/conversations/'+encodeURIComponent(id));if(active!==id||version!==revision)return;if(JSON.stringify(chat.messages)!==JSON.stringify(updated.messages)){chat.messages=updated.messages;draw();}chat.actions=updated.actions;drawActions();}catch{ /* Keep the draft when temporarily offline. */ }},4000);
+    pollTimer=setInterval(async()=>{if(sending||section.classList.contains('hidden')||active!==id||version!==revision)return;try{const updated=await request('/conversations/'+encodeURIComponent(id));if(active!==id||version!==revision)return;if(historyEntry&&historyEntry.title!==updated.title){historyEntry.title=updated.title;renderSidebar();}if(JSON.stringify(chat.messages)!==JSON.stringify(updated.messages)){chat.messages=updated.messages;draw();}chat.actions=updated.actions;drawActions();}catch{ /* Keep the draft when temporarily offline. */ }},4000);
     input.onkeydown=event=>{if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();form.requestSubmit();}};
   }
   function modal(titleText){

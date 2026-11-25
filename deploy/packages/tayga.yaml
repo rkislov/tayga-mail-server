@@ -3,9 +3,10 @@
 server:
   hostname: mail.example.com
 storage:
-  driver: sqlite
-  sqlite:
-    path: /var/lib/tayga/data/tayga.db
+  driver: postgres
+  postgres:
+    # Run the local PostgreSQL bootstrap script or set a private DSN.
+    dsn: ""
 mailstore:
   root: /var/lib/tayga/maildir
 seed:

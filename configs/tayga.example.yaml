@@ -7,13 +7,10 @@ server:
   hostname: mail.example.com
 
 storage:
-  driver: sqlite # sqlite | postgres
-  sqlite:
-    path: ./data/tayga.db
+  driver: postgres
   postgres:
-    # Shared DSN also enables cross-node IMAP IDLE (LISTEN/NOTIFY tayga_idle).
-    dsn: "postgres://tayga:tayga@localhost:5432/tayga?sslmode=disable"
-
+    # Run the local PostgreSQL bootstrap script or set a private DSN.
+    dsn: ""
 mailstore:
   root: ./data/maildir
 

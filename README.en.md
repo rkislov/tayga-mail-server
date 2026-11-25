@@ -93,7 +93,7 @@ Available integrations depend on configuration. Mattermost API and plugin suppor
 ## Installation
 
 1. Download the archive for your platform and its checksums from [GitHub Releases](https://github.com/rkislov/tayga-mail-server/releases/tag/v1.3.0).
-2. Prepare your domain, DNS, TLS and data directories using the [setup guide](docs/setup.md).
+2. Prepare PostgreSQL, your domain, DNS, TLS and data directories using the [setup guide](docs/setup.md).
 3. Create a configuration from the [example](configs/tayga.example.yaml), set your own initial administrator credentials and start the service.
 4. Open the web interface. Most mail and integration settings are under **Administration → Server**.
 
