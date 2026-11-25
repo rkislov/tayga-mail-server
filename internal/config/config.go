@@ -21,7 +21,7 @@ type MattermostFederationConfig struct {
 }
 
 type MattermostConfig struct {
-	AttachmentDirectory string                     `yaml:"attachment_directory,omitempty"`
+	AttachmentDirectory string                     `yaml:"attachment_directory"`
 	Federation          MattermostFederationConfig `yaml:"federation"`
 	PluginsEnabled      bool                       `yaml:"plugins_enabled"`
 	PluginDirectory     string                     `yaml:"plugin_directory"`
