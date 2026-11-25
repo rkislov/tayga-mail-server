@@ -259,12 +259,67 @@ const mmChat = (() => {
       }
       if(post.file_ids?.length){const files=document.createElement('div');files.className='mm-post-files';article.append(files);void renderFiles(post,files,epoch)}
       const time = document.createElement('time'); time.dateTime = new Date(post.create_at).toISOString(); time.textContent = new Date(post.create_at).toLocaleString(lang === 'en' ? 'en-GB' : 'ru-RU'); article.append(time);
-      const answer = document.createElement('button'); answer.type = 'button'; answer.className = 'btn-secondary btn-sm mm-chat-answer'; iconButton(answer,'reply','Ответить'); answer.onclick = () => { reply = post.root_id || post.id; el('reply-label').textContent = 'Ответ: ' + post.message.slice(0,120); el('reply').classList.remove('hidden'); el('body').focus(); }; article.append(answer);
+      const actions=document.createElement('div');actions.className='mm-message-actions';
+      const discuss=()=>beginDiscussion(post);
+      const answer=document.createElement('button');answer.type='button';answer.className='btn-secondary btn-sm mm-chat-answer';iconButton(answer,'reply',lang==='en'?'Reply':'Ответить');answer.onclick=discuss;
+      const more=window.tmsProductActions?.chatActions({title:post.message||'',discuss});
+      actions.append(answer);if(more)actions.append(more);article.append(actions);
       box.append(article);
     }
     if (!ordered.length) { const hint = document.createElement('p'); hint.className = 'meta'; hint.textContent = 'Сообщений пока нет'; box.append(hint); }
     if (keepScroll) box.scrollTop = previousTop + box.scrollHeight - previousHeight;
     else if (nearBottom || previousHeight <= box.clientHeight) box.scrollTop = box.scrollHeight;
+  }
+  function beginDiscussion(post) {
+    reply=post.root_id||post.id;
+    el('reply-label').textContent=(lang==='en'?'Reply: ':'Ответ: ')+(post.message||'').slice(0,120);
+    el('reply').classList.remove('hidden');el('body').focus();
+  }
+  async function discussMail(subject) {
+    const english=lang==='en';
+    const text=(ru,en)=>english?en:ru;
+    if(!await ensure()){
+      showApp('chat');
+      setMsg(el('error'),text('Чат сейчас недоступен','Chat is currently unavailable'),'err');
+      return;
+    }
+    const check=guard();
+    const dialog=document.createElement('dialog');dialog.className='mm-chat-dialog product-create-dialog';
+    const form=document.createElement('form');
+    const heading=document.createElement('h2');heading.className='heading';heading.textContent=text('Начать обсуждение в чате','Start a chat discussion');
+    const label=document.createElement('label');label.className='field-label';label.textContent=text('Диалог или канал','Conversation or channel');
+    const select=document.createElement('select');select.className='field-input';select.required=true;
+    for(const channel of channels)select.add(new Option(channelName(channel),channel.id));
+    select.value=channels.some(channel=>channel.id===selected)?selected:select.options[0]?.value||'';
+    label.append(select);
+    const controls=document.createElement('div');controls.className='actions';
+    const cancel=document.createElement('button');cancel.type='button';cancel.className='btn-secondary';cancel.textContent=text('Отмена','Cancel');cancel.onclick=()=>dialog.close();
+    const submit=document.createElement('button');submit.type='submit';submit.className='btn-spray';submit.textContent=text('Открыть черновик','Open draft');submit.disabled=!select.value;
+    const direct=document.createElement('button');direct.type='button';direct.className='btn-secondary';direct.textContent=text('Новый личный чат','New direct message');
+    const draft=subject.trim()?text('Обсудим письмо «','Let’s discuss the email “')+subject.trim().slice(0,240)+text('».','”.'):'';
+    const putDraft=()=>{
+      check();
+      if(reply){
+        reply='';el('reply').classList.add('hidden');
+      }
+      setMobilePane('read');
+      if(draft)el('body').value=[el('body').value.trimEnd(),draft].filter(Boolean).join('\n\n');
+      el('body').focus();
+    };
+    direct.onclick=()=>{check();dialog.close();showApp('chat');void people('direct',putDraft);};
+    controls.append(cancel,direct,submit);form.append(heading,label,controls);dialog.append(form);document.body.append(dialog);
+    const controller=new AbortController();
+    dialog.addEventListener('close',()=>{controller.abort();dialog.remove();},{once:true});
+    window.addEventListener('tms-products-session-ended',()=>dialog.close(),{once:true,signal:controller.signal});
+    form.onsubmit=async event=>{
+      event.preventDefault();
+      try {
+        check();const channel=select.value;dialog.close();showApp('chat');
+        if(channel!==selected)await open(channel);
+        check();if(selected===channel)putDraft();
+      } catch(error) {if(current())report(error);}
+    };
+    dialog.showModal();
   }
   async function markViewed() {
     if (!selected || !visible() || viewBusy) return;
@@ -344,7 +399,7 @@ const mmChat = (() => {
           button.disabled = true;
           try {
             if (peopleMode === 'member') { await request('/channels/' + peopleChannel + '/members',{method:'POST',body:JSON.stringify({user_id:user.id})}); el('people').close(); }
-            else { const channel = await request('/channels/direct',{method:'POST',body:JSON.stringify([me.id,user.id])}); el('people').close(); await syncChannels(); await open(channel.id); }
+            else { const channel = await request('/channels/direct',{method:'POST',body:JSON.stringify([me.id,user.id])}); const after=peopleAfterOpen;el('people').close(); await syncChannels(); await open(channel.id);if(selected===channel.id)after?.(); }
           } catch (error) { setMsg(el('people-error'),errorText(error),'err'); button.disabled = false; }
         };
         el('people-list').append(button);
@@ -352,8 +407,10 @@ const mmChat = (() => {
       if (!list.length) { const hint = document.createElement('p'); hint.className = 'meta'; hint.textContent = 'Пользователи не найдены'; el('people-list').append(hint); }
     } catch (error) { if (revision === searchRevision && current()) setMsg(el('people-error'),errorText(error),'err'); }
   }
-  async function people(mode = 'direct') {
+  let peopleAfterOpen=null;
+  async function people(mode = 'direct',afterOpen=null) {
     if (!await ensure()) return;
+    peopleAfterOpen=afterOpen;
     peopleMode = mode; peopleChannel = selected; el('search').hidden = false; el('people-list').replaceChildren(); el('search').value = ''; setMsg(el('people-error'),'');
     el('people-title').textContent = mode === 'member' ? 'Добавить участника' : 'Новый диалог'; el('people').showModal(); el('search').focus(); await searchPeople();
   }
@@ -471,7 +528,7 @@ const mmChat = (() => {
   el('filter').addEventListener('input',renderChannels);
   el('refresh').onclick = refresh; el('new').onclick = () => people(); el('members').onclick = members;
   el('search').oninput = () => { clearTimeout(searchTimer); searchRevision++; searchTimer = setTimeout(searchPeople,200); };
-  el('people').addEventListener('close',() => { searchRevision++; clearTimeout(searchTimer); el('search').hidden = false; });
+  el('people').addEventListener('close',() => { searchRevision++; clearTimeout(searchTimer); peopleAfterOpen=null;el('search').hidden = false; });
   el('send').onsubmit = send;
   el('body').addEventListener('keydown',event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); el('send').requestSubmit(); } });
   el('reply-cancel').onclick = () => { reply = ''; el('reply').classList.add('hidden'); clearAttachments(); };
@@ -515,5 +572,5 @@ const mmChat = (() => {
   });
   window.addEventListener('focus',() => { if (current() && me) { void syncChannels().then(() => selected ? loadHistory(true) : null).catch(report); } });
   document.addEventListener('visibilitychange',() => { if (!document.hidden && current() && me) { void syncChannels().then(() => selected ? loadHistory(true) : null).catch(report); } });
-  return {start,stop,refresh,openPeer};
+  return {start,stop,refresh,openPeer,discussMail};
 })();

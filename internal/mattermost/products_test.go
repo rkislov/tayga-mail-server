@@ -49,6 +49,11 @@ func TestProductBootstrapScopeAndAuthentication(t *testing.T) {
 	if bootstrap["user"].(map[string]any)["id"] != chat.ID(f.users[0].ID) {
 		t.Fatal("identity spoofed")
 	}
+	english := call(f.tokens[0], path+"?lang=en", 200)
+	if !strings.Contains(english.Body.String(), `"locale":"en"`) ||
+		!strings.Contains(english.Body.String(), `"DefaultClientLocale":"en"`) {
+		t.Fatal("product locale was not applied consistently", english.Body.String())
+	}
 	call(f.tokens[0], "/mm/"+chat.ID(scope.Key())+"/api/v4/users/"+chat.ID(f.users[3].ID), 403)
 	call(f.tokens[0], "/mm/"+chat.ID(scope.Key())+"/static/plugins/playbooks/.databases.json", 404)
 }

@@ -245,6 +245,7 @@ function renderMailActions(message) {
   const more=document.createElement('details');more.className='workspace-reader-more';const trigger=document.createElement('summary');trigger.textContent='⋮';trigger.setAttribute('aria-label',mailImageText('Другие действия','More actions'));const menu=document.createElement('div');
   for(const action of ['reply-all','spam','trip']){const item=bar.querySelector('[data-mail-action="'+action+'"]');if(item){const label=document.createElement('span');label.textContent=item.getAttribute('aria-label');item.classList.remove('action-icon');item.append(label);menu.append(item)}}
   more.append(trigger,menu);bar.append(more);footer.append(bar);reader.prepend(footer);
+  window.tmsProductActions?.appendActions(menu,{title:message.subject||'',discuss:()=>mmChat.discussMail(message.subject||'')});
 }
 
 function renderMailQuickFilters() {

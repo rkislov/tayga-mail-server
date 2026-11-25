@@ -6260,3 +6260,18 @@ html[data-color-mode=dark] :is(button,input,select,textarea):focus-visible {
   .agents-divider:is(:hover,:focus-visible)::after {width:2px;background:var(--work-accent);}
 }
 @media(max-width:900px) {.agents-divider {display:none;}}
+
+.chat-bubble{padding-right:68px}
+.mm-message-actions{position:absolute;top:5px;right:5px;display:flex;align-items:center;gap:3px}
+.chat-bubble .mm-message-actions .mm-chat-answer{position:static}
+.chat-source-menu{position:relative}
+.chat-source-menu summary{list-style:none;cursor:pointer;display:grid;place-items:center;width:29px;height:28px;border-radius:7px;color:var(--work-text)}
+.chat-source-menu summary::-webkit-details-marker{display:none}
+.chat-source-menu summary:hover,.chat-source-menu[open] summary{background:var(--work-soft);outline:1px solid var(--work-line)}
+.chat-source-menu-panel{position:absolute;right:0;top:100%;z-index:5;min-width:max-content;background:var(--work-card,var(--work-panel));padding:6px;border:1px solid var(--work-line);border-radius:9px}
+.chat-source-menu-panel button{text-align:left}
+.product-source-actions{display:flex;flex-direction:column;gap:4px}
+.product-source-actions button[hidden]{display:none}
+.product-create-dialog form{display:grid;gap:12px}
+.product-create-dialog .field-label{display:grid;gap:6px}
+.product-create-dialog .actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}

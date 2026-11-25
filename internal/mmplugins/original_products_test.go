@@ -48,9 +48,6 @@ func TestOriginalProductBundles(t *testing.T) {
 				"playbooks/linux-amd64": "337b165b4aaf3a8201adbe67e9cbc0f78d2a97f88a83c06481a800d759f4510c",
 			}
 			expected := pins[name+"/"+runtime.GOOS+"-"+runtime.GOARCH]
-			if expected == "" {
-				t.Skip("no published native original bundle")
-			}
 			path := filepath.Join(dir, fmt.Sprintf("mattermost-plugin-%s-v%s-%s-%s.tar.gz", name, version, runtime.GOOS, runtime.GOARCH))
 			if name == "playbooks" && os.Getenv("TMS_TEST_PLAYBOOKS_FORK") != "" {
 				path = os.Getenv("TMS_TEST_PLAYBOOKS_FORK")
@@ -58,6 +55,9 @@ func TestOriginalProductBundles(t *testing.T) {
 				if len(expected) != 64 {
 					t.Fatal("fork bundle requires SHA-256 pin")
 				}
+			}
+			if expected == "" {
+				t.Skip("no published native original bundle")
 			}
 			data, e := os.ReadFile(path)
 			if os.IsNotExist(e) {
@@ -291,6 +291,48 @@ func TestOriginalProductBundles(t *testing.T) {
 				patched := call("PATCH", "/boards/"+board.ID+"/blocks/"+cardID, `{"title":"Updated original card"}`, uid)
 				if patched.Code != 200 {
 					t.Fatal("update card", patched.Code, patched.Body.String())
+				}
+				shortcutID := "b" + chat.ID(uuid.NewString())
+				viewID := "v" + chat.ID(uuid.NewString())
+				statusID := "a" + chat.ID(uuid.NewString())
+				now := time.Now().UnixMilli()
+				shortcut := call("POST", "/boards-and-blocks", fmt.Sprintf(`{
+					"boards":[{"id":%q,"teamId":%q,"title":"Доска из письма","type":"P","minimumRole":"","properties":{},"cardProperties":[{"id":%q,"name":"Статус","type":"select","options":[]}]}],
+					"blocks":[{"id":%q,"boardId":%q,"parentId":%q,"schema":1,"type":"view","title":"Доска","createAt":%d,"updateAt":%d,"fields":{"viewType":"board","groupById":%q}}]
+				}`, shortcutID, team, statusID, viewID, shortcutID, shortcutID, now, now, statusID), uid)
+				if shortcut.Code != 200 || !strings.Contains(shortcut.Body.String(), "Доска из письма") {
+					t.Fatal("create private board from a source", shortcut.Code, shortcut.Body.String())
+				}
+				list := call("GET", "/teams/"+team+"/templates", "", uid)
+				var templates []struct {
+					ID    string `json:"id"`
+					Title string `json:"title"`
+					Team  string `json:"teamId"`
+				}
+				if list.Code != 200 || json.Unmarshal(list.Body.Bytes(), &templates) != nil {
+					t.Fatal("list global templates", list.Code, list.Body.String())
+				}
+				competitor := ""
+				for _, template := range templates {
+					if template.Team == "0" && strings.TrimSpace(template.Title) == "Competitive Analysis" {
+						competitor = template.ID
+					}
+				}
+				if competitor == "" {
+					t.Fatal("missing global Competitive Analysis board")
+				}
+				duplicate := call("POST", "/boards/"+competitor+"/duplicate?asTemplate=false&toTeam="+team, "", uid)
+				var draft struct {
+					Boards []struct {
+						ID string `json:"id"`
+					}
+				}
+				if duplicate.Code != 200 || json.Unmarshal(duplicate.Body.Bytes(), &draft) != nil || len(draft.Boards) != 1 {
+					t.Fatal("copy global template", duplicate.Code, duplicate.Body.String())
+				}
+				localized := call("PATCH", "/boards-and-blocks", fmt.Sprintf(`{"boardIDs":[%q],"boardPatches":[{"title":"Анализ конкурентов"}],"blockIDs":[],"blockPatches":[]}`, draft.Boards[0].ID), uid)
+				if localized.Code != 200 || !strings.Contains(localized.Body.String(), "Анализ конкурентов") {
+					t.Fatal("save Russian labels to the new board", localized.Code, localized.Body.String())
 				}
 				denied := call("GET", "/boards/"+board.ID, "", "")
 				if denied.Code == 200 {
