@@ -29,8 +29,12 @@ function workspaceFolderIcon(folder){return workspaceIcon(String(folder.role||fo
  const adminFooter=document.createElement('div');adminFooter.className='workspace-nav-footer';admins.append(adminFooter);const back=button(adminFooter,'mail','К приложениям','Back to apps','back');back.id='workspace-apps-entry';
  const collapse=button(nav,null,'Свернуть','Collapse','collapse');collapse.id='sidebar-collapse';
  const tooltip=document.createElement('div');tooltip.id='sidebar-tooltip';tooltip.className='sidebar-tooltip';tooltip.hidden=true;tooltip.setAttribute('role','tooltip');document.body.append(tooltip);
- const language=$('topbar-language');if(language){language.hidden=true;header.append(language)}oldHeader.replaceWith(header);oldNav.replaceWith(nav);
- notify.className='workspace-notify';notify.innerHTML=workspaceIcon('bell');header.querySelector('.workspace-header-actions').append(notify);
+ const headerActions=header.querySelector('.workspace-header-actions');
+ const theme=oldHeader.querySelector('.color-mode-switch'),language=$('topbar-language');
+ if(theme)headerActions.append(theme);
+ if(language)headerActions.append(language);
+ oldHeader.replaceWith(header);oldNav.replaceWith(nav);
+ notify.className='workspace-notify';notify.innerHTML=workspaceIcon('bell');headerActions.append(notify);
  const menu=document.createElement('details');menu.className='workspace-profile-dropdown';menu.innerHTML='<summary id="workspace-profile" aria-label="'+words('Меню пользователя','User menu')+'"><span></span><i>⌄</i></summary><div class="workspace-profile-menu"></div>';header.querySelector('.workspace-header-actions').append(menu);
  for(const row of [['profile','Профиль','Profile','contacts'],['vks','Видеоконференции','Video meetings','chat'],['migration','Перенос данных','Import data','migration']]){const b=button(menu.lastElementChild,...row);b.addEventListener('click',()=>menu.open=false)}menu.lastElementChild.append(logout);
  header.querySelector('form').onsubmit=e=>{e.preventDefault();const query=$('workspace-search').value.trim();showApp('mail');$('mail-search').value=query;mailState.searchQ=query;mailState.offset=0;refreshMailMessages()};

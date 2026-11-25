@@ -414,3 +414,39 @@ func TestAgentTitlesSurviveProviderRejection(t *testing.T) {
 		t.Fatalf("unexpected title %q", title)
 	}
 }
+
+func TestAgentDialogAttachmentsRetainMattermostThreadAndText(t *testing.T) {
+	f, _, sent := agentsFixture(t)
+	if err := f.api.chat.SetAttachmentDirectory(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	conv := f.call(t, "POST", "/tms/agents/conversations", f.tokens[0], map[string]string{"agent_id": "helper"}, 201)
+	id, channel := conv["id"].(string), conv["channel_id"].(string)
+	const contents = "verified text from the attachment"
+	draft, err := f.api.chat.StageAttachment("brief.txt", strings.NewReader(contents), 1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer draft.Discard()
+	files, err := f.api.chat.UploadAttachments(t.Context(), f.users[0], channel, []chat.StagedUpload{draft})
+	if err != nil {
+		t.Fatal(err)
+	}
+	message := map[string]any{"content": "", "file_ids": []string{files[0].ID}, "pending_post_id": "file-turn"}
+	path := "/tms/agents/conversations/" + id
+	reply := f.call(t, "POST", path+"/messages", f.tokens[0], message, 200)
+	if len(*sent) != 2 || !strings.Contains((*sent)[1].Content, contents) {
+		t.Fatal("model did not receive the authorized text attachment", *sent)
+	}
+	first := reply["messages"].([]any)[0].(map[string]any)
+	post := f.call(t, "GET", "/posts/"+first["post_id"].(string), f.tokens[0], nil, 200)
+	if post["root_id"] != conv["root_id"] || post["file_ids"].([]any)[0] != files[0].ID {
+		t.Fatal("attachment was not committed to the shared Mattermost thread")
+	}
+	f.call(t, "GET", "/files/"+files[0].ID+"/info", f.tokens[1], nil, 404)
+	f.call(t, "POST", path+"/messages", f.tokens[0], message, 200)
+	stored := f.call(t, "GET", path, f.tokens[0], nil, 200)
+	if len(stored["messages"].([]any)) != 2 {
+		t.Fatal("retry duplicated the file or the reply")
+	}
+}

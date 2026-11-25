@@ -1431,6 +1431,7 @@ function applyColorMode(mode) {
   const select = $("color-mode-select");
   if (select) select.value = choice;
   document.querySelectorAll(".color-mode-switch button").forEach(button => button.setAttribute("aria-pressed", String(button.dataset.colorMode === choice)));
+  document.querySelectorAll(".workspace-mode-choices button").forEach(button => button.setAttribute("aria-pressed", String(button.dataset.mode === choice)));
 }
 document.querySelectorAll(".color-mode-switch button").forEach(button => button.addEventListener("click",()=>applyColorMode(button.dataset.colorMode)));
 systemColorMode.addEventListener("change",()=>{if(localStorage.getItem("tayga.colorMode")==="auto")applyColorMode("auto");});
@@ -1688,7 +1689,7 @@ async function api(path, opts = {}) {
   const {_guard, ...requestOpts} = opts;
   _guard?.();
   if(filesState.ownerID&&/^\/api\/v1\/files(?:[/?]|$)/.test(path)&&!/^\/api\/v1\/files\/(?:access|shares|library|office)/.test(path))path+=(path.includes('?')?'&':'?')+'owner_id='+encodeURIComponent(filesState.ownerID);
-  const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
+  const headers = Object.assign(opts.body instanceof FormData ? {} : { "Content-Type": "application/json" }, opts.headers || {});
   if (state.tokens?.access_token) {
     headers.Authorization = "Bearer " + state.tokens.access_token;
   }
@@ -11520,8 +11521,12 @@ function workspaceFolderIcon(folder){return workspaceIcon(String(folder.role||fo
  const adminFooter=document.createElement('div');adminFooter.className='workspace-nav-footer';admins.append(adminFooter);const back=button(adminFooter,'mail','К приложениям','Back to apps','back');back.id='workspace-apps-entry';
  const collapse=button(nav,null,'Свернуть','Collapse','collapse');collapse.id='sidebar-collapse';
  const tooltip=document.createElement('div');tooltip.id='sidebar-tooltip';tooltip.className='sidebar-tooltip';tooltip.hidden=true;tooltip.setAttribute('role','tooltip');document.body.append(tooltip);
- const language=$('topbar-language');if(language){language.hidden=true;header.append(language)}oldHeader.replaceWith(header);oldNav.replaceWith(nav);
- notify.className='workspace-notify';notify.innerHTML=workspaceIcon('bell');header.querySelector('.workspace-header-actions').append(notify);
+ const headerActions=header.querySelector('.workspace-header-actions');
+ const theme=oldHeader.querySelector('.color-mode-switch'),language=$('topbar-language');
+ if(theme)headerActions.append(theme);
+ if(language)headerActions.append(language);
+ oldHeader.replaceWith(header);oldNav.replaceWith(nav);
+ notify.className='workspace-notify';notify.innerHTML=workspaceIcon('bell');headerActions.append(notify);
  const menu=document.createElement('details');menu.className='workspace-profile-dropdown';menu.innerHTML='<summary id="workspace-profile" aria-label="'+words('Меню пользователя','User menu')+'"><span></span><i>⌄</i></summary><div class="workspace-profile-menu"></div>';header.querySelector('.workspace-header-actions').append(menu);
  for(const row of [['profile','Профиль','Profile','contacts'],['vks','Видеоконференции','Video meetings','chat'],['migration','Перенос данных','Import data','migration']]){const b=button(menu.lastElementChild,...row);b.addEventListener('click',()=>menu.open=false)}menu.lastElementChild.append(logout);
  header.querySelector('form').onsubmit=e=>{e.preventDefault();const query=$('workspace-search').value.trim();showApp('mail');$('mail-search').value=query;mailState.searchQ=query;mailState.offset=0;refreshMailMessages()};
@@ -11650,7 +11655,7 @@ function workspaceFolderIcon(folder){return workspaceIcon(String(folder.role||fo
  if(security){const securityHeading=document.createElement('h3');securityHeading.className='workspace-security-title';securityHeading.textContent=words('Безопасность','Security');security.prepend(securityHeading);for(const card of [...security.querySelectorAll(':scope>.card')]){const totp=card.querySelector('#btn-totp-setup'),passkey=card.querySelector('#btn-passkey-add');if(!totp&&!passkey){profileExtra.append(card);continue}card.classList.add('workspace-security-control');if(totp){card.querySelector('h3').textContent=words('Двухфакторная аутентификация','Two-factor authentication');const confirm=$('btn-totp-confirm');confirm.hidden=$('totp-setup-box').classList.contains('hidden');new MutationObserver(()=>confirm.hidden=$('totp-setup-box').classList.contains('hidden')).observe($('totp-setup-box'),{attributes:true,attributeFilter:['class']});}if(passkey){card.querySelector('h3').textContent='Passkeys';const hint=card.querySelector('.field-hint');if(hint){const info=document.createElement('details');info.className='workspace-security-info';info.innerHTML='<summary>'+words('О входе с ключом','About passkeys')+'</summary>';hint.before(info);info.append(hint)}}}}
  for(const menu of document.querySelectorAll('.workspace-settings-menu')){const profileButton=menu.querySelector('.workspace-settings-link');profileButton.lastElementChild.textContent=words('Профиль','Profile');const securityButton=action(words('Безопасность','Security'),'security',()=>{showApp('profile');requestAnimationFrame(()=>$('profile-security').scrollIntoView({block:'start',behavior:'smooth'}))});securityButton.className='workspace-settings-link';const signatureButton=action(words('Подпись','Signature'),'signature',()=>{showApp('profile');requestAnimationFrame(()=>$('signature-form').closest('.card').scrollIntoView({block:'start',behavior:'smooth'}))});signatureButton.className='workspace-settings-link';profileButton.after(securityButton,signatureButton)}
  // Appearance: segmented theme choices and picture swatches, not a large wallpaper banner.
- const appearance=$('app-appearance').querySelector('.workspace-settings-content'),mode=$('color-mode-select');if(mode){const choices=document.createElement('div');choices.className='workspace-mode-choices';for(const [value,ru,en,icon] of [['light','Светлая','Light','appearance'],['dark','Тёмная','Dark','appearance'],['auto','Системная','System','appearance']]){const b=action(words(ru,en),icon,()=>{applyColorMode(value);choices.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',String(x.dataset.mode===value)))});b.dataset.mode=value;b.setAttribute('aria-pressed',String(localStorage.getItem('tayga.colorMode')===value));choices.append(b)}mode.hidden=true;mode.after(choices)}
+ const appearance=$('app-appearance').querySelector('.workspace-settings-content'),mode=$('color-mode-select');if(mode){const choices=document.createElement('div');choices.className='workspace-mode-choices';for(const [value,ru,en,icon] of [['light','Светлая','Light','appearance'],['dark','Тёмная','Dark','appearance'],['auto','Системная','System','appearance']]){const b=action(words(ru,en),icon,()=>applyColorMode(value));b.dataset.mode=value;b.setAttribute('aria-pressed',String(localStorage.getItem('tayga.colorMode')===value));choices.append(b)}mode.hidden=true;mode.after(choices)}
  const preview=$('theme-preview');if(preview)preview.hidden=true;const backgroundLabel=appearance.querySelector('[data-i18n=appearance_hint]');if(backgroundLabel){backgroundLabel.removeAttribute('data-i18n');backgroundLabel.textContent=words('Фон','Background');backgroundLabel.className='workspace-background-label'}
  // Every retained icon control receives an actual outline SVG.
  const aliases={cal:'calendar',event:'calendar',contact:'contacts',people:'contacts',user:'contacts',theme:'appearance',lang:'language',mkdir:'files',logout:'back'};document.querySelectorAll('.ico[data-ico]').forEach(el=>el.innerHTML=workspaceIcon(aliases[el.dataset.ico]||el.dataset.ico));
@@ -11972,6 +11977,12 @@ window.tmsChatWorkspace = (() => {
   const workspace=window.tmsChatWorkspace;if(!workspace)return;
   const paths={spark:'M12 3l2.2 6.8L21 12l-6.8 2.2L12 21l-2.2-6.8L3 12l6.8-2.2L12 3z',catalog:'M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15 M16 16l5 5',history:'M4 5h16v12H8l-4 4V5z',skills:'M12 3l-8 4 8 4 8-4-8-4z M4 12l8 4 8-4 M4 17l8 4 8-4',settings:'M5 4v16 M12 4v16 M19 4v16 M2 8h6 M9 15h6 M16 10h6',close:'M6 6l12 12 M18 6L6 18',plus:'M12 5v14 M5 12h14',arrow:'M5 12h14 M13 6l6 6-6 6',shield:'M12 3l8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3z M8 12l3 3 5-6'};
   function icon(name){const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('fill','none');svg.setAttribute('stroke','currentColor');svg.setAttribute('stroke-width','1.6');svg.setAttribute('stroke-linecap','round');svg.setAttribute('stroke-linejoin','round');svg.setAttribute('aria-hidden','true');const path=document.createElementNS(svg.namespaceURI,'path');path.setAttribute('d',paths[name]||paths.spark);svg.append(path);return svg;}
+  Object.assign(paths,{
+    web:'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM3 12h18M12 3c-5 5-5 13 0 18 5-5 5-13 0-18',
+    attach:'m20 11-8.4 8.4a5 5 0 0 1-7-7L13 4a3.5 3.5 0 0 1 5 5l-8 8a2 2 0 0 1-2.8-2.8l7-7',
+    mic:'M9 5a3 3 0 1 1 6 0v6a3 3 0 0 1-6 0V5ZM5 11a7 7 0 0 0 14 0M12 18v4m-3 0h6',
+    stop:'M7 7h10v10H7z',send:'M12 20V5m-6 6 6-6 6 6',download:'M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4',
+  });
   const section=document.createElement('section');section.id='app-agents';section.className='app-page hidden';
   section.innerHTML=`<div class="tms-agents"><aside id="agents-sidebar" class="agents-sidebar"><div class="agents-brand"><span class="agents-brand-icon"></span><div><strong>Агенты</strong><span>Помощники для работы</span></div></div><nav class="agents-navigation" aria-label="Разделы агентов"><button type="button" data-view="catalog">Все агенты</button><button type="button" data-view="history">Мои диалоги</button><button type="button" data-view="skills">Навыки</button><button type="button" data-view="settings">Настройки</button></nav><div class="agents-side-history"></div><div class="agents-account"><span class="agents-account-icon"></span><div><small>Рабочее пространство</small><p class="agents-scope"></p></div></div></aside><div class="agents-divider" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Ширина панели диалогов" aria-controls="agents-sidebar"></div><div class="agents-workspace"><div class="agents-error" role="alert"></div><main class="agents-main"></main></div></div>`;
   const layout=section.querySelector('.tms-agents');
@@ -12016,14 +12027,20 @@ window.tmsChatWorkspace = (() => {
   workspace.register('agents',{label:'Агенты',section});
   const main=section.querySelector('.agents-main'),error=section.querySelector('.agents-error'),sidebar=section.querySelector('.agents-side-history');
   let pollTimer=null;
+  let cleanupChatMedia=()=>{};
   let owner='',ownerToken='',epoch=0,revision=0,loadRevision=0,boot=null,config=null,history=[],active='',view='catalog',sending=false,controller=new AbortController();
   const node=(tag,text,className)=>{const el=document.createElement(tag);if(text!==undefined)el.textContent=text;if(className)el.className=className;return el;};
   const action=(text,run,className)=>{const el=node('button',text,className);el.type='button';el.onclick=run;return el;};
+  function iconAction(symbol,label,handler) {
+    const button=action('',handler,'agents-icon-action');
+    button.append(icon(symbol));button.setAttribute('aria-label',label);button.title=label;
+    return button;
+  }
   function guard(){const e=epoch,email=owner,token=ownerToken;return()=>{if(e!==epoch||email!==state.email||!token||token!==state.tokens?.access_token)throw Error('Учётная запись изменилась');};}
   async function request(path,options={}){const check=guard();try{check();const out=await api('/api/v4/tms/agents'+path,{...options,signal:controller.signal,_guard:check});check();return out;}catch(err){if(ownerToken!==state.tokens?.access_token){reset();if(state.tokens?.access_token&&!section.classList.contains('hidden'))queueMicrotask(()=>run(load));}throw err;}}
   function report(err){if(err.name!=='AbortError')error.textContent=err.data?.message||err.message;}
   async function run(fn){const version=epoch;error.textContent='';try{await fn();}catch(err){if(version===epoch)report(err);}}
-  function reset(){clearInterval(pollTimer);epoch++;revision++;loadRevision++;controller.abort();controller=new AbortController();owner='';ownerToken='';boot=null;config=null;history=[];active='';sending=false;sidebar.replaceChildren();main.replaceChildren();error.textContent='';section.querySelector('.agents-scope').textContent='';document.querySelectorAll('dialog[data-agents-dialog]').forEach(el=>el.remove());}
+  function reset(){clearInterval(pollTimer);cleanupChatMedia();epoch++;revision++;loadRevision++;controller.abort();controller=new AbortController();owner='';ownerToken='';boot=null;config=null;history=[];active='';sending=false;sidebar.replaceChildren();main.replaceChildren();error.textContent='';section.querySelector('.agents-scope').textContent='';document.querySelectorAll('dialog[data-agents-dialog]').forEach(el=>el.remove());}
   async function load(){
     if(!state.tokens?.access_token){reset();return;}
     if(owner!==state.email||ownerToken!==state.tokens.access_token){reset();owner=state.email;ownerToken=state.tokens.access_token;}
@@ -12044,7 +12061,7 @@ window.tmsChatWorkspace = (() => {
     }
   }
   function title(text,subtitle){const header=node('header',undefined,'agents-header');const block=node('div');block.append(node('h1',text));if(subtitle)block.append(node('p',subtitle));header.append(block);main.append(header);return header;}
-  async function show(next){clearInterval(pollTimer);
+  async function show(next){clearInterval(pollTimer);cleanupChatMedia();
     view=next;revision++;active='';main.classList.remove('is-conversation');main.replaceChildren();renderSidebar();
     if(!boot)return;
     if(next==='catalog'){renderCatalog();return;}
@@ -12083,37 +12100,238 @@ window.tmsChatWorkspace = (() => {
     for(const skill of boot.catalog.skills){const card=node('article',undefined,'agents-card'),avatar=node('div',undefined,'agents-avatar');avatar.append(icon('skills'));card.append(avatar,node('h2',skill.name),node('p','Дополнительная инструкция для агента'));if(boot.can_manage)card.append(action('Изменить',()=>run(()=>editSkill(skill.id))));grid.append(card);}
   }
   async function newChat(id){const check=guard();const chat=await request('/conversations',{method:'POST',body:JSON.stringify({agent_id:id})});check();history.push(chat);await openChat(chat.id);}
-  async function openChat(id){clearInterval(pollTimer);
+  async function openChat(id){clearInterval(pollTimer);cleanupChatMedia();
     const version=++revision;const chat=await request('/conversations/'+encodeURIComponent(id));if(version!==revision)return;
     const historyEntry=history.find(entry=>entry.id===id);if(historyEntry)historyEntry.title=chat.title;
     active=id;view='chat';main.replaceChildren();main.classList.add('is-conversation');renderSidebar();
     const agent=boot.catalog.agents.find(a=>a.id===chat.agent_id);const header=title(agent?.name||'Агент','Личный диалог');
     header.append(action('Новый диалог',()=>run(()=>newChat(chat.agent_id))),action('Убрать из списка',()=>run(async()=>{if(!window.confirm('Убрать диалог из списка? История ветки останется в Mattermost.'))return;await request('/conversations/'+encodeURIComponent(id),{method:'DELETE'});history=history.filter(c=>c.id!==id);await show('catalog');})));
-    const web=action(chat.web_enabled?'Веб-поиск включён':'Веб-поиск выключен',()=>run(async()=>{const updated=await request('/conversations/'+encodeURIComponent(id),{method:'PATCH',body:JSON.stringify({web_enabled:!chat.web_enabled})});chat.web_enabled=updated.web_enabled;web.textContent=chat.web_enabled?'Веб-поиск включён':'Веб-поиск выключен';}));web.setAttribute('aria-pressed',String(!!chat.web_enabled));if(agent?.tools?.includes('web_search')){if(boot.search_available===false){web.disabled=true;web.textContent='Поиск не настроен';}header.append(web);}
     const approvals=node('div',undefined,'agents-approvals');main.append(approvals);
     const drawActions=()=>{approvals.replaceChildren();for(const item of chat.actions||[]){if(item.state!=='pending'||item.expires_at<Date.now())continue;const card=node('article',undefined,'agents-card');card.append(node('strong',item.tool==='mail_draft'?'Подтвердить отправку письма':'Подтвердить отправку сообщения'),node('p',item.arguments.to||item.arguments.channel_id),node('p',item.arguments.subject||''),node('pre',item.arguments.text));card.append(action('Отправить',()=>run(async()=>{await request('/conversations/'+encodeURIComponent(id)+'/actions/'+encodeURIComponent(item.id),{method:'POST',body:'{}'});item.state='sent';drawActions();}),'agents-primary'));approvals.append(card);}};drawActions();
     const messages=node('div',undefined,'agents-messages');messages.setAttribute('role','log');messages.setAttribute('aria-label','Сообщения диалога');main.append(messages);
-    const draw=()=>{messages.replaceChildren();if(!chat.messages.length)messages.append(emptyState('spark','Чем могу помочь?',agent?.description||'Задайте вопрос или опишите задачу. История этого диалога доступна только вам.'));for(const m of chat.messages){const article=node('article',undefined,'agents-message '+m.role);article.append(node('strong',m.role==='user'?'Вы':agent?.name||'Агент'),node('div',m.content));messages.append(article);}messages.scrollTop=messages.scrollHeight;};draw();
-    const form=node('form',undefined,'agents-composer'),input=node('textarea');input.rows=3;input.maxLength=16000;input.placeholder='Напишите сообщение…';input.setAttribute('aria-label','Сообщение агенту');
-    const send=node('button','Отправить','agents-primary');send.type='submit';const status=node('span','', 'agents-send-status');status.setAttribute('role','status');form.append(input,send,status);main.append(form,node('small','Ответы ИИ могут содержать ошибки. Сообщения передаются настроенному администратором провайдеру.','agents-notice'));
-    form.onsubmit=event=>{event.preventDefault();if(sending||!input.value.trim())return;const content=input.value;run(async()=>{
-      sending=true;send.disabled=true;input.disabled=true;status.textContent='Агент готовит ответ…';const check=guard();
-      try{const updated=await request('/conversations/'+encodeURIComponent(id)+'/messages',{method:'POST',body:JSON.stringify({content})});check();const i=history.findIndex(c=>c.id===id);if(i>=0)history[i]=updated;if(active===id&&version===revision){chat.messages=updated.messages;chat.actions=updated.actions;drawActions();input.value='';draw();renderSidebar();}}
-      catch(err){
-        if(active===id&&version===revision){
-          const latest=await request('/conversations/'+encodeURIComponent(id)).catch(()=>null);
-          if(latest&&active===id&&version===revision){
-            chat.messages=latest.messages;
-            if(historyEntry)historyEntry.title=latest.title;
-            draw();
-            renderSidebar();
-          }
-        }
-        throw err;
+    const chatPath='/conversations/'+encodeURIComponent(id);
+    const fileURLs=new Map();
+    const chatIsCurrent=()=>active===id&&version===revision&&!section.classList.contains('hidden');
+    const form=node('form',undefined,'agents-composer'),input=node('textarea');
+    input.rows=2;input.maxLength=16000;input.placeholder='Сообщение для '+(agent?.name||'агента');input.setAttribute('aria-label','Сообщение агенту');
+    const status=node('span','','agents-send-status');status.setAttribute('role','status');
+    const chips=node('div',undefined,'agents-draft-files');chips.hidden=true;
+    const tools=node('div',undefined,'agents-composer-tools'),left=node('div'),right=node('div');
+    const fileInput=node('input');fileInput.type='file';fileInput.multiple=true;fileInput.hidden=true;
+    const attach=iconAction('attach','Прикрепить файлы',()=>fileInput.click());
+    const mic=iconAction('mic','Записать аудио',()=>void toggleRecording());
+    const send=iconAction('send','Отправить');send.type='submit';send.classList.add('agents-primary','agents-send');
+    let files=[],submission=null,recorder=null,recordingTimer=null,starting=false,webChanging=false,closed=false;
+    const supportedAudio=!!(navigator.mediaDevices?.getUserMedia&&window.MediaRecorder);
+    const allowWeb=!!agent?.tools?.includes('web_search')&&boot.search_available!==false;
+    const web=iconAction('web','Веб-поиск',()=>run(async()=>{
+      webChanging=true;syncWeb();
+      try {
+        const updated=await request(chatPath,{method:'PATCH',body:JSON.stringify({web_enabled:!chat.web_enabled})});
+        chat.web_enabled=updated.web_enabled;
+      } finally {webChanging=false;syncWeb();}
+    }));
+    web.classList.add('agents-web-toggle');
+    web.append(node('span','Веб-поиск'));
+    function syncWeb() {
+      const enabled=allowWeb&&!!chat.web_enabled;
+      web.setAttribute('aria-pressed',String(enabled));
+      web.setAttribute('aria-label','Веб-поиск');
+      web.title=allowWeb?(enabled?'Веб-поиск включён':'Веб-поиск выключен'):'Веб-поиск не настроен для этого агента';
+      web.disabled=!allowWeb||webChanging;
+    }
+    function syncComposer() {
+      send.disabled=sending||starting||!!recorder||(!input.value.trim()&&!files.length);
+      attach.disabled=sending;
+      mic.disabled=sending||starting||!supportedAudio;
+      mic.setAttribute('aria-pressed',String(!!recorder));
+      const micLabel=!supportedAudio?'Запись аудио недоступна в этом браузере':recorder?'Остановить запись':'Записать аудио';
+      mic.setAttribute('aria-label',micLabel);mic.title=micLabel;
+      mic.replaceChildren(icon(recorder?'stop':'mic'));
+    }
+    function drawDraft() {
+      chips.replaceChildren();
+      chips.hidden=!files.length;
+      for(const file of files){
+        const pill=node('span',undefined,'agents-file-pill');
+        const remove=iconAction('close','Убрать '+file.name,()=>{files=files.filter(f=>f!==file);submission=null;drawDraft();});
+        remove.disabled=sending;
+        pill.append(icon('attach'),node('span',file.name),remove);
+        chips.append(pill);
       }
-      finally{check();sending=false;send.disabled=false;input.disabled=false;status.textContent='';}
-    });};
-    pollTimer=setInterval(async()=>{if(sending||section.classList.contains('hidden')||active!==id||version!==revision)return;try{const updated=await request('/conversations/'+encodeURIComponent(id));if(active!==id||version!==revision)return;if(historyEntry&&historyEntry.title!==updated.title){historyEntry.title=updated.title;renderSidebar();}if(JSON.stringify(chat.messages)!==JSON.stringify(updated.messages)){chat.messages=updated.messages;draw();}chat.actions=updated.actions;drawActions();}catch{ /* Keep the draft when temporarily offline. */ }},4000);
+      syncComposer();
+    }
+    function addFiles(added) {
+      if(sending||closed)return;
+      const next=[...files,...added];
+      if(next.length>5||next.reduce((total,file)=>total+file.size,0)>1024**3){
+        status.textContent='Можно прикрепить до 5 файлов общим размером до 1 ГиБ.';
+        return;
+      }
+      files=next;submission=null;status.textContent='';drawDraft();
+    }
+    function releaseRecording() {
+      clearTimeout(recordingTimer);
+      if(!recorder)return;
+      const current=recorder;
+      recorder=null;
+      if(current.state!=='inactive')current.stop();
+      current.stream.getTracks().forEach(track=>track.stop());
+    }
+    async function toggleRecording() {
+      if(recorder){
+        if(recorder.state!=='inactive')recorder.stop();
+        return;
+      }
+      if(starting||sending||closed||!supportedAudio||files.length>=5){
+        if(files.length>=5)status.textContent='Освободите место для аудио в списке вложений.';
+        return;
+      }
+      starting=true;syncComposer();
+      let stream;
+      try {
+        stream=await navigator.mediaDevices.getUserMedia({audio:true});
+        if(closed||!chatIsCurrent()){stream.getTracks().forEach(track=>track.stop());return;}
+        const current=new MediaRecorder(stream),chunks=[];
+        recorder=current;
+        current.ondataavailable=event=>{if(event.data.size)chunks.push(event.data);};
+        current.onstop=()=>{
+          if(recorder!==current)return;
+          releaseRecording();
+          if(closed||!chatIsCurrent())return;
+          const type=current.mimeType||chunks[0]?.type||'audio/webm';
+          const extension=type.includes('mp4')?'m4a':type.includes('ogg')?'ogg':'webm';
+          if(chunks.length){
+            const stamp=new Date().toISOString().slice(0,19).replaceAll(':','-');
+            addFiles([new File(chunks,'voice-message-'+stamp+'.'+extension,{type})]);
+          }else{status.textContent='Запись пуста.';syncComposer();}
+        };
+        current.onerror=()=>{releaseRecording();status.textContent='Не удалось записать аудио.';syncComposer();};
+        current.start();
+        recordingTimer=setTimeout(()=>{if(current.state!=='inactive')current.stop();},180000);
+        status.textContent='Запись… Нажмите микрофон, чтобы остановить.';
+      }catch(err){
+        stream?.getTracks().forEach(track=>track.stop());
+        releaseRecording();
+        if(!closed)status.textContent=err.name==='NotAllowedError'?'Разрешите доступ к микрофону в браузере.':'Не удалось открыть микрофон.';
+      }finally{starting=false;syncComposer();}
+    }
+    cleanupChatMedia=()=>{
+      closed=true;
+      releaseRecording();
+      for(const url of fileURLs.values())URL.revokeObjectURL(url);
+      fileURLs.clear();
+    };
+    async function fileBlob(file) {
+      const check=guard();check();
+      const res=await fetch('/api/v4/files/'+encodeURIComponent(file.id),{headers:{Authorization:'Bearer '+ownerToken},signal:controller.signal});
+      if(!res.ok)throw Error('Не удалось открыть вложение');
+      const blob=await res.blob();check();
+      if(closed||!chatIsCurrent())throw new DOMException('Диалог закрыт','AbortError');
+      return blob;
+    }
+    function drawFile(file) {
+      const item=node('div',undefined,'agents-message-file');
+      const download=iconAction('download','Скачать '+file.name,()=>run(async()=>{
+        download.disabled=true;
+        try{
+          const url=URL.createObjectURL(await fileBlob(file));
+          const link=node('a');link.href=url;link.download=file.name;link.click();
+          setTimeout(()=>URL.revokeObjectURL(url),1000);
+        }finally{download.disabled=false;}
+      }));
+      item.append(node('span',file.name),download);
+      if(/^voice-message-.+\.(webm|m4a|ogg)$/.test(file.name)&&file.size<=24*1024**2){
+        const player=node('audio');player.controls=true;player.preload='none';player.setAttribute('aria-label',file.name);
+        const play=action('Прослушать',()=>run(async()=>{
+          play.disabled=true;
+          try{
+            if(!fileURLs.has(file.id)){
+              const blob=await fileBlob(file);
+              const type=file.name.endsWith('.m4a')?'audio/mp4':file.name.endsWith('.ogg')?'audio/ogg':'audio/webm';
+              fileURLs.set(file.id,URL.createObjectURL(new Blob([blob],{type})));
+            }
+            player.src=fileURLs.get(file.id);play.replaceWith(player);await player.play().catch(()=>{});
+          }finally{play.disabled=false;}
+        }));
+        if(fileURLs.has(file.id)){player.src=fileURLs.get(file.id);item.append(player);}
+        else item.append(play);
+      }
+      return item;
+    }
+    const draw=()=>{
+      messages.replaceChildren();
+      if(!chat.messages.length)messages.append(emptyState('spark','Чем могу помочь?',agent?.description||'Задайте вопрос или опишите задачу. История этого диалога доступна только вам.'));
+      for(const m of chat.messages){
+        const article=node('article',undefined,'agents-message '+m.role);
+        article.append(node('strong',m.role==='user'?'Вы':agent?.name||'Агент'));
+        if(m.content)article.append(node('div',m.content));
+        for(const file of m.files||[])article.append(drawFile(file));
+        messages.append(article);
+      }
+      messages.scrollTop=messages.scrollHeight;
+    };
+    fileInput.onchange=()=>{addFiles(fileInput.files);fileInput.value='';};
+    input.oninput=()=>{submission=null;syncComposer();};
+    input.onpaste=event=>{if(event.clipboardData?.files.length){event.preventDefault();addFiles(event.clipboardData.files);}};
+    left.append(web);right.append(attach,mic,send);tools.append(left,right);
+    form.append(input,chips,fileInput,tools,status);
+    main.append(form,node('small','Сообщения и текст поддерживаемых вложений передаются провайдеру.','agents-notice'));
+    syncWeb();drawDraft();draw();
+    form.onsubmit=event=>{
+      event.preventDefault();
+      if(sending||starting||recorder||closed||(!input.value.trim()&&!files.length))return;
+      const content=input.value;
+      if(!submission)submission={content,pending_post_id:crypto.randomUUID()};
+      const draft=submission;
+      run(async()=>{
+        sending=true;input.disabled=true;drawDraft();const check=guard();
+        try{
+          if(files.length&&!draft.file_ids){
+            status.textContent='Загрузка файлов…';
+            const data=new FormData();data.append('channel_id',chat.channel_id);
+            for(const file of files)data.append('files',file,file.name);
+            const uploaded=await api('/api/v4/files',{method:'POST',body:data,signal:controller.signal,_guard:check});
+            check();if(closed||!chatIsCurrent())return;
+            draft.file_ids=uploaded.file_infos.map(file=>file.id);
+          }
+          status.textContent='Агент готовит ответ…';
+          const updated=await request(chatPath+'/messages',{method:'POST',body:JSON.stringify(draft)});
+          check();
+          const i=history.findIndex(c=>c.id===id);if(i>=0)history[i]=updated;
+          if(chatIsCurrent()){
+            chat.messages=updated.messages;chat.actions=updated.actions;drawActions();
+            input.value='';files=[];submission=null;draw();renderSidebar();
+          }
+          status.textContent='';
+        }catch(err){
+          if(chatIsCurrent()){
+            const latest=await request(chatPath).catch(()=>null);
+            if(latest&&chatIsCurrent()){
+              if(latest.messages.some(m=>m.pending_post_id===draft.pending_post_id)){
+                input.value='';files=[];submission=null;
+              }
+              chat.messages=latest.messages;
+              if(historyEntry)historyEntry.title=latest.title;
+              draw();renderSidebar();
+            }
+          }
+          status.textContent=err.data?.message||err.message;
+        }finally{
+          check();sending=false;input.disabled=false;drawDraft();
+        }
+      });
+    };
+    pollTimer=setInterval(async()=>{
+      if(sending||!chatIsCurrent())return;
+      try{
+        const updated=await request(chatPath);if(!chatIsCurrent())return;
+        if(historyEntry&&historyEntry.title!==updated.title){historyEntry.title=updated.title;renderSidebar();}
+        if(!webChanging){chat.web_enabled=updated.web_enabled;syncWeb();}
+        if(JSON.stringify(chat.messages)!==JSON.stringify(updated.messages)){chat.messages=updated.messages;draw();}
+        chat.actions=updated.actions;drawActions();
+      }catch{ /* Keep the draft when temporarily offline. */ }
+    },4000);
     input.onkeydown=event=>{if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();form.requestSubmit();}};
   }
   function modal(titleText){
@@ -12151,16 +12369,45 @@ window.tmsChatWorkspace = (() => {
     const next=await adminConfig(),original=next.providers.find(p=>p.id===id),p=original||{id:crypto.randomUUID(),kind:'deepseek',thinking:false,name:'DeepSeek',url:'https://api.deepseek.com',model:'deepseek-flash',api_key:''};const {dialog,form}=modal('Подключение к модели');
     const kind=select(form,'Провайдер',[['deepseek','DeepSeek'],['ollama','Ollama'],['openai','OpenAI (ChatGPT)'],['openai-compatible','Другой OpenAI-совместимый API']],p.kind||'openai-compatible');
     const name=field(form,'Название',p.name),url=field(form,'Базовый URL API',p.url,'url'),model=field(form,'Идентификатор модели',p.model),key=field(form,p.has_key?'Новый API-ключ (пусто — сохранить прежний)':'API-ключ', '', 'password');name.required=url.required=model.required=true;key.autocomplete='new-password';name.maxLength=100;model.maxLength=200;
-    const suggestions=node('datalist');suggestions.id='agents-model-suggestions';form.append(suggestions);
     const thinking=field(form,'DeepSeek: режим рассуждений','','checkbox');thinking.checked=!!p.thinking;
     const hint=node('small');form.append(hint);
-    const presets={deepseek:{name:'DeepSeek',url:'https://api.deepseek.com',model:'deepseek-flash',models:['deepseek-flash','deepseek-v4-pro'],hint:'API-ключ из platform.deepseek.com. Подключение доступно только вашему домену.'},ollama:{name:'Ollama',url:'http://127.0.0.1:11434',model:'',models:[],hint:'Адрес Ollama со стороны сервера TMS. Укажите установленную модель из ollama list. Ключ нужен только при защите API; HTTP разрешён для локального сервера и частных IP-адресов.'},openai:{name:'OpenAI',url:'https://api.openai.com/v1',model:'gpt-6.2-sol',models:['gpt-6.2-sol','gpt-6-luna'],hint:'Нужен ключ OpenAI API из platform.openai.com и доступ к выбранной модели. Ключ хранится на сервере в настройках вашего домена.'},'openai-compatible':{name:'',url:'',model:'',models:[],hint:'Базовый URL совместимого API, например https://model.example.com/v1. Запросы отправляет сервер TMS.'}};
-    const sync=()=>{const selected=presets[kind.value],deepseek=kind.value==='deepseek';thinking.parentElement.hidden=!deepseek;hint.textContent=selected.hint;url.readOnly=['deepseek','openai'].includes(kind.value);model.placeholder=kind.value==='ollama'?'Имя установленной модели':'Идентификатор модели';suggestions.replaceChildren();for(const id of selected.models){const option=node('option');option.value=id;suggestions.append(option);}model.setAttribute('list',suggestions.id);
-      const retained=p.has_key&&p.kind===kind.value&&p.url===url.value;key.required=['deepseek','openai'].includes(kind.value)&&!retained;key.parentElement.firstChild.textContent=retained?'Новый API-ключ (пусто — сохранить прежний)':kind.value==='ollama'?'API-ключ (если требуется)':'API-ключ';};
-    kind.onchange=()=>{const selected=presets[kind.value];name.value=selected.name;url.value=selected.url;model.value=selected.model;key.value='';sync();};url.oninput=sync;sync();
-    finishEditor(dialog,form,async()=>{next.providers=next.providers.filter(v=>v.id!==p.id);next.providers.push({id:p.id,kind:kind.value,thinking:kind.value==='deepseek'&&thinking.checked,name:name.value,url:url.value,model:model.value,api_key:key.value});await saveConfig(next);},original?async()=>{if(next.agents.some(a=>a.provider_id===p.id))throw Error('Сначала переключите или удалите агентов этой модели');next.providers=next.providers.filter(v=>v.id!==p.id);await saveConfig(next);}:null);
+    const presets={deepseek:{name:'DeepSeek',url:'https://api.deepseek.com',model:'deepseek-flash',hint:'API-ключ из platform.deepseek.com. Подключение доступно только вашему домену.'},ollama:{name:'Ollama',url:'http://127.0.0.1:11434',model:'',hint:'Адрес Ollama со стороны сервера TMS. Ключ нужен только при защите API.'},openai:{name:'OpenAI',url:'https://api.openai.com/v1',model:'gpt-6.2-sol',hint:'Нужен ключ OpenAI API из platform.openai.com.'},'openai-compatible':{name:'',url:'',model:'',hint:'Базовый URL совместимого API, например https://model.example.com/v1.'}};
+    const providerKind=()=>kind.value==='openai-compatible'&&original?.kind===''?'':kind.value;
+    const result=node('small','');result.setAttribute('role','status');
+    let probe=0;
+    const test=action('Проверить подключение',async()=>{
+      if(!url.reportValidity()||!key.reportValidity())return;
+      const revision=++probe;
+      test.disabled=true;
+      picker.parentElement.classList.add('hidden');
+      result.textContent='Получаем список моделей…';
+      try {
+        const {models}=await request('/config/models',{method:'POST',body:JSON.stringify({id:p.id,kind:providerKind(),url:url.value,api_key:key.value})});
+        if(!dialog.open||!dialog.isConnected||revision!==probe)return;
+        const options=document.createDocumentFragment();options.append(new Option('Выберите модель',''));
+        for(const id of models)options.append(new Option(id,id));
+        picker.replaceChildren(options);
+        picker.value=models.includes(model.value)?model.value:'';
+        picker.parentElement.classList.toggle('hidden',!models.length);
+        result.textContent=models.length?'Моделей в каталоге: '+models.length:'Провайдер вернул пустой список моделей.';
+      } catch(err) {
+        if(dialog.open&&dialog.isConnected&&revision===probe)result.textContent=err.data?.message||err.message;
+      } finally {
+        if(revision===probe)test.disabled=false;
+      }
+    });
+    const testRow=node('div',undefined,'agents-provider-test');testRow.append(test,result);form.append(testRow);
+    const picker=select(form,'Модели провайдера',[],'');picker.parentElement.classList.add('hidden');
+    picker.onchange=()=>{if(picker.value)model.value=picker.value;};
+    model.oninput=()=>{picker.value=[...picker.options].some(option=>option.value===model.value)?model.value:'';};
+    const resetProbe=()=>{probe++;test.disabled=false;result.textContent='';picker.parentElement.classList.add('hidden');picker.replaceChildren();};
+    const sync=()=>{const selected=presets[kind.value],deepseek=kind.value==='deepseek';thinking.parentElement.classList.toggle('hidden',!deepseek);hint.textContent=selected.hint;url.readOnly=['deepseek','openai'].includes(kind.value);model.placeholder=kind.value==='ollama'?'Имя установленной модели':'Идентификатор модели';
+      const retained=p.has_key&&p.kind===providerKind()&&p.url===url.value;key.required=['deepseek','openai'].includes(kind.value)&&!retained;key.parentElement.firstChild.textContent=retained?'Новый API-ключ (пусто — сохранить прежний)':kind.value==='ollama'?'API-ключ (если требуется)':'API-ключ';resetProbe();};
+    kind.onchange=()=>{const selected=presets[kind.value];name.value=selected.name;url.value=selected.url;model.value=selected.model;key.value='';sync();};url.oninput=sync;key.oninput=resetProbe;sync();
+    finishEditor(dialog,form,async()=>{next.providers=next.providers.filter(v=>v.id!==p.id);next.providers.push({id:p.id,kind:providerKind(),thinking:kind.value==='deepseek'&&thinking.checked,name:name.value,url:url.value,model:model.value,api_key:key.value});await saveConfig(next);},original?async()=>{if(next.agents.some(a=>a.provider_id===p.id))throw Error('Сначала переключите или удалите агентов этой модели');next.providers=next.providers.filter(v=>v.id!==p.id);await saveConfig(next);}:null);
   }
   section.querySelectorAll('[data-view]').forEach(b=>{b.onclick=()=>run(()=>show(b.dataset.view));});
-  const previous=showApp;showApp=function(name){previous(name);if(name==='agents'){run(load);}};
+  const previous=showApp;showApp=function(name){previous(name);if(name==='agents'){run(load);}else{cleanupChatMedia();}};
+  window.addEventListener('pagehide',()=>cleanupChatMedia());
   window.addEventListener('tms-products-session-ended',reset);window.addEventListener('storage',event=>{if(event.key==='tayga.tokens'){reset();if(!section.classList.contains('hidden'))run(load);}});
 })();

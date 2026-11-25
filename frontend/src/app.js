@@ -306,6 +306,7 @@ function applyColorMode(mode) {
   const select = $("color-mode-select");
   if (select) select.value = choice;
   document.querySelectorAll(".color-mode-switch button").forEach(button => button.setAttribute("aria-pressed", String(button.dataset.colorMode === choice)));
+  document.querySelectorAll(".workspace-mode-choices button").forEach(button => button.setAttribute("aria-pressed", String(button.dataset.mode === choice)));
 }
 document.querySelectorAll(".color-mode-switch button").forEach(button => button.addEventListener("click",()=>applyColorMode(button.dataset.colorMode)));
 systemColorMode.addEventListener("change",()=>{if(localStorage.getItem("tayga.colorMode")==="auto")applyColorMode("auto");});
@@ -563,7 +564,7 @@ async function api(path, opts = {}) {
   const {_guard, ...requestOpts} = opts;
   _guard?.();
   if(filesState.ownerID&&/^\/api\/v1\/files(?:[/?]|$)/.test(path)&&!/^\/api\/v1\/files\/(?:access|shares|library|office)/.test(path))path+=(path.includes('?')?'&':'?')+'owner_id='+encodeURIComponent(filesState.ownerID);
-  const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
+  const headers = Object.assign(opts.body instanceof FormData ? {} : { "Content-Type": "application/json" }, opts.headers || {});
   if (state.tokens?.access_token) {
     headers.Authorization = "Bearer " + state.tokens.access_token;
   }

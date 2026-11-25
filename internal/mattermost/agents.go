@@ -55,12 +55,15 @@ type agentConfiguration struct {
 	Skills    []agentSkill      `json:"skills"`
 }
 type agentMessage struct {
-	Role       string          `json:"role"`
-	Content    string          `json:"content"`
-	ToolCalls  []agentToolCall `json:"tool_calls,omitempty"`
-	ToolCallID string          `json:"tool_call_id,omitempty"`
-	Name       string          `json:"tool_name,omitempty"`
-	Reasoning  string          `json:"reasoning_content,omitempty"`
+	Role       string            `json:"role"`
+	Content    string            `json:"content"`
+	ToolCalls  []agentToolCall   `json:"tool_calls,omitempty"`
+	ToolCallID string            `json:"tool_call_id,omitempty"`
+	Name       string            `json:"tool_name,omitempty"`
+	Reasoning  string            `json:"reasoning_content,omitempty"`
+	PostID     string            `json:"post_id,omitempty"`
+	PendingID  string            `json:"pending_post_id,omitempty"`
+	Files      []chat.Attachment `json:"files,omitempty"`
 }
 type agentConversation struct {
 	WebEnabled bool           `json:"web_enabled"`
@@ -202,14 +205,7 @@ func (c *agentConfiguration) validate(old agentConfiguration) bool {
 			return false
 		}
 		providers[p.ID] = true
-		// Empty key retains the secret of precisely this provider, never another.
-		if p.APIKey == "" {
-			for _, previous := range old.Providers {
-				if previous.ID == p.ID && previous.URL == p.URL && previous.Kind == p.Kind {
-					p.APIKey = previous.APIKey
-				}
-			}
-		}
+		p.retainKey(old.Providers)
 		p.HasKey = false
 		if (p.Kind == "deepseek" || p.Kind == "openai") && strings.TrimSpace(p.APIKey) == "" {
 			return false
@@ -254,6 +250,14 @@ func (s *API) agentsHTTP(w http.ResponseWriter, r *http.Request, u *storage.User
 		return
 	}
 	admin := s.canManageScope(r, u, userScope(u))
+	if path == "/config/models" {
+		if !admin {
+			s.failure(w, chat.ErrForbidden)
+			return
+		}
+		s.agentProviderModels(w, r, u)
+		return
+	}
 	if path == "/config" {
 		if !admin {
 			s.failure(w, chat.ErrForbidden)
@@ -445,12 +449,14 @@ func (s *API) agentAudit(u *storage.User, event, id string) {
 
 func (s *API) agentTurn(w http.ResponseWriter, r *http.Request, u *storage.User, id string) {
 	var req struct {
-		Content string `json:"content"`
+		Content   string   `json:"content"`
+		FileIDs   []string `json:"file_ids"`
+		PendingID string   `json:"pending_post_id"`
 	}
 	if !decode(w, r, &req) {
 		return
 	}
-	if strings.TrimSpace(req.Content) == "" || len(req.Content) > 16000 {
+	if (strings.TrimSpace(req.Content) == "" && len(req.FileIDs) == 0) || len(req.Content) > 16000 || len(req.FileIDs) > chat.MaxFilesPerPost || len(req.PendingID) > 128 {
 		s.failure(w, chat.ErrInvalid)
 		return
 	}
@@ -549,7 +555,6 @@ func (s *API) agentTurn(w http.ResponseWriter, r *http.Request, u *storage.User,
 		}
 	}
 	messages = append(messages, conv.Messages...)
-	messages = append(messages, agentMessage{Role: "user", Content: req.Content})
 	h.Conversations[index].Pending = claim
 	h.Conversations[index].PendingAt = time.Now().UnixMilli()
 	err = s.agentSave(r.Context(), key, h)
@@ -558,19 +563,33 @@ func (s *API) agentTurn(w http.ResponseWriter, r *http.Request, u *storage.User,
 		s.failure(w, err)
 		return
 	}
-	pendingID := ""
+	pendingID := req.PendingID
 	if native, ok := r.Context().Value(agentNativeKey{}).(agentNativeRequest); ok {
 		pendingID = native.PendingID
 	}
-	userPost, postErr := s.chat.Send(r.Context(), u, conv.ChannelID, conv.RootID, req.Content, pendingID)
+	userPost, postErr := s.chat.SendWithFiles(r.Context(), u, conv.ChannelID, conv.RootID, req.Content, pendingID, nil, req.FileIDs)
 	if postErr != nil {
 		s.clearAgentClaim(r.Context(), u, id, claim)
 		s.failure(w, postErr)
 		return
 	}
+	userMessage := agentMessageFromPost("user", userPost)
+	alreadyPosted := false
+	for _, previous := range conv.Messages {
+		if alreadyPosted && previous.Role == "assistant" {
+			s.clearAgentClaim(r.Context(), u, id, claim)
+			write(w, 200, conv)
+			return
+		}
+		alreadyPosted = alreadyPosted || previous.PostID == userPost.ID
+	}
+	if !alreadyPosted {
+		messages = append(messages, userMessage)
+	}
 	s.agentAudit(u, "turn_started", id)
 	complete := func(w http.ResponseWriter, r *http.Request) {
-		answer, actions, providerErr := s.agentToolCompletion(r, u, c, *definition, conv, *provider, messages)
+		modelMessages := s.agentMessagesWithFiles(r.Context(), u, messages)
+		answer, actions, providerErr := s.agentToolCompletion(r, u, c, *definition, conv, *provider, modelMessages)
 		// Clear the persisted claim even when the request disconnects. No user text is
 		// committed on failure, so retries cannot leave duplicate unmatched messages.
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Second)
@@ -592,7 +611,7 @@ func (s *API) agentTurn(w http.ResponseWriter, r *http.Request, u *storage.User,
 			if v.Title == newAgentConversationTitle {
 				v.Title = conv.Title
 				if v.Title == newAgentConversationTitle {
-					v.Title = agentConversationTitle(req.Content)
+					v.Title = agentPostTitle(userPost)
 				}
 			}
 			// A revoked login cannot commit a model response after logout.
@@ -610,14 +629,18 @@ func (s *API) agentTurn(w http.ResponseWriter, r *http.Request, u *storage.User,
 			}
 			if providerErr == nil {
 				bot, botErr := s.agentBot(ctx, u, conv.AgentID)
+				var botPost chat.Post
 				if botErr == nil {
-					_, botErr = s.chat.SendRich(ctx, bot, conv.ChannelID, conv.RootID, answer, "", agentActionProps(actions), "")
+					botPost, botErr = s.chat.SendRich(ctx, bot, conv.ChannelID, conv.RootID, answer, "", agentActionProps(actions), "")
 				}
 				if botErr != nil {
 					providerErr = botErr
 				} else {
 					v.Actions = append(v.Actions, actions...)
-					v.Messages = append(v.Messages, agentMessage{Role: "user", Content: req.Content}, agentMessage{Role: "assistant", Content: answer})
+					if !alreadyPosted {
+						v.Messages = append(v.Messages, userMessage)
+					}
+					v.Messages = append(v.Messages, agentMessage{Role: "assistant", Content: answer, PostID: botPost.ID})
 					v.Updated = time.Now().UnixMilli()
 				}
 			}
@@ -657,7 +680,11 @@ func (s *API) agentTurn(w http.ResponseWriter, r *http.Request, u *storage.User,
 
 }
 func agentCompletion(ctx context.Context, p agentProvider, messages []agentMessage) (string, error) {
-	client := &http.Client{Timeout: 120 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("provider redirects disabled") }}
+	client, err := newAgentProviderClient(p, 120*time.Second)
+	if err != nil {
+		return "", err
+	}
+	defer client.CloseIdleConnections()
 	return agentCompletionWithClient(ctx, p, messages, client)
 }
 func agentCompletionWithClient(ctx context.Context, p agentProvider, messages []agentMessage, client *http.Client) (string, error) {
@@ -745,13 +772,7 @@ func agentModelReply(ctx context.Context, p agentProvider, messages []agentMessa
 	}
 	defer res.Body.Close()
 	if res.StatusCode != 200 {
-		var response struct {
-			Error struct {
-				Code string `json:"code"`
-			} `json:"error"`
-		}
-		_ = json.NewDecoder(io.LimitReader(res.Body, 16<<10)).Decode(&response)
-		return agentMessage{}, agentProviderError{status: res.StatusCode, code: response.Error.Code}
+		return agentMessage{}, readAgentProviderError(res)
 	}
 	data, err := io.ReadAll(io.LimitReader(res.Body, (2<<20)+1))
 	if err != nil || len(data) > 2<<20 {
@@ -796,6 +817,16 @@ func agentConversationTitle(firstQuestion string) string {
 type agentProviderError struct {
 	status int
 	code   string
+}
+
+func readAgentProviderError(res *http.Response) agentProviderError {
+	var response struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	_ = json.NewDecoder(io.LimitReader(res.Body, 16<<10)).Decode(&response)
+	return agentProviderError{status: res.StatusCode, code: response.Error.Code}
 }
 
 func (e agentProviderError) Error() string {

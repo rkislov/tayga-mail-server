@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
+	"slices"
 	"time"
 
 	"github.com/tayga/tms/internal/chat"
@@ -141,10 +141,10 @@ func (s *API) refreshAgentConversation(ctx context.Context, u *storage.User, c *
 		} else if p.UserID != u.ID {
 			return chat.ErrForbidden
 		}
-		if role == "user" && c.Title == newAgentConversationTitle && strings.TrimSpace(p.Message) != "" {
-			c.Title = agentConversationTitle(p.Message)
+		if role == "user" && c.Title == newAgentConversationTitle {
+			c.Title = agentPostTitle(p)
 		}
-		c.Messages = append(c.Messages, agentMessage{Role: role, Content: p.Message})
+		c.Messages = append(c.Messages, agentMessageFromPost(role, p))
 		c.Updated = p.CreatedAt
 	}
 	return nil
@@ -167,7 +167,7 @@ func (s *API) clearAgentClaim(ctx context.Context, u *storage.User, id, claim st
 
 // Intercept only a two-member DM with a native agent from the same domain.
 // HTTP authentication and the ordinary membership check happen before dispatch.
-func (s *API) nativeAgentPost(w http.ResponseWriter, r *http.Request, u *storage.User, channelID, rootID, content, pendingID string) bool {
+func (s *API) nativeAgentPost(w http.ResponseWriter, r *http.Request, u *storage.User, channelID, rootID, content, pendingID string, files []string) bool {
 	if u.AuthSource == "bot" || u.AuthSource == "federated" {
 		return false
 	}
@@ -206,7 +206,11 @@ func (s *API) nativeAgentPost(w http.ResponseWriter, r *http.Request, u *storage
 		for _, p := range posts {
 			if p.UserID == u.ID && p.PendingID == pendingID {
 				s.agentsMu.Unlock()
-				if p.Message != content {
+				ids := make([]string, len(p.Attachments))
+				for i, attachment := range p.Attachments {
+					ids[i] = attachment.ID
+				}
+				if p.Message != content || !slices.Equal(ids, files) {
 					s.failure(w, chat.ErrInvalid)
 				} else {
 					write(w, 201, postModel(p))
@@ -243,7 +247,7 @@ func (s *API) nativeAgentPost(w http.ResponseWriter, r *http.Request, u *storage
 		s.failure(w, chat.ErrInvalid)
 		return true
 	}
-	payload, _ := json.Marshal(map[string]string{"content": content})
+	payload, _ := json.Marshal(map[string]any{"content": content, "file_ids": files})
 	req := r.Clone(context.WithValue(r.Context(), agentNativeKey{}, agentNativeRequest{PendingID: pendingID}))
 	req.Body = io.NopCloser(bytes.NewReader(payload))
 	s.agentTurn(w, req, u, selected)

@@ -7,10 +7,12 @@ const settle=async()=>{for(let i=0;i<12;i++)await new Promise(r=>setImmediate(r)
 function fixture(t,admin=false,empty=false,tools=false){
  const dom=new JSDOM('<nav><button data-app="chat">Чат</button></nav><main><section id="app-chat"></section></main>',{url:'https://tms.test',runScripts:'outside-only'}),w=dom.window;
  w.state={email:'alice@test',tokens:{access_token:'alice'}};w.APPS=['chat'];w.showApp=name=>{for(const app of w.APPS)w.document.getElementById('app-'+app)?.classList.toggle('hidden',app!==name);};
- const requests=[];let deferred=null,history=[],chat={id:'c1',agent_id:'helper',title:'Личный тест',updated_at:1,messages:[],web_enabled:false,actions:tools?[{id:'a1',tool:'mail_draft',arguments:{to:'recipient@example.test',subject:'<img src=x>',text:'Exact proposed body'},state:'pending',expires_at:Date.now()+60000}]:[]};
+ const requests=[];let deferred=null,history=[],chat={id:'c1',channel_id:'dm1',agent_id:'helper',title:'Личный тест',updated_at:1,messages:[],web_enabled:false,actions:tools?[{id:'a1',tool:'mail_draft',arguments:{to:'recipient@example.test',subject:'<img src=x>',text:'Exact proposed body'},state:'pending',expires_at:Date.now()+60000}]:[]};
  w.api=async(url,options={})=>{requests.push({url,options});options._guard?.();
   if(deferred&&url==='/api/v4/tms/agents')return new Promise(r=>{deferred.finish=()=>r({can_manage:false,catalog:{agents:[{id:'private',name:'STALE OWNER',description:''}],skills:[]}});});
   if(url.endsWith('/config'))return {version:0,providers:[],agents:[],skills:[]};
+  if(url.endsWith('/config/models'))return {models:['catalog-first','catalog-second']};
+  if(url==='/api/v4/files')return {file_infos:options.body.getAll('files').map((file,i)=>({id:'file'+i,name:file.name,size:file.size}))};
   if(url==='/api/v4/tms/agents')return {can_manage:admin,search_available:true,catalog:{agents:empty?[]:[{id:'helper',name:'<img src=x onerror=alert(1)>',description:'Помощник',tools:tools?['web_search']:[]}],skills:[]}};
   if(url.endsWith('/conversations')){if(options.method==='POST'){history=[chat];return chat;}return history;}
   if(options.method==='PATCH'){chat={...chat,...JSON.parse(options.body)};return chat;}
@@ -27,7 +29,7 @@ test('Agents opens catalog, creates a private conversation and sends message',as
  const start=[...w.document.querySelectorAll('#app-agents button')].find(b=>b.textContent==='Начать диалог');start.click();await settle();
  const input=w.document.querySelector('.agents-composer textarea');input.value='Мой вопрос';w.document.querySelector('.agents-composer').dispatchEvent(new w.Event('submit',{cancelable:true}));await settle();
  assert.match(w.document.querySelector('.agents-messages').textContent,/Мой вопрос.*Ответ/);
- const req=requests.find(r=>r.url.endsWith('/messages'));assert.deepEqual(JSON.parse(req.options.body),{content:'Мой вопрос'});
+ const req=requests.find(r=>r.url.endsWith('/messages'));const body=JSON.parse(req.options.body);assert.equal(body.content,'Мой вопрос');assert.ok(body.pending_post_id);
  assert.equal(w.document.querySelector('[data-view="settings"]').hidden,false);
  w.document.querySelector('[data-view="settings"]').click();await settle();assert.match(w.document.querySelector('.agents-main').textContent,/администратору домена/);
  assert.ok(!requests.some(r=>r.url.endsWith('/config')));
@@ -87,8 +89,55 @@ test('Ollama and OpenAI presets select native connection fields without carrying
 
 test('web switch persists on the dialog and delivery confirms the exact stored action',async t=>{
  const {w,requests}=fixture(t,false,false,true);w.showApp('agents');await settle();[...w.document.querySelectorAll('button')].find(b=>b.textContent==='Начать диалог').click();await settle();
- const web=[...w.document.querySelectorAll('button')].find(b=>b.textContent==='Веб-поиск выключен');assert.ok(web);web.click();await settle();
- const patch=requests.find(r=>r.options.method==='PATCH');assert.deepEqual(JSON.parse(patch.options.body),{web_enabled:true});assert.equal(web.textContent,'Веб-поиск включён');
+ const web=w.document.querySelector('.agents-composer [aria-label="Веб-поиск"]');assert.ok(web);web.click();await settle();
+ const patch=requests.find(r=>r.options.method==='PATCH');assert.deepEqual(JSON.parse(patch.options.body),{web_enabled:true});assert.equal(web.getAttribute('aria-pressed'),'true');
  const card=w.document.querySelector('.agents-approvals');assert.match(card.textContent,/recipient@example.test.*Exact proposed body/);assert.equal(card.querySelector('img'),null);
  card.querySelector('button').click();await settle();const confirmation=requests.find(r=>r.url.endsWith('/conversations/c1/actions/a1'));assert.ok(confirmation);assert.equal(confirmation.options.body,'{}');assert.equal(card.children.length,0);
+});
+
+test('provider catalog is discoverable before saving and selects the exact returned ID',async t=>{
+ const {w,requests}=fixture(t,true,true);w.showApp('agents');await settle();
+ w.document.querySelector('.agents-empty .agents-primary').click();await settle();
+ const dialog=w.document.querySelector('dialog');
+ const provider=dialog.querySelector('[aria-label="Провайдер"]');
+ provider.value='ollama';provider.dispatchEvent(new w.Event('change'));
+ [...dialog.querySelectorAll('button')].find(button=>button.textContent==='Проверить подключение').click();await settle();
+ assert.ok(requests.some(req=>req.url.endsWith('/config/models')&&req.options.method==='POST'));
+ assert.ok(!requests.some(req=>req.options.method==='PUT'));
+ const picker=dialog.querySelector('[aria-label="Модели провайдера"]');
+ assert.equal(picker.parentElement.classList.contains('hidden'),false);
+ picker.value='catalog-second';picker.dispatchEvent(new w.Event('change'));
+ dialog.querySelector('form').dispatchEvent(new w.Event('submit',{cancelable:true}));await settle();
+ const saved=requests.find(req=>req.options.method==='PUT');
+ assert.equal(JSON.parse(saved.options.body).providers[0].model,'catalog-second');
+});
+
+test('agent composer uploads a file and recorded audio before posting to the private dialog',async t=>{
+ const {w,requests}=fixture(t);let stops=0;
+ const stream={getTracks:()=>[{stop(){stops++;}}]};
+ Object.defineProperty(w.navigator,'mediaDevices',{value:{getUserMedia:async()=>stream}});
+ w.MediaRecorder=class{
+  constructor(stream){this.stream=stream;this.mimeType='audio/webm';this.state='inactive';}
+  start(){this.state='recording';}
+  stop(){this.state='inactive';this.ondataavailable({data:new w.Blob(['test audio'],{type:this.mimeType})});this.onstop();}
+ };
+ w.showApp('agents');await settle();
+ [...w.document.querySelectorAll('button')].find(button=>button.textContent==='Начать диалог').click();await settle();
+ const composer=w.document.querySelector('.agents-composer'),input=composer.querySelector('input[type=file]');
+ Object.defineProperty(input,'files',{value:[new w.File(['text'],'brief.txt')]});
+ input.dispatchEvent(new w.Event('change'));
+ assert.match(composer.querySelector('.agents-draft-files').textContent,/brief.txt/);
+ composer.querySelector('[aria-label="Записать аудио"]').click();await settle();
+ assert.equal(composer.querySelector('[aria-label="Отправить"]').disabled,true);
+ composer.querySelector('[aria-label="Остановить запись"]').click();await settle();
+ assert.equal(stops,1);
+ assert.match(composer.querySelector('.agents-draft-files').textContent,/voice-message-.+\.webm/);
+ composer.dispatchEvent(new w.Event('submit',{cancelable:true}));await settle();
+ const upload=requests.find(req=>req.url==='/api/v4/files');
+ assert.equal(upload.options.body.get('channel_id'),'dm1');
+ assert.equal(upload.options.body.getAll('files').length,2);
+ const turn=requests.find(req=>req.url.endsWith('/messages'));
+ assert.deepEqual(JSON.parse(turn.options.body).file_ids,['file0','file1']);
+ assert.ok(requests.indexOf(upload)<requests.indexOf(turn));
+ assert.equal(composer.querySelector('.agents-draft-files').hidden,true);
 });
