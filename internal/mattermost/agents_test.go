@@ -10,7 +10,9 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
+	"github.com/tayga/tms/internal/chat"
 	"github.com/tayga/tms/internal/mmsettings"
 	"github.com/tayga/tms/internal/storage"
 )
@@ -88,6 +90,40 @@ func TestAgentsScopedCatalogAndPrivateHistory(t *testing.T) {
 		}
 	}
 	f.call(t, "GET", "/tms/agents", "", nil, 401)
+}
+
+func TestAgentsWebAndMattermostShareThread(t *testing.T) {
+	f, _, sent := agentsFixture(t)
+	conv := f.call(t, "POST", "/tms/agents/conversations", f.tokens[0], map[string]string{"agent_id": "helper"}, 201)
+	id, channel, root := conv["id"].(string), conv["channel_id"].(string), conv["root_id"].(string)
+	f.call(t, "POST", "/tms/agents/conversations/"+id+"/messages", f.tokens[0], map[string]string{"content": "from web"}, 200)
+	f.call(t, "POST", "/posts", f.tokens[0], map[string]string{"channel_id": channel, "message": "from phone"}, 201)
+	got := waitAgentMessages(t, f, f.tokens[0], id, 4)
+	if len(got["messages"].([]any)) != 4 || len(*sent) != 4 || (*sent)[3].Content != "from phone" {
+		t.Fatalf("histories diverged: %#v", got)
+	}
+	f.call(t, "GET", "/posts/"+root+"/thread", f.tokens[1], nil, 404)
+	f.call(t, "POST", "/posts", f.tokens[1], map[string]string{"channel_id": channel, "message": "intrusion"}, 404)
+	// The other user has a different DM and model context, even with the same bot.
+	bot, err := f.api.agentBot(t.Context(), f.users[1], "helper")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dm, err := f.api.chat.Direct(t.Context(), f.users[1], chat.ID(bot.ID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.call(t, "POST", "/posts", f.tokens[1], map[string]string{"channel_id": dm.ID, "message": "bob phone"}, 201)
+	f.api.agentsMu.Lock()
+	bobHistory := agentHistory{}
+	_ = f.api.agentLoad(t.Context(), agentHistoryKey(f.users[1]), &bobHistory)
+	f.api.agentsMu.Unlock()
+	waitAgentMessages(t, f, f.tokens[1], bobHistory.Conversations[0].ID, 2)
+	for _, m := range *sent {
+		if strings.Contains(m.Content, "from web") || strings.Contains(m.Content, "from phone") {
+			t.Fatal("cross-user leak")
+		}
+	}
 }
 func TestAgentsSecretRetentionVersionAndDisabledAgent(t *testing.T) {
 	f, _, _ := agentsFixture(t)
@@ -317,5 +353,37 @@ func TestAgentsProviderEndpointPolicyHTTP(t *testing.T) {
 				version = int64(result["version"].(float64))
 			}
 		})
+	}
+}
+
+func waitAgentMessages(t *testing.T, f *fixture, token, id string, n int) map[string]any {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		got := f.call(t, "GET", "/tms/agents/conversations/"+id, token, nil, 200)
+		if len(got["messages"].([]any)) >= n {
+			return got
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("agent response timeout")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+func TestAgentsRepliesKeepCausalPostOrder(t *testing.T) {
+	f, _, _ := agentsFixture(t)
+	conv := f.call(t, "POST", "/tms/agents/conversations", f.tokens[0], map[string]string{"agent_id": "helper"}, 201)
+	root := conv["root_id"].(string)
+	if _, err := f.store.DB().ExecContext(t.Context(), `UPDATE chat_posts SET created_at=? WHERE id=?`, time.Now().UnixMilli()+10000, root); err != nil {
+		t.Fatal(err)
+	}
+	f.call(t, "POST", "/tms/agents/conversations/"+conv["id"].(string)+"/messages", f.tokens[0], map[string]string{"content": "ordered"}, 200)
+	posts, err := f.api.chat.Thread(t.Context(), f.users[0], root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(posts) != 3 || posts[1].UserID != f.users[0].ID || posts[1].CreatedAt <= posts[0].CreatedAt || posts[2].CreatedAt <= posts[1].CreatedAt {
+		t.Fatalf("causality lost: %#v", posts)
 	}
 }

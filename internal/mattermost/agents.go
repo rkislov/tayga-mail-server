@@ -1,8 +1,8 @@
 package mattermost
 
 // Agents is a native TMS product following the Mattermost Agents navigation.
-// It deliberately has no access to the mail store, plugin tools, or the owner's
-// aiagent credentials. Only the current user's messages reach the chosen model.
+// Tool access is explicitly scoped to the authenticated user and domain.
+// Existing aiagent owner credentials are never inherited.
 import (
 	"bytes"
 	"context"
@@ -39,6 +39,7 @@ type agentDefinition struct {
 	ProviderID   string   `json:"provider_id"`
 	Enabled      bool     `json:"enabled"`
 	SkillIDs     []string `json:"skill_ids"`
+	Tools        []string `json:"tools"`
 }
 type agentSkill struct {
 	ID           string `json:"id"`
@@ -46,23 +47,32 @@ type agentSkill struct {
 	Instructions string `json:"instructions"`
 }
 type agentConfiguration struct {
+	Search    agentSearchConfig `json:"search"`
 	Version   int64             `json:"version"`
 	Providers []agentProvider   `json:"providers"`
 	Agents    []agentDefinition `json:"agents"`
 	Skills    []agentSkill      `json:"skills"`
 }
 type agentMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role       string          `json:"role"`
+	Content    string          `json:"content"`
+	ToolCalls  []agentToolCall `json:"tool_calls,omitempty"`
+	ToolCallID string          `json:"tool_call_id,omitempty"`
+	Name       string          `json:"tool_name,omitempty"`
+	Reasoning  string          `json:"reasoning_content,omitempty"`
 }
 type agentConversation struct {
-	ID        string         `json:"id"`
-	AgentID   string         `json:"agent_id"`
-	Title     string         `json:"title"`
-	Updated   int64          `json:"updated_at"`
-	Messages  []agentMessage `json:"messages"`
-	Pending   string         `json:"pending,omitempty"`
-	PendingAt int64          `json:"pending_at,omitempty"`
+	WebEnabled bool           `json:"web_enabled"`
+	Actions    []agentAction  `json:"actions,omitempty"`
+	ChannelID  string         `json:"channel_id,omitempty"`
+	RootID     string         `json:"root_id,omitempty"`
+	ID         string         `json:"id"`
+	AgentID    string         `json:"agent_id"`
+	Title      string         `json:"title"`
+	Updated    int64          `json:"updated_at"`
+	Messages   []agentMessage `json:"messages"`
+	Pending    string         `json:"pending,omitempty"`
+	PendingAt  int64          `json:"pending_at,omitempty"`
 }
 type agentHistory struct {
 	Conversations []agentConversation `json:"conversations"`
@@ -104,6 +114,11 @@ func emptyAgentConfig() agentConfiguration {
 func (c agentConfiguration) public(admin bool) agentConfiguration {
 	out := emptyAgentConfig()
 	out.Version = c.Version
+	if admin {
+		out.Search = c.Search
+		out.Search.HasKey = out.Search.APIKey != ""
+		out.Search.APIKey = ""
+	}
 	if admin {
 		out.Providers = append(out.Providers, c.Providers...)
 		out.Skills = append(out.Skills, c.Skills...)
@@ -176,6 +191,9 @@ func (c *agentConfiguration) validate(old agentConfiguration) bool {
 	if len(c.Providers) > 30 || len(c.Agents) > 100 || len(c.Skills) > 100 {
 		return false
 	}
+	if !c.Search.validate(old.Search) {
+		return false
+	}
 	providers, agents, skills := map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for i := range c.Providers {
 		p := &c.Providers[i]
@@ -205,6 +223,11 @@ func (c *agentConfiguration) validate(old agentConfiguration) bool {
 	for _, a := range c.Agents {
 		if !validAgentID(a.ID) || agents[a.ID] || strings.TrimSpace(a.Name) == "" || len(a.Name) > 100 || len(a.Description) > 1000 || len(a.Instructions) > 32000 || !providers[a.ProviderID] || len(a.SkillIDs) > 20 {
 			return false
+		}
+		for _, tool := range a.Tools {
+			if tool != "web_search" && tool != "mail_read" && tool != "mail_send" && tool != "chat_read" && tool != "chat_send" {
+				return false
+			}
 		}
 		agents[a.ID] = true
 		for _, id := range a.SkillIDs {
@@ -262,6 +285,10 @@ func (s *API) agentsHTTP(w http.ResponseWriter, r *http.Request, u *storage.User
 			s.failure(w, chat.ErrInvalid)
 			return
 		}
+		if err := s.syncAgentBots(r.Context(), u, next, c); err != nil {
+			s.failure(w, err)
+			return
+		}
 		next.Version++
 		if err := s.agentSave(r.Context(), agentConfigKey(u), next); err != nil {
 			s.failure(w, err)
@@ -277,7 +304,7 @@ func (s *API) agentsHTTP(w http.ResponseWriter, r *http.Request, u *storage.User
 			s.failure(w, err)
 			return
 		}
-		write(w, 200, map[string]any{"tenant_id": u.TenantID, "domain_id": u.DomainID, "user_id": chat.ID(u.ID), "can_manage": admin, "catalog": c.public(false)})
+		write(w, 200, map[string]any{"tenant_id": u.TenantID, "domain_id": u.DomainID, "user_id": chat.ID(u.ID), "can_manage": admin, "search_available": c.Search.Kind != "", "catalog": c.public(false)})
 		return
 	}
 	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
@@ -287,6 +314,10 @@ func (s *API) agentsHTTP(w http.ResponseWriter, r *http.Request, u *storage.User
 	}
 	if len(parts) == 3 && parts[2] == "messages" && r.Method == http.MethodPost {
 		s.agentTurn(w, r, u, parts[1])
+		return
+	}
+	if len(parts) == 4 && parts[2] == "actions" && r.Method == http.MethodPost {
+		s.confirmAgentAction(w, r, u, parts[1], parts[3])
 		return
 	}
 	s.agentsMu.Lock()
@@ -339,6 +370,10 @@ func (s *API) agentsHTTP(w http.ResponseWriter, r *http.Request, u *storage.User
 			return
 		}
 		conversation := agentConversation{ID: agentID(), AgentID: req.AgentID, Title: "Новый диалог", Updated: time.Now().UnixMilli(), Messages: []agentMessage{}}
+		if err := s.linkAgentConversation(r.Context(), u, &conversation); err != nil {
+			s.failure(w, err)
+			return
+		}
 		h.Conversations = append(h.Conversations, conversation)
 		if err := s.agentSave(r.Context(), key, h); err != nil {
 			s.failure(w, err)
@@ -357,9 +392,28 @@ func (s *API) agentsHTTP(w http.ResponseWriter, r *http.Request, u *storage.User
 			continue
 		}
 		if r.Method == http.MethodGet {
+			if err := s.refreshAgentConversation(r.Context(), u, &c); err != nil {
+				s.failure(w, err)
+				return
+			}
 			c.Pending = ""
 			c.PendingAt = 0
 			write(w, 200, c)
+			return
+		}
+		if r.Method == http.MethodPatch {
+			var req struct {
+				WebEnabled bool `json:"web_enabled"`
+			}
+			if !decode(w, r, &req) {
+				return
+			}
+			h.Conversations[i].WebEnabled = req.WebEnabled
+			if err := s.agentSave(r.Context(), key, h); err != nil {
+				s.failure(w, err)
+				return
+			}
+			write(w, 200, h.Conversations[i])
 			return
 		}
 		if r.Method != http.MethodDelete {
@@ -409,7 +463,12 @@ func (s *API) agentTurn(w http.ResponseWriter, r *http.Request, u *storage.User,
 		fail(w, 429, "tms.agents.capacity", "Все агенты заняты. Повторите позже")
 		return
 	}
-	defer func() { <-s.agentsRequests }()
+	detached := false
+	defer func() {
+		if !detached {
+			<-s.agentsRequests
+		}
+	}()
 	h := agentHistory{Conversations: []agentConversation{}}
 	c := emptyAgentConfig()
 	err := s.agentLoad(r.Context(), key, &h)
@@ -466,6 +525,17 @@ func (s *API) agentTurn(w http.ResponseWriter, r *http.Request, u *storage.User,
 		s.failure(w, storage.ErrNotFound)
 		return
 	}
+	if err := s.linkAgentConversation(r.Context(), u, &conv); err != nil {
+		s.agentsMu.Unlock()
+		s.failure(w, err)
+		return
+	}
+	if err := s.refreshAgentConversation(r.Context(), u, &conv); err != nil {
+		s.agentsMu.Unlock()
+		s.failure(w, err)
+		return
+	}
+	h.Conversations[index] = conv
 	messages := []agentMessage{{Role: "system", Content: definition.Instructions}}
 	for _, sid := range definition.SkillIDs {
 		for _, skill := range c.Skills {
@@ -484,70 +554,141 @@ func (s *API) agentTurn(w http.ResponseWriter, r *http.Request, u *storage.User,
 		s.failure(w, err)
 		return
 	}
-	s.agentAudit(u, "turn_started", id)
-	answer, providerErr := agentCompletion(r.Context(), *provider, messages)
-	// Clear the persisted claim even when the request disconnects. No user text is
-	// committed on failure, so retries cannot leave duplicate unmatched messages.
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Second)
-	defer cancel()
-	s.agentsMu.Lock()
-	defer s.agentsMu.Unlock()
-	current := agentHistory{Conversations: []agentConversation{}}
-	if err = s.agentLoad(ctx, key, &current); err != nil {
-		s.failure(w, err)
+	pendingID := ""
+	if native, ok := r.Context().Value(agentNativeKey{}).(agentNativeRequest); ok {
+		pendingID = native.PendingID
+	}
+	userPost, postErr := s.chat.Send(r.Context(), u, conv.ChannelID, conv.RootID, req.Content, pendingID)
+	if postErr != nil {
+		s.clearAgentClaim(r.Context(), u, id, claim)
+		s.failure(w, postErr)
 		return
 	}
-	for i := range current.Conversations {
-		v := &current.Conversations[i]
-		if v.ID != id || v.Pending != claim {
-			continue
-		}
-		v.Pending = ""
-		v.PendingAt = 0
-		// A revoked login cannot commit a model response after logout.
-		_, authErr := s.authenticate(ctx, bearer(r))
-		if authErr != nil {
-			providerErr = errors.New("session revoked")
-		}
-		latest := emptyAgentConfig()
-		if e := s.agentLoad(ctx, agentConfigKey(u), &latest); e != nil || latest.Version != c.Version {
-			providerErr = errors.New("configuration changed")
-		}
-		policy, e := s.policy.Resolve(ctx, userScope(u))
-		if e != nil || !policy.Enabled {
-			providerErr = errors.New("scope disabled")
-		}
-		if providerErr == nil {
-			v.Messages = append(v.Messages, agentMessage{Role: "user", Content: req.Content}, agentMessage{Role: "assistant", Content: answer})
-			v.Updated = time.Now().UnixMilli()
-			if len(v.Messages) == 2 {
-				v.Title = string([]rune(req.Content)[:min(60, len([]rune(req.Content)))])
-			}
-		}
-		if err = s.agentSave(ctx, key, current); err != nil {
+	s.agentAudit(u, "turn_started", id)
+	complete := func(w http.ResponseWriter, r *http.Request) {
+		answer, actions, providerErr := s.agentToolCompletion(r, u, c, *definition, conv, *provider, messages)
+		// Clear the persisted claim even when the request disconnects. No user text is
+		// committed on failure, so retries cannot leave duplicate unmatched messages.
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Second)
+		defer cancel()
+		s.agentsMu.Lock()
+		defer s.agentsMu.Unlock()
+		current := agentHistory{Conversations: []agentConversation{}}
+		if err = s.agentLoad(ctx, key, &current); err != nil {
 			s.failure(w, err)
 			return
 		}
-		if providerErr != nil {
-			s.agentAudit(u, "turn_failed", id)
-			fail(w, 502, "tms.agents.provider_error", "Модель не ответила. Проверьте подключение и настройки провайдера")
+		for i := range current.Conversations {
+			v := &current.Conversations[i]
+			if v.ID != id || v.Pending != claim {
+				continue
+			}
+			v.Pending = ""
+			v.PendingAt = 0
+			// A revoked login cannot commit a model response after logout.
+			_, authErr := s.authenticate(ctx, bearer(r))
+			if authErr != nil {
+				providerErr = errors.New("session revoked")
+			}
+			latest := emptyAgentConfig()
+			if e := s.agentLoad(ctx, agentConfigKey(u), &latest); e != nil || latest.Version != c.Version {
+				providerErr = errors.New("configuration changed")
+			}
+			policy, e := s.policy.Resolve(ctx, userScope(u))
+			if e != nil || !policy.Enabled {
+				providerErr = errors.New("scope disabled")
+			}
+			if providerErr == nil {
+				bot, botErr := s.agentBot(ctx, u, conv.AgentID)
+				if botErr == nil {
+					_, botErr = s.chat.SendRich(ctx, bot, conv.ChannelID, conv.RootID, answer, "", agentActionProps(actions), "")
+				}
+				if botErr != nil {
+					providerErr = botErr
+				} else {
+					v.Actions = append(v.Actions, actions...)
+					v.Messages = append(v.Messages, agentMessage{Role: "user", Content: req.Content}, agentMessage{Role: "assistant", Content: answer})
+					v.Updated = time.Now().UnixMilli()
+					if len(v.Messages) == 2 {
+						v.Title = string([]rune(req.Content)[:min(60, len([]rune(req.Content)))])
+					}
+				}
+			}
+			if err = s.agentSave(ctx, key, current); err != nil {
+				s.failure(w, err)
+				return
+			}
+			if providerErr != nil {
+				s.agentAudit(u, "turn_failed", id)
+				fail(w, 502, "tms.agents.provider_error", "Модель не ответила. Проверьте подключение и настройки провайдера")
+				return
+			}
+			s.agentAudit(u, "turn_completed", id)
+			write(w, 200, v)
 			return
 		}
-		s.agentAudit(u, "turn_completed", id)
-		write(w, 200, v)
+		fail(w, 409, "tms.agents.turn_changed", "Состояние диалога изменилось")
+	}
+	if r.Context().Value(agentNativeKey{}) != nil {
+		detached = true
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 120*time.Second)
+		jobRequest := r.Clone(ctx)
+		go func() {
+			defer cancel()
+			defer func() { <-s.agentsRequests }()
+			complete(agentDiscardWriter{}, jobRequest)
+		}()
+		write(w, 201, postModel(userPost))
 		return
 	}
-	fail(w, 409, "tms.agents.turn_changed", "Состояние диалога изменилось")
+	complete(w, r)
+
 }
 func agentCompletion(ctx context.Context, p agentProvider, messages []agentMessage) (string, error) {
 	client := &http.Client{Timeout: 120 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("provider redirects disabled") }}
 	return agentCompletionWithClient(ctx, p, messages, client)
 }
 func agentCompletionWithClient(ctx context.Context, p agentProvider, messages []agentMessage, client *http.Client) (string, error) {
+	reply, err := agentModelReply(ctx, p, messages, nil, client)
+	return reply.Content, err
+}
+func agentModelReply(ctx context.Context, p agentProvider, messages []agentMessage, tools []any, client *http.Client) (agentMessage, error) {
 	if !validAgentProviderEndpoint(p) {
-		return "", errors.New("invalid provider")
+		return agentMessage{}, errors.New("invalid provider")
 	}
-	body := map[string]any{"model": p.Model, "messages": messages, "stream": false, "max_tokens": 4096}
+	wireMessages := make([]map[string]any, 0, len(messages))
+	for _, m := range messages {
+		v := map[string]any{"role": m.Role, "content": m.Content}
+		if len(m.ToolCalls) > 0 {
+			calls := []map[string]any{}
+			for _, call := range m.ToolCalls {
+				var args any
+				_ = json.Unmarshal(call.Function.Arguments, &args)
+				if p.Kind != "ollama" {
+					if _, ok := args.(string); !ok {
+						b, _ := json.Marshal(args)
+						args = string(b)
+					}
+				}
+				calls = append(calls, map[string]any{"id": call.ID, "type": "function", "function": map[string]any{"name": call.Function.Name, "arguments": args}})
+			}
+			v["tool_calls"] = calls
+		}
+		if m.ToolCallID != "" && p.Kind != "ollama" {
+			v["tool_call_id"] = m.ToolCallID
+		}
+		if m.Name != "" && p.Kind == "ollama" {
+			v["tool_name"] = m.Name
+		}
+		if m.Reasoning != "" && p.Kind == "deepseek" {
+			v["reasoning_content"] = m.Reasoning
+		}
+		wireMessages = append(wireMessages, v)
+	}
+	body := map[string]any{"model": p.Model, "messages": wireMessages, "stream": false, "max_tokens": 4096}
+	if len(tools) > 0 {
+		body["tools"] = tools
+	}
 	if p.Kind == "deepseek" {
 		mode := "disabled"
 		if p.Thinking {
@@ -574,13 +715,13 @@ func agentCompletionWithClient(ctx context.Context, p agentProvider, messages []
 	}
 	payload, err := json.Marshal(body)
 	if err != nil {
-		return "", err
+		return agentMessage{}, err
 	}
 	ctx, cancel := context.WithTimeout(ctx, 120*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
-		return "", err
+		return agentMessage{}, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if p.APIKey != "" {
@@ -588,15 +729,15 @@ func agentCompletionWithClient(ctx context.Context, p agentProvider, messages []
 	}
 	res, err := client.Do(req)
 	if err != nil {
-		return "", errors.New("provider unavailable")
+		return agentMessage{}, errors.New("provider unavailable")
 	}
 	defer res.Body.Close()
 	if res.StatusCode != 200 {
-		return "", errors.New("provider rejected request")
+		return agentMessage{}, errors.New("provider rejected request")
 	}
 	data, err := io.ReadAll(io.LimitReader(res.Body, (2<<20)+1))
 	if err != nil || len(data) > 2<<20 {
-		return "", errors.New("provider response too large")
+		return agentMessage{}, errors.New("provider response too large")
 	}
 	var result struct {
 		Message agentMessage `json:"message"`
@@ -606,19 +747,19 @@ func agentCompletionWithClient(ctx context.Context, p agentProvider, messages []
 		} `json:"choices"`
 	}
 	if json.Unmarshal(data, &result) != nil {
-		return "", errors.New("invalid model response")
+		return agentMessage{}, errors.New("invalid model response")
 	}
-	answer := ""
+	reply := agentMessage{}
 	if p.Kind == "ollama" {
 		if !result.Done {
-			return "", errors.New("incomplete model response")
+			return agentMessage{}, errors.New("incomplete model response")
 		}
-		answer = result.Message.Content
+		reply = result.Message
 	} else if len(result.Choices) > 0 {
-		answer = result.Choices[0].Message.Content
+		reply = result.Choices[0].Message
 	}
-	if strings.TrimSpace(answer) == "" || len(answer) > 64000 {
-		return "", errors.New("invalid model response")
+	if (strings.TrimSpace(reply.Content) == "" && len(reply.ToolCalls) == 0) || len(reply.Content) > 64000 || len(reply.ToolCalls) > 8 {
+		return agentMessage{}, errors.New("invalid model response")
 	}
-	return answer, nil
+	return reply, nil
 }

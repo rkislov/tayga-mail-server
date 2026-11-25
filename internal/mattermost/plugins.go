@@ -202,7 +202,7 @@ func (s *API) ServePluginHTTP(w http.ResponseWriter, r *http.Request) {
 		fail(w, 401, "api.context.session_expired.app_error", "Invalid session")
 		return
 	}
-	if s.startChannelCall != nil {
+	{
 		switch r.URL.Path {
 		case mattermostAppsRoute + "/bindings", mattermostAppsRoute + "/call":
 			s.channelCallApp(w, r, u)
@@ -227,7 +227,7 @@ func (s *API) commands(w http.ResponseWriter, r *http.Request, u *storage.User, 
 			s.failure(w, chat.ErrForbidden)
 			return
 		}
-		commands := []*model.Command{}
+		commands := s.nativeProductCommands(u)
 		rows, err := s.botCommands(r.Context(), u)
 		if err != nil {
 			s.failure(w, err)
@@ -253,6 +253,9 @@ func (s *API) commands(w http.ResponseWriter, r *http.Request, u *storage.User, 
 			suggestions := []model.AutocompleteSuggestion{}
 			for _, command := range commands {
 				values := []string{command.Trigger}
+				if command.Trigger == "agent-web" {
+					values = append(values, "agent-web on", "agent-web off", "agent-web status")
+				}
 				if command.PluginId == "tms.bot" {
 					for _, sub := range []string{"help", "new", "chats", "use", "web on", "web off", "web status"} {
 						values = append(values, command.Trigger+" "+sub)
@@ -297,6 +300,9 @@ func (s *API) commands(w http.ResponseWriter, r *http.Request, u *storage.User, 
 	args.UserId = chat.ID(u.ID)
 	args.TeamId = chat.ID(u.TenantID)
 	args.SiteURL = s.siteURL
+	if s.nativeProductCommand(w, r, u, args) {
+		return
+	}
 	if fields := strings.Fields(args.Command); len(fields) > 0 && fields[0] == "/meet" && s.startChannelCall != nil {
 		response, err := s.callCommand(r.Context(), u, args)
 		if err != nil {

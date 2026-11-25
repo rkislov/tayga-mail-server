@@ -380,6 +380,15 @@ func (s *Service) send(ctx context.Context, u *storage.User, channelID, rootID, 
 		return Post{}, err
 	}
 	defer tx.Rollback()
+	// Preserve causality for fast replies in one channel, including an agent's
+	// immediate answer. Millisecond ties previously sorted by random post IDs.
+	var latest int64
+	if err = tx.QueryRowContext(ctx, s.q(`SELECT COALESCE(MAX(created_at),0) FROM chat_posts WHERE channel_id=?`), channelID).Scan(&latest); err != nil {
+		return Post{}, err
+	}
+	if p.CreatedAt <= latest {
+		p.CreatedAt = latest + 1
+	}
 	result, err := tx.ExecContext(ctx, s.q(`INSERT INTO chat_posts(id,channel_id,user_id,root_id,message,created_at,pending_id,props,post_type) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING`), p.ID, p.ChannelID, p.UserID, p.RootID, p.Message, p.CreatedAt, p.PendingID, string(rawProps), postType)
 	if err != nil {
 		return Post{}, err
