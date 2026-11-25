@@ -486,6 +486,7 @@ function isAuthPublicPath(path) {
 }
 
 function clearSession() {
+  window.dispatchEvent(new Event("tms-products-session-ended"));
   resetMattermostBots();
   if (typeof omemoCancelOperations === 'function') omemoCancelOperations();
   mmProfileSessions.reset();

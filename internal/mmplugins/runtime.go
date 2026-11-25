@@ -6,6 +6,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -34,6 +35,14 @@ var pluginID = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,189}$`)
 const Version = "12.0.0"
 
 type Options struct {
+	PreferencesMutex *sync.Mutex
+	SQLDatabase      SQLDatabaseFactory
+	RefreshSQL       func(*sql.DB) error
+	SQLDriverName    string
+	SQLDataSource    func(pluginID string) string
+	// Development is for isolated test harnesses only; never enabled by domain settings.
+	Development bool
+
 	LoadConfiguration func(string) (map[string]any, error)
 	SaveConfiguration func(string, map[string]any) error
 	ReadEnabled       func(string) (bool, error)
@@ -47,6 +56,8 @@ type Options struct {
 	Logger                    *slog.Logger
 }
 type Runtime struct {
+	sql *sqlBridge
+
 	botMu     sync.Mutex
 	options   Options
 	env       *plugin.Environment
@@ -86,9 +97,14 @@ func New(options Options) (*Runtime, error) {
 		return nil, err
 	}
 	r := &Runtime{options: options, logger: logger, commands: map[string]registeredCommand{}}
+	var dbDriver plugin.AppDriver
+	if options.SQLDatabase != nil {
+		r.sql = newSQLBridge(options.SQLDatabase)
+		dbDriver = r.sql
+	}
 	r.env, err = plugin.NewEnvironment(func(m *model.Manifest) plugin.API {
 		return &hostAPI{unsupportedAPI: &unsupportedAPI{log: options.Logger, pluginID: m.Id}, runtime: r, manifest: m}
-	}, nil, options.Directory, web, logger, metrics{})
+	}, dbDriver, options.Directory, web, logger, metrics{})
 	if err != nil {
 		return nil, err
 	}
@@ -122,6 +138,9 @@ func (r *Runtime) Close() {
 	}
 	r.closed = true
 	r.env.Shutdown()
+	if r.sql != nil {
+		r.sql.Close()
+	}
 	_ = r.logger.Shutdown()
 }
 func (r *Runtime) List() (map[string]any, error) {
@@ -333,10 +352,28 @@ func (r *Runtime) Install(reader io.Reader, force bool) (*model.Manifest, error)
 	return &m, nil
 }
 func (r *Runtime) ServeHTTP(w http.ResponseWriter, request *http.Request, userID string) {
+	if userID != "" && (r.options.TenantID != "" || r.options.DomainID != "") {
+		if _, err := (&hostAPI{runtime: r}).user(userID); err != nil {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+	}
 	parts := strings.SplitN(strings.TrimPrefix(request.URL.Path, "/plugins/"), "/", 2)
 	if len(parts) != 2 || !pluginID.MatchString(parts[0]) {
 		http.NotFound(w, request)
 		return
+	}
+	if r.sql != nil && r.options.RefreshSQL != nil {
+		r.sql.mu.Lock()
+		db := r.sql.pools[parts[0]]
+		r.sql.mu.Unlock()
+		if db != nil {
+			if err := r.options.RefreshSQL(db); err != nil {
+				r.options.Logger.Error("plugin metadata refresh failed", "plugin_id", parts[0])
+				http.Error(w, "Plugin metadata unavailable", http.StatusServiceUnavailable)
+				return
+			}
+		}
 	}
 	hooks, err := r.env.HooksForPlugin(parts[0])
 	if err != nil {

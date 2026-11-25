@@ -4,6 +4,13 @@ set -eux
 package=$1
 family=$2
 export DEBIAN_FRONTEND=noninteractive
+# Keep unavailable CI mirrors bounded; retain repository TLS/GPG policies and
+# the distro's mirror order instead of selecting a mirror by socket latency.
+dnf_ci() {
+  timeout 300 dnf --setopt=fastestmirror=False --setopt=timeout=30 \
+    --setopt=retries=3 --setopt=minrate=1000 \
+    --setopt='*.timeout=30' --setopt='*.retries=3' --setopt='*.minrate=1000' "$@"
+}
 case "$family" in
   deb)
     apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 update
@@ -20,8 +27,8 @@ case "$family" in
     apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 install -y "$package" curl procps su systemd-analyze
     ;;
   rpm)
-    dnf install -y "$package" procps-ng
-    if ! command -v curl >/dev/null; then dnf install -y curl; fi
+    dnf_ci install -y "$package" procps-ng
+    if ! command -v curl >/dev/null; then dnf_ci install -y curl; fi
     ;;
   *) exit 2;;
 esac
@@ -114,7 +121,15 @@ kill -0 "$pid"
 curl -fsS http://127.0.0.1:18080/readyz >/dev/null
 if [ ! -d /run/systemd/system ]; then
   kill -TERM "$pid"
-  wait "$runner"
+  if wait "$runner"; then
+    :
+  else
+    status=$?
+    printf '%s\n' "Server lifecycle exited with status $status; captured output follows."
+    cat /tmp/tayga-package-test.out 2>/dev/null || true
+    cat /var/log/tayga/tayga.log 2>/dev/null || true
+    exit "$status"
+  fi
   trap - EXIT
 fi
 # Preserve administrator edits and mail during a reinstall/upgrade transaction.

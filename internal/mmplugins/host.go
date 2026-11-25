@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -76,10 +77,25 @@ func (a *hostAPI) GetConfig() *model.Config {
 	c := &model.Config{}
 	c.SetDefaults()
 	c.ServiceSettings.SiteURL = &a.runtime.options.SiteURL
+	if a.runtime.options.SQLDatabase != nil {
+		c.SqlSettings.DriverName = &a.runtime.options.SQLDriverName
+		c.SqlSettings.DataSource = new("plugin-rpc://scoped")
+		if a.runtime.options.SQLDataSource != nil {
+			c.SqlSettings.DataSource = new(a.runtime.options.SQLDataSource(a.manifest.Id))
+		}
+	}
+	c.ServiceSettings.EnableDeveloper = new(a.runtime.options.Development)
+	c.ServiceSettings.EnableTesting = new(a.runtime.options.Development)
 	c.LogSettings.EnableDiagnostics = new(false)
 	c.PluginSettings.Enable = new(true)
 	c.PluginSettings.EnableUploads = new(true)
 	c.PluginSettings.Directory = &a.runtime.options.Directory
+	files := filepath.Join(a.runtime.options.Directory, ".data", chat.ID(a.runtime.options.Scope), a.manifest.Id, "files")
+	if err := os.MkdirAll(files, 0700); err != nil {
+		a.log.Error("plugin file directory unavailable", "plugin_id", a.manifest.Id)
+	}
+	c.FileSettings.Directory = &files
+	c.FileSettings.DriverName = new("local")
 	c.PluginSettings.Plugins = map[string]map[string]any{a.manifest.Id: a.GetPluginConfig()}
 	return c
 }
@@ -196,7 +212,7 @@ func (a *hostAPI) KVCompareAndDelete(key string, oldValue []byte) (bool, *model.
 	return a.KVCompareAndSet(key, oldValue, nil)
 }
 func (a *hostAPI) KVList(page, perPage int) ([]string, *model.AppError) {
-	if page < 0 || page > 1000000 || perPage < 1 || perPage > 200 {
+	if page < 0 || page > 1000000 || perPage < 1 || perPage > 1000 {
 		return nil, appError(ErrInvalid)
 	}
 	all, err := a.runtime.options.Store.ListSettings(context.Background())

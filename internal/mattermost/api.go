@@ -46,6 +46,7 @@ type API struct {
 	pluginScopeMu       sync.Mutex
 	pluginScopes        map[string]scopedRuntime
 	pluginDirectory     string
+	pluginDatabases     *mmplugins.DatabaseBindings
 	scopeAuthorize      func(*http.Request, *storage.User, mmsettings.Scope) bool
 	plugins             *mmplugins.Runtime
 	pluginAdmins        []string
@@ -210,8 +211,29 @@ func (s *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		fail(w, 403, "tms.mattermost.scope_disabled", "Mattermost is disabled for this tenant or domain")
 		return
 	}
+
 	if u.AuthSource == "bot" && !botRequestAllowed(r.Method, path) {
 		s.failure(w, chat.ErrForbidden)
+		return
+	}
+	if path == "/tms/products" && r.Method == http.MethodGet {
+		runtime, err := s.pluginRuntimeForScope(r.Context(), userScope(u))
+		out := []map[string]string{}
+		if err == nil {
+			for _, m := range runtime.Webapp() {
+				name, route := "", ""
+				if m.Id == "focalboard" {
+					name, route = "Boards", "boards"
+				}
+				if m.Id == "playbooks" {
+					name, route = "Playbooks", "playbooks"
+				}
+				if route != "" {
+					out = append(out, map[string]string{"id": route, "title": name, "user_id": chat.ID(u.ID), "url": "/mm/" + chat.ID(userScope(u).Key()) + "/" + route})
+				}
+			}
+		}
+		write(w, 200, out)
 		return
 	}
 	if u.AuthSource != "bot" && u.AuthSource != "federated" {

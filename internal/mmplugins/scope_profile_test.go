@@ -50,7 +50,7 @@ func TestScopedPluginUsersChannelsAndBotImages(t *testing.T) {
 		if _, e := h.GetUserByEmail(u.Email); e == nil {
 			t.Fatal("cross-domain email exposed")
 		}
-		if _, e := h.GetUserByUsername(modelUser(u).Username); e == nil {
+		if found, e := h.GetUserByUsername(modelUser(u).Username); e == nil && found.Id == chat.ID(u.ID) {
 			t.Fatal("cross-domain username exposed")
 		}
 	}

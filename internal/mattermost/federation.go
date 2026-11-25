@@ -4,6 +4,7 @@ package mattermost
 import (
 	"context"
 	"crypto/cipher"
+	"github.com/tayga/tms/internal/chat"
 	"github.com/tayga/tms/internal/mmfederation"
 	"github.com/tayga/tms/internal/mmsettings"
 	"github.com/tayga/tms/internal/storage"
@@ -28,6 +29,9 @@ func (s *API) StartFederation(ctx context.Context) {
 	}
 }
 func (s *API) federatedUserVisible(ctx context.Context, actor, target *storage.User) bool {
+	if domain := chat.DomainScope(ctx); domain != "" && (target.DomainID != domain || target.TenantID != actor.TenantID) {
+		return false
+	}
 	if target.AuthSource != "federated" {
 		return target.Enabled
 	}

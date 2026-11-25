@@ -49,6 +49,7 @@ archives:
       - deploy/packages/*
       - deploy/ha/*
       - docs/*.md
+      - scripts/mattermost/*.py
       - docs/screenshots/*.png
       - docs/screenshots/*.md
       - docs/screenshots/*.txt
@@ -127,7 +128,13 @@ nfpms:
         dst: /usr/share/doc/tayga-mail/NOTICE
       - src: docs/linux-packages.md
         dst: /usr/share/doc/tayga-mail/linux-packages.md
-      - src: docs/release-1.0.5.md
+      - src: docs/mattermost-products.md
+        dst: /usr/share/doc/tayga-mail/mattermost-products.md
+      - src: scripts/mattermost/provision-product-db.py
+        dst: /usr/share/tayga-mail/mattermost/provision-product-db.py
+      - src: scripts/mattermost/restore-product-dbs.py
+        dst: /usr/share/tayga-mail/mattermost/restore-product-dbs.py
+      - src: docs/release-1.2.0.md
         dst: /usr/share/doc/tayga-mail/release-notes.md
 
 checksum:

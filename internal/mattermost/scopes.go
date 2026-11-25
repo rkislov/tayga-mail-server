@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/tayga/tms/internal/chat"
@@ -58,7 +59,7 @@ func (s *API) pluginRuntimeForScope(ctx context.Context, scope mmsettings.Scope)
 	if err = s.store.PutSetting(ctx, "mattermost.runtime_scope:"+scopeRef, string(record)); err != nil {
 		return nil, err
 	}
-	options := mmplugins.Options{Directory: s.pluginDirectory, SiteURL: strings.TrimRight(s.siteURL, "/") + "/mm/" + scopeRef, Store: s.store, Chat: s.chat, Logger: s.log, TenantID: scope.TenantID, DomainID: scope.DomainID, Scope: key, Admins: s.pluginAdmins,
+	options := mmplugins.Options{PreferencesMutex: &s.preferencesMu, Directory: s.pluginDirectory, SiteURL: strings.TrimRight(s.siteURL, "/") + "/mm/" + scopeRef, Store: s.store, Chat: s.chat, Logger: s.log, TenantID: scope.TenantID, DomainID: scope.DomainID, Scope: key, Admins: s.pluginAdmins,
 		LoadConfiguration: func(id string) (map[string]any, error) {
 			p, e := s.policy.Resolve(context.Background(), scope)
 			if e != nil {
@@ -76,6 +77,9 @@ func (s *API) pluginRuntimeForScope(ctx context.Context, scope mmsettings.Scope)
 		WriteEnabled: func(id string, value bool) error {
 			return s.policy.SetPluginEnabled(context.Background(), scope, id, value)
 		},
+	}
+	if s.pluginDatabases != nil {
+		s.pluginDatabases.Configure(&options)
 	}
 	runtime, err := mmplugins.New(options)
 	if err != nil {
@@ -106,7 +110,7 @@ func (s *API) canManageScope(r *http.Request, u *storage.User, scope mmsettings.
 }
 func (s *API) ServeScopedPluginHTTP(w http.ResponseWriter, r *http.Request) {
 	parts := strings.SplitN(strings.TrimPrefix(r.URL.Path, "/mm/"), "/", 2)
-	if len(parts) != 2 || !strings.HasPrefix(parts[1], "plugins/") {
+	if len(parts) != 2 {
 		http.NotFound(w, r)
 		return
 	}
@@ -120,8 +124,28 @@ func (s *API) ServeScopedPluginHTTP(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	if parts[1] == "products/session" && r.Method == http.MethodDelete {
+		if origin := r.Header.Get("Origin"); origin != "" {
+			configured, e := url.Parse(s.siteURL)
+			if e != nil || origin != configured.Scheme+"://"+configured.Host {
+				s.failure(w, chat.ErrForbidden)
+				return
+			}
+		}
+		http.SetCookie(w, &http.Cookie{Name: "tms_product_session", Value: "", Path: "/mm/" + parts[0] + "/", MaxAge: -1, HttpOnly: true, Secure: r.TLS != nil || strings.HasPrefix(s.siteURL, "https://"), SameSite: http.SameSiteStrictMode})
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	uid := ""
-	if token := bearer(r); token != "" {
+	token := bearer(r)
+	cookieAuth := false
+	if token == "" && (r.Method == http.MethodGet || r.Method == http.MethodHead) {
+		if cookie, e := r.Cookie("tms_product_session"); e == nil {
+			token = cookie.Value
+			cookieAuth = true
+		}
+	}
+	if token != "" {
 		u, e := s.authenticate(r.Context(), token)
 		if e != nil {
 			fail(w, 401, "api.context.session_expired.app_error", "Invalid session")
@@ -132,9 +156,26 @@ func (s *API) ServeScopedPluginHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		uid = chat.ID(u.ID)
+		if cookieAuth {
+			r = r.Clone(r.Context())
+			r.Header.Set("Authorization", "Bearer "+token)
+		} else {
+			// Same-session, read-only cookie transport for original <img> / download URLs.
+			// Mutations always require the explicit bearer header and are not authorized
+			// by this cookie. Revocation and token expiry are checked on every request.
+			http.SetCookie(w, &http.Cookie{Name: "tms_product_session", Value: token, Path: "/mm/" + parts[0] + "/", MaxAge: 120, HttpOnly: true, Secure: r.TLS != nil || strings.HasPrefix(s.siteURL, "https://"), SameSite: http.SameSiteStrictMode})
+		}
 	}
+
 	runtime, err := s.pluginRuntimeForScope(r.Context(), scope)
 	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if s.serveProductHTTP(w, r, runtime, scope, uid, parts[1]) {
+		return
+	}
+	if !strings.HasPrefix(parts[1], "plugins/") {
 		http.NotFound(w, r)
 		return
 	}

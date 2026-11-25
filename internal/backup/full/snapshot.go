@@ -1,6 +1,7 @@
 // Package full implements encrypted offline snapshots of a self-contained
-// SQLite installation. It intentionally refuses PostgreSQL, S3 and external
-// paths: those require a separately coordinated database/object-store snapshot.
+// SQLite installation, including dedicated PostgreSQL product databases. It
+// refuses a PostgreSQL main database, S3 and external paths because those need
+// a separately coordinated database/object-store snapshot.
 package full
 
 import (
@@ -28,15 +29,17 @@ import (
 )
 
 const format = "tayga-full-sqlite-v1"
+const productFormat = "tayga-full-sqlite-products-v2"
 const maxManifest = 64 << 20
 
 type Header struct {
-	Format   string    `json:"format"`
-	Version  string    `json:"version"`
-	Created  time.Time `json:"created"`
-	Root     string    `json:"root"`
-	Config   string    `json:"config"`
-	Database string    `json:"database"`
+	Format   string         `json:"format"`
+	Version  string         `json:"version"`
+	Created  time.Time      `json:"created"`
+	Root     string         `json:"root"`
+	Config   string         `json:"config"`
+	Database string         `json:"database"`
+	Products *ProductBackup `json:"products,omitempty"`
 }
 
 type Entry struct {
@@ -151,7 +154,18 @@ func Snapshot(ctx context.Context, opts Options) (*Manifest, error) {
 		return nil, err
 	}
 	m := &Manifest{Header: Header{Format: format, Version: version.String(), Created: time.Now().UTC(), Root: root, Config: configRel, Database: dbRel}, Counts: counts}
-	// No plaintext staging archive. Publish only after every stream is closed
+	products, cleanupProducts, err := snapshotProducts(ctx, root, hub.Config())
+	if err != nil {
+		return nil, err
+	}
+	defer cleanupProducts()
+	m.Header.Products = products
+	if products != nil {
+		m.Header.Format = productFormat
+	}
+	// No plaintext staging archive. Product logical dumps are staged in a
+	// private directory under the fenced root, encrypted with the snapshot,
+	// and removed on return. No plaintext staging tar. Publish only after every stream is closed
 	// successfully; a failed run removes its own incomplete ciphertext.
 	f, err := os.CreateTemp(parent, ".tayga-full-*.partial")
 	if err != nil {
