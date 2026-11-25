@@ -1,16 +1,17 @@
 # Original Boards and Tayga Playbooks
 
-Implementation branch: `codex/original-boards-playbooks`. These integrations have
-passed isolated functional acceptance; they have **not been deployed to the
-production mail server**. Advanced host integrations still need acceptance before
-calling this a complete replacement for a Mattermost deployment.
+Available in TMS 1.2.0 as **experimental, separately installed modules**. Isolated
+functional acceptance has passed. Advanced host integrations and native mobile
+UX still need acceptance before this can be called complete Mattermost product
+compatibility. An ordinary TMS upgrade does not install PostgreSQL, install plugin
+bundles or enable products automatically.
 
 ## Distribution and licensing
 
 - Boards: untouched official `focalboard` 10.1.0 compiled distribution. Its binary
   distribution is MIT-licensed. Source modifications have separate AGPL/commercial
   terms; TMS does not relicense the vendor source.
-- Playbooks: [Tayga fork](https://github.com/rkislov/tms-playbooks), pinned upstream
+- Playbooks: [Tayga fork and binaries](https://github.com/rkislov/tms-playbooks/releases/tag/v2.9.7-tms.1), pinned upstream
   v2.9.7 / `47e06734cd71cfe0b01f57749aa116ac04006022`. The Apache-2.0 community
   distribution excludes `server/enterprise` and supplies independently written
   feature-availability policy. Original UI and core application remain upstream.
@@ -45,6 +46,10 @@ only operator-reviewed binaries. A tenant must not receive permission to upload
 arbitrary native code on the assumption that SQL scoping alone isolates it.
 
 ## Provisioning
+
+The release archives include helpers under `scripts/mattermost/`. DEB/RPM installs
+them under `/usr/share/tayga-mail/mattermost/`, with this guide under
+`/usr/share/doc/tayga-mail/`. Provisioning and restore helpers require Python 3.
 
 1. Install PostgreSQL and matching `pg_dump`/`pg_restore` tools. Keep PostgreSQL
    private, preferably on the same host. Remote bindings require verified TLS.
