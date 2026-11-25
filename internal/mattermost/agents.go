@@ -223,7 +223,7 @@ func (c *agentConfiguration) validate(old agentConfiguration) bool {
 			return false
 		}
 		for _, tool := range a.Tools {
-			if tool != "web_search" && tool != "mail_read" && tool != "mail_send" && tool != "chat_read" && tool != "chat_send" {
+			if tool != "web_search" && tool != "mail_read" && tool != "mail_send" && tool != "chat_read" && tool != "chat_send" && tool != "calendar_read" {
 				return false
 			}
 		}
