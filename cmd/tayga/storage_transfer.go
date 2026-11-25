@@ -16,6 +16,7 @@ func runStorageTransfer(args []string) error {
 	flags := flag.NewFlagSet("migrate-storage", flag.ContinueOnError)
 	source := flags.String("config", "", "Source SQLite config (server must be stopped)")
 	target := flags.String("target-config", "", "Private target PostgreSQL config (fresh database)")
+	checkOnly := flags.Bool("check-only", false, "Validate source formats and references without copying application data; source may remain running")
 	reportPath := flags.String("report", "", "New private JSON verification report")
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -47,7 +48,11 @@ func runStorageTransfer(args []string) error {
 		return errors.New("cannot initialize target PostgreSQL; credentials and SQL details suppressed")
 	}
 	defer driver.Close()
-	report, transferErr := storage.TransferSQLiteToPostgres(context.Background(), src.Storage.SQLite.Path, driver.(*storage.Store), func(table storage.TransferTable) {
+	transfer := storage.TransferSQLiteToPostgres
+	if *checkOnly {
+		transfer = storage.CheckSQLitePostgresTransfer
+	}
+	report, transferErr := transfer(context.Background(), src.Storage.SQLite.Path, driver.(*storage.Store), func(table storage.TransferTable) {
 		fmt.Printf("verified %s -> %s: %d rows\n", table.Source, table.Target, table.Rows)
 	})
 	if err = json.NewEncoder(reportFile).Encode(report); err != nil {
@@ -58,6 +63,10 @@ func runStorageTransfer(args []string) error {
 	}
 	if transferErr != nil {
 		return transferErr
+	}
+	if *checkOnly {
+		fmt.Println("Preflight complete: source formats and references validated; no application data copied. This does not replace the final transfer verification.")
+		return nil
 	}
 	fmt.Println("All application tables verified and committed. Source SQLite and active configuration are unchanged; switch configuration separately.")
 	return nil

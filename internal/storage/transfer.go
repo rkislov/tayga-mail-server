@@ -36,11 +36,12 @@ type TransferTable struct {
 	Verified                   bool   `json:"verified"`
 }
 type TransferReport struct {
-	Version  int             `json:"version"`
-	Tables   []TransferTable `json:"tables"`
-	Derived  []string        `json:"derived"`
-	Excluded []string        `json:"excluded"`
-	Verified bool            `json:"verified"`
+	CheckOnly bool            `json:"check_only,omitempty"`
+	Version   int             `json:"version"`
+	Tables    []TransferTable `json:"tables"`
+	Derived   []string        `json:"derived"`
+	Excluded  []string        `json:"excluded"`
+	Verified  bool            `json:"verified"`
 }
 type transferColumn struct{ name, kind string }
 type transferPlan struct {
@@ -57,8 +58,17 @@ type transferTrigger struct{ table, name, enabled string }
 // migrated PostgreSQL database. The destination role must own its tables; it
 // does NOT need superuser privileges. All data and temporary constraint/trigger
 // changes are committed together, only after complete content verification.
-func TransferSQLiteToPostgres(ctx context.Context, path string, target *Store, progress func(TransferTable)) (report TransferReport, err error) {
-	report = TransferReport{Version: 1, Tables: []TransferTable{}, Derived: []string{"mail_log_fts is rebuilt from mail_log by PostgreSQL queries", "message_search.tsv is regenerated with the PostgreSQL simple dictionary; duplicate SQLite search documents use their latest rowid and skipped duplicates are counted; orphan document references still fail; invalid UTF-8 and NUL are normalized only in derived search text and counted per table", "Malformed subject/from_addr/to_addr display metadata is normalized only with exact original bytes verified in message_header_bytes; counts are reported per table", "SQL timestamps are normalized to UTC at PostgreSQL microsecond precision; raw calendar/JSON/MIME data remains unchanged"}, Excluded: []string{}}
+func TransferSQLiteToPostgres(ctx context.Context, path string, target *Store, progress func(TransferTable)) (TransferReport, error) {
+	return transferSQLiteToPostgres(ctx, path, target, progress, false)
+}
+
+// CheckSQLitePostgresTransfer validates a consistent read-only source snapshot
+// while the source server may remain running. Application data is never copied.
+func CheckSQLitePostgresTransfer(ctx context.Context, path string, target *Store, progress func(TransferTable)) (TransferReport, error) {
+	return transferSQLiteToPostgres(ctx, path, target, progress, true)
+}
+func transferSQLiteToPostgres(ctx context.Context, path string, target *Store, progress func(TransferTable), checkOnly bool) (report TransferReport, err error) {
+	report = TransferReport{CheckOnly: checkOnly, Version: 1, Tables: []TransferTable{}, Derived: []string{"mail_log_fts is rebuilt from mail_log by PostgreSQL queries", "message_search.tsv is regenerated with the PostgreSQL simple dictionary; duplicate SQLite search documents use their latest rowid and skipped duplicates are counted; orphan document references still fail; invalid UTF-8 and NUL are normalized only in derived search text and counted per table", "Malformed subject/from_addr/to_addr display metadata is normalized only with exact original bytes verified in message_header_bytes; counts are reported per table", "SQL timestamps are normalized to UTC at PostgreSQL microsecond precision; raw calendar/JSON/MIME data remains unchanged"}, Excluded: []string{}}
 	if target == nil || target.dialect != DialectPostgres {
 		return report, errors.New("target must be PostgreSQL")
 	}
@@ -66,7 +76,7 @@ func TransferSQLiteToPostgres(ctx context.Context, path string, target *Store, p
 	if err != nil {
 		return report, err
 	}
-	lock, err := maintenance.SQLite(path, true)
+	lock, err := maintenance.SQLite(path, !checkOnly)
 	if err != nil {
 		return report, err
 	}
@@ -114,7 +124,13 @@ func TransferSQLiteToPostgres(ctx context.Context, path string, target *Store, p
 		return report, err
 	}
 	for _, p := range plans {
-		record, e := copyTransferTable(ctx, read, tx, p, target)
+		var record TransferTable
+		var e error
+		if checkOnly {
+			record, e = validateTransferTable(ctx, read, p)
+		} else {
+			record, e = copyTransferTable(ctx, read, tx, p, target)
+		}
 		if e != nil {
 			return report, fmt.Errorf("transfer %s: %w", p.source, e)
 		}
@@ -122,6 +138,10 @@ func TransferSQLiteToPostgres(ctx context.Context, path string, target *Store, p
 		if progress != nil {
 			progress(record)
 		}
+	}
+	if checkOnly {
+		report.Verified = true
+		return report, nil
 	}
 	if _, err = tx.ExecContext(ctx, `UPDATE message_search SET tsv=to_tsvector('simple',coalesce(subject,'') || ' ' || coalesce(from_addr,'') || ' ' || coalesce(to_addr,'') || ' ' || coalesce(body,''))`); err != nil {
 		return report, errors.New("cannot rebuild PostgreSQL message search")
@@ -338,10 +358,7 @@ func copyTransferTable(ctx context.Context, source, target *sql.Tx, plan transfe
 		quoted = append(quoted, pq.QuoteIdentifier(c.name))
 	}
 	selectColumns := strings.Join(quoted, ",")
-	sourceQuery := "SELECT " + selectColumns + " FROM " + pq.QuoteIdentifier(plan.source)
-	if plan.source == "message_fts" {
-		sourceQuery += " WHERE rowid IN (SELECT max(rowid) FROM message_fts GROUP BY message_id)"
-	}
+	sourceQuery := transferSourceQuery(plan, selectColumns)
 	rows, err := source.QueryContext(ctx, sourceQuery)
 	if err != nil {
 		return record, err
@@ -514,16 +531,11 @@ func normalizeTransferValue(value any, kind string) (any, error) {
 		value = string(b)
 	}
 	if kind == "timestamptz" || kind == "timestamp" || kind == "date" {
-		if t, ok := value.(time.Time); ok {
-			return t.UTC().Round(time.Microsecond), nil
+		var parsed time.Time
+		if err := (sqlTime{&parsed}).Scan(value); err != nil {
+			return nil, errors.New("invalid timestamp")
 		}
-		text := fmt.Sprint(value)
-		for _, layout := range []string{time.RFC3339Nano, "2006-01-02 15:04:05.999999999-07:00", "2006-01-02 15:04:05.999999999+00:00", "2006-01-02 15:04:05.999999999", "2006-01-02"} {
-			if t, e := time.Parse(layout, text); e == nil {
-				return t.UTC().Round(time.Microsecond), nil
-			}
-		}
-		return nil, errors.New("invalid timestamp")
+		return parsed.UTC().Round(time.Microsecond), nil
 	}
 	if kind == "bool" {
 		switch v := value.(type) {
@@ -589,4 +601,67 @@ func writeTransferValue(h hash.Hash, value any) {
 	}
 	_, _ = io.WriteString(h, "V"+strconv.Itoa(len(text))+":")
 	_, _ = io.WriteString(h, text)
+}
+
+func transferSourceQuery(plan transferPlan, columns string) string {
+	query := "SELECT " + columns + " FROM " + pq.QuoteIdentifier(plan.source)
+	if plan.source == "message_fts" {
+		query += " WHERE rowid IN (SELECT max(rowid) FROM message_fts GROUP BY message_id)"
+	}
+	return query
+}
+func validateTransferTable(ctx context.Context, source *sql.Tx, plan transferPlan) (TransferTable, error) {
+	record := TransferTable{Source: plan.source, Target: plan.target}
+	if plan.source == "message_fts" {
+		var orphan int
+		if err := source.QueryRowContext(ctx, `SELECT count(*) FROM message_fts f WHERE NOT EXISTS(SELECT 1 FROM messages m WHERE m.id=f.message_id)`).Scan(&orphan); err != nil {
+			return record, err
+		}
+		if orphan != 0 {
+			return record, errors.New("derived search documents reference missing messages")
+		}
+	}
+	quoted := []string{}
+	for _, c := range plan.columns {
+		quoted = append(quoted, pq.QuoteIdentifier(c.name))
+	}
+	rows, err := source.QueryContext(ctx, transferSourceQuery(plan, strings.Join(quoted, ",")))
+	if err != nil {
+		return record, err
+	}
+	defer rows.Close()
+	var hash transferDigest
+	var headerBytes int64
+	for rows.Next() {
+		fixes := transferTextCorrections{}
+		var headers []legacyMessageHeaders
+		if plan.source == "message_fts" {
+			fixes.searchFields = &record.NormalizedSearchFields
+		}
+		if plan.source == "messages" {
+			fixes.headerRows = &headers
+			fixes.headerFields = &record.PreservedHeaderFields
+			fixes.headerBytes = &headerBytes
+		}
+		values, e := scanTransferRow(rows, plan.columns, fixes)
+		if e != nil {
+			return record, e
+		}
+		hash.add(values)
+		record.Rows++
+	}
+	if err = rows.Err(); err != nil {
+		return record, err
+	}
+	rows.Close()
+	if plan.source == "message_fts" {
+		var total int64
+		if err = source.QueryRowContext(ctx, `SELECT count(*) FROM message_fts`).Scan(&total); err != nil {
+			return record, err
+		}
+		record.SkippedDuplicateSearchRows = total - record.Rows
+	}
+	record.Digest = hex.EncodeToString(hash[:])
+	record.Verified = true
+	return record, nil
 }
