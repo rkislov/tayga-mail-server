@@ -55,15 +55,16 @@ type agentConfiguration struct {
 	Skills    []agentSkill      `json:"skills"`
 }
 type agentMessage struct {
-	Role       string            `json:"role"`
-	Content    string            `json:"content"`
-	ToolCalls  []agentToolCall   `json:"tool_calls,omitempty"`
-	ToolCallID string            `json:"tool_call_id,omitempty"`
-	Name       string            `json:"tool_name,omitempty"`
-	Reasoning  string            `json:"reasoning_content,omitempty"`
-	PostID     string            `json:"post_id,omitempty"`
-	PendingID  string            `json:"pending_post_id,omitempty"`
-	Files      []chat.Attachment `json:"files,omitempty"`
+	Role          string            `json:"role"`
+	Content       string            `json:"content"`
+	ToolCalls     []agentToolCall   `json:"tool_calls,omitempty"`
+	ToolCallID    string            `json:"tool_call_id,omitempty"`
+	Name          string            `json:"tool_name,omitempty"`
+	Reasoning     string            `json:"reasoning_content,omitempty"`
+	PostID        string            `json:"post_id,omitempty"`
+	PendingID     string            `json:"pending_post_id,omitempty"`
+	Files         []chat.Attachment `json:"files,omitempty"`
+	ResponseItems []json.RawMessage `json:"-"`
 }
 type agentConversation struct {
 	WebEnabled bool           `json:"web_enabled"`
@@ -691,9 +692,12 @@ func agentCompletionWithClient(ctx context.Context, p agentProvider, messages []
 	reply, err := agentModelReply(ctx, p, messages, nil, client)
 	return reply.Content, err
 }
-func agentModelReply(ctx context.Context, p agentProvider, messages []agentMessage, tools []any, client *http.Client) (agentMessage, error) {
+func agentModelReply(ctx context.Context, p agentProvider, messages []agentMessage, tools []agentFunction, client *http.Client) (agentMessage, error) {
 	if !validAgentProviderEndpoint(p) {
 		return agentMessage{}, errors.New("invalid provider")
+	}
+	if p.Kind == "openai" && strings.HasPrefix(p.Model, "gpt-6.2") && len(tools) != 0 {
+		return openAIResponsesReply(ctx, p, messages, tools, client)
 	}
 	wireMessages := make([]map[string]any, 0, len(messages))
 	for _, m := range messages {
@@ -726,7 +730,11 @@ func agentModelReply(ctx context.Context, p agentProvider, messages []agentMessa
 	}
 	body := map[string]any{"model": p.Model, "messages": wireMessages, "stream": false, "max_tokens": 4096}
 	if len(tools) > 0 {
-		body["tools"] = tools
+		wireTools := make([]any, 0, len(tools))
+		for _, tool := range tools {
+			wireTools = append(wireTools, map[string]any{"type": "function", "function": tool})
+		}
+		body["tools"] = wireTools
 	}
 	if p.Kind == "deepseek" {
 		mode := "disabled"
@@ -752,31 +760,9 @@ func agentModelReply(ctx context.Context, p agentProvider, messages []agentMessa
 			endpoint = base + "/api/chat"
 		}
 	}
-	payload, err := json.Marshal(body)
+	data, err := sendAgentProviderRequest(ctx, p, endpoint, body, client)
 	if err != nil {
 		return agentMessage{}, err
-	}
-	ctx, cancel := context.WithTimeout(ctx, 120*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		return agentMessage{}, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if p.APIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+p.APIKey)
-	}
-	res, err := client.Do(req)
-	if err != nil {
-		return agentMessage{}, errors.New("provider unavailable")
-	}
-	defer res.Body.Close()
-	if res.StatusCode != 200 {
-		return agentMessage{}, readAgentProviderError(res)
-	}
-	data, err := io.ReadAll(io.LimitReader(res.Body, (2<<20)+1))
-	if err != nil || len(data) > 2<<20 {
-		return agentMessage{}, errors.New("provider response too large")
 	}
 	var result struct {
 		Message agentMessage `json:"message"`
@@ -801,6 +787,36 @@ func agentModelReply(ctx context.Context, p agentProvider, messages []agentMessa
 		return agentMessage{}, errors.New("invalid model response")
 	}
 	return reply, nil
+}
+
+func sendAgentProviderRequest(ctx context.Context, p agentProvider, endpoint string, body map[string]any, client *http.Client) ([]byte, error) {
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, 120*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if p.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+p.APIKey)
+	}
+	res, err := client.Do(req)
+	if err != nil {
+		return nil, errors.New("provider unavailable")
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		return nil, readAgentProviderError(res)
+	}
+	data, err := io.ReadAll(io.LimitReader(res.Body, (2<<20)+1))
+	if err != nil || len(data) > 2<<20 {
+		return nil, errors.New("provider response too large")
+	}
+	return data, nil
 }
 
 const newAgentConversationTitle = "Новый диалог"
