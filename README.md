@@ -3,7 +3,7 @@
 **Почта и совместная работа на вашем сервере.**
 
 **Русский** · [English](README.en.md)
-[Скачать v1.2.0](https://github.com/rkislov/tayga-mail-server/releases/tag/v1.2.0) · [Установка](docs/setup.md) · [Пользователю](docs/user-guide.md) · [Администратору](docs/admin-guide.md) · [Скриншоты](docs/screenshots/README.md)
+[Скачать v1.3.0](https://github.com/rkislov/tayga-mail-server/releases/tag/v1.3.0) · [Установка](docs/setup.md) · [Пользователю](docs/user-guide.md) · [Администратору](docs/admin-guide.md) · [Администратору домена](docs/domain-admin-guide.md) · [Скриншоты](docs/screenshots/README.md)
 
 Tayga Mail Server — открытый сервер корпоративной почты и совместной работы. Он объединяет письма, календари, контакты, задачи, заметки, файлы и чаты в одном веб-пространстве. Организация размещает систему в своей инфраструктуре и управляет доменами, учётными записями, доступом и хранением данных.
 
@@ -50,7 +50,7 @@ Tayga Mail Server — открытый сервер корпоративной �
 
 [Межсерверные каналы (экспериментально)](docs/mattermost-federation.md) · [Совместимость Mattermost](docs/mattermost-compatibility.md) · [Подключение ботов](docs/mattermost-bots.md) · [Видеовстречи](docs/vks.md)
 
-### Агенты — в разработке следующего обновления
+### Агенты и DeepSeek API
 
 Каталог агентов, личные диалоги с историей, навыки и настройки моделей в интерфейсе TMS. Предусмотрены DeepSeek API и другие OpenAI-совместимые провайдеры. Настройки и ключи разделяются по тенантам и доменам, история — по пользователям. Платная лицензия не требуется. Это встроенная реализация TMS с навигацией по образцу Mattermost Agents; нативный экран Agents на iPhone, MCP и доступ к подключениям бота пока не входят в этот модуль.
 
@@ -85,19 +85,19 @@ SPF, DKIM, DMARC и ARC, TLS, политики доставки, огранич�
 - **Почтовые приложения:** SMTP, IMAP, POP3; Autodiscover и Mozilla autoconfig помогают с настройкой.
 - **Календари, контакты и файлы:** CalDAV, CardDAV и WebDAV.
 - **FlowSync:** собственная реализация части ActiveSync и EWS. Поддерживаемые операции и ограничения перечислены в [документе совместимости](docs/flowsync-compatibility.md); полная совместимость с Microsoft Exchange не заявляется.
-- **Thunderbird:** расширение Tayga доступно в [выпуске](https://github.com/rkislov/tayga-mail-server/releases/tag/v1.2.0) и имеет отдельную [инструкцию](extensions/thunderbird-tayga/README.md).
+- **Thunderbird:** расширение Tayga доступно в [выпуске](https://github.com/rkislov/tayga-mail-server/releases/tag/v1.3.0) и имеет отдельную [инструкцию](extensions/thunderbird-tayga/README.md).
 - **Инфраструктура:** LDAP/OIDC, Prometheus, дополнительное S3/MinIO-хранилище, внешние антиспам, антивирус, офисный редактор и видеосервис.
 
 Набор работающих интеграций зависит от конфигурации. Поддержка Mattermost API и плагинов имеет [опубликованные границы совместимости](docs/mattermost-plugins.md).
 
 ## Установка
 
-1. Скачайте архив для своей платформы и контрольные суммы из [GitHub Releases](https://github.com/rkislov/tayga-mail-server/releases/tag/v1.2.0).
+1. Скачайте архив для своей платформы и контрольные суммы из [GitHub Releases](https://github.com/rkislov/tayga-mail-server/releases/tag/v1.3.0).
 2. Подготовьте домен, DNS, TLS и каталоги данных по [инструкции установки](docs/setup.md).
 3. Создайте конфигурацию на основе [примера](configs/tayga.example.yaml), задайте собственные данные первого администратора и запустите службу.
 4. Откройте веб-интерфейс: основные параметры почты и интеграций находятся в разделе **Администрирование → Сервер**.
 
-В выпуске 1.2.0 доступны архивы для Linux и macOS (amd64/arm64), Windows (amd64/arm64), FreeBSD (amd64). Также доступны [DEB/RPM для Ubuntu, Astra Linux, ALT, CentOS Stream и РЕД ОС](docs/linux-packages.md), amd64/arm64; правила logrotate включены.
+В выпуске 1.3.0 доступны архивы для Linux и macOS (amd64/arm64), Windows (amd64/arm64), FreeBSD (amd64). Также доступны [DEB/RPM для Ubuntu, Astra Linux, ALT, CentOS Stream и РЕД ОС](docs/linux-packages.md), amd64/arm64; правила logrotate включены.
 
 Пример конфигурации предназначен для первоначальной настройки. Если использованы демонстрационные `admin@example.com` / `changeme`, замените их до открытия доступа к серверу.
 
@@ -120,7 +120,7 @@ CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o tayga-mail ./cmd/tayga
 - [Руководство пользователя](docs/user-guide.md) — повседневная работа со скриншотами.
 - [Руководство администратора](docs/admin-guide.md) — настройка и эксплуатация.
 - [Галерея интерфейса](docs/screenshots/README.md) — пользовательские разделы и администрирование.
-- [Изменения 1.2.0](docs/release-1.2.0.md) и [дорожная карта](docs/roadmap.md).
+- [Изменения 1.3.0](docs/release-1.3.0.md) и [дорожная карта](docs/roadmap.md).
 - [Сравнение решений](docs/product-comparison.md) — отдельный обзор с указанием даты и источников.
 
 Скриншоты сделаны в работающем приложении на демонстрационных данных. Возможности в дорожной карте обозначают планы, а не состав текущего выпуска.
