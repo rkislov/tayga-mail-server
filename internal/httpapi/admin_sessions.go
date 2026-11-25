@@ -45,7 +45,7 @@ func (s *Server) handleAdminSessions(w http.ResponseWriter, r *http.Request) {
 			}
 			for _, item := range sessions {
 				user, err := s.store.GetUserByID(ctx, item.UserID)
-				if err != nil || item.DomainID != user.DomainID || item.TenantID != user.TenantID || !s.adminCanManageDomain(r, admin, user.DomainID) {
+				if err != nil || item.DomainID != user.DomainID || item.TenantID != user.TenantID || !s.adminCanManageUser(r, admin, user) {
 					continue
 				}
 				observed := live[item.ObservedID]
@@ -61,7 +61,7 @@ func (s *Server) handleAdminSessions(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			user, err := s.store.GetUserByID(r.Context(), item.UserID)
-			if err == nil && s.adminCanManageDomain(r, admin, user.DomainID) {
+			if err == nil && s.adminCanManageUser(r, admin, user) {
 				out = append(out, sessionRow{SessionInfo: item, IsCurrent: item.Protocol == "Web" && item.ID == currentWebID})
 			}
 		}
@@ -77,7 +77,7 @@ func (s *Server) handleAdminSessions(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			user, err := s.store.GetUserByID(ctx, item.UserID)
-			if err != nil || item.DomainID != user.DomainID || item.TenantID != user.TenantID || !s.adminCanManageDomain(r, admin, user.DomainID) {
+			if err != nil || item.DomainID != user.DomainID || item.TenantID != user.TenantID || !s.adminCanManageUser(r, admin, user) {
 				writeJSON(w, 404, map[string]string{"error": "session not found"})
 				return
 			}
@@ -99,7 +99,7 @@ func (s *Server) handleAdminSessions(w http.ResponseWriter, r *http.Request) {
 		}
 		owner := s.authn.SessionOwner(id)
 		user, err := s.store.GetUserByID(r.Context(), owner)
-		if err != nil || !s.adminCanManageDomain(r, admin, user.DomainID) {
+		if err != nil || !s.adminCanManageUser(r, admin, user) {
 			writeJSON(w, 404, map[string]string{"error": "session not found"})
 			return
 		}
