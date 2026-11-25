@@ -4,14 +4,14 @@ const fs=require('node:fs');
 const {JSDOM}=require('jsdom');
 const source=fs.readFileSync(require('node:path').join(__dirname,'../src/mattermost-agents.js'),'utf8');
 const settle=async()=>{for(let i=0;i<12;i++)await new Promise(r=>setImmediate(r));};
-function fixture(t,admin=false){
+function fixture(t,admin=false,empty=false){
  const dom=new JSDOM('<nav><button data-app="chat">Чат</button></nav><main><section id="app-chat"></section></main>',{url:'https://tms.test',runScripts:'outside-only'}),w=dom.window;
  w.state={email:'alice@test',tokens:{access_token:'alice'}};w.APPS=['chat'];w.showApp=name=>{for(const section of w.document.querySelectorAll('main>section'))section.classList.toggle('hidden',section.id!=='app-'+name);};
  const requests=[];let deferred=null,history=[],chat={id:'c1',agent_id:'helper',title:'Личный тест',updated_at:1,messages:[]};
  w.api=async(url,options={})=>{requests.push({url,options});options._guard?.();
   if(deferred&&url==='/api/v4/tms/agents')return new Promise(r=>{deferred.finish=()=>r({can_manage:false,catalog:{agents:[{id:'private',name:'STALE OWNER',description:''}],skills:[]}});});
   if(url.endsWith('/config'))return {version:0,providers:[],agents:[],skills:[]};
-  if(url==='/api/v4/tms/agents')return {can_manage:admin,catalog:{agents:[{id:'helper',name:'<img src=x onerror=alert(1)>',description:'Помощник'}],skills:[]}};
+  if(url==='/api/v4/tms/agents')return {can_manage:admin,catalog:{agents:empty?[]:[{id:'helper',name:'<img src=x onerror=alert(1)>',description:'Помощник'}],skills:[]}};
   if(url.endsWith('/conversations')){if(options.method==='POST'){history=[chat];return chat;}return history;}
   if(url.endsWith('/messages')){chat={...chat,messages:[{role:'user',content:JSON.parse(options.body).content},{role:'assistant',content:'Ответ'}]};return chat;}
   return chat;
@@ -53,4 +53,17 @@ test('same email with a different login cannot accept a late response',async t=>
  w.state.tokens={access_token:'different-login'};finish();await settle();
  assert.ok(!w.document.querySelector('.agents-main').textContent.includes('STALE OWNER'));
  assert.match(w.document.querySelector('.agents-main').textContent,/Все агенты/);
+});
+
+test('collapsed workspace rail has a real icon and a hideable label',async t=>{
+ const {w}=fixture(t);const button=w.document.querySelector('[data-app="agents"]');
+ assert.equal(button.children.length,2);assert.ok(button.querySelector('.nav-ico svg'));assert.equal(button.lastElementChild.textContent,'Агенты');assert.equal(button.getAttribute('aria-label'),'Агенты');
+ w.showApp('agents');await settle();assert.equal(w.document.querySelector('[data-view="catalog"]').getAttribute('aria-current'),'page');
+ w.document.querySelector('[data-view="skills"]').click();await settle();assert.equal(w.document.querySelector('[data-view="skills"]').getAttribute('aria-current'),'page');assert.equal(w.document.querySelector('[data-view="catalog"]').hasAttribute('aria-current'),false);
+});
+test('empty catalog gives the administrator a direct model setup action',async t=>{
+ const {w}=fixture(t,true,true);w.showApp('agents');await settle();
+ assert.ok(w.document.querySelector('.agents-empty'));assert.equal(w.document.querySelector('.agents-search'),null);
+ const connect=[...w.document.querySelectorAll('.agents-empty button')].find(b=>b.textContent==='Подключить модель');assert.ok(connect);connect.click();await settle();assert.ok(w.document.querySelector('dialog').open);
+ assert.equal(w.document.querySelector('dialog input[type="password"]').value,'');
 });
