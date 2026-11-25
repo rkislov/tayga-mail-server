@@ -16,7 +16,7 @@ Tayga Mail Server is an open-source mail and collaboration server. It brings ema
 - **A calm interface without advertising.** Light panels, soft green accents, artwork by Alisa Kislova, appearance settings and a sidebar that collapses to icons. The interface supports Russian and English.
 - **Familiar email clients.** Standard SMTP, IMAP, POP3 and DAV protocols, with FlowSync for supported ActiveSync and EWS workflows.
 - **Multiple organizations in one installation.** Central management of organizations, domains, users, quotas and administrative roles.
-- **Open code and straightforward deployment.** Written in Go, with the web interface embedded in the executable. Choose SQLite or PostgreSQL and connect additional services as needed.
+- **Open code and straightforward deployment.** Written in Go, with the web interface embedded in the executable. New installations use PostgreSQL. Connect additional services as needed.
 
 ## Features
 
