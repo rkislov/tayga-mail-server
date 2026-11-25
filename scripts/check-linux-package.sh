@@ -7,7 +7,7 @@ export DEBIAN_FRONTEND=noninteractive
 # Keep unavailable CI mirrors bounded; retain repository TLS/GPG policies and
 # the distro's mirror order instead of selecting a mirror by socket latency.
 dnf_ci() {
-  timeout 300 dnf --setopt=fastestmirror=False --setopt=timeout=30 \
+  timeout 300 dnf --setopt=fastestmirror=False --setopt='*.fastestmirror=False' --setopt=timeout=30 \
     --setopt=retries=3 --setopt=minrate=1000 \
     --setopt='*.timeout=30' --setopt='*.retries=3' --setopt='*.minrate=1000' "$@"
 }

@@ -27,6 +27,8 @@ import (
 const CompatibilityVersion = mmplugins.Version
 
 type API struct {
+	agentsMu            sync.Mutex
+	agentsRequests      chan struct{}
 	federation          *mmfederation.Service
 	botMu               sync.Mutex
 	startChannelCall    ChannelCallStarter
@@ -214,6 +216,10 @@ func (s *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if u.AuthSource == "bot" && !botRequestAllowed(r.Method, path) {
 		s.failure(w, chat.ErrForbidden)
+		return
+	}
+	if path == "/tms/agents" || strings.HasPrefix(path, "/tms/agents/") {
+		s.agentsHTTP(w, r, u, strings.TrimPrefix(path, "/tms/agents"))
 		return
 	}
 	if path == "/tms/products" && r.Method == http.MethodGet {
