@@ -114,7 +114,15 @@ kill -0 "$pid"
 curl -fsS http://127.0.0.1:18080/readyz >/dev/null
 if [ ! -d /run/systemd/system ]; then
   kill -TERM "$pid"
-  wait "$runner"
+  if wait "$runner"; then
+    :
+  else
+    status=$?
+    printf '%s\n' "Server lifecycle exited with status $status; captured output follows."
+    cat /tmp/tayga-package-test.out 2>/dev/null || true
+    cat /var/log/tayga/tayga.log 2>/dev/null || true
+    exit "$status"
+  fi
   trap - EXIT
 fi
 # Preserve administrator edits and mail during a reinstall/upgrade transaction.
