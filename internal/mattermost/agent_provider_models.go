@@ -43,6 +43,44 @@ func newAgentProviderClient(p agentProvider, timeout time.Duration) (*http.Clien
 	return client, nil
 }
 
+// Choose a fixed destination or one supplied by the server operator. In
+// particular, the draft URL from the browser is never used to make a request.
+func agentProviderCatalogEndpoint(p agentProvider) string {
+	base := strings.TrimRight(p.URL, "/")
+	suffix := "/models"
+	switch p.Kind {
+	case "openai":
+		if base == "https://api.openai.com/v1" {
+			return "https://api.openai.com/v1/models"
+		}
+		return ""
+	case "deepseek":
+		if base == "https://api.deepseek.com" || base == "https://api.deepseek.com/v1" {
+			return "https://api.deepseek.com/models"
+		}
+		return ""
+	case "ollama":
+		base = strings.TrimSuffix(base, "/api")
+		suffix = "/api/tags"
+		switch base {
+		case "http://127.0.0.1:11434", "http://localhost:11434":
+			return "http://127.0.0.1:11434/api/tags"
+		case "http://[::1]:11434":
+			return "http://[::1]:11434/api/tags"
+		}
+	}
+	for _, configured := range strings.Split(os.Getenv("TAYGA_AGENT_MODEL_CATALOG_URLS"), ",") {
+		approved := strings.TrimRight(strings.TrimSpace(configured), "/")
+		if p.Kind == "ollama" {
+			approved = strings.TrimSuffix(approved, "/api")
+		}
+		if approved != "" && base == approved && validAgentProviderEndpoint(agentProvider{Kind: p.Kind, URL: approved}) {
+			return approved + suffix
+		}
+	}
+	return ""
+}
+
 func (s *API) agentProviderModels(w http.ResponseWriter, r *http.Request, u *storage.User) {
 	if r.Method != http.MethodPost {
 		wrongMethod(w)
@@ -57,6 +95,11 @@ func (s *API) agentProviderModels(w http.ResponseWriter, r *http.Request, u *sto
 		fail(w, 400, "tms.agents.provider_settings", "Проверьте адрес API и тип провайдера.")
 		return
 	}
+	endpoint := agentProviderCatalogEndpoint(p)
+	if endpoint == "" {
+		fail(w, 403, "tms.agents.provider_catalog_url", "Администратор сервера должен разрешить этот URL для каталога моделей. Идентификатор можно ввести вручную.")
+		return
+	}
 	if p.ID != "" && p.APIKey == "" {
 		c := emptyAgentConfig()
 		if err := s.agentLoad(r.Context(), agentConfigKey(u), &c); err != nil {
@@ -69,7 +112,7 @@ func (s *API) agentProviderModels(w http.ResponseWriter, r *http.Request, u *sto
 		fail(w, 400, "tms.agents.provider_key_required", "Введите API-ключ провайдера.")
 		return
 	}
-	models, err := listAgentProviderModels(r.Context(), p)
+	models, err := listAgentProviderModels(r.Context(), p, endpoint)
 	if err != nil {
 		message := "Не удалось получить список моделей. Проверьте адрес API и доступность провайдера."
 		var rejection agentProviderError
@@ -85,13 +128,8 @@ func (s *API) agentProviderModels(w http.ResponseWriter, r *http.Request, u *sto
 	write(w, 200, map[string]any{"models": models})
 }
 
-func listAgentProviderModels(ctx context.Context, p agentProvider) ([]string, error) {
+func listAgentProviderModels(ctx context.Context, p agentProvider, endpoint string) ([]string, error) {
 	const maxResponse = 2 << 20
-	base := strings.TrimRight(p.URL, "/")
-	endpoint := base + "/models"
-	if p.Kind == "ollama" {
-		endpoint = strings.TrimSuffix(base, "/api") + "/api/tags"
-	}
 	client, err := newAgentProviderClient(p, 12*time.Second)
 	if err != nil {
 		return nil, err

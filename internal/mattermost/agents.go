@@ -160,7 +160,7 @@ func validAgentID(id string) bool {
 }
 func validAgentEndpoint(raw string) bool {
 	u, err := url.Parse(raw)
-	if err != nil || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+	if err != nil || u.Hostname() == "" || u.User != nil || strings.ContainsAny(raw, "?#") {
 		return false
 	}
 	return u.Scheme == "https" || u.Scheme == "http" && (u.Hostname() == "127.0.0.1" || u.Hostname() == "::1" || u.Hostname() == "localhost")
@@ -182,7 +182,7 @@ func validAgentProviderEndpoint(p agentProvider) bool {
 			return true
 		}
 		u, err := url.Parse(p.URL)
-		if err != nil || u.Scheme != "http" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		if err != nil || u.Scheme != "http" || u.User != nil || strings.ContainsAny(p.URL, "?#") {
 			return false
 		}
 		ip, err := netip.ParseAddr(u.Hostname())

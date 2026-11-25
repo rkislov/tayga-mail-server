@@ -41,6 +41,7 @@ func TestAgentProviderCatalogUsesOnlyScopedSettings(t *testing.T) {
 		}
 	}))
 	t.Cleanup(server.Close)
+	t.Setenv("TAYGA_AGENT_MODEL_CATALOG_URLS", server.URL+"/v1,"+server.URL+","+server.URL+"/redirect")
 	provider := agentProvider{ID: "demo", Kind: "openai-compatible", Name: "Demo", URL: server.URL + "/v1", Model: "previous", APIKey: secret}
 	f.call(t, "PUT", "/tms/agents/config", f.tokens[0], agentConfiguration{Providers: []agentProvider{provider}}, 200)
 	const path = "/tms/agents/config/models"
@@ -59,6 +60,7 @@ func TestAgentProviderCatalogUsesOnlyScopedSettings(t *testing.T) {
 		t.Fatal("unexpected Ollama catalog", ollama)
 	}
 	f.call(t, "POST", path, f.tokens[0], agentProvider{Kind: "openai-compatible", URL: server.URL + "/redirect"}, 502)
+	f.call(t, "POST", path, f.tokens[0], agentProvider{Kind: "openai-compatible", URL: server.URL + "/not-approved"}, 403)
 	stored := f.call(t, "GET", "/tms/agents/config", f.tokens[0], nil, 200)
 	b, _ := json.Marshal(stored)
 	if strings.Contains(string(b), secret) || !strings.Contains(string(b), "previous") || stored["version"] != float64(1) {
