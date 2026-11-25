@@ -54,7 +54,7 @@ Tayga Mail Server — открытый сервер корпоративной �
 
 Каталог агентов, личные диалоги с историей, навыки и настройки моделей в интерфейсе TMS. Доступны DeepSeek API, нативный Ollama, OpenAI (ChatGPT) и другие OpenAI-совместимые провайдеры. Настройки и ключи разделяются по тенантам и доменам, история — по пользователям. Платная лицензия не требуется. Это встроенная реализация TMS с навигацией по образцу Mattermost Agents; нативный экран Agents на iPhone, MCP и доступ к подключениям бота пока не входят в этот модуль.
 
-[Настройка DeepSeek, изоляция и ограничения](docs/mattermost-agents.md)
+[SearXNG, OpenAI, DeepSeek, Ollama и GPUStack](docs/install-search-and-models.md) · [Агенты, изоляция и ограничения](docs/mattermost-agents.md)
 
 ### Boards и Playbooks — экспериментально
 

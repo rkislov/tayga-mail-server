@@ -134,6 +134,12 @@ nfpms:
         dst: /usr/share/doc/tayga-mail/NOTICE
       - src: docs/linux-packages.md
         dst: /usr/share/doc/tayga-mail/linux-packages.md
+      - src: docs/setup.md
+        dst: /usr/share/doc/tayga-mail/setup.md
+      - src: docs/vks.md
+        dst: /usr/share/doc/tayga-mail/vks.md
+      - src: docs/install-search-and-models.md
+        dst: /usr/share/doc/tayga-mail/install-search-and-models.md
       - src: docs/admin-guide.md
         dst: /usr/share/doc/tayga-mail/admin-guide.md
       - src: docs/domain-admin-guide.md
