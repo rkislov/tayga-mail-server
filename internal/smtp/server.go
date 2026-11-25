@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/mail"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/emersion/go-sasl"
@@ -56,6 +57,9 @@ type Server struct {
 	queue        *OutboundQueue
 	siem         *siem.Exporter
 	servers      []*gosmtp.Server
+	shutdownOnce sync.Once
+	shutdownDone chan struct{}
+	shutdownErr  error
 }
 
 // SetSIEM attaches a CEF syslog exporter (optional; call before Start).
@@ -408,13 +412,26 @@ func (s *Server) Start(ctx context.Context) error {
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {
-	var first error
-	for _, srv := range s.servers {
-		if err := srv.Shutdown(ctx); err != nil && first == nil {
-			first = err
-		}
+	// Start's cancellation watcher and main's bounded shutdown can overlap.
+	// go-smtp Shutdown closes an internal channel without serializing callers.
+	// Run it once, while allowing each waiter to retain its own deadline.
+	s.shutdownOnce.Do(func() {
+		s.shutdownDone = make(chan struct{})
+		go func() {
+			defer close(s.shutdownDone)
+			for _, srv := range s.servers {
+				if err := srv.Shutdown(ctx); err != nil && s.shutdownErr == nil {
+					s.shutdownErr = err
+				}
+			}
+		}()
+	})
+	select {
+	case <-s.shutdownDone:
+		return s.shutdownErr
+	case <-ctx.Done():
+		return ctx.Err()
 	}
-	return first
 }
 
 func (s *Server) tlsConfig() *tls.Config {

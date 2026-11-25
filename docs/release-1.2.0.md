@@ -22,6 +22,10 @@
 
 Перед обновлением сохраните данные, конфигурацию и ключ секретов. Миграция 083 добавляет историю членства в чатах; откат выполняйте с совместимой резервной копией, а не только заменой бинарного файла. Тексты и файлы переписок сохраняются. Для подключённых модулей нужны PostgreSQL и подходящие `pg_dump`/`pg_restore`; утилиты подготовки и инструкция включены в архивы и DEB/RPM.
 
+### Надёжное завершение сервера
+
+Исправлена воспроизводимая гонка при одновременной остановке SMTP из основного процесса и обработчика отмены: повторное закрытие канала могло завершить процесс с паникой. Теперь остановка запускается один раз, а каждый ожидающий вызов сохраняет собственный таймаут. Конкурентная остановка, повторные вызовы и таймаут при активном соединении проверены тестами с детектором гонок. Диагностика пакетных проверок сохраняет вывод сервера при ошибке завершения.
+
 ### Боты и поставка
 
 Выпуск также включает ранее подготовленные команды бота с автодополнением и кнопками, привязку команд к пользователю/домену и проверку действий по JWT. Собственный backend бота настраивается отдельно; обновление TMS не передаёт другим пользователям подключения и права владельца бота.
@@ -35,5 +39,7 @@ TMS 1.2.0 adds experimental hosting of original Boards 10.1.0 and the Apache-bas
 Real plugin acceptance passed on Linux AMD64/ARM64 for migrations, boards/cards, playbook/run creation, task completion and property delta pagination. Original web UI acceptance covered private playbooks, run launch/task completion/finish and persisted boards/cards. Advanced automations, attachments, reports, remaining SDK operations and mobile UX still require acceptance. Complete Mattermost product compatibility is not claimed. Paid licensing and development/testing mode are not required for the validated community workflows. Plugins and PostgreSQL are installed and enabled separately; upgrading TMS does not enable them automatically.
 
 Encrypted offline snapshots of SQLite installations now include logical dumps of all bound product PostgreSQL databases. Missing dump tools or database access fail backup. Product snapshots use format v2, rejected by older restore binaries; ordinary v1 SQLite snapshots remain readable. Restore quarantines source connection credentials and requires fresh restricted destination databases. A real database dump/archive/quarantine and restore rehearsal passed. Main PostgreSQL/S3 installations retain their separate external backup procedure.
+
+A reproducible SMTP shutdown race is fixed: cancellation and main-process shutdown now share a single shutdown operation, with independent waiter deadlines. Concurrent/repeated shutdown and active-connection deadline regressions passed under the race detector.
 
 Migration 083 adds chat membership history. Back up data, configuration and the secrets key before upgrading; rollback requires a compatible backup. Existing Outlook/EWS, ItemAttachment, Travel, Mattermost, Jitsi and iPhone image-viewer fixes are preserved. The release also includes scoped bot commands, autocomplete and authenticated message buttons. Assets include seven platform archives, four DEB/RPM packages, Thunderbird XPI, provisioning/restore helpers and SHA-256 checksums.
