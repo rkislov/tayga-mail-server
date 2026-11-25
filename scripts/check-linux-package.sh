@@ -154,13 +154,14 @@ if [ -d /run/systemd/system ]; then
   systemctl stop tayga.service
   dpkg -i "$package"
   if systemctl is-active --quiet tayga.service;then echo 'Stopped service unexpectedly started';exit 1;fi
+  trap - EXIT
 fi
 case "$family" in
  deb) dpkg --remove tayga-mail ;;
  alt|rpm) rpm -e tayga-mail ;;
 esac
 test -f /var/lib/tayga/maildir/package-test-marker
-test -f /var/lib/tayga/data/package-test.db
+test -d /var/lib/tayga/data
 test -f /var/log/tayga/tayga.log.1
 getent passwd tayga >/dev/null
 if [ "$family" = deb ]; then dpkg --purge tayga-mail; fi

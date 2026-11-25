@@ -104,6 +104,8 @@ jobs:
           docker run --rm --network host -e TAYGA_PACKAGE_DATABASE_DSN --platform linux/amd64 \
             -v "$PWD/packages:/packages:ro" -v "$PWD/scripts:/scripts:ro" \
             "$IMAGE" sh /scripts/check-linux-package.sh "/packages/$(basename "$package")" "$FAMILY"
+      - name: Check PostgreSQL metadata after package removal
+        run: docker exec '${{ job.services.postgres.id }}' psql -U tayga -d tayga -AtXc 'SELECT COUNT(*) > 0 FROM schema_migrations' | grep -Fx t
 
   systemd:
     needs: build
@@ -131,6 +133,8 @@ jobs:
           path: packages
       - name: Real systemd service lifecycle and logrotate
         run: sudo --preserve-env=TAYGA_PACKAGE_DATABASE_DSN sh scripts/check-linux-package.sh "$PWD/$(find packages -name '*_amd64.deb' -print -quit)" deb
+      - name: Check PostgreSQL metadata after package removal
+        run: docker exec '${{ job.services.postgres.id }}' psql -U tayga -d tayga -AtXc 'SELECT COUNT(*) > 0 FROM schema_migrations' | grep -Fx t
   arm64:
     needs: build
     runs-on: ubuntu-24.04-arm
@@ -172,3 +176,5 @@ jobs:
           test -n "$package"
           docker run --rm --network host -e TAYGA_PACKAGE_DATABASE_DSN -v "$PWD/packages:/packages:ro" -v "$PWD/scripts:/scripts:ro" \
             "$IMAGE" sh /scripts/check-linux-package.sh "/packages/$(basename "$package")" "$FAMILY"
+      - name: Check PostgreSQL metadata after package removal
+        run: docker exec '${{ job.services.postgres.id }}' psql -U tayga -d tayga -AtXc 'SELECT COUNT(*) > 0 FROM schema_migrations' | grep -Fx t
