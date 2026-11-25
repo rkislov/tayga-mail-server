@@ -3,6 +3,11 @@
   'use strict';
   const scope = location.pathname.match(/^\/mm\/[a-z0-9]{26}/)?.[0];
   if (!scope) return;
+  try {
+    const color = localStorage.getItem('tayga.colorMode');
+    const dark = color === 'dark' || (color === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.dataset.taygaColor = dark ? 'dark' : 'light';
+  } catch { /* Use the default palette when storage is unavailable. */ }
   const queryLanguage = new URLSearchParams(location.search).get('lang');
   let locale = queryLanguage || document.documentElement.lang;
   if (!queryLanguage) {

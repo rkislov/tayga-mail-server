@@ -149,9 +149,14 @@ localization covers the default Boards 10.1 template catalog and Board
 copies, and the presets bundled in the Tayga Playbooks web client.
 Team templates and other user content remain as authored. The matching
 Playbooks web bundle and its shared Tayga host are built from
-[the localized fork](https://github.com/rkislov/tms-playbooks/tree/f664ae5dfe880271cea7117ef842c935fdd1860f).
+[the localized fork](https://github.com/rkislov/tms-playbooks/tree/50e4ed580f998d1f9fe1a93215937cba2d45bc89).
 
 The mail and post action menus provide private board and playbook
 creation for enabled products. The title is proposed from the subject
 or text. Mail discussion opens a draft in a selected channel. The chat
 action opens the reply composer for the selected thread.
+
+Playbooks follows the Tayga color mode and uses the full profile name,
+falling back to the account username. The tutorial run form suggests a title
+with that name. The details page can also show the full name in titles
+originally suggested by older versions, while keeping the saved title.

@@ -2,7 +2,6 @@ package mattermost
 
 import (
 	"encoding/json"
-	"github.com/tayga/tms/internal/storage"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -10,10 +9,17 @@ import (
 	"testing"
 
 	"github.com/tayga/tms/internal/chat"
+	"github.com/tayga/tms/internal/storage"
 )
 
 func TestProductBootstrapScopeAndAuthentication(t *testing.T) {
 	f := setup(t)
+	if err := f.store.UpdateUserProfile(t.Context(), f.users[0].ID, "Алиса Тестовая"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.UpdateUserProfile(t.Context(), f.users[1].ID, ""); err != nil {
+		t.Fatal(err)
+	}
 	if err := f.api.EnablePlugins(filepath.Join(t.TempDir(), "plugins"), nil); err != nil {
 		t.Fatal(err)
 	}
@@ -48,6 +54,23 @@ func TestProductBootstrapScopeAndAuthentication(t *testing.T) {
 	}
 	if bootstrap["user"].(map[string]any)["id"] != chat.ID(f.users[0].ID) {
 		t.Fatal("identity spoofed")
+	}
+	config := bootstrap["config"].(map[string]any)
+	if config["TeammateNameDisplay"] != "full_name" {
+		t.Fatalf("unexpected product name preference %v", config["TeammateNameDisplay"])
+	}
+	if firstName := bootstrap["user"].(map[string]any)["first_name"]; firstName != "Алиса Тестовая" {
+		t.Fatalf("product profile lost display name %v", firstName)
+	}
+	var accountOnly map[string]any
+	for _, value := range bootstrap["users"].([]any) {
+		profile := value.(map[string]any)
+		if profile["id"] == chat.ID(f.users[1].ID) {
+			accountOnly = profile
+		}
+	}
+	if accountOnly["first_name"] != "" || accountOnly["username"] != "bob" {
+		t.Fatalf("product profile lost account fallback %v", accountOnly)
 	}
 	english := call(f.tokens[0], path+"?lang=en", 200)
 	if !strings.Contains(english.Body.String(), `"locale":"en"`) ||

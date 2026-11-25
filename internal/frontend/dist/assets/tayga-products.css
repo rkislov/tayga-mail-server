@@ -22,7 +22,7 @@
   --sidebar-header-bg: var(--tayga-product-sidebar) !important;
   --sidebar-header-text-color: var(--tayga-product-text) !important;
   --button-bg: rgb(var(--button-bg-rgb)) !important;
-  --button-color: #fff !important;
+  --button-color: rgb(var(--button-color-rgb)) !important;
   --link-color: rgb(var(--link-color-rgb)) !important;
   --link-visited-color-rgb: 73,91,101 !important;
   --sys-center-channel-bg: var(--tayga-product-panel) !important;
@@ -69,3 +69,34 @@ html[data-tayga-product] :is(button, a, input, select, textarea):focus-visible {
   outline-offset: 2px;
 }
 html[data-tayga-product="boards"] .VersionMessage { display:none; }
+
+/* Playbooks' Bootstrap defaults and legacy theme tokens apply inside its own frame. */
+html[data-tayga-product="playbooks"] body,
+html[data-tayga-product="playbooks"] #playbooks-backstageRoot {
+  color: var(--center-channel-color);
+  background-color: var(--center-channel-bg);
+}
+html[data-tayga-product="playbooks"] a:any-link:not(.btn, [role="button"]) {
+  color: var(--link-color);
+}
+:root[data-tayga-product="playbooks"][data-tayga-color="dark"] {
+  --button-bg-rgb: 171,212,154 !important;
+  --button-color-rgb: 18,33,22 !important;
+  --center-channel-color-08: rgba(var(--center-channel-color-rgb), .08) !important;
+  --center-channel-color-56: rgba(var(--center-channel-color-rgb), .56) !important;
+  --center-channel-color-64: rgba(var(--center-channel-color-rgb), .64) !important;
+  --center-channel-color-72: rgba(var(--center-channel-color-rgb), .72) !important;
+  --button-bg-08: rgba(var(--button-bg-rgb), .08) !important;
+}
+html[data-tayga-product="playbooks"][data-tayga-color="dark"] .form-control {
+  color: var(--center-channel-color);
+  background-color: var(--tayga-product-sidebar);
+  border-color: var(--tayga-product-line);
+}
+html[data-tayga-product="playbooks"][data-tayga-color="dark"] .form-control::placeholder {
+  color: var(--tayga-product-muted);
+}
+html[data-tayga-product="playbooks"][data-tayga-color="dark"] [data-testid="badge"][data-status="Archived"] {
+  color: var(--center-channel-color);
+  background-color: rgba(var(--center-channel-color-rgb), .12);
+}

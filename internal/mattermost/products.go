@@ -123,7 +123,7 @@ func (s *API) serveProductHTTP(w http.ResponseWriter, r *http.Request, rt *mmplu
 		}
 		roles := model.MakeDefaultRoles()
 		roles["team_user"].Permissions = append(roles["team_user"].Permissions, model.PermissionPublicPlaybookCreate.Id, model.PermissionPrivatePlaybookCreate.Id, model.PermissionRunCreate.Id)
-		write(w, 200, map[string]any{"user": profile, "team": team, "users": profiles, "channels": channels, "roles": roles, "preferences": []any{}, "config": map[string]string{"EnableDeveloper": "false", "EnableTesting": "false", "EnablePlugins": "true", "EnableCommands": "true", "EnableCustomEmoji": "false", "SiteName": resolved.SiteName, "DefaultClientLocale": locale, "DiagnosticId": chat.ID(scope.Key())}})
+		write(w, 200, map[string]any{"user": profile, "team": team, "users": profiles, "channels": channels, "roles": roles, "preferences": []any{}, "config": map[string]string{"EnableDeveloper": "false", "EnableTesting": "false", "EnablePlugins": "true", "EnableCommands": "true", "EnableCustomEmoji": "false", "SiteName": resolved.SiteName, "DefaultClientLocale": locale, "TeammateNameDisplay": "full_name", "DiagnosticId": chat.ID(scope.Key())}})
 		return true
 	}
 	if path == "boards" || strings.HasPrefix(path, "boards/") || path == "playbooks" || strings.HasPrefix(path, "playbooks/") {
@@ -147,7 +147,7 @@ func (s *API) serveProductHTTP(w http.ResponseWriter, r *http.Request, rt *mmplu
 		if product == "boards" && locale == "ru" {
 			stringsScript = `<script defer src="/assets/tayga-boards-templates-ru.js"></script>`
 		}
-		w.Write([]byte(`<!doctype html><html lang="` + locale + `" data-tayga-product="` + product + `"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Tayga</title><link rel="stylesheet" href="/assets/tayga-products.css"><style>:root{--font-family:Arial,sans-serif;--heading-font:Arial,sans-serif;--body-font:Arial,sans-serif}html,body,#root{height:100%;margin:0}body{font-family:Arial,sans-serif;color:var(--tayga-product-text);background:var(--tayga-product-panel)}*{box-sizing:border-box}</style><div id="root">` + loading + `</div>` + stringsScript + `<script defer src="/assets/tayga-product-frame.js"></script><script defer src="` + base + `/static/plugins/playbooks/tms-host.js"></script></html>`))
+		w.Write([]byte(`<!doctype html><html lang="` + locale + `" data-tayga-product="` + product + `"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Tayga</title><link rel="stylesheet" href="/assets/tayga-products.css?v=1.3.0-ui.12"><style>:root{--font-family:Arial,sans-serif;--heading-font:Arial,sans-serif;--body-font:Arial,sans-serif}html,body,#root{height:100%;margin:0}body{font-family:Arial,sans-serif;color:var(--tayga-product-text);background:var(--tayga-product-panel)}*{box-sizing:border-box}</style><div id="root">` + loading + `</div>` + stringsScript + `<script defer src="/assets/tayga-product-frame.js?v=1.3.0-ui.12"></script><script defer src="` + base + `/static/plugins/playbooks/tms-host.js?v=1.3.0-ui.12"></script></html>`))
 		return true
 	}
 	return false

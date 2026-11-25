@@ -38,6 +38,12 @@ func TestProductBrowserStand(t *testing.T) {
 	f := setup(t)
 	f.api.log = slog.New(slog.NewTextHandler(os.Stderr, nil))
 	ctx := context.Background()
+	if err = f.store.UpdateUserProfile(ctx, f.users[0].ID, "Алиса Тестовая"); err != nil {
+		t.Fatal(err)
+	}
+	if err = f.store.UpdateUserProfile(ctx, f.users[1].ID, ""); err != nil {
+		t.Fatal(err)
+	}
 	scope := userScope(f.users[0])
 	directory := filepath.Join(t.TempDir(), "plugins")
 	if err = os.MkdirAll(directory, 0700); err != nil {
@@ -96,20 +102,51 @@ func TestProductBrowserStand(t *testing.T) {
 	if _, err = f.api.pluginRuntimeForScope(ctx, scope); err != nil {
 		t.Fatal(err)
 	}
+	base := "/mm/" + chat.ID(scope.Key())
+	create := func(user int, collection, body string) string {
+		r := httptest.NewRequest("POST", base+"/plugins/playbooks/api/v0/"+collection, strings.NewReader(body))
+		r.Header.Set("Authorization", "Bearer "+f.tokens[user])
+		r.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		f.api.ServeScopedPluginHTTP(w, r)
+		var created struct{ ID string }
+		if w.Code != http.StatusCreated || json.Unmarshal(w.Body.Bytes(), &created) != nil || created.ID == "" {
+			t.Fatalf("create browser %s fixture: %d %s", collection, w.Code, w.Body.String())
+		}
+		return created.ID
+	}
+	team := chat.ID(scope.TenantID)
+	tutorial := create(0, "playbooks", fmt.Sprintf(`{"title":"Learn how to use playbooks","team_id":%q,"public":true,"status_update_enabled":true,"reminder_timer_default_seconds":3600,"checklists":[{"title":"Checklist","items":[{"title":"Read the procedure"}]}]}`, team))
+	legacyRuns := map[int]string{}
+	for user, name := range []string{"alice", "bob"} {
+		legacyRuns[user] = create(user, "runs", fmt.Sprintf(`{"name":%q,"summary":"Contrast sample","owner_user_id":%q,"team_id":%q,"playbook_id":%q}`, name+"'s onboarding run", chat.ID(f.users[user].ID), team, tutorial))
+	}
 	stop := make(chan struct{})
 	mux := http.NewServeMux()
 	mux.Handle("/api/v4/", f.api)
 	mux.Handle("/assets/", frontend.Handler())
 	mux.HandleFunc("/mm/", f.api.ServeScopedPluginHTTP)
 	mux.HandleFunc("/test-login", func(w http.ResponseWriter, r *http.Request) {
-		value, _ := json.Marshal(map[string]string{"access_token": f.tokens[0]})
+		user := 0
+		if r.URL.Query().Get("profile") == "account-only" {
+			user = 1
+		}
+		value, _ := json.Marshal(map[string]string{"access_token": f.tokens[user]})
 		product := "playbooks"
 		if r.URL.Query().Get("product") == "boards" {
 			product = "boards"
 		}
-		url := "/mm/" + chat.ID(scope.Key()) + "/" + product + "?lang=" + productLocale(r)
+		path := base + "/" + product
+		if product == "playbooks" && r.URL.Query().Get("run") == "legacy" {
+			path += "/runs/" + legacyRuns[user]
+		}
+		url := path + "?lang=" + productLocale(r)
+		theme := "light"
+		if r.URL.Query().Get("theme") == "dark" {
+			theme = "dark"
+		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		fmt.Fprintf(w, `<script>localStorage.setItem('tayga.tokens',%q);location.replace(%q)</script>`, string(value), url)
+		fmt.Fprintf(w, `<script>localStorage.setItem('tayga.tokens',%q);localStorage.setItem('tayga.colorMode',%q);location.replace(%q)</script>`, string(value), theme, url)
 	})
 	mux.HandleFunc("/test-stop", func(w http.ResponseWriter, r *http.Request) {
 		select {
