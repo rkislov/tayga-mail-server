@@ -27,6 +27,7 @@ import (
 const CompatibilityVersion = mmplugins.Version
 
 type API struct {
+	agentMailTool       func(context.Context, *storage.User, string, map[string]string) (any, error)
 	agentsMu            sync.Mutex
 	agentsRequests      chan struct{}
 	federation          *mmfederation.Service
@@ -217,6 +218,12 @@ func (s *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if u.AuthSource == "bot" && !botRequestAllowed(r.Method, path) {
 		s.failure(w, chat.ErrForbidden)
 		return
+	}
+	if u.AuthSource != "bot" && u.AuthSource != "federated" && (path == "/tms/agents" || path == "/users/search" || path == "/users/autocomplete") {
+		if err := s.nativeAgentsReady(r, u); err != nil {
+			s.failure(w, err)
+			return
+		}
 	}
 	if path == "/tms/agents" || strings.HasPrefix(path, "/tms/agents/") {
 		s.agentsHTTP(w, r, u, strings.TrimPrefix(path, "/tms/agents"))

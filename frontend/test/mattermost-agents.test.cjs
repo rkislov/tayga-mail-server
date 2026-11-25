@@ -4,15 +4,17 @@ const fs=require('node:fs');
 const {JSDOM}=require('jsdom');
 const source=fs.readFileSync(require('node:path').join(__dirname,'../src/mattermost-agents.js'),'utf8');
 const settle=async()=>{for(let i=0;i<12;i++)await new Promise(r=>setImmediate(r));};
-function fixture(t,admin=false,empty=false){
+function fixture(t,admin=false,empty=false,tools=false){
  const dom=new JSDOM('<nav><button data-app="chat">Чат</button></nav><main><section id="app-chat"></section></main>',{url:'https://tms.test',runScripts:'outside-only'}),w=dom.window;
  w.state={email:'alice@test',tokens:{access_token:'alice'}};w.APPS=['chat'];w.showApp=name=>{for(const section of w.document.querySelectorAll('main>section'))section.classList.toggle('hidden',section.id!=='app-'+name);};
- const requests=[];let deferred=null,history=[],chat={id:'c1',agent_id:'helper',title:'Личный тест',updated_at:1,messages:[]};
+ const requests=[];let deferred=null,history=[],chat={id:'c1',agent_id:'helper',title:'Личный тест',updated_at:1,messages:[],web_enabled:false,actions:tools?[{id:'a1',tool:'mail_draft',arguments:{to:'recipient@example.test',subject:'<img src=x>',text:'Exact proposed body'},state:'pending',expires_at:Date.now()+60000}]:[]};
  w.api=async(url,options={})=>{requests.push({url,options});options._guard?.();
   if(deferred&&url==='/api/v4/tms/agents')return new Promise(r=>{deferred.finish=()=>r({can_manage:false,catalog:{agents:[{id:'private',name:'STALE OWNER',description:''}],skills:[]}});});
   if(url.endsWith('/config'))return {version:0,providers:[],agents:[],skills:[]};
-  if(url==='/api/v4/tms/agents')return {can_manage:admin,catalog:{agents:empty?[]:[{id:'helper',name:'<img src=x onerror=alert(1)>',description:'Помощник'}],skills:[]}};
+  if(url==='/api/v4/tms/agents')return {can_manage:admin,search_available:true,catalog:{agents:empty?[]:[{id:'helper',name:'<img src=x onerror=alert(1)>',description:'Помощник',tools:tools?['web_search']:[]}],skills:[]}};
   if(url.endsWith('/conversations')){if(options.method==='POST'){history=[chat];return chat;}return history;}
+  if(options.method==='PATCH'){chat={...chat,...JSON.parse(options.body)};return chat;}
+  if(url.includes('/actions/'))return {status:'sent'};
   if(url.endsWith('/messages')){chat={...chat,messages:[{role:'user',content:JSON.parse(options.body).content},{role:'assistant',content:'Ответ'}]};return chat;}
   return chat;
  };
@@ -81,4 +83,12 @@ test('Ollama and OpenAI presets select native connection fields without carrying
   dialog.querySelector('form').dispatchEvent(new w.Event('submit',{cancelable:true}));await settle();
   const put=requests.find(r=>r.url.endsWith('/config')&&r.options.method==='PUT');assert.ok(put);const provider=JSON.parse(put.options.body).providers[0];assert.equal(provider.kind,kind);assert.equal(provider.thinking,false);assert.equal(provider.api_key,kind==='ollama'?'':'openai-fixture-key');
  }
+});
+
+test('web switch persists on the dialog and delivery confirms the exact stored action',async t=>{
+ const {w,requests}=fixture(t,false,false,true);w.showApp('agents');await settle();[...w.document.querySelectorAll('button')].find(b=>b.textContent==='Начать диалог').click();await settle();
+ const web=[...w.document.querySelectorAll('button')].find(b=>b.textContent==='Веб-поиск выключен');assert.ok(web);web.click();await settle();
+ const patch=requests.find(r=>r.options.method==='PATCH');assert.deepEqual(JSON.parse(patch.options.body),{web_enabled:true});assert.equal(web.textContent,'Веб-поиск включён');
+ const card=w.document.querySelector('.agents-approvals');assert.match(card.textContent,/recipient@example.test.*Exact proposed body/);assert.equal(card.querySelector('img'),null);
+ card.querySelector('button').click();await settle();const confirmation=requests.find(r=>r.url.endsWith('/conversations/c1/actions/a1'));assert.ok(confirmation);assert.equal(confirmation.options.body,'{}');assert.equal(card.children.length,0);
 });

@@ -132,3 +132,5 @@ Most detailed guides are currently in Russian; the [architecture overview](docs/
 The server and FlowSync are licensed under [Apache License 2.0](LICENSE); the web frontend source is under [GPL-3.0](frontend/LICENSE). Third-party terms are listed in [NOTICE](NOTICE) and the corresponding license files.
 
 Interface background artwork is by **Alisa Kislova (Алиса Кислова)**. See the [wallpaper credits](assets/wallpapers/README.md) for individual image attribution.
+
+Agents are also available through Mattermost DMs with shared conversation threads. Scoped TMS tools support SearXNG/Brave search, the current user’s mail and joined channels; delivery requires a separate single-use confirmation.

@@ -13,6 +13,7 @@
 
   parent.append(section);
   const main=section.querySelector('.agents-main'),error=section.querySelector('.agents-error'),sidebar=section.querySelector('.agents-side-history');
+  let pollTimer=null;
   let owner='',ownerToken='',epoch=0,revision=0,loadRevision=0,boot=null,config=null,history=[],active='',view='catalog',sending=false,controller=new AbortController();
   const node=(tag,text,className)=>{const el=document.createElement(tag);if(text!==undefined)el.textContent=text;if(className)el.className=className;return el;};
   const action=(text,run,className)=>{const el=node('button',text,className);el.type='button';el.onclick=run;return el;};
@@ -20,7 +21,7 @@
   async function request(path,options={}){const check=guard();try{check();const out=await api('/api/v4/tms/agents'+path,{...options,signal:controller.signal,_guard:check});check();return out;}catch(err){if(ownerToken!==state.tokens?.access_token){reset();if(state.tokens?.access_token&&!section.classList.contains('hidden'))queueMicrotask(()=>run(load));}throw err;}}
   function report(err){if(err.name!=='AbortError')error.textContent=err.data?.message||err.message;}
   async function run(fn){const version=epoch;error.textContent='';try{await fn();}catch(err){if(version===epoch)report(err);}}
-  function reset(){epoch++;revision++;loadRevision++;controller.abort();controller=new AbortController();owner='';ownerToken='';boot=null;config=null;history=[];active='';sending=false;sidebar.replaceChildren();main.replaceChildren();error.textContent='';section.querySelector('.agents-scope').textContent='';document.querySelectorAll('dialog[data-agents-dialog]').forEach(el=>el.remove());}
+  function reset(){clearInterval(pollTimer);epoch++;revision++;loadRevision++;controller.abort();controller=new AbortController();owner='';ownerToken='';boot=null;config=null;history=[];active='';sending=false;sidebar.replaceChildren();main.replaceChildren();error.textContent='';section.querySelector('.agents-scope').textContent='';document.querySelectorAll('dialog[data-agents-dialog]').forEach(el=>el.remove());}
   async function load(){
     if(!state.tokens?.access_token){reset();return;}
     if(owner!==state.email||ownerToken!==state.tokens.access_token){reset();owner=state.email;ownerToken=state.tokens.access_token;}
@@ -41,7 +42,7 @@
     }
   }
   function title(text,subtitle){const header=node('header',undefined,'agents-header');const block=node('div');block.append(node('h1',text));if(subtitle)block.append(node('p',subtitle));header.append(block);main.append(header);return header;}
-  async function show(next){
+  async function show(next){clearInterval(pollTimer);
     view=next;revision++;active='';main.classList.remove('is-conversation');main.replaceChildren();renderSidebar();
     if(!boot)return;
     if(next==='catalog'){renderCatalog();return;}
@@ -80,20 +81,24 @@
     for(const skill of boot.catalog.skills){const card=node('article',undefined,'agents-card'),avatar=node('div',undefined,'agents-avatar');avatar.append(icon('skills'));card.append(avatar,node('h2',skill.name),node('p','Дополнительная инструкция для агента'));if(boot.can_manage)card.append(action('Изменить',()=>run(()=>editSkill(skill.id))));grid.append(card);}
   }
   async function newChat(id){const check=guard();const chat=await request('/conversations',{method:'POST',body:JSON.stringify({agent_id:id})});check();history.push(chat);await openChat(chat.id);}
-  async function openChat(id){
+  async function openChat(id){clearInterval(pollTimer);
     const version=++revision;const chat=await request('/conversations/'+encodeURIComponent(id));if(version!==revision)return;
     active=id;view='chat';main.replaceChildren();main.classList.add('is-conversation');renderSidebar();
     const agent=boot.catalog.agents.find(a=>a.id===chat.agent_id);const header=title(agent?.name||'Агент','Личный диалог');
-    header.append(action('Новый диалог',()=>run(()=>newChat(chat.agent_id))),action('Удалить',()=>run(async()=>{if(!window.confirm('Удалить этот диалог?'))return;await request('/conversations/'+encodeURIComponent(id),{method:'DELETE'});history=history.filter(c=>c.id!==id);await show('catalog');})));
+    header.append(action('Новый диалог',()=>run(()=>newChat(chat.agent_id))),action('Убрать из списка',()=>run(async()=>{if(!window.confirm('Убрать диалог из списка? История ветки останется в Mattermost.'))return;await request('/conversations/'+encodeURIComponent(id),{method:'DELETE'});history=history.filter(c=>c.id!==id);await show('catalog');})));
+    const web=action(chat.web_enabled?'Веб-поиск включён':'Веб-поиск выключен',()=>run(async()=>{const updated=await request('/conversations/'+encodeURIComponent(id),{method:'PATCH',body:JSON.stringify({web_enabled:!chat.web_enabled})});chat.web_enabled=updated.web_enabled;web.textContent=chat.web_enabled?'Веб-поиск включён':'Веб-поиск выключен';}));web.setAttribute('aria-pressed',String(!!chat.web_enabled));if(agent?.tools?.includes('web_search')){if(boot.search_available===false){web.disabled=true;web.textContent='Поиск не настроен';}header.append(web);}
+    const approvals=node('div',undefined,'agents-approvals');main.append(approvals);
+    const drawActions=()=>{approvals.replaceChildren();for(const item of chat.actions||[]){if(item.state!=='pending'||item.expires_at<Date.now())continue;const card=node('article',undefined,'agents-card');card.append(node('strong',item.tool==='mail_draft'?'Подтвердить отправку письма':'Подтвердить отправку сообщения'),node('p',item.arguments.to||item.arguments.channel_id),node('p',item.arguments.subject||''),node('pre',item.arguments.text));card.append(action('Отправить',()=>run(async()=>{await request('/conversations/'+encodeURIComponent(id)+'/actions/'+encodeURIComponent(item.id),{method:'POST',body:'{}'});item.state='sent';drawActions();}),'agents-primary'));approvals.append(card);}};drawActions();
     const messages=node('div',undefined,'agents-messages');messages.setAttribute('role','log');messages.setAttribute('aria-label','Сообщения диалога');main.append(messages);
     const draw=()=>{messages.replaceChildren();if(!chat.messages.length)messages.append(emptyState('spark','Чем могу помочь?',agent?.description||'Задайте вопрос или опишите задачу. История этого диалога доступна только вам.'));for(const m of chat.messages){const article=node('article',undefined,'agents-message '+m.role);article.append(node('strong',m.role==='user'?'Вы':agent?.name||'Агент'),node('div',m.content));messages.append(article);}messages.scrollTop=messages.scrollHeight;};draw();
     const form=node('form',undefined,'agents-composer'),input=node('textarea');input.rows=3;input.maxLength=16000;input.placeholder='Напишите сообщение…';input.setAttribute('aria-label','Сообщение агенту');
     const send=node('button','Отправить','agents-primary');send.type='submit';const status=node('span','', 'agents-send-status');status.setAttribute('role','status');form.append(input,send,status);main.append(form,node('small','Ответы ИИ могут содержать ошибки. Сообщения передаются настроенному администратором провайдеру.','agents-notice'));
     form.onsubmit=event=>{event.preventDefault();if(sending||!input.value.trim())return;const content=input.value;run(async()=>{
       sending=true;send.disabled=true;input.disabled=true;status.textContent='Агент готовит ответ…';const check=guard();
-      try{const updated=await request('/conversations/'+encodeURIComponent(id)+'/messages',{method:'POST',body:JSON.stringify({content})});check();const i=history.findIndex(c=>c.id===id);if(i>=0)history[i]=updated;if(active===id&&version===revision){chat.messages=updated.messages;input.value='';draw();renderSidebar();}}
+      try{const updated=await request('/conversations/'+encodeURIComponent(id)+'/messages',{method:'POST',body:JSON.stringify({content})});check();const i=history.findIndex(c=>c.id===id);if(i>=0)history[i]=updated;if(active===id&&version===revision){chat.messages=updated.messages;chat.actions=updated.actions;drawActions();input.value='';draw();renderSidebar();}}
       finally{check();sending=false;send.disabled=false;input.disabled=false;status.textContent='';}
     });};
+    pollTimer=setInterval(async()=>{if(sending||section.classList.contains('hidden')||active!==id||version!==revision)return;try{const updated=await request('/conversations/'+encodeURIComponent(id));if(active!==id||version!==revision)return;if(JSON.stringify(chat.messages)!==JSON.stringify(updated.messages)){chat.messages=updated.messages;draw();}chat.actions=updated.actions;drawActions();}catch{ /* Keep the draft when temporarily offline. */ }},4000);
     input.onkeydown=event=>{if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();form.requestSubmit();}};
   }
   function modal(titleText){
@@ -114,17 +119,19 @@
     const name=field(form,'Имя',a.name);name.required=true;name.maxLength=100;const description=field(form,'Описание',a.description);description.maxLength=1000;
     const provider=select(form,'Модель',next.providers.map(p=>[p.id,p.name+' · '+p.model]),a.provider_id),instructions=field(form,'Инструкции агента',a.instructions,'textarea');instructions.maxLength=32000;
     const enabled=field(form,'Доступен пользователям домена','','checkbox');enabled.checked=a.enabled;
+    const tools=[];for(const [id,label] of [['web_search','Поиск в интернете'],['mail_read','Поиск и чтение моей почты'],['mail_send','Подготовка писем с подтверждением'],['chat_read','Чтение доступных мне каналов'],['chat_send','Подготовка сообщений с подтверждением']]){const checkbox=field(form,label,'','checkbox');checkbox.checked=a.tools?.includes(id);tools.push([id,checkbox]);}
     const skills=[];for(const skill of next.skills){const checkbox=field(form,skill.name,'','checkbox');checkbox.checked=a.skill_ids?.includes(skill.id);skills.push([skill.id,checkbox]);}
-    finishEditor(dialog,form,async()=>{const updated={...a,name:name.value,description:description.value,provider_id:provider.value,instructions:instructions.value,enabled:enabled.checked,skill_ids:skills.filter(([,el])=>el.checked).map(([key])=>key)};next.agents=next.agents.filter(v=>v.id!==a.id);next.agents.push(updated);await saveConfig(next);},original?async()=>{next.agents=next.agents.filter(v=>v.id!==a.id);await saveConfig(next);}:null);
+    finishEditor(dialog,form,async()=>{const updated={...a,name:name.value,description:description.value,provider_id:provider.value,instructions:instructions.value,enabled:enabled.checked,tools:tools.filter(([,el])=>el.checked).map(([key])=>key),skill_ids:skills.filter(([,el])=>el.checked).map(([key])=>key)};next.agents=next.agents.filter(v=>v.id!==a.id);next.agents.push(updated);await saveConfig(next);},original?async()=>{next.agents=next.agents.filter(v=>v.id!==a.id);await saveConfig(next);}:null);
   }
   async function editSkill(id){const next=await adminConfig(),original=next.skills.find(s=>s.id===id),skill=original||{id:crypto.randomUUID(),name:'',instructions:''};const {dialog,form}=modal('Навык');const name=field(form,'Название',skill.name),instructions=field(form,'Инструкции',skill.instructions,'textarea');name.required=true;name.maxLength=100;instructions.maxLength=16000;
     finishEditor(dialog,form,async()=>{next.skills=next.skills.filter(s=>s.id!==skill.id);next.skills.push({...skill,name:name.value,instructions:instructions.value});await saveConfig(next);},original?async()=>{next.skills=next.skills.filter(s=>s.id!==skill.id);next.agents.forEach(a=>{a.skill_ids=a.skill_ids.filter(k=>k!==skill.id);});await saveConfig(next);}:null);
   }
-  function renderSettings(){const header=main.querySelector('header');header.append(action('+ Подключить модель',()=>run(()=>editProvider()),'agents-primary'));main.append(node('p','Подключения доступны агентам только в вашем домене.','agents-settings-note'));if(!config.providers.length)main.append(emptyState('settings','Подключите первую модель','Выберите DeepSeek, Ollama, OpenAI или совместимый провайдер.',[action('Подключить модель',()=>run(()=>editProvider()),'agents-primary')]));
+  function renderSettings(){const header=main.querySelector('header');header.append(action('Веб-поиск',()=>run(editSearch)));header.append(action('+ Подключить модель',()=>run(()=>editProvider()),'agents-primary'));main.append(node('p','Подключения доступны агентам только в вашем домене.','agents-settings-note'));if(!config.providers.length)main.append(emptyState('settings','Подключите первую модель','Выберите DeepSeek, Ollama, OpenAI или совместимый провайдер.',[action('Подключить модель',()=>run(()=>editProvider()),'agents-primary')]));
     for(const p of config.providers){const card=node('article',undefined,'agents-provider');const mark=node('div',undefined,'agents-avatar');mark.append(icon('settings'));const details=node('div',undefined,'agents-provider-details');details.append(node('h2',p.name),node('p',p.model),node('small',p.url));card.append(mark,details,node('span',p.has_key?'Ключ настроен':'Без API-ключа','agents-badge'),action('Изменить',()=>run(()=>editProvider(p.id))));main.append(card);}
     const header2=node('div',undefined,'agents-actions');header2.append(node('h2','Агенты'),action('+ Создать',()=>run(()=>editAgent()),'agents-primary'));main.append(header2);
     for(const a of config.agents){const row=node('article',undefined,'agents-provider');row.append(node('strong',a.name+(a.enabled?'':' · отключён')),action('Настроить',()=>run(()=>editAgent(a.id))));main.append(row);}
   }
+  async function editSearch(){const next=await adminConfig(),current=next.search||{}, {dialog,form}=modal('Веб-поиск домена');const kind=select(form,'Сервис',[['','Выключен'],['brave','Brave Search API'],['searxng','SearXNG']],current.kind),url=field(form,'Адрес SearXNG',current.kind==='searxng'?current.url:''),key=field(form,current.has_key?'Новый ключ (пусто — сохранить)':'API-ключ','','password');form.append(node('p','Поисковые запросы передаются выбранному сервису. Для SearXNG включите формат JSON. Агент и пользователь отдельно разрешают веб-поиск.'));finishEditor(dialog,form,async()=>{next.search={kind:kind.value,url:kind.value==='searxng'?url.value:'',api_key:key.value};await saveConfig(next);});}
   async function editProvider(id){
     const next=await adminConfig(),original=next.providers.find(p=>p.id===id),p=original||{id:crypto.randomUUID(),kind:'deepseek',thinking:false,name:'DeepSeek',url:'https://api.deepseek.com',model:'deepseek-flash',api_key:''};const {dialog,form}=modal('Подключение к модели');
     const kind=select(form,'Провайдер',[['deepseek','DeepSeek'],['ollama','Ollama'],['openai','OpenAI (ChatGPT)'],['openai-compatible','Другой OpenAI-совместимый API']],p.kind||'openai-compatible');

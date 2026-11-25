@@ -114,6 +114,7 @@ func (s *Server) Handler() http.Handler {
 			}
 
 			s.mattermostAPI.SetScopeAuthorizer(s.canManageMattermostScope)
+			s.mattermostAPI.SetAgentMailTools(s.agentMailTool)
 			if cfg.Mattermost.Federation.Enabled {
 				key, e := s.federationCipher()
 				if e == nil {

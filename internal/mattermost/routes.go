@@ -544,6 +544,9 @@ func (s *API) posts(w http.ResponseWriter, r *http.Request, u *storage.User, pat
 		if !decode(w, r, &req) {
 			return
 		}
+		if len(req.FileIDs) == 0 && s.nativeAgentPost(w, r, u, req.ChannelID, req.RootID, req.Message, req.PendingID) {
+			return
+		}
 		p, err := s.chat.SendWithFiles(r.Context(), u, req.ChannelID, req.RootID, req.Message, req.PendingID, req.Props, req.FileIDs)
 		if err != nil {
 			s.failure(w, err)

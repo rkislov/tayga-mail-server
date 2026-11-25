@@ -6107,3 +6107,7 @@ html[data-color-mode=dark] #app-filters .btn-spray{color:#fff;background:#466439
   .agents-dialog { padding:22px; }
 }
 @media(prefers-reduced-motion:reduce) { .tms-agents button { transition:none; } }
+
+/* Agent delivery previews must preserve the exact text, including long URLs. */
+.tms-agents .agents-approvals pre { white-space: pre-wrap; overflow-wrap: anywhere; font-family: inherit; max-height: 260px; overflow: auto; }
+.tms-agents .agents-approvals:empty { display: none; }

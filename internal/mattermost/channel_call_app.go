@@ -3,6 +3,7 @@ package mattermost
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/tayga/tms/internal/chat"
 	"github.com/tayga/tms/internal/storage"
@@ -48,6 +49,18 @@ func (s *API) channelCallApp(w http.ResponseWriter, r *http.Request, u *storage.
 		if !decode(w, r, &call) {
 			return
 		}
+		if call.Context.AppID == "tms-boards" && call.Path == "/open-boards" {
+			if _, err := s.chat.Channel(ctx, u, call.Context.ChannelID); err != nil {
+				s.failure(w, err)
+				return
+			}
+			if !s.boardsAvailable(r, u) {
+				s.failure(w, storage.ErrNotFound)
+				return
+			}
+			write(w, 200, map[string]string{"type": "navigate", "navigate_to_url": strings.TrimRight(s.siteURL, "/") + "/mm/" + chat.ID(userScope(u).Key()) + "/boards"})
+			return
+		}
 		if call.Context.AppID != channelCallAppID || call.Path != channelCallAppPath || call.Context.ChannelID == "" {
 			s.failure(w, chat.ErrInvalid)
 			return
@@ -77,10 +90,17 @@ func (s *API) channelCallBindings(w http.ResponseWriter, r *http.Request, u *sto
 			return
 		}
 		if err == nil {
-			allowed, err := s.canStartChannelCall(ctx, u)
+			allowed := false
+			var err error
+			if s.canStartChannelCall != nil {
+				allowed, err = s.canStartChannelCall(ctx, u)
+			}
 			if err != nil {
 				s.failure(w, err)
 				return
+			}
+			if s.boardsAvailable(r, u) {
+				bindings = append(bindings, map[string]any{"location": "/channel_header", "bindings": []any{map[string]any{"app_id": "tms-boards", "location": "tms-boards", "label": "Доски Boards", "icon": "apps-outline", "submit": map[string]string{"path": "/open-boards"}}}})
 			}
 			if allowed {
 				bindings = append(bindings, map[string]any{
