@@ -12,6 +12,11 @@
   document.documentElement.lang = locale;
   const root = document.getElementById('root');
   if (root) root.textContent = locale === 'en' ? 'Loading…' : 'Загрузка…';
+  if (document.documentElement.dataset.taygaProduct === 'boards') {
+    // The original Boards app has its own locale store, independent of
+    // Mattermost's Redux preferences and the host IntlProvider.
+    try { localStorage.setItem('language', locale); } catch { /* Use the browser locale. */ }
+  }
   const boardStrings = locale === 'ru' ? window.taygaBoardsTemplatesRu : null;
   const base = scope + '/plugins/focalboard/api/v2';
   const fetchProduct = window.fetch.bind(window);
@@ -64,6 +69,13 @@
   }
 
   async function boardResponse(request, suffix) {
+    if (request.method === 'GET' && /^\/teams\/[^/]+\/categories$/.test(suffix)) {
+      const response = await fetchProduct(request);
+      if (!response.ok) return response;
+      const categories = await response.clone().json();
+      return withJSON(response, categories.map(category => category.type === 'system' && category.name === 'Boards'
+        ? {...category, name: 'Доски'} : category));
+    }
     if (request.method === 'GET' && /^\/teams\/[^/]+\/templates$/.test(suffix)) {
       const response = await fetchProduct(request);
       if (!response.ok) return response;

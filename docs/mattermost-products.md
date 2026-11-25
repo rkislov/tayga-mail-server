@@ -149,7 +149,7 @@ localization covers the default Boards 10.1 template catalog and Board
 copies, and the presets bundled in the Tayga Playbooks web client.
 Team templates and other user content remain as authored. The matching
 Playbooks web bundle and its shared Tayga host are built from
-[the localized fork](https://github.com/rkislov/tms-playbooks/tree/6e0cd6a20a98705d8a9f82a793e250a97e343733).
+[the localized fork](https://github.com/rkislov/tms-playbooks/tree/f664ae5dfe880271cea7117ef842c935fdd1860f).
 
 The mail and post action menus provide private board and playbook
 creation for enabled products. The title is proposed from the subject
