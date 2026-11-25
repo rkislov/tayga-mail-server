@@ -6,7 +6,7 @@ const source=fs.readFileSync(require('node:path').join(__dirname,'../src/matterm
 const settle=async()=>{for(let i=0;i<12;i++)await new Promise(r=>setImmediate(r));};
 function fixture(t,admin=false,empty=false,tools=false){
  const dom=new JSDOM('<nav><button data-app="chat">Чат</button></nav><main><section id="app-chat"></section></main>',{url:'https://tms.test',runScripts:'outside-only'}),w=dom.window;
- w.state={email:'alice@test',tokens:{access_token:'alice'}};w.APPS=['chat'];w.showApp=name=>{for(const section of w.document.querySelectorAll('main>section'))section.classList.toggle('hidden',section.id!=='app-'+name);};
+ w.state={email:'alice@test',tokens:{access_token:'alice'}};w.APPS=['chat'];w.showApp=name=>{for(const app of w.APPS)w.document.getElementById('app-'+app)?.classList.toggle('hidden',app!==name);};
  const requests=[];let deferred=null,history=[],chat={id:'c1',agent_id:'helper',title:'Личный тест',updated_at:1,messages:[],web_enabled:false,actions:tools?[{id:'a1',tool:'mail_draft',arguments:{to:'recipient@example.test',subject:'<img src=x>',text:'Exact proposed body'},state:'pending',expires_at:Date.now()+60000}]:[]};
  w.api=async(url,options={})=>{requests.push({url,options});options._guard?.();
   if(deferred&&url==='/api/v4/tms/agents')return new Promise(r=>{deferred.finish=()=>r({can_manage:false,catalog:{agents:[{id:'private',name:'STALE OWNER',description:''}],skills:[]}});});
@@ -19,7 +19,7 @@ function fixture(t,admin=false,empty=false,tools=false){
   return chat;
  };
  w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;this.dispatchEvent(new w.Event('close'));};
- w.eval(source);t.after(()=>w.close());return {w,requests,defer(){deferred={};return()=>{deferred.finish();deferred=null;};}};
+ w.eval(fs.readFileSync(require('node:path').join(__dirname,'../src/chat-workspace.js'),'utf8'));w.eval(source);t.after(()=>w.close());return {w,requests,defer(){deferred={};return()=>{deferred.finish();deferred=null;};}};
 }
 test('Agents opens catalog, creates a private conversation and sends message',async t=>{
  const {w,requests}=fixture(t);w.showApp('agents');await settle();
@@ -57,9 +57,9 @@ test('same email with a different login cannot accept a late response',async t=>
  assert.match(w.document.querySelector('.agents-main').textContent,/Все агенты/);
 });
 
-test('collapsed workspace rail has a real icon and a hideable label',async t=>{
- const {w}=fixture(t);const button=w.document.querySelector('[data-app="agents"]');
- assert.equal(button.children.length,2);assert.ok(button.querySelector('.nav-ico svg'));assert.equal(button.lastElementChild.textContent,'Агенты');assert.equal(button.getAttribute('aria-label'),'Агенты');
+test('agents live inside chat navigation with an icon and selected subviews',async t=>{
+ const {w}=fixture(t);const button=w.document.querySelector('[data-chat-app="agents"]');
+ assert.equal(w.document.querySelector('[data-app="agents"]'),null);assert.ok(button.querySelector('svg'));assert.equal(button.lastElementChild.textContent,'Агенты');assert.equal(button.getAttribute('role'),'tab');assert.ok(w.document.querySelector('#app-chat-workspace #app-agents'));
  w.showApp('agents');await settle();assert.equal(w.document.querySelector('[data-view="catalog"]').getAttribute('aria-current'),'page');
  w.document.querySelector('[data-view="skills"]').click();await settle();assert.equal(w.document.querySelector('[data-view="skills"]').getAttribute('aria-current'),'page');assert.equal(w.document.querySelector('[data-view="catalog"]').hasAttribute('aria-current'),false);
 });
