@@ -4,6 +4,13 @@ set -eux
 package=$1
 family=$2
 export DEBIAN_FRONTEND=noninteractive
+# Keep unavailable CI mirrors bounded; retain repository TLS/GPG policies and
+# the distro's mirror order instead of selecting a mirror by socket latency.
+dnf_ci() {
+  timeout 300 dnf --setopt=fastestmirror=False --setopt=timeout=30 \
+    --setopt=retries=3 --setopt=minrate=1000 \
+    --setopt='*.timeout=30' --setopt='*.retries=3' --setopt='*.minrate=1000' "$@"
+}
 case "$family" in
   deb)
     apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 update
@@ -20,8 +27,8 @@ case "$family" in
     apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 install -y "$package" curl procps su systemd-analyze
     ;;
   rpm)
-    dnf install -y "$package" procps-ng
-    if ! command -v curl >/dev/null; then dnf install -y curl; fi
+    dnf_ci install -y "$package" procps-ng
+    if ! command -v curl >/dev/null; then dnf_ci install -y curl; fi
     ;;
   *) exit 2;;
 esac
