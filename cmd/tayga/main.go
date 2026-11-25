@@ -48,6 +48,18 @@ func main() {
 				os.Exit(1)
 			}
 			return
+		case "compact-sync-state":
+			if err := runSyncCompaction(os.Args[2:]); err != nil {
+				fmt.Fprintf(os.Stderr, "tayga compact-sync-state: %v\n", err)
+				os.Exit(1)
+			}
+			return
+		case "migrate-storage":
+			if err := runStorageTransfer(os.Args[2:]); err != nil {
+				fmt.Fprintf(os.Stderr, "tayga migrate-storage: %v\n", err)
+				os.Exit(1)
+			}
+			return
 		case "version", "-version", "--version":
 			fmt.Println(version.String())
 			return
@@ -451,6 +463,16 @@ func run(cfgPath string) error {
 				return fmt.Errorf("imap idle cluster: %w", err)
 			}
 		}
+	}
+
+	if sqlStore, ok := store.(*storage.Store); ok && cfg.FlowSync.StateRetentionDays >= 30 {
+		cleanupCtx, cleanupCancel := context.WithCancel(ctx)
+		cleanupDone := make(chan struct{})
+		go func() {
+			defer close(cleanupDone)
+			runSyncStateMaintenance(cleanupCtx, sqlStore, cfg.FlowSync.StateRetentionDays, log)
+		}()
+		defer func() { cleanupCancel(); <-cleanupDone }()
 	}
 
 	if err := seed.Run(ctx, cfg.Seed, store, authn.Hasher, ms, log); err != nil {

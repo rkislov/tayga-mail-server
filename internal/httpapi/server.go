@@ -72,6 +72,9 @@ type Server struct {
 }
 
 func New(cfg *config.Config, log *slog.Logger, store storage.Driver, authn *auth.Layer, ms *mailstore.Store, tlsMgr *tlsutil.Manager, hub *settings.Hub) *Server {
+	if log == nil {
+		log = slog.Default()
+	}
 	return &Server{cfg: cfg, log: log, store: store, authn: authn, ms: ms, tls: tlsMgr, hub: hub}
 }
 
@@ -105,11 +108,7 @@ func (s *Server) Handler() http.Handler {
 		s.mattermostOnce.Do(func() {
 			cfg := s.cfgLive()
 			s.mattermostAPI = mattermost.New(s.store, s.authn, s.log, cfg.HTTP.PublicURL)
-			attachmentRoot := cfg.Mailstore.Root
-			if cfg.Storage.Driver == "sqlite" {
-				attachmentRoot = filepath.Dir(cfg.Storage.SQLite.Path)
-			}
-			if err := s.mattermostAPI.SetAttachmentDirectory(filepath.Join(attachmentRoot, ".mattermost-attachments")); err != nil {
+			if err := s.mattermostAPI.SetAttachmentDirectory(cfg.MattermostAttachmentsPath()); err != nil {
 				s.log.Error("Mattermost attachment storage unavailable", "error", err)
 			}
 

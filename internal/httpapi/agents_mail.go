@@ -53,6 +53,9 @@ func (s *Server) agentMailTool(ctx context.Context, u *storage.User, name string
 			return nil, errors.New("message too large")
 		}
 		parsed := parseMIMEMessage(raw)
+		if parsed.Text == "" && parsed.HTML != "" {
+			parsed.Text = mailsearch.ExtractHTMLText(parsed.HTML)
+		}
 		return map[string]string{"id": m.ID, "subject": parsed.Subject, "from": parsed.From, "to": parsed.To, "date": parsed.Date, "text": agentMailClip(parsed.Text, 20000)}, nil
 	case "mail_send":
 		data, _ := json.Marshal(map[string]any{"from": current.Email, "to": []string{args["to"]}, "subject": args["subject"], "text": args["text"]})

@@ -345,6 +345,8 @@ type Driver interface {
 	ListFlowSyncDevices(ctx context.Context) ([]*FlowSyncDevice, error)
 	TouchFlowSyncDevice(ctx context.Context, id, address, agent, version string, provisioned bool) error
 	SetFlowSyncDeviceControl(ctx context.Context, id string, blocked bool, wipe string) error
+	RetireFlowSyncDevice(ctx context.Context, userID, id string) (int64, error)
+	RestoreFlowSyncDevice(ctx context.Context, userID, id string) error
 	EnsureFlowSyncDevice(ctx context.Context, userID, deviceID, deviceType string) (*FlowSyncDevice, error)
 	SetFlowSyncPolicyKey(ctx context.Context, deviceRowID, policyKey string) error
 	GetFlowSyncState(ctx context.Context, userID, clientID, collectionID string) (string, error)

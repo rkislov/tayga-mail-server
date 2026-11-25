@@ -28,7 +28,7 @@ func Run(cfgPath string) error {
 			"Сменить путь к config",
 			"Backup (.tar.gz)",
 			"Restore из .tar.gz",
-			"Перенос БД / хранилища (sqlite ↔ postgres)",
+			"Полный перенос БД (sqlite → postgres)",
 			"Настройки сервера (почта / защита / Mattermost / офис)",
 			"О версии",
 		})

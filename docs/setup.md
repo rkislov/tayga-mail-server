@@ -29,7 +29,7 @@ CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o tayga-mail ./cmd/tayga
 
 Готовые архивы: GitHub Releases (`v*`) или `VERSION=0.9.2 ./scripts/crossbuild.sh`.
 
-Интерактивное меню (wizard, backup/restore, перенос sqlite↔postgres, секции настроек):
+Интерактивное меню (wizard, backup/restore, полный перенос SQLite → PostgreSQL, секции настроек):
 
 ```bash
 ./tayga-mail menu -config /var/lib/tayga/config/tayga.yaml
@@ -300,3 +300,5 @@ tayga-mail backup -config /var/lib/tayga/config/tayga.yaml -out /backup/tayga-$(
 Для прямой доставки (`smtp.outbound_direct: true`) серверу нужен исходящий TCP/25 к MX-серверам получателей. Слушающий локальный порт 25 подтверждает только приём. Если очередь показывает `dial tcp …:25: i/o timeout`, проверьте подключения к нескольким внешним MX по IPv4 и правила firewall/ограничения хостинга. Если исходящий TCP/25 недоступен, потребуется его разблокировка или авторизованный SMTP-релей на 587/465. Не удаляйте ожидающие письма ради повторной проверки.
 
 Публичные ссылки календарей формируются из `http.public_url`. На новом хосте задайте доступный адрес этой установки; ICS-ссылки дают чтение и подписку без входа, могут быть отключены или заменены в свойствах календаря. Настройки календарей автоматически добавляются миграцией 026 при запуске новой сборки.
+
+Полная миграция существующей установки: [SQLite → PostgreSQL](storage-migration.md).

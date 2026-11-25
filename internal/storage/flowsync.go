@@ -8,6 +8,7 @@ import (
 
 // FlowSyncDevice is a mobile/desktop client registered with FlowSync.
 type FlowSyncDevice struct {
+	RetiredAt   *time.Time
 	Address     string
 	Agent       string
 	Version     string
@@ -33,11 +34,11 @@ type FlowSyncSyncKey struct {
 }
 
 func (s *Store) EnsureFlowSyncDevice(ctx context.Context, userID, deviceID, deviceType string) (*FlowSyncDevice, error) {
-	q := s.rebind(`SELECT id, user_id, device_id, device_type, policy_key, created_at, updated_at, address, agent, version, provisioned, blocked, wipe_status
+	q := s.rebind(`SELECT id, user_id, device_id, device_type, policy_key, created_at, updated_at, address, agent, version, provisioned, blocked, wipe_status, retired_at
 		FROM flowsync_devices WHERE user_id = ? AND device_id = ?`)
 	d := &FlowSyncDevice{}
 	err := s.db.QueryRowContext(ctx, q, userID, deviceID).Scan(
-		&d.ID, &d.UserID, &d.DeviceID, &d.DeviceType, &d.PolicyKey, &d.CreatedAt, &d.UpdatedAt, &d.Address, &d.Agent, &d.Version, &d.Provisioned, &d.Blocked, &d.WipeStatus,
+		&d.ID, &d.UserID, &d.DeviceID, &d.DeviceType, &d.PolicyKey, &d.CreatedAt, &d.UpdatedAt, &d.Address, &d.Agent, &d.Version, &d.Provisioned, &d.Blocked, &d.WipeStatus, &d.RetiredAt,
 	)
 	if err == nil {
 		if deviceType != "" && d.DeviceType != deviceType {
@@ -101,7 +102,7 @@ func (s *Store) SetFlowSyncSyncKey(ctx context.Context, deviceRowID, collectionI
 }
 
 func (s *Store) ListFlowSyncDevices(ctx context.Context) ([]*FlowSyncDevice, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,user_id,device_id,device_type,policy_key,created_at,updated_at,address,agent,version,provisioned,blocked,wipe_status FROM flowsync_devices ORDER BY updated_at DESC`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id,user_id,device_id,device_type,policy_key,created_at,updated_at,address,agent,version,provisioned,blocked,wipe_status,retired_at FROM flowsync_devices ORDER BY updated_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +110,7 @@ func (s *Store) ListFlowSyncDevices(ctx context.Context) ([]*FlowSyncDevice, err
 	out := []*FlowSyncDevice{}
 	for rows.Next() {
 		d := &FlowSyncDevice{}
-		if err = rows.Scan(&d.ID, &d.UserID, &d.DeviceID, &d.DeviceType, &d.PolicyKey, &d.CreatedAt, &d.UpdatedAt, &d.Address, &d.Agent, &d.Version, &d.Provisioned, &d.Blocked, &d.WipeStatus); err != nil {
+		if err = rows.Scan(&d.ID, &d.UserID, &d.DeviceID, &d.DeviceType, &d.PolicyKey, &d.CreatedAt, &d.UpdatedAt, &d.Address, &d.Agent, &d.Version, &d.Provisioned, &d.Blocked, &d.WipeStatus, &d.RetiredAt); err != nil {
 			return nil, err
 		}
 		out = append(out, d)
@@ -121,20 +122,24 @@ func (s *Store) TouchFlowSyncDevice(ctx context.Context, id, address, agent, ver
 	return err
 }
 func (s *Store) SetFlowSyncDeviceControl(ctx context.Context, id string, blocked bool, wipe string) error {
-	_, err := s.db.ExecContext(ctx, s.rebind(`UPDATE flowsync_devices SET blocked=?,wipe_status=? WHERE id=?`), blocked, wipe, id)
+	result, err := s.db.ExecContext(ctx, s.rebind(`UPDATE flowsync_devices SET blocked=?,wipe_status=? WHERE id=? AND retired_at IS NULL`), blocked, wipe, id)
+	if err == nil {
+		n, e := result.RowsAffected()
+		if e != nil {
+			return e
+		}
+		if n == 0 {
+			return ErrUnauthorized
+		}
+	}
 	return err
 }
 
 // State is scoped to an authenticated user and client, including replay data.
 func (s *Store) GetFlowSyncState(ctx context.Context, userID, clientID, collectionID string) (string, error) {
-	var state string
-	err := s.db.QueryRowContext(ctx, s.rebind(`SELECT state FROM flowsync_states WHERE user_id=? AND client_id=? AND collection_id=?`), userID, clientID, collectionID).Scan(&state)
-	if err == sql.ErrNoRows {
-		return "", nil
-	}
-	return state, err
+	return s.readCompactSyncState(ctx, userID, clientID, collectionID, true)
 }
 func (s *Store) PutFlowSyncState(ctx context.Context, userID, clientID, collectionID, state string) error {
-	_, err := s.db.ExecContext(ctx, s.rebind(`INSERT INTO flowsync_states(user_id,client_id,collection_id,state,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(user_id,client_id,collection_id) DO UPDATE SET state=excluded.state,updated_at=excluded.updated_at`), userID, clientID, collectionID, state, time.Now().UTC())
+	_, err := s.putCompactSyncState(ctx, userID, clientID, collectionID, state, time.Now().UTC(), false)
 	return err
 }

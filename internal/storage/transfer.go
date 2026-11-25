@@ -1,0 +1,501 @@
+package storage
+
+// Full offline transfer copies physical application tables, including tokens,
+// opaque synchronization state and extension metadata. Logical mail exports are
+// intentionally not used here. Source data is never changed.
+import (
+	"context"
+	"crypto/sha256"
+	"database/sql"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"hash"
+	"io"
+	"net/url"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/lib/pq"
+	"github.com/tayga/tms/internal/maintenance"
+)
+
+type TransferTable struct {
+	Source   string `json:"source"`
+	Target   string `json:"target"`
+	Rows     int64  `json:"rows"`
+	Digest   string `json:"sha256_multiset"`
+	Verified bool   `json:"verified"`
+}
+type TransferReport struct {
+	Version  int             `json:"version"`
+	Tables   []TransferTable `json:"tables"`
+	Derived  []string        `json:"derived"`
+	Excluded []string        `json:"excluded"`
+	Verified bool            `json:"verified"`
+}
+type transferColumn struct{ name, kind string }
+type transferPlan struct {
+	source, target string
+	columns        []transferColumn
+}
+type transferConstraint struct {
+	table, name          string
+	deferrable, deferred bool
+}
+type transferTrigger struct{ table, name, enabled string }
+
+// TransferSQLiteToPostgres requires a stopped SQLite installation and a fresh,
+// migrated PostgreSQL database. The destination role must own its tables; it
+// does NOT need superuser privileges. All data and temporary constraint/trigger
+// changes are committed together, only after complete content verification.
+func TransferSQLiteToPostgres(ctx context.Context, path string, target *Store, progress func(TransferTable)) (report TransferReport, err error) {
+	report = TransferReport{Version: 1, Tables: []TransferTable{}, Derived: []string{"mail_log_fts is rebuilt from mail_log by PostgreSQL queries", "message_search.tsv is regenerated with the PostgreSQL simple dictionary", "SQL timestamps are normalized to UTC at PostgreSQL microsecond precision; raw calendar/JSON/MIME data remains unchanged"}, Excluded: []string{}}
+	if target == nil || target.dialect != DialectPostgres {
+		return report, errors.New("target must be PostgreSQL")
+	}
+	path, err = filepath.Abs(path)
+	if err != nil {
+		return report, err
+	}
+	lock, err := maintenance.SQLite(path, true)
+	if err != nil {
+		return report, err
+	}
+	defer lock.Close()
+	uri := (&url.URL{Scheme: "file", Path: path}).String() + "?mode=ro"
+	source, err := sql.Open(sqliteDriverName, uri)
+	if err != nil {
+		return report, errors.New("cannot open source SQLite")
+	}
+	defer source.Close()
+	source.SetMaxOpenConns(1)
+	read, err := source.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return report, err
+	}
+	defer read.Rollback()
+	fk, err := read.QueryContext(ctx, "PRAGMA foreign_key_check")
+	if err != nil {
+		return report, err
+	}
+	invalid := fk.Next()
+	fkErr := fk.Err()
+	fk.Close()
+	if fkErr != nil {
+		return report, errors.New("cannot validate source foreign keys")
+	}
+	if invalid {
+		return report, errors.New("source contains foreign-key violations; no data transferred")
+	}
+	tx, err := target.db.BeginTx(ctx, nil)
+	if err != nil {
+		return report, err
+	}
+	defer tx.Rollback()
+	if _, err = tx.ExecContext(ctx, "SELECT pg_advisory_xact_lock(1928305711)"); err != nil {
+		return report, err
+	}
+	plans, excluded, err := planTransfer(ctx, read, tx)
+	if err != nil {
+		return report, err
+	}
+	report.Excluded = excluded
+	constraints, triggers, err := deferTransferConstraints(ctx, tx)
+	if err != nil {
+		return report, err
+	}
+	for _, p := range plans {
+		record, e := copyTransferTable(ctx, read, tx, p)
+		if e != nil {
+			return report, fmt.Errorf("transfer %s: %w", p.source, e)
+		}
+		report.Tables = append(report.Tables, record)
+		if progress != nil {
+			progress(record)
+		}
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE message_search SET tsv=to_tsvector('simple',coalesce(subject,'') || ' ' || coalesce(from_addr,'') || ' ' || coalesce(to_addr,'') || ' ' || coalesce(body,''))`); err != nil {
+		return report, errors.New("cannot rebuild PostgreSQL message search")
+	}
+	if _, err = tx.ExecContext(ctx, "SET CONSTRAINTS ALL IMMEDIATE"); err != nil {
+		return report, errors.New("destination foreign-key validation failed; transaction rolled back")
+	}
+	for _, c := range constraints {
+		state := "NOT DEFERRABLE"
+		if c.deferrable {
+			state = "DEFERRABLE INITIALLY IMMEDIATE"
+			if c.deferred {
+				state = "DEFERRABLE INITIALLY DEFERRED"
+			}
+		}
+		if _, err = tx.ExecContext(ctx, "ALTER TABLE "+pq.QuoteIdentifier(c.table)+" ALTER CONSTRAINT "+pq.QuoteIdentifier(c.name)+" "+state); err != nil {
+			return report, err
+		}
+	}
+	for _, t := range triggers {
+		mode := "ENABLE"
+		switch t.enabled {
+		case "D":
+			mode = "DISABLE"
+		case "A":
+			mode = "ENABLE ALWAYS"
+		case "R":
+			mode = "ENABLE REPLICA"
+		}
+		if _, err = tx.ExecContext(ctx, "ALTER TABLE "+pq.QuoteIdentifier(t.table)+" "+mode+" TRIGGER "+pq.QuoteIdentifier(t.name)); err != nil {
+			return report, err
+		}
+	}
+	if err = tx.Commit(); err != nil {
+		return report, errors.New("destination commit failed; inspect target before retrying")
+	}
+	report.Verified = true
+	return report, nil
+}
+
+func planTransfer(ctx context.Context, source *sql.Tx, target *sql.Tx) ([]transferPlan, []string, error) {
+	rows, err := source.QueryContext(ctx, `SELECT name,coalesce(sql,'') FROM sqlite_master WHERE type='table' ORDER BY name`)
+	if err != nil {
+		return nil, nil, err
+	}
+	tables := map[string]string{}
+	for rows.Next() {
+		var name, definition string
+		if err = rows.Scan(&name, &definition); err != nil {
+			rows.Close()
+			return nil, nil, err
+		}
+		tables[name] = definition
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, nil, err
+	}
+	columns := map[string][]transferColumn{}
+	rows, err = target.QueryContext(ctx, `SELECT table_name,column_name,udt_name FROM information_schema.columns WHERE table_schema=current_schema() ORDER BY table_name,ordinal_position`)
+	if err != nil {
+		return nil, nil, err
+	}
+	for rows.Next() {
+		var table string
+		var c transferColumn
+		if err = rows.Scan(&table, &c.name, &c.kind); err != nil {
+			rows.Close()
+			return nil, nil, err
+		}
+		columns[table] = append(columns[table], c)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, nil, err
+	}
+	// Fresh schemas contain exactly one bootstrap mutex row. Nothing else may be
+	// overwritten, including account/settings rows added by another process.
+	for table := range columns {
+		if table == "schema_migrations" {
+			continue
+		}
+		var count int64
+		if err = target.QueryRowContext(ctx, "SELECT count(*) FROM "+pq.QuoteIdentifier(table)).Scan(&count); err != nil {
+			return nil, nil, err
+		}
+		if table == "chat_file_write_lock" && count == 1 {
+			var id int
+			if err = target.QueryRowContext(ctx, `SELECT id FROM chat_file_write_lock`).Scan(&id); err != nil || id != 1 {
+				return nil, nil, errors.New("unexpected destination mutex row")
+			}
+			if _, err = target.ExecContext(ctx, `DELETE FROM chat_file_write_lock`); err != nil {
+				return nil, nil, err
+			}
+			continue
+		}
+		if count != 0 {
+			return nil, nil, fmt.Errorf("destination table %s is not empty", table)
+		}
+	}
+	names := []string{}
+	for name := range tables {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	plans := []transferPlan{}
+	excluded := []string{}
+	for _, name := range names {
+		if name == "schema_migrations" || strings.HasPrefix(name, "sqlite_") || name == "mail_log_fts" || strings.HasPrefix(name, "mail_log_fts_") || strings.HasPrefix(name, "message_fts_") {
+			excluded = append(excluded, name)
+			continue
+		}
+		to := name
+		if name == "message_fts" {
+			to = "message_search"
+		} else if strings.Contains(strings.ToUpper(tables[name]), "CREATE VIRTUAL TABLE") {
+			return nil, nil, fmt.Errorf("unsupported virtual table %s", name)
+		}
+		dest, exists := columns[to]
+		if !exists {
+			return nil, nil, fmt.Errorf("source table %s has no destination", name)
+		}
+		destMap := map[string]transferColumn{}
+		for _, c := range dest {
+			destMap[c.name] = c
+		}
+		info, e := source.QueryContext(ctx, "PRAGMA table_info("+pq.QuoteIdentifier(name)+")")
+		if e != nil {
+			return nil, nil, e
+		}
+		plan := transferPlan{source: name, target: to}
+		for info.Next() {
+			var cid, notNull, pk int
+			var cname, ctype string
+			var def any
+			if e = info.Scan(&cid, &cname, &ctype, &notNull, &def, &pk); e != nil {
+				info.Close()
+				return nil, nil, e
+			}
+			c, ok := destMap[cname]
+			if !ok {
+				info.Close()
+				return nil, nil, fmt.Errorf("source column %s.%s has no destination", name, cname)
+			}
+			plan.columns = append(plan.columns, c)
+		}
+		e = info.Err()
+		info.Close()
+		if e != nil {
+			return nil, nil, e
+		}
+		plans = append(plans, plan)
+	}
+	return plans, excluded, nil
+}
+func deferTransferConstraints(ctx context.Context, tx *sql.Tx) ([]transferConstraint, []transferTrigger, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT c.relname,k.conname,k.condeferrable,k.condeferred FROM pg_constraint k JOIN pg_class c ON c.oid=k.conrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE k.contype='f' AND n.nspname=current_schema()`)
+	if err != nil {
+		return nil, nil, err
+	}
+	constraints := []transferConstraint{}
+	for rows.Next() {
+		var c transferConstraint
+		if err = rows.Scan(&c.table, &c.name, &c.deferrable, &c.deferred); err != nil {
+			rows.Close()
+			return nil, nil, err
+		}
+		constraints = append(constraints, c)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, nil, err
+	}
+	triggers := []transferTrigger{}
+	rows, err = tx.QueryContext(ctx, `SELECT c.relname,t.tgname,t.tgenabled::text FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE NOT t.tgisinternal AND n.nspname=current_schema()`)
+	if err != nil {
+		return nil, nil, err
+	}
+	for rows.Next() {
+		var t transferTrigger
+		if err = rows.Scan(&t.table, &t.name, &t.enabled); err != nil {
+			rows.Close()
+			return nil, nil, err
+		}
+		triggers = append(triggers, t)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, c := range constraints {
+		if _, err = tx.ExecContext(ctx, "ALTER TABLE "+pq.QuoteIdentifier(c.table)+" ALTER CONSTRAINT "+pq.QuoteIdentifier(c.name)+" DEFERRABLE INITIALLY DEFERRED"); err != nil {
+			return nil, nil, err
+		}
+	}
+	for _, t := range triggers {
+		if _, err = tx.ExecContext(ctx, "ALTER TABLE "+pq.QuoteIdentifier(t.table)+" DISABLE TRIGGER "+pq.QuoteIdentifier(t.name)); err != nil {
+			return nil, nil, err
+		}
+	}
+	_, err = tx.ExecContext(ctx, "SET CONSTRAINTS ALL DEFERRED")
+	return constraints, triggers, err
+}
+func copyTransferTable(ctx context.Context, source, target *sql.Tx, plan transferPlan) (TransferTable, error) {
+	record := TransferTable{Source: plan.source, Target: plan.target}
+	names := []string{}
+	quoted := []string{}
+	for _, c := range plan.columns {
+		names = append(names, c.name)
+		quoted = append(quoted, pq.QuoteIdentifier(c.name))
+	}
+	selectColumns := strings.Join(quoted, ",")
+	rows, err := source.QueryContext(ctx, "SELECT "+selectColumns+" FROM "+pq.QuoteIdentifier(plan.source))
+	if err != nil {
+		return record, err
+	}
+	defer rows.Close()
+	statement, err := target.PrepareContext(ctx, pq.CopyIn(plan.target, names...))
+	if err != nil {
+		return record, err
+	}
+	defer statement.Close()
+	var sourceHash transferDigest
+	for rows.Next() {
+		values, err := scanTransferRow(rows, plan.columns)
+		if err != nil {
+			return record, err
+		}
+		sourceHash.add(values)
+		if _, err = statement.ExecContext(ctx, values...); err != nil {
+			return record, fmt.Errorf("COPY failed for row %d (contents suppressed)", record.Rows+1)
+		}
+		record.Rows++
+	}
+	if err = rows.Err(); err != nil {
+		return record, err
+	}
+	rows.Close()
+	if _, err = statement.ExecContext(ctx); err != nil {
+		return record, errors.New("COPY completion failed (contents suppressed)")
+	}
+	if err = statement.Close(); err != nil {
+		return record, err
+	}
+	verified, err := target.QueryContext(ctx, "SELECT "+selectColumns+" FROM "+pq.QuoteIdentifier(plan.target))
+	if err != nil {
+		return record, err
+	}
+	defer verified.Close()
+	var targetHash transferDigest
+	var count int64
+	for verified.Next() {
+		values, e := scanTransferRow(verified, plan.columns)
+		if e != nil {
+			return record, e
+		}
+		targetHash.add(values)
+		count++
+	}
+	if err = verified.Err(); err != nil {
+		return record, err
+	}
+	if count != record.Rows || sourceHash != targetHash {
+		return record, errors.New("row count or content fingerprint mismatch")
+	}
+	record.Digest = hex.EncodeToString(sourceHash[:])
+	record.Verified = true
+	return record, nil
+}
+func scanTransferRow(rows *sql.Rows, columns []transferColumn) ([]any, error) {
+	values := make([]any, len(columns))
+	pointers := make([]any, len(columns))
+	for i := range values {
+		pointers[i] = &values[i]
+	}
+	if err := rows.Scan(pointers...); err != nil {
+		return nil, err
+	}
+	for i, c := range columns {
+		value, err := normalizeTransferValue(values[i], c.kind)
+		if err != nil {
+			return nil, fmt.Errorf("invalid value in column %s (contents suppressed)", c.name)
+		}
+		values[i] = value
+	}
+	return values, nil
+}
+func normalizeTransferValue(value any, kind string) (any, error) {
+	if value == nil {
+		return nil, nil
+	}
+	if kind == "bytea" {
+		if b, ok := value.([]byte); ok {
+			return b, nil
+		}
+		return nil, errors.New("invalid binary value")
+	}
+	if b, ok := value.([]byte); ok {
+		value = string(b)
+	}
+	if kind == "timestamptz" || kind == "timestamp" || kind == "date" {
+		if t, ok := value.(time.Time); ok {
+			return t.UTC().Round(time.Microsecond), nil
+		}
+		text := fmt.Sprint(value)
+		for _, layout := range []string{time.RFC3339Nano, "2006-01-02 15:04:05.999999999-07:00", "2006-01-02 15:04:05.999999999+00:00", "2006-01-02 15:04:05.999999999", "2006-01-02"} {
+			if t, e := time.Parse(layout, text); e == nil {
+				return t.UTC().Round(time.Microsecond), nil
+			}
+		}
+		return nil, errors.New("invalid timestamp")
+	}
+	if kind == "bool" {
+		switch v := value.(type) {
+		case bool:
+			return v, nil
+		case int64:
+			if v == 0 || v == 1 {
+				return v == 1, nil
+			}
+		}
+		return nil, errors.New("invalid boolean")
+	}
+	if kind == "jsonb" {
+		var raw any
+		decoder := json.NewDecoder(strings.NewReader(fmt.Sprint(value)))
+		decoder.UseNumber()
+		if err := decoder.Decode(&raw); err != nil {
+			return nil, err
+		}
+		data, err := json.Marshal(raw)
+		return string(data), err
+	}
+	if text, ok := value.(string); ok && strings.ContainsRune(text, 0) {
+		return nil, errors.New("PostgreSQL text cannot contain NUL")
+	}
+	return value, nil
+}
+
+// Sum SHA-256 row digests modulo 2^256 so SQL iteration order cannot change a
+// fingerprint. Counts and constraints are verified separately (not XOR hashes).
+type transferDigest [32]byte
+
+func (d *transferDigest) add(values []any) {
+	h := sha256.New()
+	for _, value := range values {
+		writeTransferValue(h, value)
+	}
+	sum := h.Sum(nil)
+	carry := 0
+	for i := 31; i >= 0; i-- {
+		n := int(d[i]) + int(sum[i]) + carry
+		d[i] = byte(n)
+		carry = n >> 8
+	}
+}
+func writeTransferValue(h hash.Hash, value any) {
+	if value == nil {
+		_, _ = io.WriteString(h, "N;")
+		return
+	}
+	var text string
+	switch v := value.(type) {
+	case time.Time:
+		text = v.UTC().Format(time.RFC3339Nano)
+	case []byte:
+		_, _ = io.WriteString(h, "B"+strconv.Itoa(len(v))+":")
+		_, _ = h.Write(v)
+		return
+	case string:
+		text = v
+	default:
+		text = fmt.Sprint(v)
+	}
+	_, _ = io.WriteString(h, "V"+strconv.Itoa(len(text))+":")
+	_, _ = io.WriteString(h, text)
+}

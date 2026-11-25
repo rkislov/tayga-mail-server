@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -20,10 +21,11 @@ type MattermostFederationConfig struct {
 }
 
 type MattermostConfig struct {
-	Federation      MattermostFederationConfig `yaml:"federation"`
-	PluginsEnabled  bool                       `yaml:"plugins_enabled"`
-	PluginDirectory string                     `yaml:"plugin_directory"`
-	Enabled         bool                       `yaml:"enabled"`
+	AttachmentDirectory string                     `yaml:"attachment_directory,omitempty"`
+	Federation          MattermostFederationConfig `yaml:"federation"`
+	PluginsEnabled      bool                       `yaml:"plugins_enabled"`
+	PluginDirectory     string                     `yaml:"plugin_directory"`
+	Enabled             bool                       `yaml:"enabled"`
 }
 
 // VKSConfig connects TMS to native or containerized conferencing services.
@@ -490,8 +492,9 @@ type WebAuthnConfig struct {
 // FlowSyncConfig controls Tayga's proprietary FlowSync engine
 // (ActiveSync- and EWS-compatible wire protocols).
 type FlowSyncConfig struct {
-	ProtocolDebug bool `yaml:"protocol_debug"`
-	Enabled       bool `yaml:"enabled"`
+	StateRetentionDays int  `yaml:"state_retention_days"`
+	ProtocolDebug      bool `yaml:"protocol_debug"`
+	Enabled            bool `yaml:"enabled"`
 }
 
 type TLSConfig struct {
@@ -631,7 +634,7 @@ func Default() *Config {
 				Enabled: true,
 			},
 		},
-		FlowSync: FlowSyncConfig{Enabled: true},
+		FlowSync: FlowSyncConfig{Enabled: true, StateRetentionDays: 180},
 		HTTP: HTTPConfig{
 			Listen:            ":80",
 			TLSListen:         ":443",
@@ -724,6 +727,9 @@ func Default() *Config {
 
 // Validate checks required fields.
 func (c *Config) Validate() error {
+	if c.FlowSync.StateRetentionDays != 0 && (c.FlowSync.StateRetentionDays < 30 || c.FlowSync.StateRetentionDays > 3650) {
+		return fmt.Errorf("flowsync.state_retention_days must be 0 or 30..3650")
+	}
 	if c.VKS.Enabled {
 		u, err := url.Parse(c.VKS.PublicURL)
 		if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
@@ -1260,4 +1266,17 @@ func (c *Config) Validate() error {
 // TLSEnabled reports whether TLS certificate files are configured.
 func (c *Config) TLSEnabled() bool {
 	return c.TLS.CertFile != "" && c.TLS.KeyFile != ""
+}
+
+// MattermostAttachmentsPath stays stable when the SQL backend changes. Set the
+// explicit path before migrating a SQLite installation to PostgreSQL.
+func (c *Config) MattermostAttachmentsPath() string {
+	if c.Mattermost.AttachmentDirectory != "" {
+		return c.Mattermost.AttachmentDirectory
+	}
+	root := c.Mailstore.Root
+	if c.Storage.Driver == "sqlite" {
+		root = filepath.Dir(c.Storage.SQLite.Path)
+	}
+	return filepath.Join(root, ".mattermost-attachments")
 }

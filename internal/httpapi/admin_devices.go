@@ -29,7 +29,10 @@ func (s *Server) handleAdminDevices(w http.ResponseWriter, r *http.Request) {
 		if device.ID == id {
 			selected = device
 		}
-		out = append(out, map[string]any{"id": device.ID, "user_id": device.UserID, "email": user.Email, "device_id": device.DeviceID, "type": device.DeviceType, "address": device.Address, "agent": device.Agent, "last_seen": device.UpdatedAt, "blocked": device.Blocked, "wipe_status": device.WipeStatus, "account_wipe_supported": device.Provisioned && device.Version == "16.1"})
+		if device.RetiredAt != nil && r.URL.Query().Get("include_retired") != "true" {
+			continue
+		}
+		out = append(out, map[string]any{"retired_at": device.RetiredAt, "id": device.ID, "user_id": device.UserID, "email": user.Email, "device_id": device.DeviceID, "type": device.DeviceType, "address": device.Address, "agent": device.Agent, "last_seen": device.UpdatedAt, "blocked": device.Blocked, "wipe_status": device.WipeStatus, "account_wipe_supported": device.Provisioned && device.Version == "16.1"})
 	}
 	if r.Method == http.MethodGet && id == "" {
 		writeJSON(w, 200, map[string]any{"devices": out})
@@ -45,6 +48,42 @@ func (s *Server) handleAdminDevices(w http.ResponseWriter, r *http.Request) {
 	}
 	if json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&req) != nil {
 		writeJSON(w, 400, map[string]string{"error": "invalid json"})
+		return
+	}
+	if req.Action == "retire" {
+		if req.ConfirmDeviceID != selected.DeviceID {
+			writeJSON(w, 400, map[string]string{"error": "confirm device ID required"})
+			return
+		}
+		removed, err := s.store.RetireFlowSyncDevice(r.Context(), selected.UserID, selected.ID)
+		if err != nil {
+			writeJSON(w, 500, map[string]string{"error": "cannot forget device"})
+			return
+		}
+		s.log.Info("mobile device retired", "actor_id", admin.ID, "user_id", selected.UserID, "device_id", selected.ID, "cached_states_removed", removed)
+		writeJSON(w, 200, map[string]any{"retired": true, "blocked": true, "cached_states_removed": removed, "remote_wipe_sent": false})
+		return
+	}
+	if req.Action == "restore" {
+		if selected.RetiredAt == nil {
+			writeJSON(w, 409, map[string]string{"error": "device is not retired"})
+			return
+		}
+		if req.ConfirmDeviceID != selected.DeviceID {
+			writeJSON(w, 400, map[string]string{"error": "confirm device ID required"})
+			return
+		}
+		if err := s.store.RestoreFlowSyncDevice(r.Context(), selected.UserID, selected.ID); err != nil {
+			writeJSON(w, 500, map[string]string{"error": "cannot restore device registration"})
+			return
+		}
+		s.log.Info("mobile device registration restored", "actor_id", admin.ID, "user_id", selected.UserID, "device_id", selected.ID, "previous_wipe_status", selected.WipeStatus)
+		writeJSON(w, 200, map[string]any{"retired": false, "blocked": true, "wipe_status": "none", "requires_reprovision": true})
+		return
+	}
+
+	if selected.RetiredAt != nil {
+		writeJSON(w, 409, map[string]string{"error": "device identity was retired and remains blocked"})
 		return
 	}
 	blocked, wipe := selected.Blocked, selected.WipeStatus
