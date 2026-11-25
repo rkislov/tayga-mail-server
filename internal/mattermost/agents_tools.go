@@ -333,12 +333,12 @@ func clipAgentText(s string, n int) string {
 	return s
 }
 func (s *API) validateAgentDraft(ctx context.Context, u *storage.User, name string, args map[string]string) error {
-	if strings.TrimSpace(args["text"]) == "" || len(args["text"]) > 16000 {
+	if strings.TrimSpace(args["text"]) == "" || len(args["text"]) > 16000 || strings.ContainsRune(args["text"], 0) {
 		return chat.ErrInvalid
 	}
 	if name == "mail_draft" {
 		address, err := mail.ParseAddress(args["to"])
-		if err != nil || address.Address != args["to"] || strings.ContainsAny(args["subject"], "\r\n") || len(args["subject"]) > 500 {
+		if err != nil || address.Address != args["to"] || strings.ContainsAny(args["subject"], "\r\n\x00") || len(args["subject"]) > 500 {
 			return chat.ErrInvalid
 		}
 		return nil

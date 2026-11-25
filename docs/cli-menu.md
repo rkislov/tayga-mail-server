@@ -1,6 +1,6 @@
 # Консольное меню (`tayga-mail menu`)
 
-Интерактивный CLI для первичной настройки, backup/restore и переноса хранилища.
+Интерактивный CLI для первичной настройки, backup/restore и полного переноса SQLite → PostgreSQL.
 
 ```bash
 tayga-mail menu -config /etc/tayga/tayga.yaml
@@ -16,10 +16,12 @@ tayga-mail menu -config /etc/tayga/tayga.yaml
 | Сменить путь к config | рабочий файл для остальных операций |
 | Backup | `backup.WriteTarGz` (с maildir по желанию) |
 | Restore | `backup.RestoreTarGz` в текущий storage/maildir |
-| Перенос БД / хранилища | экспорт из источника → импорт в sqlite или postgres → новый YAML |
+| Перенос БД / хранилища | полный SQLite → PostgreSQL в пустую БД со сверкой всех таблиц |
 | Настройки сервера | Guided-формы: SMTP, spam/Rspamd, AV/ICAP, SIEM (syslog CEF), log, CoS; плюс raw JSON для остальных секций |
 | О версии | `version.String()` |
 
-Перед переносом sqlite↔postgres **остановите** `tayga-mail`. После переноса запускайте с новым config.
+Перед переносом SQLite → PostgreSQL **остановите** `tayga-mail`. После переноса запускайте с новым config.
 
 См. также: [setup.md](./setup.md), [ha.md](./ha.md), [migration.md](./migration.md) (пользовательский IMAP/DAV импорт).
+
+[Подготовка, отчёт сверки и переключение](storage-migration.md). Логический backup/restore не заменяет полный перенос.

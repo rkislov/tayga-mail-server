@@ -16,6 +16,14 @@ import (
 
 // Open creates a Driver for the configured backend and runs migrations.
 func Open(ctx context.Context, cfg config.StorageConfig) (Driver, error) {
+	return openStore(ctx, cfg, false)
+}
+
+// OpenOffline requires exclusive maintenance access until the returned store closes.
+func OpenOffline(ctx context.Context, cfg config.StorageConfig) (Driver, error) {
+	return openStore(ctx, cfg, true)
+}
+func openStore(ctx context.Context, cfg config.StorageConfig, offline bool) (Driver, error) {
 	var (
 		db       *sql.DB
 		dialect  Dialect
@@ -31,7 +39,7 @@ func Open(ctx context.Context, cfg config.StorageConfig) (Driver, error) {
 
 	switch cfg.Driver {
 	case "sqlite":
-		lifeLock, err = maintenance.SQLite(cfg.SQLite.Path, false)
+		lifeLock, err = maintenance.SQLite(cfg.SQLite.Path, offline)
 		if err != nil {
 			return nil, err
 		}
@@ -65,6 +73,13 @@ func Open(ctx context.Context, cfg config.StorageConfig) (Driver, error) {
 		return nil, fmt.Errorf("ping database: %w", err)
 	}
 
+	if dialect == DialectPostgres {
+		lifeLock, err = maintenance.Postgres(ctx, db, offline)
+		if err != nil {
+			db.Close()
+			return nil, err
+		}
+	}
 	if err := migrate(ctx, db, dialect); err != nil {
 		_ = db.Close()
 		return nil, err
@@ -163,6 +178,8 @@ func migrate(ctx context.Context, db *sql.DB, dialect Dialect) error {
 			"081_ews_delegates.sqlite.sql",
 			"082_chat_federation.sqlite.sql",
 			"083_chat_member_history.sqlite.sql",
+			"084_sync_state_snapshots.sqlite.sql",
+			"085_device_retirement.sqlite.sql",
 		}
 	case DialectPostgres:
 		files = []string{
@@ -249,6 +266,8 @@ func migrate(ctx context.Context, db *sql.DB, dialect Dialect) error {
 			"081_ews_delegates.postgres.sql",
 			"082_chat_federation.postgres.sql",
 			"083_chat_member_history.postgres.sql",
+			"084_sync_state_snapshots.postgres.sql",
+			"085_device_retirement.postgres.sql",
 		}
 	default:
 		return fmt.Errorf("unsupported dialect")

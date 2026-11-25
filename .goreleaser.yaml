@@ -50,6 +50,7 @@ archives:
       - deploy/ha/*
       - docs/*.md
       - scripts/mattermost/*.py
+      - scripts/agents/*.sh
       - docs/screenshots/*.png
       - docs/screenshots/*.md
       - docs/screenshots/*.txt
@@ -136,10 +137,14 @@ nfpms:
         dst: /usr/share/doc/tayga-mail/user-guide.md
       - src: docs/mattermost-agents.md
         dst: /usr/share/doc/tayga-mail/mattermost-agents.md
+      - src: docs/storage-migration.md
+        dst: /usr/share/doc/tayga-mail/storage-migration.md
       - src: docs/mattermost-products.md
         dst: /usr/share/doc/tayga-mail/mattermost-products.md
       - src: scripts/mattermost/provision-product-db.py
         dst: /usr/share/tayga-mail/mattermost/provision-product-db.py
+      - src: scripts/agents/install-searxng.sh
+        dst: /usr/share/tayga-mail/agents/install-searxng.sh
       - src: scripts/mattermost/restore-product-dbs.py
         dst: /usr/share/tayga-mail/mattermost/restore-product-dbs.py
       - src: docs/release-1.3.0.md

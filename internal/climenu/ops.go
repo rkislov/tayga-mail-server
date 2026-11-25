@@ -2,6 +2,7 @@ package climenu
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -98,91 +99,50 @@ func (m *Menu) doRestore() error {
 
 func (m *Menu) transferStorage() error {
 	u := m.ui
-	u.Println("Перенос данных между storage (sqlite ↔ postgres) через backup/restore.")
-	u.Println("Остановите tayga-mail на исходном и целевом хосте перед переносом.")
-	srcCfgPath := u.Prompt("Исходный config", m.cfgPath)
-	dstDriver := strings.ToLower(u.Prompt("Целевой драйвер (sqlite/postgres)", "postgres"))
-	var dstStorage config.StorageConfig
-	var dstMail string
-	var dstCfgPath string
-	srcCfg, err := config.Load(srcCfgPath)
+	u.Println("Полный офлайн-перенос SQLite → PostgreSQL. Остановите исходный сервер.")
+	sourcePath := u.Prompt("Исходный config", m.cfgPath)
+	targetPath := u.Prompt("Готовый приватный config PostgreSQL (пустая БД)", strings.TrimSuffix(sourcePath, filepath.Ext(sourcePath))+"-postgres.yaml")
+	reportPath := u.Prompt("Новый файл отчёта сверки", targetPath+".migration-report.json")
+	source, err := config.Load(sourcePath)
 	if err != nil {
 		return err
 	}
-	dstMail = u.Prompt("Целевой mailstore.root", srcCfg.Mailstore.Root)
-	switch dstDriver {
-	case "postgres", "postgresql":
-		dstStorage.Driver = "postgres"
-		dstStorage.Postgres.DSN = u.Prompt("Целевой Postgres DSN", "postgres://tayga:tayga@localhost:5432/tayga?sslmode=disable")
-		dstCfgPath = u.Prompt("Записать новый config как", strings.TrimSuffix(srcCfgPath, filepath.Ext(srcCfgPath))+"-postgres.yaml")
-	default:
-		dstStorage.Driver = "sqlite"
-		dstStorage.SQLite.Path = u.Prompt("Целевой sqlite path", "./data/tayga-pg-migrated.db")
-		dstCfgPath = u.Prompt("Записать новый config как", strings.TrimSuffix(srcCfgPath, filepath.Ext(srcCfgPath))+"-sqlite.yaml")
+	target, err := config.Load(targetPath)
+	if err != nil {
+		return err
 	}
-	if !u.PromptYesNo("Выполнить перенос сейчас?", false) {
-		u.Println("Отменено.")
+	if source.Storage.Driver != "sqlite" || target.Storage.Driver != "postgres" {
+		return fmt.Errorf("полный перенос поддерживает только SQLite → PostgreSQL; логический backup не является полной миграцией")
+	}
+	if source.Mailstore.Root != target.Mailstore.Root || source.MattermostAttachmentsPath() != target.MattermostAttachmentsPath() {
+		return fmt.Errorf("сохраните mailstore.root и mattermost.attachment_directory в целевом config")
+	}
+	if !u.PromptYesNo("Перенести все таблицы в пустую БД и проверить содержимое? Активный config не изменится", false) {
 		return nil
 	}
-
+	reportFile, err := os.OpenFile(reportPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	if err != nil {
+		return err
+	}
+	defer reportFile.Close()
 	ctx := context.Background()
-	src, err := storage.Open(ctx, srcCfg.Storage)
+	driver, err := storage.OpenOffline(ctx, target.Storage)
 	if err != nil {
-		return fmt.Errorf("source: %w", err)
+		return fmt.Errorf("не удалось открыть целевую PostgreSQL")
 	}
-	defer src.Close()
-
-	tmp, err := os.CreateTemp("", "tayga-xfer-*.tar.gz")
-	if err != nil {
-		return err
-	}
-	tmpName := tmp.Name()
-	defer os.Remove(tmpName)
-
-	u.Println("Экспорт…")
-	if err := backup.WriteTarGz(ctx, src, backup.Options{
-		IncludeMail: true,
-		MailRoot:    srcCfg.Mailstore.Root,
-	}, tmp); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-
-	dst, err := storage.Open(ctx, dstStorage)
-	if err != nil {
-		return fmt.Errorf("dest: %w", err)
-	}
-	defer dst.Close()
-
-	f, err := os.Open(tmpName)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	u.Println("Импорт…")
-	rep, err := backup.RestoreTarGz(ctx, dst, f, backup.RestoreOptions{
-		MailRoot:     dstMail,
-		IncludeMail:  true,
-		SkipExisting: false,
+	defer driver.Close()
+	report, transferErr := storage.TransferSQLiteToPostgres(ctx, source.Storage.SQLite.Path, driver.(*storage.Store), func(table storage.TransferTable) {
+		u.Printf("проверено %s → %s: %d строк\n", table.Source, table.Target, table.Rows)
 	})
-	if err != nil {
+	if err = json.NewEncoder(reportFile).Encode(report); err != nil {
 		return err
 	}
-	u.Printf("перенесено: tenants=%d domains=%d users=%d mail=%d\n",
-		rep.TenantsCreated, rep.DomainsCreated, rep.UsersCreated, rep.MailFiles)
-
-	// write target bootstrap YAML based on source with new storage
-	out := *srcCfg
-	out.Storage = dstStorage
-	out.Mailstore.Root = dstMail
-	if err := writeConfigYAML(dstCfgPath, &out); err != nil {
-		return fmt.Errorf("write config: %w", err)
+	if err = reportFile.Sync(); err != nil {
+		return err
 	}
-	u.Printf("Новый config: %s\n", dstCfgPath)
-	u.Println("Дальше: tayga-mail -config " + dstCfgPath)
-	m.cfgPath = dstCfgPath
+	if transferErr != nil {
+		return transferErr
+	}
+	u.Println("Все таблицы перенесены и проверены. Исходная SQLite сохранена. Переключите службу на целевой config отдельно.")
 	return nil
 }

@@ -35,8 +35,8 @@ func validateChatAttachments(ctx context.Context, cfg *config.Config, st *storag
 		return err
 	}
 	defer rows.Close()
-	// The HTTP server uses the database's parent directory for SQLite attachments.
-	directory := filepath.Join(filepath.Dir(cfg.Storage.SQLite.Path), ".mattermost-attachments")
+	// Use the same explicit/default directory as the HTTP server.
+	directory := cfg.MattermostAttachmentsPath()
 	for rows.Next() {
 		var id string
 		var size, blobSize int64

@@ -122,7 +122,7 @@ func (h *easHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "device update failed", 500)
 		return
 	}
-	if dev.Blocked && !(strings.EqualFold(cmd, "provision") && (dev.WipeStatus == "pending" || dev.WipeStatus == "sent")) {
+	if dev.RetiredAt != nil || dev.Blocked && !(strings.EqualFold(cmd, "provision") && (dev.WipeStatus == "pending" || dev.WipeStatus == "sent")) {
 		http.Error(w, "device blocked", 403)
 		return
 	}

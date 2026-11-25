@@ -10,6 +10,39 @@ permissions:
   contents: read
 
 jobs:
+  postgres-storage:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: fixture_admin
+          POSTGRES_PASSWORD: fixture-admin-password
+          POSTGRES_DB: fixture_admin
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fixture_admin -d fixture_admin"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Provision isolated non-superuser fixture
+        env:
+          PGPASSWORD: fixture-admin-password
+        run: |
+          psql -h 127.0.0.1 -U fixture_admin -d fixture_admin -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE transfer_fixture LOGIN PASSWORD 'fixture-only-password' NOSUPERUSER NOCREATEDB NOCREATEROLE;
+          CREATE DATABASE transfer_fixture OWNER transfer_fixture;
+          REVOKE ALL ON DATABASE transfer_fixture FROM PUBLIC;
+          SQL
+      - name: Test PostgreSQL migration, compaction and existing storage contracts
+        env:
+          TAYGA_TEST_BOOKING_POSTGRES_DSN: postgres://transfer_fixture:fixture-only-password@127.0.0.1:5432/transfer_fixture?sslmode=disable
+        run: CGO_ENABLED=0 go test ./internal/storage -count=1
+
   test:
     runs-on: ubuntu-latest
     steps:
