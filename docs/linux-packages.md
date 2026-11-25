@@ -14,7 +14,7 @@
 
 ## Новая установка
 
-Скачайте нужный пакет и `checksums.txt` из [актуального выпуска](https://github.com/rkislov/tayga-mail-server/releases/latest). Проверьте SHA-256 скачанного файла по `checksums.txt` до установки. RPM опубликован без GPG-подписи пакета; контрольные суммы приложены к выпуску. Настройки проверки подписей системных репозиториев менять не нужно.
+Скачайте нужный пакет и `checksums.txt` из [актуального выпуска](https://github.com/rkislov/tayga-mail-server/releases/latest). Проверьте SHA-256 скачанного файла по `checksums.txt` до установки. RPM опубликован без GPG-подписи пакета; контрольные суммы приложены к выпуску. Подписи системных репозиториев продолжают проверяться штатно.
 
 Ubuntu / Astra (выберите архитектуру своего сервера):
 
@@ -46,7 +46,9 @@ sudo /usr/lib/tayga-mail/postgres-bootstrap /etc/tayga/tayga.yaml
 
 Откройте `sudoedit /etc/tayga/tayga.yaml` и задайте:
 
-1. `server.hostname` и `http.public_url` для своего домена.
+1. `server.hostname` и `http.public_url` для своего домена. Сгенерируйте
+   постоянный `server.secrets_key` через `openssl rand -base64 32` и
+   добавьте его в секцию `server` закрытого YAML.
 2. `seed.enabled: true`, свой `seed.domain`, адрес `seed.email` и уникальный `seed.password` для первого запуска.
 3. Тот же адрес в списке `http.admins`.
 4. Сертификаты TLS и остальные параметры по [руководству установки](setup.md).
