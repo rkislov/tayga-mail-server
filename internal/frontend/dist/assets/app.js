@@ -11863,9 +11863,14 @@ function workspaceFolderIcon(folder){return workspaceIcon(String(folder.role||fo
   const anchor=document.querySelector('[data-app="chat"]'),parent=document.getElementById('app-chat')?.parentElement;
   if(!anchor||!parent)return;
   if(!APPS.includes('agents'))APPS.push('agents');
-  const button=document.createElement('button');button.type='button';button.className=anchor.className;button.classList.remove('is-active');button.dataset.app='agents';button.textContent='✧ Агенты';button.title='Агенты';anchor.after(button);
-  const section=document.createElement('section');section.id='app-agents';section.className='hidden';
-  section.innerHTML=`<div class="tms-agents"><aside class="agents-sidebar"><h2>✧ Агенты</h2><button type="button" data-view="catalog">⌕ Найти агентов</button><button type="button" data-view="catalog">Все агенты</button><button type="button" data-view="history">Мои диалоги</button><button type="button" data-view="skills">Навыки</button><button type="button" data-view="settings">Настройки</button><div class="agents-side-history"></div><p class="agents-scope"></p></aside><div class="agents-workspace"><div class="agents-error" role="alert"></div><main class="agents-main"></main></div></div>`;
+  const paths={spark:'M12 3l2.2 6.8L21 12l-6.8 2.2L12 21l-2.2-6.8L3 12l6.8-2.2L12 3z',catalog:'M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15 M16 16l5 5',history:'M4 5h16v12H8l-4 4V5z',skills:'M12 3l-8 4 8 4 8-4-8-4z M4 12l8 4 8-4 M4 17l8 4 8-4',settings:'M5 4v16 M12 4v16 M19 4v16 M2 8h6 M9 15h6 M16 10h6',close:'M6 6l12 12 M18 6L6 18',plus:'M12 5v14 M5 12h14',arrow:'M5 12h14 M13 6l6 6-6 6',shield:'M12 3l8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3z M8 12l3 3 5-6'};
+  function icon(name){const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('fill','none');svg.setAttribute('stroke','currentColor');svg.setAttribute('stroke-width','1.6');svg.setAttribute('stroke-linecap','round');svg.setAttribute('stroke-linejoin','round');svg.setAttribute('aria-hidden','true');const path=document.createElementNS(svg.namespaceURI,'path');path.setAttribute('d',paths[name]||paths.spark);svg.append(path);return svg;}
+  const button=document.createElement('button');button.type='button';button.className=anchor.className;button.classList.remove('is-active');button.dataset.app='agents';button.title='Агенты';button.setAttribute('aria-label','Агенты');const navIcon=document.createElement('span');navIcon.className='nav-ico';navIcon.setAttribute('aria-hidden','true');navIcon.append(icon('spark'));const navLabel=document.createElement('span');navLabel.textContent='Агенты';button.append(navIcon,navLabel);anchor.after(button);
+  const section=document.createElement('section');section.id='app-agents';section.className='app-page hidden';
+  section.innerHTML=`<div class="tms-agents"><aside class="agents-sidebar"><div class="agents-brand"><span class="agents-brand-icon"></span><div><strong>Агенты</strong><span>Помощники для работы</span></div></div><nav class="agents-navigation" aria-label="Разделы агентов"><button type="button" data-view="catalog">Все агенты</button><button type="button" data-view="history">Мои диалоги</button><button type="button" data-view="skills">Навыки</button><button type="button" data-view="settings">Настройки</button></nav><div class="agents-side-history"></div><div class="agents-account"><span class="agents-account-icon"></span><div><small>Рабочее пространство</small><p class="agents-scope"></p></div></div></aside><div class="agents-workspace"><div class="agents-error" role="alert"></div><main class="agents-main"></main></div></div>`;
+  section.querySelector('.agents-brand-icon').append(icon('spark'));section.querySelector('.agents-account-icon').append(icon('shield'));
+  section.querySelectorAll('[data-view]').forEach(b=>b.prepend(icon(b.dataset.view)));
+
   parent.append(section);
   const main=section.querySelector('.agents-main'),error=section.querySelector('.agents-error'),sidebar=section.querySelector('.agents-side-history');
   let owner='',ownerToken='',epoch=0,revision=0,loadRevision=0,boot=null,config=null,history=[],active='',view='catalog',sending=false,controller=new AbortController();
@@ -11884,9 +11889,12 @@ function workspaceFolderIcon(folder){return workspaceIcon(String(folder.role||fo
     section.querySelector('.agents-scope').textContent=state.email||'Мой домен';renderSidebar();if(active)await openChat(active);else await show(view==='chat'?'catalog':view);
   }
   function renderSidebar(){
+    section.querySelectorAll('[data-view]').forEach(b=>{const selected=b.dataset.view===view;b.classList.toggle('is-selected',selected);if(selected)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
     sidebar.replaceChildren();
+    if(!boot.catalog.agents.length)return;
+    sidebar.append(node('p','Личные диалоги','agents-sidebar-label'));
     for(const agent of boot.catalog.agents){
-      const heading=node('div',undefined,'agents-history-heading');heading.append(node('span',agent.name),action('+',()=>run(()=>newChat(agent.id))));heading.lastChild.setAttribute('aria-label','Новый диалог: '+agent.name);sidebar.append(heading);
+      const heading=node('div',undefined,'agents-history-heading');heading.append(node('span',agent.name),action('+',()=>run(()=>newChat(agent.id))));heading.lastChild.setAttribute('aria-label','Новый диалог: '+agent.name);heading.lastChild.title='Новый диалог';sidebar.append(heading);
       for(const chat of history.filter(c=>c.agent_id===agent.id).sort((a,b)=>b.updated_at-a.updated_at)){
         const b=action(chat.title,()=>run(()=>openChat(chat.id)),'agents-history-link');b.classList.toggle('is-selected',active===chat.id);sidebar.append(b);
       }
@@ -11894,41 +11902,51 @@ function workspaceFolderIcon(folder){return workspaceIcon(String(folder.role||fo
   }
   function title(text,subtitle){const header=node('header',undefined,'agents-header');const block=node('div');block.append(node('h1',text));if(subtitle)block.append(node('p',subtitle));header.append(block);main.append(header);return header;}
   async function show(next){
-    view=next;revision++;active='';main.replaceChildren();renderSidebar();
+    view=next;revision++;active='';main.classList.remove('is-conversation');main.replaceChildren();renderSidebar();
     if(!boot)return;
     if(next==='catalog'){renderCatalog();return;}
     if(next==='skills'){renderSkills();return;}
-    if(next==='history'){title('Мои диалоги','Только ваша история');if(!history.length)main.append(node('p','Начните диалог с агентом из каталога.'));for(const chat of [...history].sort((a,b)=>b.updated_at-a.updated_at)){const row=node('article',undefined,'agents-provider');row.append(node('strong',chat.title),action('Открыть',()=>run(()=>openChat(chat.id))));main.append(row);}return;}
+    if(next==='history'){title('Мои диалоги','Только ваша история');if(!history.length)main.append(emptyState('history','Ваша история начинается здесь','Выберите помощника в каталоге и задайте первый вопрос.',[action('Выбрать агента',()=>run(()=>show('catalog')),'agents-primary')]));for(const chat of [...history].sort((a,b)=>b.updated_at-a.updated_at)){const row=node('article',undefined,'agents-provider');row.append(node('strong',chat.title),action('Открыть',()=>run(()=>openChat(chat.id))));main.append(row);}return;}
     title('Настройки агентов','Модели и агенты только для текущего домена');
-    if(!boot.can_manage){main.append(node('p','Настройки моделей доступны администратору домена.'));return;}
+    if(!boot.can_manage){main.append(emptyState('settings','Всё настроит администратор','Настройки моделей доступны администратору домена. Вы можете выбрать доступного помощника в каталоге.'));return;}
     const version=revision;config=await request('/config');if(version!==revision)return;
     renderSettings();
   }
+  function emptyState(symbol,heading,description,buttons=[]){
+    const wrap=node('div',undefined,'agents-empty'),visual=node('div',undefined,'agents-empty-visual');visual.append(icon(symbol));wrap.append(visual,node('h2',heading),node('p',description));
+    if(buttons.length){const controls=node('div',undefined,'agents-empty-actions');controls.append(...buttons);wrap.append(controls);}
+    return wrap;
+  }
   function renderCatalog(){
-    const header=title('Все агенты','Выберите агента и начните личный диалог');
+    const header=title('Все агенты','Помощники вашего рабочего пространства');
     if(boot.can_manage)header.append(action('+ Создать агента',()=>run(()=>editAgent()),'agents-primary'));
-    const search=node('input');search.type='search';search.placeholder='Поиск агентов';search.setAttribute('aria-label','Поиск агентов');search.className='agents-search';main.append(search);
+    if(!boot.catalog.agents.length){
+      main.append(emptyState('spark','С чего начнём?',boot.can_manage?'Подключите DeepSeek или другую модель и создайте помощника для вашей команды.':'Здесь появятся помощники, настроенные администратором для вашего домена.',boot.can_manage?[action('Подключить модель',()=>run(()=>editProvider()),'agents-primary'),action('Создать первого агента',()=>run(()=>editAgent()))]:[]));
+      if(boot.can_manage){const steps=node('div',undefined,'agents-setup-steps');for(const [number,heading,text]of [['1','Подключите модель','DeepSeek или совместимый API'],['2','Настройте помощника','Имя, инструкции и навыки'],['3','Начните диалог','Личная история для каждого']]){const step=node('div');step.append(node('span',number),node('strong',heading),node('small',text));steps.append(step);}main.append(steps);}
+      return;
+    }
+    const toolbar=node('div',undefined,'agents-toolbar'),searchWrap=node('div',undefined,'agents-search-wrap'),search=node('input');search.type='search';search.placeholder='Поиск агентов';search.setAttribute('aria-label','Поиск агентов');search.className='agents-search';searchWrap.append(icon('catalog'),search);toolbar.append(searchWrap,node('span','Агентов: '+boot.catalog.agents.length,'agents-count'));main.append(toolbar);
     const grid=node('div',undefined,'agents-catalog');main.append(grid);
     const fill=()=>{grid.replaceChildren();const term=search.value.toLocaleLowerCase();const list=boot.catalog.agents.filter(a=>(a.name+' '+a.description).toLocaleLowerCase().includes(term));
-      if(!list.length)grid.append(node('p',boot.catalog.agents.length?'Агенты не найдены':'В этом домене пока нет агентов. Администратор может добавить модель и создать первого агента.'));
-      for(const agent of list){const card=node('article',undefined,'agents-card');card.append(node('div','✧','agents-avatar'),node('h2',agent.name),node('p',agent.description||'Помощник вашего домена'),node('small','Личный диалог · без доступа к подключениям'),action('Начать диалог',()=>run(()=>newChat(agent.id)),'agents-primary'));if(boot.can_manage)card.append(action('Настроить',()=>run(()=>editAgent(agent.id))));grid.append(card);}
+      if(!list.length){grid.append(emptyState('catalog','Ничего не найдено','Попробуйте другое имя или описание.'));return;}
+      for(const agent of list){const card=node('article',undefined,'agents-card'),avatar=node('div',undefined,'agents-avatar');avatar.append(icon('spark'));const top=node('div',undefined,'agents-card-top');top.append(avatar,node('span','Агент','agents-badge'));card.append(top,node('h2',agent.name),node('p',agent.description||'Помощник для ваших рабочих задач'));const controls=node('div',undefined,'agents-card-actions');controls.append(action('Начать диалог',()=>run(()=>newChat(agent.id)),'agents-primary'));if(boot.can_manage)controls.append(action('Настроить',()=>run(()=>editAgent(agent.id))));card.append(controls);grid.append(card);}
     };search.oninput=fill;fill();
   }
   function renderSkills(){
-    const header=title('Навыки','Инструкции, которые администратор подключает к агентам');
+    const header=title('Навыки','Дополнительные инструкции для ваших помощников');
     if(boot.can_manage)header.append(action('+ Добавить навык',()=>run(()=>editSkill()),'agents-primary'));
+    if(!boot.catalog.skills.length){main.append(emptyState('skills','Помогите агенту работать точнее','Добавьте инструкции: например, отвечать кратко, писать деловым языком или проверять структуру документа.',boot.can_manage?[action('Добавить навык',()=>run(()=>editSkill()),'agents-primary')]:[]));return;}
     const grid=node('div',undefined,'agents-catalog');main.append(grid);
-    if(!boot.catalog.skills.length)grid.append(node('p','Навыки ещё не добавлены.'));
-    for(const skill of boot.catalog.skills){const card=node('article',undefined,'agents-card');card.append(node('h2',skill.name));if(boot.can_manage)card.append(action('Изменить',()=>run(()=>editSkill(skill.id))));grid.append(card);}
+    for(const skill of boot.catalog.skills){const card=node('article',undefined,'agents-card'),avatar=node('div',undefined,'agents-avatar');avatar.append(icon('skills'));card.append(avatar,node('h2',skill.name),node('p','Дополнительная инструкция для агента'));if(boot.can_manage)card.append(action('Изменить',()=>run(()=>editSkill(skill.id))));grid.append(card);}
   }
   async function newChat(id){const check=guard();const chat=await request('/conversations',{method:'POST',body:JSON.stringify({agent_id:id})});check();history.push(chat);await openChat(chat.id);}
   async function openChat(id){
     const version=++revision;const chat=await request('/conversations/'+encodeURIComponent(id));if(version!==revision)return;
-    active=id;view='chat';main.replaceChildren();renderSidebar();
+    active=id;view='chat';main.replaceChildren();main.classList.add('is-conversation');renderSidebar();
     const agent=boot.catalog.agents.find(a=>a.id===chat.agent_id);const header=title(agent?.name||'Агент','Личный диалог');
     header.append(action('Новый диалог',()=>run(()=>newChat(chat.agent_id))),action('Удалить',()=>run(async()=>{if(!window.confirm('Удалить этот диалог?'))return;await request('/conversations/'+encodeURIComponent(id),{method:'DELETE'});history=history.filter(c=>c.id!==id);await show('catalog');})));
     const messages=node('div',undefined,'agents-messages');messages.setAttribute('role','log');messages.setAttribute('aria-label','Сообщения диалога');main.append(messages);
-    const draw=()=>{messages.replaceChildren();if(!chat.messages.length)messages.append(node('div','Чем могу помочь?','agents-welcome'));for(const m of chat.messages){const article=node('article',undefined,'agents-message '+m.role);article.append(node('strong',m.role==='user'?'Вы':agent?.name||'Агент'),node('div',m.content));messages.append(article);}messages.scrollTop=messages.scrollHeight;};draw();
+    const draw=()=>{messages.replaceChildren();if(!chat.messages.length)messages.append(emptyState('spark','Чем могу помочь?',agent?.description||'Задайте вопрос или опишите задачу. История этого диалога доступна только вам.'));for(const m of chat.messages){const article=node('article',undefined,'agents-message '+m.role);article.append(node('strong',m.role==='user'?'Вы':agent?.name||'Агент'),node('div',m.content));messages.append(article);}messages.scrollTop=messages.scrollHeight;};draw();
     const form=node('form',undefined,'agents-composer'),input=node('textarea');input.rows=3;input.maxLength=16000;input.placeholder='Напишите сообщение…';input.setAttribute('aria-label','Сообщение агенту');
     const send=node('button','Отправить','agents-primary');send.type='submit';const status=node('span','', 'agents-send-status');status.setAttribute('role','status');form.append(input,send,status);main.append(form,node('small','Ответы ИИ могут содержать ошибки. Сообщения передаются настроенному администратором провайдеру.','agents-notice'));
     form.onsubmit=event=>{event.preventDefault();if(sending||!input.value.trim())return;const content=input.value;run(async()=>{
@@ -11939,10 +11957,10 @@ function workspaceFolderIcon(folder){return workspaceIcon(String(folder.role||fo
     input.onkeydown=event=>{if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();form.requestSubmit();}};
   }
   function modal(titleText){
-    const dialog=node('dialog');dialog.dataset.agentsDialog='';dialog.className='agents-dialog';const form=node('form');form.append(node('h2',titleText));dialog.append(form);section.append(dialog);dialog.addEventListener('close',()=>dialog.remove());dialog.showModal();return {dialog,form};
+    const dialog=node('dialog');dialog.dataset.agentsDialog='';dialog.className='agents-dialog';const form=node('form'),header=node('div',undefined,'agents-dialog-header'),close=action('',()=>dialog.close(),'agents-dialog-close');close.append(icon('close'));close.setAttribute('aria-label','Закрыть');header.append(node('h2',titleText),close);form.append(header);dialog.append(form);section.append(dialog);dialog.addEventListener('close',()=>dialog.remove());dialog.showModal();return {dialog,form};
   }
   function field(form,label,value='',type='text'){
-    const wrap=node('label',label),input=node(type==='textarea'?'textarea':'input');if(type!=='textarea')input.type=type;else input.rows=5;input.value=value;wrap.append(input);form.append(wrap);return input;
+    const wrap=node('label',label),input=node(type==='textarea'?'textarea':'input');if(type!=='textarea')input.type=type;else input.rows=5;input.value=value;if(type==='checkbox')wrap.className='agents-checkbox';wrap.append(input);form.append(wrap);return input;
   }
   function select(form,label,items,value){const wrap=node('label',label),input=node('select');for(const [id,text]of items)input.add(new Option(text,id));input.value=value||items[0]?.[0]||'';wrap.append(input);form.append(wrap);return input;}
   function finishEditor(dialog,form,save,remove){const controls=node('div',undefined,'agents-actions');controls.append(action('Отмена',()=>dialog.close()));if(remove)controls.append(action('Удалить',()=>run(async()=>{await remove();dialog.close();await reload();})));const submit=node('button','Сохранить','agents-primary');submit.type='submit';controls.append(submit);form.append(controls);const localError=node('p','','agents-error');localError.setAttribute('role','alert');form.append(localError);form.onsubmit=async event=>{event.preventDefault();submit.disabled=true;try{await save();dialog.close();await reload();}catch(err){localError.textContent=err.data?.message||err.message;}finally{submit.disabled=false;}};}
@@ -11950,7 +11968,7 @@ function workspaceFolderIcon(folder){return workspaceIcon(String(folder.role||fo
   async function saveConfig(next){await request('/config',{method:'PUT',body:JSON.stringify(next)});}
   async function reload(){const check=guard();boot=await request('');check();renderSidebar();await show(view==='chat'?'catalog':view);}
   async function editAgent(id){
-    const next=await adminConfig();if(!next.providers.length){await show('settings');error.textContent='Сначала добавьте подключение к модели';return;}
+    const next=await adminConfig();if(!next.providers.length){await editProvider();return;}
     const original=next.agents.find(a=>a.id===id),a=original||{id:crypto.randomUUID(),name:'',description:'',instructions:'',provider_id:next.providers[0].id,enabled:true,skill_ids:[]};
     const {dialog,form}=modal(original?'Настройки агента':'Новый агент');
     const name=field(form,'Имя',a.name);name.required=true;name.maxLength=100;const description=field(form,'Описание',a.description);description.maxLength=1000;
@@ -11962,8 +11980,8 @@ function workspaceFolderIcon(folder){return workspaceIcon(String(folder.role||fo
   async function editSkill(id){const next=await adminConfig(),original=next.skills.find(s=>s.id===id),skill=original||{id:crypto.randomUUID(),name:'',instructions:''};const {dialog,form}=modal('Навык');const name=field(form,'Название',skill.name),instructions=field(form,'Инструкции',skill.instructions,'textarea');name.required=true;name.maxLength=100;instructions.maxLength=16000;
     finishEditor(dialog,form,async()=>{next.skills=next.skills.filter(s=>s.id!==skill.id);next.skills.push({...skill,name:name.value,instructions:instructions.value});await saveConfig(next);},original?async()=>{next.skills=next.skills.filter(s=>s.id!==skill.id);next.agents.forEach(a=>{a.skill_ids=a.skill_ids.filter(k=>k!==skill.id);});await saveConfig(next);}:null);
   }
-  function renderSettings(){const header=main.querySelector('header');header.append(action('+ Подключить модель',()=>run(()=>editProvider()),'agents-primary'));main.append(node('p','Совместимые с OpenAI API провайдеры. Эти подключения используются только агентами текущего домена.'));
-    for(const p of config.providers){const card=node('article',undefined,'agents-provider');card.append(node('h2',p.name),node('p',p.model+' · '+p.url),node('small',p.has_key?'Ключ настроен':'Без API-ключа'),action('Изменить',()=>run(()=>editProvider(p.id))));main.append(card);}
+  function renderSettings(){const header=main.querySelector('header');header.append(action('+ Подключить модель',()=>run(()=>editProvider()),'agents-primary'));main.append(node('p','Подключения доступны агентам только в вашем домене.','agents-settings-note'));if(!config.providers.length)main.append(emptyState('settings','Подключите первую модель','Используйте DeepSeek или другой совместимый провайдер. API-ключ сохраняется на сервере.',[action('Подключить DeepSeek',()=>run(()=>editProvider()),'agents-primary')]));
+    for(const p of config.providers){const card=node('article',undefined,'agents-provider');const mark=node('div',undefined,'agents-avatar');mark.append(icon('settings'));const details=node('div',undefined,'agents-provider-details');details.append(node('h2',p.name),node('p',p.model),node('small',p.url));card.append(mark,details,node('span',p.has_key?'Ключ настроен':'Без API-ключа','agents-badge'),action('Изменить',()=>run(()=>editProvider(p.id))));main.append(card);}
     const header2=node('div',undefined,'agents-actions');header2.append(node('h2','Агенты'),action('+ Создать',()=>run(()=>editAgent()),'agents-primary'));main.append(header2);
     for(const a of config.agents){const row=node('article',undefined,'agents-provider');row.append(node('strong',a.name+(a.enabled?'':' · отключён')),action('Настроить',()=>run(()=>editAgent(a.id))));main.append(row);}
   }
