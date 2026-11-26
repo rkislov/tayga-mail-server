@@ -1,11 +1,52 @@
 package flowsync
 
 import (
-	"github.com/tayga/tms/internal/storage"
+	"maps"
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/tayga/tms/internal/storage"
 )
+
+func TestGetFolderAdvertisesRequestedTaygaTaskCapabilities(t *testing.T) {
+	ctx, store, user, eas, _, _ := syncFixture(t)
+	handler := &ewsHandler{store: store, ms: eas.ms}
+	request := func(properties string) string {
+		return `<m:GetFolder><m:FolderShape><t:BaseShape>IdOnly</t:BaseShape>` + properties +
+			`</m:FolderShape><m:FolderIds><t:DistinguishedFolderId Id="msgfolderroot"/></m:FolderIds></m:GetFolder>`
+	}
+	metadata := func(names ...string) string {
+		var fields strings.Builder
+		fields.WriteString(`<t:AdditionalProperties>`)
+		for _, name := range names {
+			fields.WriteString(`<t:ExtendedFieldURI PropertySetId="` + taygaPropertySet + `" PropertyName="` + name + `" PropertyType="String"/>`)
+		}
+		fields.WriteString(`</t:AdditionalProperties>`)
+		return fields.String()
+	}
+	for _, tc := range []struct {
+		name       string
+		properties string
+		want       map[string]string
+	}{
+		{"Thunderbird", metadata("TaygaSyncVersion", "TaygaTasksVersion", "TaygaTaskRecurrenceVersion"), map[string]string{
+			"TaygaSyncVersion": "1", "TaygaTasksVersion": "1", "TaygaTaskRecurrenceVersion": "1",
+		}},
+		{"Only tasks", metadata("TaygaTasksVersion"), map[string]string{"TaygaTasksVersion": "1"}},
+		{"Standard EWS", "", nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			response, err := handler.getFolder(ctx, user, request(tc.properties))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if actual := taygaProperties(response); !maps.Equal(actual, tc.want) {
+				t.Fatalf("advertised capabilities = %v, want %v", actual, tc.want)
+			}
+		})
+	}
+}
 
 func TestTaygaEWSTasksRoundTripAndReplay(t *testing.T) {
 	ctx, st, u, eas, _, _ := syncFixture(t)

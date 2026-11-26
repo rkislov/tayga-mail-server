@@ -4,8 +4,9 @@ package flowsync
 import (
 	"context"
 	"fmt"
-	"github.com/tayga/tms/internal/storage"
 	"strings"
+
+	"github.com/tayga/tms/internal/storage"
 )
 
 // Resolve each mailbox-qualified reference independently; a batch can contain
@@ -34,6 +35,12 @@ func (h *ewsHandler) getFolder(ctx context.Context, u *storage.User, body string
 	if group == nil || len(group.Children) == 0 || len(group.Children) > 512 {
 		return ewsOperationError("GetFolder", "ErrorInvalidRequest", "FolderIds required"), nil
 	}
+	var capabilities strings.Builder
+	for _, name := range []string{"TaygaSyncVersion", "TaygaTasksVersion", "TaygaTaskRecurrenceVersion"} {
+		if taygaRequestedIn(request, name) {
+			capabilities.WriteString(taygaProperty(name, "1"))
+		}
+	}
 	var out strings.Builder
 	for _, ref := range group.Children {
 		if ref.Name.Local != "FolderId" && ref.Name.Local != "DistinguishedFolderId" {
@@ -59,16 +66,12 @@ func (h *ewsHandler) getFolder(ctx context.Context, u *storage.User, body string
 			out.WriteString(folderWriteMessage("GetFolder", "ErrorFolderNotFound", "Folder unavailable", ""))
 			continue
 		}
-		if taygaRequested(body, "TaygaSyncVersion") { // keep extension metadata local to this response
-			raw := ewsTypeNodeXML(f)
+		raw := ewsTypeNodeXML(f)
+		if capabilities.Len() > 0 {
 			at := strings.LastIndex(raw, "</")
-			if at >= 0 {
-				raw = raw[:at] + taygaProperty("TaygaSyncVersion", "1") + raw[at:]
-			}
-			out.WriteString(`<m:GetFolderResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:Folders>` + raw + `</m:Folders></m:GetFolderResponseMessage>`)
-		} else {
-			out.WriteString(`<m:GetFolderResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:Folders>` + ewsTypeNodeXML(f) + `</m:Folders></m:GetFolderResponseMessage>`)
+			raw = raw[:at] + capabilities.String() + raw[at:]
 		}
+		out.WriteString(`<m:GetFolderResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:Folders>` + raw + `</m:Folders></m:GetFolderResponseMessage>`)
 	}
 	return `<m:GetFolderResponse` + ewsNamespaces + `><m:ResponseMessages>` + out.String() + `</m:ResponseMessages></m:GetFolderResponse>`, nil
 }

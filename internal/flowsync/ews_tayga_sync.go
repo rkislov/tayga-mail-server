@@ -43,24 +43,22 @@ func taygaProperties(body string) map[string]string {
 	return out
 }
 func taygaRequested(body, name string) bool {
-	doc, e := parseProtocolXML([]byte(body))
-	if e != nil {
-		return false
+	doc, err := parseProtocolXML([]byte(body))
+	return err == nil && taygaRequestedIn(doc, name)
+}
+
+func taygaRequestedIn(n *protocolNode, name string) bool {
+	if n.Name.Local == "ExtendedFieldURI" && strings.EqualFold(nodeAttr(n, "PropertySetId"), taygaPropertySet) && nodeAttr(n, "PropertyName") == name {
+		return true
 	}
-	var visit func(*protocolNode) bool
-	visit = func(n *protocolNode) bool {
-		if n.Name.Local == "ExtendedFieldURI" && strings.EqualFold(nodeAttr(n, "PropertySetId"), taygaPropertySet) && nodeAttr(n, "PropertyName") == name {
+	for _, child := range n.Children {
+		if taygaRequestedIn(child, name) {
 			return true
 		}
-		for _, c := range n.Children {
-			if visit(c) {
-				return true
-			}
-		}
-		return false
 	}
-	return visit(doc)
+	return false
 }
+
 func taygaRawItem(item, body, kind, data string) string {
 	if !taygaRequested(body, kind) {
 		return item
