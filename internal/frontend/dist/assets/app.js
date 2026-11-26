@@ -7453,6 +7453,73 @@ async function loadMattermostFederationLinks(peer,scope,guard) {
 }
 
 window.addEventListener('tms-session-ended',()=>{mmFed.epoch++;mmAdmin.epoch++;mmFed.peers=[];document.getElementById('mm-federation')?.replaceChildren();});
+/* Shared renderer for bot replies in Tayga's web chat and Agents. */
+(() => {
+  const markdown = window.markdownit?.({html: false, breaks: true});
+  if (!markdown) return;
+
+  const validateLink = markdown.validateLink.bind(markdown);
+  markdown.validateLink = value => {
+    if (!validateLink(value)) return false;
+    try {
+      const {protocol} = new URL(value, document.baseURI);
+      return protocol === 'https:' || protocol === 'http:' || protocol === 'mailto:';
+    } catch {
+      return false;
+    }
+  };
+
+  markdown.renderer.rules.link_open = (tokens, index, options, env, renderer) => {
+    env.insideLink = true;
+    const token = tokens[index];
+    const url = new URL(token.attrGet('href'), document.baseURI);
+    if (url.protocol !== 'mailto:' && url.origin !== location.origin) {
+      token.attrSet('target', '_blank');
+      token.attrSet('rel', 'noopener noreferrer');
+    }
+    return renderer.renderToken(tokens, index, options);
+  };
+  markdown.renderer.rules.link_close = (tokens, index, options, env, renderer) => {
+    env.insideLink = false;
+    return renderer.renderToken(tokens, index, options);
+  };
+
+  // Keep images behind a click so opening a conversation does not contact remote hosts.
+  markdown.renderer.rules.image = (tokens, index, options, env, renderer) => {
+    const token = tokens[index];
+    const url = markdown.utils.escapeHtml(token.attrGet('src'));
+    const label = markdown.utils.escapeHtml(renderer.renderInlineAsText(token.children, options, env) || 'Изображение');
+    return env.insideLink ? label : `<a href="${url}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+  };
+
+  markdown.renderer.rules.table_open = (tokens, index, options, _env, renderer) =>
+    '<div class="chat-markdown-table">' + renderer.renderToken(tokens, index, options);
+  markdown.renderer.rules.table_close = (tokens, index, options, _env, renderer) =>
+    renderer.renderToken(tokens, index, options) + '</div>';
+
+  // Older replies can contain escaped pairs of bold markers. Code stays literal.
+  const escapedBold = '\\*\\*';
+  markdown.inline.ruler.before('escape', 'tayga_escaped_bold', (state, silent) => {
+    if (!state.src.startsWith(escapedBold, state.pos)) return false;
+    const start = state.pos + escapedBold.length;
+    const end = state.src.indexOf(escapedBold, start);
+    if (end === -1 || end + escapedBold.length > state.posMax) return false;
+    const content = state.src.slice(start, end);
+    if (!content || /^\s|\s$|[\r\n`]/u.test(content)) return false;
+    if (!silent) {
+      state.push('strong_open', 'strong', 1);
+      state.push('text', '', 0).content = content;
+      state.push('strong_close', 'strong', -1);
+    }
+    state.pos = end + escapedBold.length;
+    return true;
+  });
+
+  window.tmsChatMarkdown = (element, content) => {
+    element.classList.add('chat-markdown');
+    element.innerHTML = markdown.render(content, {});
+  };
+})();
 /* Shared TMS/Mattermost chat. No XMPP requests or tokens in WebSocket URLs. */
 const mmChat = (() => {
   let generation = 0, owner = '', boot = null, socket = null, reconnect = null, heartbeat = null, poll = null;
@@ -7688,18 +7755,22 @@ const mmChat = (() => {
       const article = document.createElement('article'); article.className = 'chat-bubble' + (post.user_id === me.id ? ' is-mine' : ''); article.dataset.postId = post.id;
       const author = document.createElement('strong'); author.textContent = label(users.get(post.user_id)); article.append(avatar(users.get(post.user_id)),author);
       if (post.root_id) { const root = posts.get(post.root_id), quote = document.createElement('div'); quote.className = 'mm-chat-quote'; quote.textContent = 'Ответ: ' + (root?.message?.slice(0,160) || 'сообщение в ветке'); article.append(quote); }
-      const text = document.createElement('p');
       const callURL = meetingURL(post.props?.tms_meeting_url);
+      const bot = users.get(post.user_id)?.is_bot;
+      const renderMarkdown = !callURL && bot && window.tmsChatMarkdown;
+      const text = document.createElement(renderMarkdown ? 'div' : 'p');
       if (callURL) {
         const link = document.createElement('a');
         link.href = callURL;
         link.textContent = 'Присоединиться к видеозвонку';
         text.append(link);
       } else {
-        text.textContent = post.message || '';text.hidden=!post.message;
+        text.hidden = !post.message;
+        if (renderMarkdown && post.message) renderMarkdown(text, post.message);
+        else text.textContent = post.message || '';
       }
       article.append(text);
-      if (users.get(post.user_id)?.is_bot && Array.isArray(post.props?.attachments)) {
+      if (bot && Array.isArray(post.props?.attachments)) {
         const actions=document.createElement('div');actions.className='mm-bot-actions';
         for (const attachment of post.props.attachments.slice(0,10)) {
           if (!Array.isArray(attachment.actions)) continue;
@@ -12701,7 +12772,11 @@ window.tmsChatWorkspace = (() => {
       for(const m of chat.messages){
         const article=node('article',undefined,'agents-message '+m.role);
         article.append(node('strong',m.role==='user'?'Вы':agent?.name||'Агент'));
-        if(m.content)article.append(node('div',m.content));
+        if(m.content){
+          const content=node('div',m.content);
+          if(m.role==='assistant')window.tmsChatMarkdown?.(content,m.content);
+          article.append(content);
+        }
         for(const file of m.files||[])article.append(drawFile(file));
         for(const file of m.artifacts||[])article.append(drawArtifact(file));
         messages.append(article);
@@ -12822,6 +12897,9 @@ window.tmsChatWorkspace = (() => {
     conversation.disabled=Boolean(item.id);
     const prompt=field(form,'Что агент должен сделать',item.prompt||'','textarea');
     prompt.required=true;prompt.maxLength=8000;
+    const promptHint=node('small','Опишите задачу целиком. При запуске агент получает этот текст.','agents-settings-note');
+    promptHint.id='agents-schedule-prompt-hint';
+    prompt.setAttribute('aria-describedby',promptHint.id);form.append(promptHint);
     const interval=select(form,'Периодичность',[['once','Один раз'],['daily','Каждый день'],['weekly','По дням недели']],item.frequency);
     const date=field(form,'Дата и время первого запуска',item.local_time||'','datetime-local');
     date.required=true;

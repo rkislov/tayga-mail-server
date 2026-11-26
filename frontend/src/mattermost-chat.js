@@ -233,18 +233,22 @@ const mmChat = (() => {
       const article = document.createElement('article'); article.className = 'chat-bubble' + (post.user_id === me.id ? ' is-mine' : ''); article.dataset.postId = post.id;
       const author = document.createElement('strong'); author.textContent = label(users.get(post.user_id)); article.append(avatar(users.get(post.user_id)),author);
       if (post.root_id) { const root = posts.get(post.root_id), quote = document.createElement('div'); quote.className = 'mm-chat-quote'; quote.textContent = 'Ответ: ' + (root?.message?.slice(0,160) || 'сообщение в ветке'); article.append(quote); }
-      const text = document.createElement('p');
       const callURL = meetingURL(post.props?.tms_meeting_url);
+      const bot = users.get(post.user_id)?.is_bot;
+      const renderMarkdown = !callURL && bot && window.tmsChatMarkdown;
+      const text = document.createElement(renderMarkdown ? 'div' : 'p');
       if (callURL) {
         const link = document.createElement('a');
         link.href = callURL;
         link.textContent = 'Присоединиться к видеозвонку';
         text.append(link);
       } else {
-        text.textContent = post.message || '';text.hidden=!post.message;
+        text.hidden = !post.message;
+        if (renderMarkdown && post.message) renderMarkdown(text, post.message);
+        else text.textContent = post.message || '';
       }
       article.append(text);
-      if (users.get(post.user_id)?.is_bot && Array.isArray(post.props?.attachments)) {
+      if (bot && Array.isArray(post.props?.attachments)) {
         const actions=document.createElement('div');actions.className='mm-bot-actions';
         for (const attachment of post.props.attachments.slice(0,10)) {
           if (!Array.isArray(attachment.actions)) continue;

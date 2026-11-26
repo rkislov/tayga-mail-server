@@ -50,6 +50,8 @@ function fixture(t) {
   } else throw Error('Unexpected request '+route);
   options._guard?.();return structuredClone(result);
  };
+ w.eval(fs.readFileSync(require.resolve('markdown-it/browser'),'utf8'));
+ w.eval(fs.readFileSync(path.join(root,'frontend/src/chat-markdown.js'),'utf8'));
  w.eval(fs.readFileSync(path.join(root,'frontend/src/mattermost-chat.js'),'utf8')+'\nwindow.chat=mmChat;');
  t.after(()=>{w.chat.stop();w.close();});
  return {w,model,requests,sockets,timers,el:id=>w.document.getElementById('mm-chat-'+id)};
@@ -108,4 +110,15 @@ test('bot buttons use stored post action route and render labels as text',async 
  assert.ok(action);assert.equal(action.querySelector('img'),null);action.click();await settle();
  assert.ok(f.requests.some(r=>r.route.includes('/actions/help')&&r.options.method==='POST'));
  assert.ok(!f.requests.some(r=>r.route.includes('untrusted.example')));
+});
+
+test('bot Markdown displays in the shared chat without changing ordinary posts',async t=>{
+ const f=fixture(t);
+ f.model.bob.is_bot=true;
+ f.model.history[0].message='**Дайджест**\n\n- Первый пункт';
+ f.model.history.push({id:'plain',user_id:f.model.me.id,channel_id:'town-id',message:'**Текст**',root_id:'',create_at:101});
+ await selectTown(f);
+ assert.equal(f.el('posts').querySelector('.chat-markdown strong').textContent,'Дайджест');
+ assert.equal(f.el('posts').querySelector('.chat-markdown li').textContent,'Первый пункт');
+ assert.equal(f.el('posts').querySelector('[data-post-id="plain"] p').textContent,'**Текст**');
 });

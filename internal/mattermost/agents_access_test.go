@@ -45,7 +45,8 @@ func TestAgentCalendarUsesCurrentPermissionsAndOwner(t *testing.T) {
 		}
 		system := payload.Messages[0].Content
 		if !strings.Contains(system, "Доступные инструменты: calendar_events") ||
-			!strings.Contains(system, "имеет приоритет") || !strings.Contains(system, "Ты не имеешь доступа к календарю") {
+			!strings.Contains(system, "имеет приоритет") || !strings.Contains(system, "Ты не имеешь доступа к календарю") ||
+			!strings.Contains(system, "Агенты → Расписание") || !strings.Contains(system, "обычный Markdown") {
 			t.Error("the server policy must qualify custom instructions")
 		}
 		last := payload.Messages[len(payload.Messages)-1]

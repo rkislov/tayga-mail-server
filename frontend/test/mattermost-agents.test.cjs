@@ -7,7 +7,7 @@ const settle=async()=>{for(let i=0;i<12;i++)await new Promise(r=>setImmediate(r)
 function fixture(t,admin=false,empty=false,tools=false){
  const dom=new JSDOM('<nav><button data-app="chat">Чат</button></nav><main><section id="app-chat"></section></main>',{url:'https://tms.test',runScripts:'outside-only'}),w=dom.window;
  w.state={email:'alice@test',tokens:{access_token:'alice'}};w.APPS=['chat'];w.showApp=name=>{for(const app of w.APPS)w.document.getElementById('app-'+app)?.classList.toggle('hidden',app!==name);};
- const requests=[];let deferred=null,history=[],chat={id:'c1',channel_id:'dm1',agent_id:'helper',title:'Личный тест',updated_at:1,messages:[],web_enabled:false,actions:tools?[{id:'a1',tool:'mail_draft',arguments:{to:'recipient@example.test',subject:'<img src=x>',text:'Exact proposed body'},state:'pending',expires_at:Date.now()+60000}]:[]};
+ const requests=[];let reply='Ответ',deferred=null,history=[],chat={id:'c1',channel_id:'dm1',agent_id:'helper',title:'Личный тест',updated_at:1,messages:[],web_enabled:false,actions:tools?[{id:'a1',tool:'mail_draft',arguments:{to:'recipient@example.test',subject:'<img src=x>',text:'Exact proposed body'},state:'pending',expires_at:Date.now()+60000}]:[]};
  w.api=async(url,options={})=>{requests.push({url,options});options._guard?.();
   if(deferred&&url==='/api/v4/tms/agents')return new Promise(r=>{deferred.finish=()=>r({can_manage:false,catalog:{agents:[{id:'private',name:'STALE OWNER',description:''}],skills:[]}});});
   if(url.endsWith('/config'))return {version:0,providers:[],agents:[],skills:[]};
@@ -17,11 +17,13 @@ function fixture(t,admin=false,empty=false,tools=false){
   if(url.endsWith('/conversations')){if(options.method==='POST'){history=[chat];return chat;}return history;}
   if(options.method==='PATCH'){chat={...chat,...JSON.parse(options.body)};return chat;}
   if(url.includes('/actions/'))return {status:'sent'};
-  if(url.endsWith('/messages')){chat={...chat,messages:[{role:'user',content:JSON.parse(options.body).content},{role:'assistant',content:'Ответ'}]};return chat;}
+  if(url.endsWith('/messages')){chat={...chat,messages:[{role:'user',content:JSON.parse(options.body).content},{role:'assistant',content:reply}]};return chat;}
   return chat;
  };
  w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;this.dispatchEvent(new w.Event('close'));};
- w.eval(fs.readFileSync(require('node:path').join(__dirname,'../src/chat-workspace.js'),'utf8'));w.eval(source);t.after(()=>w.close());return {w,requests,defer(){deferred={};return()=>{deferred.finish();deferred=null;};}};
+ w.eval(fs.readFileSync(require.resolve('markdown-it/browser'),'utf8'));
+ w.eval(fs.readFileSync(require('node:path').join(__dirname,'../src/chat-markdown.js'),'utf8'));
+ w.eval(fs.readFileSync(require('node:path').join(__dirname,'../src/chat-workspace.js'),'utf8'));w.eval(source);t.after(()=>w.close());return {w,requests,replyWith(content){reply=content;},defer(){deferred={};return()=>{deferred.finish();deferred=null;};}};
 }
 test('Agents opens catalog, creates a private conversation and sends message',async t=>{
  const {w,requests}=fixture(t);w.showApp('agents');await settle();
@@ -33,6 +35,57 @@ test('Agents opens catalog, creates a private conversation and sends message',as
  assert.equal(w.document.querySelector('[data-view="settings"]').hidden,false);
  w.document.querySelector('[data-view="settings"]').click();await settle();assert.match(w.document.querySelector('.agents-main').textContent,/администратору домена/);
  assert.ok(!requests.some(r=>r.url.endsWith('/config')));
+});
+test('agent replies render Markdown on send and when reopening the history',async t=>{
+ const f=fixture(t),{w}=f;
+ f.replyWith([
+  '# Дайджест',
+  '',
+  'Отправка на \\*\\*07:00 мск\\*\\*. Напишите **«Дайджест»**.',
+  '',
+  '- [Источник](https://example.org/news)',
+  '- [Справка](/help)',
+  '- [Недоступная ссылка](javascript:alert%281%29)',
+  '',
+  '<img src=x onerror=alert(1)>',
+  '',
+  '![Иллюстрация](https://example.org/cover.png)',
+  '[![Обложка](https://example.org/preview.png)](https://example.org/article)',
+  '',
+  '| Время | Событие |',
+  '| --- | --- |',
+  '| 07:00 | Выпуск |',
+  '',
+  '```text',
+  '\\*\\*символы\\*\\*',
+  '```',
+ ].join('\n'));
+ w.showApp('agents');await settle();
+ [...w.document.querySelectorAll('button')].find(button=>button.textContent==='Начать диалог').click();
+ await settle();
+ const composer=w.document.querySelector('.agents-composer');
+ composer.querySelector('textarea').value='Запрос **буквально**';
+ composer.dispatchEvent(new w.Event('submit',{cancelable:true}));await settle();
+ const verify=()=>{
+  const body=w.document.querySelector('.agents-message.assistant .chat-markdown');
+  assert.equal(body.querySelector('h1').textContent,'Дайджест');
+  assert.deepEqual(Array.from(body.querySelectorAll('strong'),tag=>tag.textContent),['07:00 мск','«Дайджест»']);
+  assert.equal(body.querySelectorAll('li').length,3);
+  assert.equal(body.querySelector('tbody td').textContent,'07:00');
+  assert.equal(body.querySelector('pre code').textContent.trim(),'\\*\\*символы\\*\\*');
+  assert.equal(body.querySelector('a[href="/help"]').hasAttribute('target'),false);
+  assert.equal(body.querySelector('a[href="https://example.org/news"]').rel,'noopener noreferrer');
+  assert.equal(body.querySelector('a[href="https://example.org/cover.png"]').textContent,'Иллюстрация');
+  assert.equal(body.querySelector('a[href="https://example.org/article"]').textContent,'Обложка');
+  assert.equal(body.querySelector('a[href="https://example.org/preview.png"]'),null);
+  assert.equal(body.querySelector('img,script,[onerror],a[href^="javascript:"]'),null);
+  assert.match(body.textContent,/<img src=x/);
+  assert.equal(w.document.querySelector('.agents-message.user>div').textContent,'Запрос **буквально**');
+ };
+ verify();
+ w.document.querySelector('[data-view="history"]').click();await settle();
+ [...w.document.querySelectorAll('.agents-main button')].find(button=>button.textContent==='Открыть').click();
+ await settle();verify();
 });
 test('logout removes private history and ignores a late catalog response',async t=>{
  const f=fixture(t),w=f.w;const finish=f.defer();w.showApp('agents');await settle();

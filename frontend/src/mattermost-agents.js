@@ -320,7 +320,11 @@
       for(const m of chat.messages){
         const article=node('article',undefined,'agents-message '+m.role);
         article.append(node('strong',m.role==='user'?'Вы':agent?.name||'Агент'));
-        if(m.content)article.append(node('div',m.content));
+        if(m.content){
+          const content=node('div',m.content);
+          if(m.role==='assistant')window.tmsChatMarkdown?.(content,m.content);
+          article.append(content);
+        }
         for(const file of m.files||[])article.append(drawFile(file));
         for(const file of m.artifacts||[])article.append(drawArtifact(file));
         messages.append(article);
@@ -441,6 +445,9 @@
     conversation.disabled=Boolean(item.id);
     const prompt=field(form,'Что агент должен сделать',item.prompt||'','textarea');
     prompt.required=true;prompt.maxLength=8000;
+    const promptHint=node('small','Опишите задачу целиком. При запуске агент получает этот текст.','agents-settings-note');
+    promptHint.id='agents-schedule-prompt-hint';
+    prompt.setAttribute('aria-describedby',promptHint.id);form.append(promptHint);
     const interval=select(form,'Периодичность',[['once','Один раз'],['daily','Каждый день'],['weekly','По дням недели']],item.frequency);
     const date=field(form,'Дата и время первого запуска',item.local_time||'','datetime-local');
     date.required=true;

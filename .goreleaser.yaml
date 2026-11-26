@@ -68,6 +68,7 @@ archives:
       - frontend/src/*
       - frontend/assets/*
       - internal/frontend/dist/assets/libomemo-LICENSE.txt
+      - internal/frontend/dist/assets/markdown-it-LICENSE.txt
       - internal/frontend/dist/assets/ckeditor5/LICENSE.md
       - internal/frontend/dist/assets/ckeditor5/COPYING.GPL
       - internal/imapwire/LICENSE

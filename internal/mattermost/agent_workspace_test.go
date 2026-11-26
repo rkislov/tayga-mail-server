@@ -104,6 +104,9 @@ func TestAgentScheduleRunsOnceInPrivateConversation(t *testing.T) {
 		if len(input.Tools) != 0 || input.Messages[len(input.Messages)-1].Content != "Личный отчёт" {
 			t.Error("wrong scheduled model input")
 		}
+		if !strings.Contains(input.Messages[0].Content, "запущен сервером из сохранённого расписания") {
+			t.Error("model was not told this is a scheduled run")
+		}
 		write(w, 200, map[string]any{"choices": []any{map[string]any{"message": agentMessage{Role: "assistant", Content: "Отчёт по расписанию"}}}})
 	}))
 	defer provider.Close()
@@ -180,9 +183,9 @@ func TestAgentWeeklyScheduleRespectsLocalTime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	spec := agentScheduleSpec{Frequency: "weekly", LocalTime: "2026-11-26T09:30", Timezone: loc.String(), Weekdays: []time.Weekday{time.Friday}}
+	spec := agentScheduleSpec{Frequency: "weekly", LocalTime: "2026-11-26T07:00", Timezone: loc.String(), Weekdays: []time.Weekday{time.Friday}}
 	next, err := spec.next(time.Date(2026, 11, 26, 15, 0, 0, 0, loc))
-	if err != nil || time.UnixMilli(next).In(loc).Format(agentScheduleTimeFormat) != "2026-11-27T09:30" {
+	if err != nil || !time.UnixMilli(next).Equal(time.Date(2026, 11, 27, 4, 0, 0, 0, time.UTC)) {
 		t.Fatal(next, err)
 	}
 }
