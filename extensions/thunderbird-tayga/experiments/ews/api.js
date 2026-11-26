@@ -25,6 +25,11 @@ var { VCardUtils } = ChromeUtils.importESModule(
   "resource:///modules/VCardUtils.sys.mjs",
 );
 
+// Match every message. The extra space survives saving but Thunderbird drops it
+// when serializing the active query. The virtual view then skips its cached
+// hits, which can otherwise reinsert an EWS header already in the view.
+const CONVERSATION_SEARCH = "AND  (status,is,read) OR (status,isn't,read)";
+
 var taygaEws = class extends ExtensionCommon.ExtensionAPI {
   getAPI(context) {
     this.ready ||= this.initialize();
@@ -70,6 +75,12 @@ var taygaEws = class extends ExtensionCommon.ExtensionAPI {
     };
   }
   async initialize() {
+    // Native EWS may start loading folders while the extension is still
+    // restoring its OAuth session and local state.
+    this.httpObserver = { observe: (subject) => {
+      this.manageNativeChannel(subject.QueryInterface(Ci.nsIHttpChannel));
+    } };
+    Services.obs.addObserver(this.httpObserver, "http-on-modify-request");
     this.path = PathUtils.join(PathUtils.profileDir, "tayga-ews-state.json");
     this.queuedSnapshot = null;
     this.writing = null;
@@ -116,21 +127,35 @@ var taygaEws = class extends ExtensionCommon.ExtensionAPI {
       "addrbook-contact-deleted",
     ])
       Services.obs.addObserver(this.contactObserver, topic);
-    this.httpObserver = {
-      observe: (subject) => {
-        if (!this.session) return;
-        const channel = subject.QueryInterface(Ci.nsIHttpChannel);
-        if (
-          channel.URI.spec !== this.session.endpoint ||
-          !channel.loadInfo.triggeringPrincipal.isSystemPrincipal
-        )
-          return;
-        this.authorizeChannel(channel);
-      },
-    };
-    Services.obs.addObserver(this.httpObserver, "http-on-modify-request");
     for (const collection of Object.values(this.state.collections))
       this.attach(collection);
+  }
+  manageNativeChannel(channel) {
+    const spec = channel.URI.spec;
+    if (!spec.includes("taygaEws=")) return;
+    let endpoint;
+    try { endpoint = new URL(spec); } catch { return; }
+    const info = channel.loadInfo;
+    const principal = info.loadingPrincipal || info.triggeringPrincipal;
+    // New Thunderbird versions isolate native HTTP auth in a contextual
+    // identity. These Rust requests have no browsing context or document.
+    const nativeContext = principal?.originNoSuffix === endpoint.origin &&
+      principal.originAttributes?.userContextId > 0 &&
+      info.externalContentPolicyType === Ci.nsIContentPolicy.TYPE_OTHER &&
+      Number(info.browsingContextID) === 0 &&
+      !info.loadingDocument &&
+      info.securityMode === Ci.nsILoadInfo.SEC_ALLOW_CROSS_ORIGIN_SEC_CONTEXT_IS_NULL;
+    if (!info.triggeringPrincipal?.isSystemPrincipal && !nativeContext) return;
+    if (this.session?.endpoint === spec && !this.shuttingDown) {
+      this.authorizeChannel(channel);
+      return;
+    }
+    // The unique marker is part of the configured URL of managed accounts.
+    // Block a request before Gecko can try the marker as a password.
+    if (endpoint.pathname !== "/EWS/Exchange.asmx" ||
+        !/^tayga-ews:[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(endpoint.searchParams.get("taygaEws") || ""))
+      return;
+    channel.cancel(Cr.NS_BINDING_ABORTED);
   }
   authorizeChannel(channel) {
     const session = this.session;
@@ -462,33 +487,58 @@ var taygaEws = class extends ExtensionCommon.ExtensionAPI {
     const { VirtualFolderHelper } = ChromeUtils.importESModule(
       "resource:///modules/VirtualFolderWrapper.sys.mjs",
     );
-    let folder;
+    const parent = server.rootFolder;
+    const isManagedView = folder =>
+      Boolean(folder?.parent && (folder.flags & Ci.nsMsgFolderFlags.Virtual) &&
+        folder.getStringProperty("taygaConversationServer") === record.serverKey);
+    let previous;
     if (record.conversationsURI) {
-      try { folder = MailServices.folderLookup.getFolderForURL(record.conversationsURI); } catch {}
-      if (!folder?.parent || !(folder.flags & Ci.nsMsgFolderFlags.Virtual) ||
-          folder.getStringProperty("taygaConversationServer") !== record.serverKey)
-        folder = null;
+      try {
+        const found = MailServices.folderLookup.getFolderForURL(record.conversationsURI);
+        if (isManagedView(found)) previous = found;
+      } catch {}
     }
+    let folder = previous?.parent.URI === parent.URI
+      ? previous
+      : Array.from(parent.subFolders).find(isManagedView);
     if (!folder) {
-      const parent = MailServices.accounts.localFoldersServer.rootFolder;
-      let name = "Tayga · Беседы · " + server.username;
-      if (parent.containsChildNamed(name)) name += " · " + this.uuid().slice(0, 8);
-      folder = VirtualFolderHelper.createNewVirtualFolder(name, parent, folders, "ALL", false).virtualFolder;
+      let name = "Беседы";
+      for (let suffix = 2; parent.containsChildNamed(name); suffix++)
+        name = `Беседы (${suffix})`;
+      const previousInfo = previous?.msgDatabase.dBFolderInfo;
+      const viewFlags = previousInfo?.viewFlags ?? Ci.nsMsgViewFlagsType.kThreadedDisplay;
+      const sortType = previousInfo?.sortType ?? Ci.nsMsgViewSortType.byDate;
+      const sortOrder = previousInfo?.sortOrder ?? Ci.nsMsgViewSortOrder.descending;
+      folder = VirtualFolderHelper.createNewVirtualFolder(
+        name, parent, folders, CONVERSATION_SEARCH, false,
+      ).virtualFolder;
       folder.setStringProperty("taygaConversationServer", record.serverKey);
       const info = folder.msgDatabase.dBFolderInfo;
-      info.viewFlags = Ci.nsMsgViewFlagsType.kThreadedDisplay;
-      info.sortType = Ci.nsMsgViewSortType.byDate;
-      info.sortOrder = Ci.nsMsgViewSortOrder.descending;
+      info.viewFlags = viewFlags;
+      info.sortType = sortType;
+      info.sortOrder = sortOrder;
       folder.msgDatabase.commit(Ci.nsMsgDBCommitType.kLargeCommit);
-      record.conversationsURI = folder.URI;
-      this.save();
     } else {
       const wrapped = VirtualFolderHelper.wrapVirtualFolder(folder);
+      const migrateSearch = wrapped.searchString === "ALL";
+      if (migrateSearch) wrapped.searchString = CONVERSATION_SEARCH;
       const source = folders.map(f => f.URI).sort().join("|");
-      if (Array.from(wrapped.searchFolders).map(f => f.URI).sort().join("|") !== source) {
+      const sourcesChanged = Array.from(wrapped.searchFolders).map(f => f.URI).sort().join("|") !== source;
+      if (sourcesChanged || migrateSearch) {
         wrapped.searchFolders = folders;
         MailServices.accounts.saveVirtualFolders();
       }
+    }
+    // Remove the old saved search only after the account view is ready.
+    if (previous && previous.URI !== folder.URI &&
+        previous.parent.URI === MailServices.accounts.localFoldersServer.rootFolder.URI &&
+        !previous.hasSubFolders) {
+      previous.parent.propagateDelete(previous, true);
+      MailServices.accounts.saveVirtualFolders();
+    }
+    if (record.conversationsURI !== folder.URI) {
+      record.conversationsURI = folder.URI;
+      this.save();
     }
     return folder;
   }
@@ -512,7 +562,8 @@ var taygaEws = class extends ExtensionCommon.ExtensionAPI {
         this.save();
         continue;
       }
-      server.doBiff = key === scope;
+      server.doBiff = false;
+      server.setBoolValue("login_at_startup", false);
     }
     let record = this.state.mail[scope];
     if (!record) {
@@ -587,8 +638,9 @@ var taygaEws = class extends ExtensionCommon.ExtensionAPI {
       );
     }
     incoming.password = record.marker;
-    incoming.doBiff = true;
-    incoming.biffMinutes = 1;
+    // The extension's alarm calls syncMail after it restores the session.
+    // The independent native biff timer must not race that restoration.
+    incoming.doBiff = false;
     incoming.valid = true;
     // An optional local view must never interrupt authentication refresh.
     try { this.ensureConversations(record); } catch { console.warn("Tayga conversation view is not ready"); }
@@ -975,7 +1027,8 @@ var taygaEws = class extends ExtensionCommon.ExtensionAPI {
   }
   onShutdown() {
     this.shuttingDown = true;
-    if (!this.state) return;
+    if (this.httpObserver) Services.obs.removeObserver(this.httpObserver, "http-on-modify-request");
+    if (!this.state || !this.calObservers) return;
     this.invoke("stop", {});
     for (const { calendar, observer } of this.calObservers.values())
       calendar.removeObserver(observer);
@@ -985,7 +1038,6 @@ var taygaEws = class extends ExtensionCommon.ExtensionAPI {
       "addrbook-contact-deleted",
     ])
       Services.obs.removeObserver(this.contactObserver, topic);
-    Services.obs.removeObserver(this.httpObserver, "http-on-modify-request");
     Services.obs.notifyObservers(null, "startupcache-invalidate", null);
   }
 };

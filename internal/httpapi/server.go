@@ -299,6 +299,7 @@ func (s *Server) Start(ctx context.Context) error {
 		s.mattermostAPI.StartPush(ctx)
 		s.mattermostAPI.StartFederation(ctx)
 		s.mattermostAPI.StartCalendarChatReminders(ctx)
+		s.mattermostAPI.StartAgentBackground(ctx)
 	}
 	go s.runCalendarSubscriptions(ctx)
 	go s.runCalendarDeliveries(ctx)

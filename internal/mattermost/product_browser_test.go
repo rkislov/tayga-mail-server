@@ -115,6 +115,9 @@ func TestProductBrowserStand(t *testing.T) {
 	}
 	defer f.api.Close()
 	for _, product := range []struct{ id, file string }{{"focalboard", fmt.Sprintf("mattermost-plugin-boards-v10.1.0-%s-%s.tar.gz", runtime.GOOS, runtime.GOARCH)}, {"playbooks", fmt.Sprintf("tayga-playbooks-2.9.7-tms.1-%s-%s.tar.gz", runtime.GOOS, runtime.GOARCH)}} {
+		if os.Getenv("TMS_TEST_PRODUCT_BROWSER_PRODUCT") == "playbooks" && product.id != "playbooks" {
+			continue
+		}
 		file, err := os.Open(filepath.Join(bundles, product.file))
 		if err != nil {
 			t.Fatal(err)

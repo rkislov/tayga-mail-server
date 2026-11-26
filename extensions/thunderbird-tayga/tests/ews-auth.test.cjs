@@ -5,6 +5,8 @@ const fs = require("node:fs");
 
 function harness() {
   const context = vm.createContext({
+    URL,
+    Ci: { nsIContentPolicy: { TYPE_OTHER: 1 }, nsILoadInfo: { SEC_ALLOW_CROSS_ORIGIN_SEC_CONTEXT_IS_NULL: 2 } },
     Cu: { importGlobalProperties() {} },
     ChromeUtils: { importESModule: () => ({ ExtensionCommon: { ExtensionAPI: class {} } }) },
     Cr: { NS_BINDING_ABORTED: "aborted" },
@@ -79,4 +81,38 @@ test("logout immediately releases a native request waiting for a stuck refresh",
   finish({ ...h.cfg, expiresAt: Date.now() + 3600000 });
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(h.events, ["suspend", "aborted", "resume"]);
+});
+
+
+test("managed native EWS waits for the extension to restore OAuth", () => {
+  const h = harness();
+  const endpoint = "https://mail.example.com/EWS/Exchange.asmx?taygaEws=tayga-ews%3A12345678-1234-1234-1234-123456789abc";
+  h.channel.loadInfo = { triggeringPrincipal: { isSystemPrincipal: true } };
+  h.channel.URI = { spec: endpoint };
+  h.api.session = null;
+  h.api.manageNativeChannel(h.channel);
+  assert.deepEqual(h.events, ["aborted"]);
+
+  h.events.length = 0;
+  h.api.session = { ...h.cfg, endpoint, expiresAt: Date.now() + 3600000 };
+  h.api.manageNativeChannel(h.channel);
+  assert.deepEqual(h.events, [["Authorization", "Bearer expired"]]);
+
+  h.events.length = 0;
+  h.channel.URI.spec = "https://another.example.com/EWS/Exchange.asmx";
+  h.api.manageNativeChannel(h.channel);
+  h.channel.URI.spec = endpoint;
+  h.channel.loadInfo.triggeringPrincipal.isSystemPrincipal = false;
+  h.api.manageNativeChannel(h.channel);
+  assert.deepEqual(h.events, []);
+  Object.assign(h.channel.loadInfo, {
+    loadingPrincipal: { originNoSuffix: "https://mail.example.com", originAttributes: { userContextId: 13 } },
+    externalContentPolicyType: 1, securityMode: 2, browsingContextID: 0, loadingDocument: null,
+  });
+  h.api.manageNativeChannel(h.channel);
+  assert.deepEqual(h.events, [["Authorization", "Bearer expired"]]);
+  h.events.length = 0;
+  h.channel.loadInfo.browsingContextID = 7;
+  h.api.manageNativeChannel(h.channel);
+  assert.deepEqual(h.events, []);
 });

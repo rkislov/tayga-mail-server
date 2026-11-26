@@ -12,7 +12,12 @@ import (
 )
 
 func agentMessageFromPost(role string, post chat.Post) agentMessage {
-	return agentMessage{Role: role, Content: post.Message, PostID: post.ID, PendingID: post.PendingID, Files: post.Attachments}
+	message := agentMessage{Role: role, Content: post.Message, PostID: post.ID, PendingID: post.PendingID, Files: post.Attachments}
+	if role == "assistant" && post.Props["tayga_agent_artifacts"] != nil {
+		raw, _ := json.Marshal(post.Props["tayga_agent_artifacts"])
+		_ = json.Unmarshal(raw, &message.Artifacts)
+	}
+	return message
 }
 
 func agentPostTitle(post chat.Post) string {

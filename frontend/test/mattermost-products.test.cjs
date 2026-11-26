@@ -123,3 +123,19 @@ test('Boards translates imported template IDs and saves a translated copy withou
  assert.equal(saved.boardIDs[0],copyID);
  assert.equal(saved.blockPatches[0].title,'Расписание команды');
 });
+
+test('failed product avatars show Unicode initials and ignore unrelated images',async t=>{
+ const scope='/mm/'+'s'.repeat(26),id='a'.repeat(26);
+ const dom=new JSDOM('<html lang="ru" data-tayga-product="playbooks"><div id="root"></div></html>',{url:'https://tms.test'+scope+'/playbooks',runScripts:'outside-only'});
+ const w=dom.window;t.after(()=>w.close());
+ w.Request=class extends Request {constructor(input,init){super(input instanceof Request?input:new URL(input,w.location.href),init);}};w.Response=Response;w.Headers=Headers;
+ w.fetch=async()=>Response.json({users:[{id,first_name:'Роман',last_name:'Кислов',username:'roman'}]});
+ w.eval(fs.readFileSync(path.join(__dirname,'../../internal/frontend/dist/assets/tayga-product-frame.js'),'utf8'));
+ await w.fetch(scope+'/products/bootstrap');
+ const img=w.document.createElement('img');img.src=scope+'/api/v4/users/'+id+'/image';w.document.body.append(img);
+ img.dispatchEvent(new w.Event('error'));
+ assert.ok(decodeURIComponent(img.src).includes('>РК</text>'));assert.equal(img.alt,'Роман Кислов');
+ const fallback=img.src;img.dispatchEvent(new w.Event('error'));assert.equal(img.src,fallback);
+ img.src='https://other.test'+scope+'/api/v4/users/'+id+'/image';const external=img.src;img.dispatchEvent(new w.Event('error'));assert.equal(img.src,external);
+ img.src='/assets/photo.png';img.dispatchEvent(new w.Event('error'));assert.ok(img.src.endsWith('/assets/photo.png'));
+});

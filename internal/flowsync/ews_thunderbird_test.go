@@ -246,6 +246,9 @@ func TestTaygaEWSThunderbirdNative(t *testing.T) {
 			return
 		case "/EWS/Exchange.asmx":
 			if r.Header.Get("Authorization") != "Bearer fixture-token" {
+				if r.URL.Query().Has("taygaEws") {
+					t.Error("native account sent an EWS request without its OAuth bearer")
+				}
 				w.Header().Set("WWW-Authenticate", `Basic realm="FlowSync", Bearer`)
 				http.Error(w, "unauthorized", 401)
 				return

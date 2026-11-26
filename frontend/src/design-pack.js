@@ -6,7 +6,7 @@ async function boundedPreviewBlob(response,limit) {
 }
 // Shared stroke language for reader actions and document previews.
 function designIcon(name) {
-  const paths={bot:'M12 3v3M7 6h10a4 4 0 0 1 4 4v6a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4v-6a4 4 0 0 1 4-4zM8 12h.01m8 0h.01M9 16h6',calendar:'M4 6h16v14H4zM8 3v6m8-6v6M4 11h16',files:'M4 7h16v13H4zM7 7l2-3h6l2 3M4 12h16',check:'m5 12 4 4L19 6',question:'M9 8a3 3 0 0 1 6 0c0 3-3 2-3 5m0 4h.01',read:'M3 9l9-6 9 6v12H3zM3 9l9 7 9-7',unread:'M3 5h18v14H3zM3 6l9 7 9-7',settings:'M9 3h6l1 4 4 1v6l-4 1-1 4H9l-1-4-4-1V8l4-1zM9 11a3 3 0 1 0 6 0 3 3 0 0 0-6 0',key:'M15 7a5 5 0 1 0-7 7l-5 5v3h3v-3h3l3-3M15 7h.01',shield:'M12 3 3 7v5c0 5 9 9 9 9s9-4 9-9V7zM9 12l2 2 4-4',refresh:'M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-1l2 6M4 12l2 6a7 7 0 0 0 12-1',disconnect:'M9 5H4v14h5M12 12h9m-4-4 4 4-4 4',forward:'m15 5 6 6-6 6M21 11h-9a8 8 0 0 0-8 8',reply:'M9 5 3 11l6 6M3 11h9a8 8 0 0 1 8 8','reply-all':'m8 4-6 6 6 6m5-12-6 6 6 6M7 10h6a8 8 0 0 1 8 8',trip:'M8 2h8v4H8zM5 6h14v15H5zM9 10v6m6-6v6',spam:'m7 3-4 4v10l4 4h10l4-4V7l-4-4zM12 7v6m0 4h.01',archive:'M3 3h18v5H3zM5 8v13h14V8M9 12h6',delete:'M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7',download:'M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4',close:'m6 6 12 12M18 6 6 18'};
+  const paths={lock:'M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4',unlock:'M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0',restore:'M4 4v6h6M4 10a8 8 0 1 1 1 9',wipe:'M7 2h10v20H7zM10 6l4 4m0-4-4 4M11 18h2',undo:'M9 4 3 10l6 6M3 10h11a6 6 0 0 1 0 12',bot:'M12 3v3M7 6h10a4 4 0 0 1 4 4v6a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4v-6a4 4 0 0 1 4-4zM8 12h.01m8 0h.01M9 16h6',calendar:'M4 6h16v14H4zM8 3v6m8-6v6M4 11h16',files:'M4 7h16v13H4zM7 7l2-3h6l2 3M4 12h16',check:'m5 12 4 4L19 6',question:'M9 8a3 3 0 0 1 6 0c0 3-3 2-3 5m0 4h.01',read:'M3 9l9-6 9 6v12H3zM3 9l9 7 9-7',unread:'M3 5h18v14H3zM3 6l9 7 9-7',settings:'M9 3h6l1 4 4 1v6l-4 1-1 4H9l-1-4-4-1V8l4-1zM9 11a3 3 0 1 0 6 0 3 3 0 0 0-6 0',key:'M15 7a5 5 0 1 0-7 7l-5 5v3h3v-3h3l3-3M15 7h.01',shield:'M12 3 3 7v5c0 5 9 9 9 9s9-4 9-9V7zM9 12l2 2 4-4',refresh:'M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-1l2 6M4 12l2 6a7 7 0 0 0 12-1',disconnect:'M9 5H4v14h5M12 12h9m-4-4 4 4-4 4',forward:'m15 5 6 6-6 6M21 11h-9a8 8 0 0 0-8 8',reply:'M9 5 3 11l6 6M3 11h9a8 8 0 0 1 8 8','reply-all':'m8 4-6 6 6 6m5-12-6 6 6 6M7 10h6a8 8 0 0 1 8 8',trip:'M8 2h8v4H8zM5 6h14v15H5zM9 10v6m6-6v6',spam:'m7 3-4 4v10l4 4h10l4-4V7l-4-4zM12 7v6m0 4h.01',archive:'M3 3h18v5H3zM5 8v13h14V8M9 12h6',delete:'M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7',download:'M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4',close:'m6 6 12 12M18 6 6 18'};
   return '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="'+(paths[name]||paths.download)+'"/></svg>';
 }
 function documentPreviewType(name) {
@@ -363,10 +363,22 @@ async function openAdminDevices(panel){
     for(const item of data.devices||[]){
       const row=document.createElement('tr'),retired=!!item.retired_at;
       const stateLabel=retired?mailImageText('Забыто на сервере; ID заблокирован','Forgotten on server; ID blocked'):(item.blocked?mailImageText('Заблокировано','Blocked'):mailImageText('Разрешено','Allowed'));
-      for(const value of [item.email,(item.type||'—')+' · '+item.device_id+' · '+(item.agent||''),item.address||'—',new Date(item.last_seen).toLocaleString(),stateLabel+' · '+wipeLabel(item.wipe_status)]){const td=document.createElement('td');td.textContent=value;row.append(td);}
+      const cell=(className,primary,secondary)=>{
+        const td=document.createElement('td');td.className=className;
+        const main=document.createElement('span');main.className='device-cell-main';main.textContent=primary;td.append(main);
+        if(secondary){const detail=document.createElement('span');detail.className='device-cell-detail';detail.textContent=secondary;td.append(detail);}
+        row.append(td);return td;
+      };
+      cell('device-user',item.email);
+      const device=cell('device-client',item.type||'—',item.agent||'');
+      const id=document.createElement('span');id.className='device-cell-detail device-id';id.textContent=item.device_id;device.querySelector('.device-cell-main').after(id);
+      cell('device-address',item.address||'—');
+      const seen=new Date(item.last_seen);cell('device-seen',seen.toLocaleDateString(),seen.toLocaleTimeString());
+      cell('device-state',stateLabel,wipeLabel(item.wipe_status)).dataset.state=retired?'retired':item.blocked?'blocked':'allowed';
       const actions=document.createElement('td');actions.className='device-actions';row.append(actions);
+      const buttons=document.createElement('div');buttons.className='device-action-buttons';actions.append(buttons);
       const deviceActions=retired?[['restore',mailImageText('Восстановить запись','Restore registration')]]:[[item.blocked?'unblock':'block',item.blocked?mailImageText('Разрешить','Allow'):mailImageText('Заблокировать','Block')],['retire',mailImageText('Забыть на сервере','Forget on server')],['wipe_account',mailImageText('Очистить учётную запись на телефоне','Erase account on phone')],['cancel_wipe',mailImageText('Отменить неотправленную очистку','Cancel unsent wipe')]];for(const [action,label] of deviceActions){
-        const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.textContent=label;button.title=label;
+        const button=document.createElement('button');button.type='button';button.className='btn-secondary action-icon';button.innerHTML=designIcon(({block:'lock',unblock:'unlock',retire:'archive',wipe_account:'wipe',cancel_wipe:'undo',restore:'restore'})[action]);button.title=label;button.setAttribute('aria-label',label);button.dataset.action=action;
         if(action==='wipe_account')button.disabled=!item.account_wipe_supported||['pending','sent','acknowledged'].includes(item.wipe_status);
         if(action==='cancel_wipe')button.disabled=item.wipe_status!=='pending';
         button.onclick=async()=>{
@@ -375,7 +387,7 @@ async function openAdminDevices(panel){
             confirm=await askPrompt(prompt,item.device_id);if(confirm!==item.device_id)return;
           }
           button.disabled=true;status.textContent='';try{const result=await api('/api/v1/admin/devices/'+encodeURIComponent(item.id),{method:'POST',body:JSON.stringify({action,confirm_device_id:confirm})});await load();status.textContent=action==='retire'?mailImageText('Устройство забыто на сервере. Старый ID заблокирован; команда очистки не отправлялась.','Device forgotten on server. Old ID blocked; no wipe sent.'):action==='restore'?mailImageText('Запись восстановлена. Доступ пока заблокирован — разрешите его отдельной кнопкой.','Registration restored. Access remains blocked until separately allowed.'):mailImageText('Настройка устройства обновлена.','Device setting updated.');}catch(error){status.textContent=error.message;button.disabled=false;}
-        };actions.append(button);
+        };buttons.append(button);
       }
       tbody.append(row);
     }

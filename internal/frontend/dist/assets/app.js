@@ -9092,7 +9092,7 @@ async function boundedPreviewBlob(response,limit) {
 }
 // Shared stroke language for reader actions and document previews.
 function designIcon(name) {
-  const paths={bot:'M12 3v3M7 6h10a4 4 0 0 1 4 4v6a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4v-6a4 4 0 0 1 4-4zM8 12h.01m8 0h.01M9 16h6',calendar:'M4 6h16v14H4zM8 3v6m8-6v6M4 11h16',files:'M4 7h16v13H4zM7 7l2-3h6l2 3M4 12h16',check:'m5 12 4 4L19 6',question:'M9 8a3 3 0 0 1 6 0c0 3-3 2-3 5m0 4h.01',read:'M3 9l9-6 9 6v12H3zM3 9l9 7 9-7',unread:'M3 5h18v14H3zM3 6l9 7 9-7',settings:'M9 3h6l1 4 4 1v6l-4 1-1 4H9l-1-4-4-1V8l4-1zM9 11a3 3 0 1 0 6 0 3 3 0 0 0-6 0',key:'M15 7a5 5 0 1 0-7 7l-5 5v3h3v-3h3l3-3M15 7h.01',shield:'M12 3 3 7v5c0 5 9 9 9 9s9-4 9-9V7zM9 12l2 2 4-4',refresh:'M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-1l2 6M4 12l2 6a7 7 0 0 0 12-1',disconnect:'M9 5H4v14h5M12 12h9m-4-4 4 4-4 4',forward:'m15 5 6 6-6 6M21 11h-9a8 8 0 0 0-8 8',reply:'M9 5 3 11l6 6M3 11h9a8 8 0 0 1 8 8','reply-all':'m8 4-6 6 6 6m5-12-6 6 6 6M7 10h6a8 8 0 0 1 8 8',trip:'M8 2h8v4H8zM5 6h14v15H5zM9 10v6m6-6v6',spam:'m7 3-4 4v10l4 4h10l4-4V7l-4-4zM12 7v6m0 4h.01',archive:'M3 3h18v5H3zM5 8v13h14V8M9 12h6',delete:'M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7',download:'M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4',close:'m6 6 12 12M18 6 6 18'};
+  const paths={lock:'M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4',unlock:'M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0',restore:'M4 4v6h6M4 10a8 8 0 1 1 1 9',wipe:'M7 2h10v20H7zM10 6l4 4m0-4-4 4M11 18h2',undo:'M9 4 3 10l6 6M3 10h11a6 6 0 0 1 0 12',bot:'M12 3v3M7 6h10a4 4 0 0 1 4 4v6a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4v-6a4 4 0 0 1 4-4zM8 12h.01m8 0h.01M9 16h6',calendar:'M4 6h16v14H4zM8 3v6m8-6v6M4 11h16',files:'M4 7h16v13H4zM7 7l2-3h6l2 3M4 12h16',check:'m5 12 4 4L19 6',question:'M9 8a3 3 0 0 1 6 0c0 3-3 2-3 5m0 4h.01',read:'M3 9l9-6 9 6v12H3zM3 9l9 7 9-7',unread:'M3 5h18v14H3zM3 6l9 7 9-7',settings:'M9 3h6l1 4 4 1v6l-4 1-1 4H9l-1-4-4-1V8l4-1zM9 11a3 3 0 1 0 6 0 3 3 0 0 0-6 0',key:'M15 7a5 5 0 1 0-7 7l-5 5v3h3v-3h3l3-3M15 7h.01',shield:'M12 3 3 7v5c0 5 9 9 9 9s9-4 9-9V7zM9 12l2 2 4-4',refresh:'M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-1l2 6M4 12l2 6a7 7 0 0 0 12-1',disconnect:'M9 5H4v14h5M12 12h9m-4-4 4 4-4 4',forward:'m15 5 6 6-6 6M21 11h-9a8 8 0 0 0-8 8',reply:'M9 5 3 11l6 6M3 11h9a8 8 0 0 1 8 8','reply-all':'m8 4-6 6 6 6m5-12-6 6 6 6M7 10h6a8 8 0 0 1 8 8',trip:'M8 2h8v4H8zM5 6h14v15H5zM9 10v6m6-6v6',spam:'m7 3-4 4v10l4 4h10l4-4V7l-4-4zM12 7v6m0 4h.01',archive:'M3 3h18v5H3zM5 8v13h14V8M9 12h6',delete:'M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7',download:'M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4',close:'m6 6 12 12M18 6 6 18'};
   return '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="'+(paths[name]||paths.download)+'"/></svg>';
 }
 function documentPreviewType(name) {
@@ -9449,10 +9449,22 @@ async function openAdminDevices(panel){
     for(const item of data.devices||[]){
       const row=document.createElement('tr'),retired=!!item.retired_at;
       const stateLabel=retired?mailImageText('Забыто на сервере; ID заблокирован','Forgotten on server; ID blocked'):(item.blocked?mailImageText('Заблокировано','Blocked'):mailImageText('Разрешено','Allowed'));
-      for(const value of [item.email,(item.type||'—')+' · '+item.device_id+' · '+(item.agent||''),item.address||'—',new Date(item.last_seen).toLocaleString(),stateLabel+' · '+wipeLabel(item.wipe_status)]){const td=document.createElement('td');td.textContent=value;row.append(td);}
+      const cell=(className,primary,secondary)=>{
+        const td=document.createElement('td');td.className=className;
+        const main=document.createElement('span');main.className='device-cell-main';main.textContent=primary;td.append(main);
+        if(secondary){const detail=document.createElement('span');detail.className='device-cell-detail';detail.textContent=secondary;td.append(detail);}
+        row.append(td);return td;
+      };
+      cell('device-user',item.email);
+      const device=cell('device-client',item.type||'—',item.agent||'');
+      const id=document.createElement('span');id.className='device-cell-detail device-id';id.textContent=item.device_id;device.querySelector('.device-cell-main').after(id);
+      cell('device-address',item.address||'—');
+      const seen=new Date(item.last_seen);cell('device-seen',seen.toLocaleDateString(),seen.toLocaleTimeString());
+      cell('device-state',stateLabel,wipeLabel(item.wipe_status)).dataset.state=retired?'retired':item.blocked?'blocked':'allowed';
       const actions=document.createElement('td');actions.className='device-actions';row.append(actions);
+      const buttons=document.createElement('div');buttons.className='device-action-buttons';actions.append(buttons);
       const deviceActions=retired?[['restore',mailImageText('Восстановить запись','Restore registration')]]:[[item.blocked?'unblock':'block',item.blocked?mailImageText('Разрешить','Allow'):mailImageText('Заблокировать','Block')],['retire',mailImageText('Забыть на сервере','Forget on server')],['wipe_account',mailImageText('Очистить учётную запись на телефоне','Erase account on phone')],['cancel_wipe',mailImageText('Отменить неотправленную очистку','Cancel unsent wipe')]];for(const [action,label] of deviceActions){
-        const button=document.createElement('button');button.type='button';button.className='btn-secondary btn-sm';button.textContent=label;button.title=label;
+        const button=document.createElement('button');button.type='button';button.className='btn-secondary action-icon';button.innerHTML=designIcon(({block:'lock',unblock:'unlock',retire:'archive',wipe_account:'wipe',cancel_wipe:'undo',restore:'restore'})[action]);button.title=label;button.setAttribute('aria-label',label);button.dataset.action=action;
         if(action==='wipe_account')button.disabled=!item.account_wipe_supported||['pending','sent','acknowledged'].includes(item.wipe_status);
         if(action==='cancel_wipe')button.disabled=item.wipe_status!=='pending';
         button.onclick=async()=>{
@@ -9461,7 +9473,7 @@ async function openAdminDevices(panel){
             confirm=await askPrompt(prompt,item.device_id);if(confirm!==item.device_id)return;
           }
           button.disabled=true;status.textContent='';try{const result=await api('/api/v1/admin/devices/'+encodeURIComponent(item.id),{method:'POST',body:JSON.stringify({action,confirm_device_id:confirm})});await load();status.textContent=action==='retire'?mailImageText('Устройство забыто на сервере. Старый ID заблокирован; команда очистки не отправлялась.','Device forgotten on server. Old ID blocked; no wipe sent.'):action==='restore'?mailImageText('Запись восстановлена. Доступ пока заблокирован — разрешите его отдельной кнопкой.','Registration restored. Access remains blocked until separately allowed.'):mailImageText('Настройка устройства обновлена.','Device setting updated.');}catch(error){status.textContent=error.message;button.disabled=false;}
-        };actions.append(button);
+        };buttons.append(button);
       }
       tbody.append(row);
     }
@@ -12373,13 +12385,14 @@ window.tmsChatWorkspace = (() => {
   const paths={spark:'M12 3l2.2 6.8L21 12l-6.8 2.2L12 21l-2.2-6.8L3 12l6.8-2.2L12 3z',catalog:'M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15 M16 16l5 5',history:'M4 5h16v12H8l-4 4V5z',skills:'M12 3l-8 4 8 4 8-4-8-4z M4 12l8 4 8-4 M4 17l8 4 8-4',settings:'M5 4v16 M12 4v16 M19 4v16 M2 8h6 M9 15h6 M16 10h6',close:'M6 6l12 12 M18 6L6 18',plus:'M12 5v14 M5 12h14',arrow:'M5 12h14 M13 6l6 6-6 6',shield:'M12 3l8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3z M8 12l3 3 5-6'};
   function icon(name){const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('fill','none');svg.setAttribute('stroke','currentColor');svg.setAttribute('stroke-width','1.6');svg.setAttribute('stroke-linecap','round');svg.setAttribute('stroke-linejoin','round');svg.setAttribute('aria-hidden','true');const path=document.createElementNS(svg.namespaceURI,'path');path.setAttribute('d',paths[name]||paths.spark);svg.append(path);return svg;}
   Object.assign(paths,{
+    schedule:'M4 5h16v16H4zM8 3v4m8-4v4M4 9h16m-8 3v4l3 1',
     web:'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM3 12h18M12 3c-5 5-5 13 0 18 5-5 5-13 0-18',
     attach:'m20 11-8.4 8.4a5 5 0 0 1-7-7L13 4a3.5 3.5 0 0 1 5 5l-8 8a2 2 0 0 1-2.8-2.8l7-7',
     mic:'M9 5a3 3 0 1 1 6 0v6a3 3 0 0 1-6 0V5ZM5 11a7 7 0 0 0 14 0M12 18v4m-3 0h6',
     stop:'M7 7h10v10H7z',send:'M12 20V5m-6 6 6-6 6 6',download:'M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4',
   });
   const section=document.createElement('section');section.id='app-agents';section.className='app-page hidden';
-  section.innerHTML=`<div class="tms-agents"><aside id="agents-sidebar" class="agents-sidebar"><div class="agents-brand"><span class="agents-brand-icon"></span><div><strong>Агенты</strong><span>Помощники для работы</span></div></div><nav class="agents-navigation" aria-label="Разделы агентов"><button type="button" data-view="catalog">Все агенты</button><button type="button" data-view="history">Мои диалоги</button><button type="button" data-view="skills">Навыки</button><button type="button" data-view="settings">Настройки</button></nav><div class="agents-side-history"></div><div class="agents-account"><span class="agents-account-icon"></span><div><small>Рабочее пространство</small><p class="agents-scope"></p></div></div></aside><div class="agents-divider" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Ширина панели диалогов" aria-controls="agents-sidebar"></div><div class="agents-workspace"><div class="agents-error" role="alert"></div><main class="agents-main"></main></div></div>`;
+  section.innerHTML=`<div class="tms-agents"><aside id="agents-sidebar" class="agents-sidebar"><div class="agents-brand"><span class="agents-brand-icon"></span><div><strong>Агенты</strong><span>Помощники для работы</span></div></div><nav class="agents-navigation" aria-label="Разделы агентов"><button type="button" data-view="catalog">Все агенты</button><button type="button" data-view="history">Мои диалоги</button><button type="button" data-view="schedules">Расписание</button><button type="button" data-view="skills">Навыки</button><button type="button" data-view="settings">Настройки</button></nav><div class="agents-side-history"></div><div class="agents-account"><span class="agents-account-icon"></span><div><small>Рабочее пространство</small><p class="agents-scope"></p></div></div></aside><div class="agents-divider" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Ширина панели диалогов" aria-controls="agents-sidebar"></div><div class="agents-workspace"><div class="agents-error" role="alert"></div><main class="agents-main"></main></div></div>`;
   const layout=section.querySelector('.tms-agents');
   const divider=section.querySelector('.agents-divider');
   const leftPanel=section.querySelector('.agents-sidebar');
@@ -12461,6 +12474,7 @@ window.tmsChatWorkspace = (() => {
     if(!boot)return;
     if(next==='catalog'){renderCatalog();return;}
     if(next==='skills'){renderSkills();return;}
+    if(next==='schedules'){await renderSchedules();return;}
     if(next==='history'){title('Мои диалоги','Только ваша история');if(!history.length)main.append(emptyState('history','Ваша история начинается здесь','Выберите помощника в каталоге и задайте первый вопрос.',[action('Выбрать агента',()=>run(()=>show('catalog')),'agents-primary')]));for(const chat of [...history].sort((a,b)=>b.updated_at-a.updated_at)){const row=node('article',undefined,'agents-provider');row.append(node('strong',chat.title),action('Открыть',()=>run(()=>openChat(chat.id))));main.append(row);}return;}
     title('Настройки агентов','Модели и агенты только для текущего домена');
     if(!boot.can_manage){main.append(emptyState('settings','Всё настроит администратор','Настройки моделей доступны администратору домена. Вы можете выбрать доступного помощника в каталоге.'));return;}
@@ -12500,7 +12514,7 @@ window.tmsChatWorkspace = (() => {
     const historyEntry=history.find(entry=>entry.id===id);if(historyEntry)historyEntry.title=chat.title;
     active=id;view='chat';main.replaceChildren();main.classList.add('is-conversation');renderSidebar();
     const agent=boot.catalog.agents.find(a=>a.id===chat.agent_id);const header=title(agent?.name||'Агент','Личный диалог');
-    header.append(action('Новый диалог',()=>run(()=>newChat(chat.agent_id))),action('Убрать из списка',()=>run(async()=>{if(!window.confirm('Убрать диалог из списка? История ветки останется в Mattermost.'))return;await request('/conversations/'+encodeURIComponent(id),{method:'DELETE'});history=history.filter(c=>c.id!==id);await show('catalog');})));
+    header.append(iconAction('schedule','Запланировать задачу',()=>editSchedule({conversation_id:id})),action('Новый диалог',()=>run(()=>newChat(chat.agent_id))),action('Убрать из списка',()=>run(async()=>{if(!window.confirm('Убрать диалог из списка? История ветки останется в Mattermost.'))return;await request('/conversations/'+encodeURIComponent(id),{method:'DELETE'});history=history.filter(c=>c.id!==id);await show('catalog');})));
     const approvals=node('div',undefined,'agents-approvals');main.append(approvals);
     const drawActions=()=>{approvals.replaceChildren();for(const item of chat.actions||[]){if(item.state!=='pending'||item.expires_at<Date.now())continue;const card=node('article',undefined,'agents-card');card.append(node('strong',item.tool==='mail_draft'?'Подтвердить отправку письма':'Подтвердить отправку сообщения'),node('p',item.arguments.to||item.arguments.channel_id),node('p',item.arguments.subject||''),node('pre',item.arguments.text));card.append(action('Отправить',()=>run(async()=>{await request('/conversations/'+encodeURIComponent(id)+'/actions/'+encodeURIComponent(item.id),{method:'POST',body:'{}'});item.state='sent';drawActions();}),'agents-primary'));approvals.append(card);}};drawActions();
     const messages=node('div',undefined,'agents-messages');messages.setAttribute('role','log');messages.setAttribute('aria-label','Сообщения диалога');main.append(messages);
@@ -12518,8 +12532,11 @@ window.tmsChatWorkspace = (() => {
     const send=iconAction('send','Отправить');send.type='submit';send.classList.add('agents-primary','agents-send');
     let files=[],submission=null,recorder=null,recordingTimer=null,starting=false,webChanging=false,closed=false;
     const supportedAudio=!!(navigator.mediaDevices?.getUserMedia&&window.MediaRecorder);
-    const allowWeb=!!agent?.tools?.includes('web_search')&&boot.search_available!==false;
-    const web=iconAction('web','Веб-поиск',()=>run(async()=>{
+    const allowSearch=!!agent?.tools?.includes('web_search')&&boot.search_available!==false;
+    const allowDownload=!!agent?.tools?.includes('web_download');
+    const allowWeb=allowSearch||allowDownload;
+    const webLabel=allowDownload?'Доступ к интернету':'Веб-поиск';
+    const web=iconAction('web',webLabel,()=>run(async()=>{
       webChanging=true;syncWeb();
       try {
         const updated=await request(chatPath,{method:'PATCH',body:JSON.stringify({web_enabled:!chat.web_enabled})});
@@ -12527,12 +12544,12 @@ window.tmsChatWorkspace = (() => {
       } finally {webChanging=false;syncWeb();}
     }));
     web.classList.add('agents-web-toggle');
-    web.append(node('span','Веб-поиск'));
+    web.append(node('span',webLabel));
     function syncWeb() {
       const enabled=allowWeb&&!!chat.web_enabled;
       web.setAttribute('aria-pressed',String(enabled));
-      web.setAttribute('aria-label','Веб-поиск');
-      web.title=allowWeb?(enabled?'Веб-поиск включён':'Веб-поиск выключен'):'Веб-поиск не настроен для этого агента';
+      web.setAttribute('aria-label',webLabel);
+      web.title=webLabel+(allowWeb?(enabled?' · включено':' · выключено'):' · недоступно');
       web.disabled=!allowWeb||webChanging;
     }
     function syncComposer() {
@@ -12625,6 +12642,30 @@ window.tmsChatWorkspace = (() => {
       if(closed||!chatIsCurrent())throw new DOMException('Диалог закрыт','AbortError');
       return blob;
     }
+    function drawArtifact(file) {
+      const item=node('div',undefined,'agents-message-file');
+      const expiry=new Date(file.expires_at);
+      if(expiry.getTime()<=Date.now()){
+        item.append(node('span',file.name+' · срок скачивания истёк'));
+        return item;
+      }
+      const download=iconAction('download','Скачать '+file.name,()=>run(async()=>{
+        download.disabled=true;
+        try {
+          const check=guard();check();
+          const response=await fetch('/api/v4/tms/agents/artifacts/'+encodeURIComponent(file.id),{headers:{Authorization:'Bearer '+ownerToken},signal:controller.signal});
+          if(response.status===404)throw Error('Временный файл больше недоступен');
+          if(!response.ok)throw Error('Не удалось скачать файл');
+          const blob=await response.blob();check();
+          const url=URL.createObjectURL(blob);
+          const link=node('a');link.href=url;link.download=file.name;link.click();
+          setTimeout(()=>URL.revokeObjectURL(url),1000);
+        }finally{download.disabled=false;}
+      }));
+      item.append(node('span',file.name),download);
+      item.title='Скачать до '+expiry.toLocaleString();
+      return item;
+    }
     function drawFile(file) {
       const item=node('div',undefined,'agents-message-file');
       const download=iconAction('download','Скачать '+file.name,()=>run(async()=>{
@@ -12662,6 +12703,7 @@ window.tmsChatWorkspace = (() => {
         article.append(node('strong',m.role==='user'?'Вы':agent?.name||'Агент'));
         if(m.content)article.append(node('div',m.content));
         for(const file of m.files||[])article.append(drawFile(file));
+        for(const file of m.artifacts||[])article.append(drawArtifact(file));
         messages.append(article);
       }
       messages.scrollTop=messages.scrollHeight;
@@ -12729,6 +12771,95 @@ window.tmsChatWorkspace = (() => {
     },4000);
     input.onkeydown=event=>{if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();form.requestSubmit();}};
   }
+  const scheduleStatus={
+    completed:'Выполнено',waiting:'Ожидает свободного агента',conversation_busy:'Диалог занят или достигнут предел истории',
+    error:'Модель не ответила',unavailable:'Агент или диалог недоступен',
+  };
+  function scheduleDate(value,zone){
+    return new Intl.DateTimeFormat(document.documentElement.lang||'ru',{dateStyle:'short',timeStyle:'short',timeZone:zone}).format(value);
+  }
+  async function renderSchedules(){
+    const version=revision;
+    const header=title('Расписание');
+    const create=action('Добавить задачу',()=>editSchedule(),'agents-primary');
+    create.disabled=!history.length;
+    header.append(create);
+    const items=await request('/schedules');
+    if(version!==revision)return;
+    if(!items.length){
+      main.append(emptyState('schedule','Заданий пока нет',history.length?
+        'Выберите личный диалог и задайте время выполнения.':'Откройте диалог с агентом, чтобы запланировать первое задание.'));
+      return;
+    }
+    const list=node('div',undefined,'agents-schedule-list');
+    for(const item of items){
+      const chat=history.find(value=>value.id===item.conversation_id);
+      const card=node('article',undefined,'agents-card agents-schedule');
+      const text=node('div',undefined,'agents-schedule-summary');
+      const stateText=item.paused?'На паузе':item.next_at?'Следующий запуск '+scheduleDate(item.next_at,item.timezone):'Завершено';
+      text.append(node('strong',item.prompt),node('p',(chat?.title||'Личный диалог')+' · '+stateText+' · '+item.timezone));
+      if(item.status)text.append(node('p',(item.last_at?scheduleDate(item.last_at,item.timezone)+' · ':'')+(scheduleStatus[item.status]||item.status)));
+      const controls=node('div',undefined,'agents-actions');
+      if(chat)controls.append(action('Диалог',()=>run(()=>openChat(chat.id))));
+      controls.append(action('Изменить',()=>editSchedule(item)));
+      if(item.next_at || item.paused){
+        controls.append(action(item.paused?'Возобновить':'Пауза',()=>run(async()=>{
+          await request('/schedules/'+item.id,{method:'PUT',body:JSON.stringify({...item,paused:!item.paused})});
+          await show('schedules');
+        })));
+      }
+      card.append(text,controls);
+      list.append(card);
+    }
+    main.append(list);
+  }
+  function editSchedule(item={}){
+    const {dialog,form}=modal(item.id?'Изменить задание':'Запланировать задание');
+    const conversation=select(form,'Личный диалог',history.map(chat=>{
+      const agent=boot.catalog.agents.find(value=>value.id===chat.agent_id);
+      return [chat.id,(agent?.name||'Агент')+' · '+chat.title];
+    }),item.conversation_id);
+    conversation.disabled=Boolean(item.id);
+    const prompt=field(form,'Что агент должен сделать',item.prompt||'','textarea');
+    prompt.required=true;prompt.maxLength=8000;
+    const interval=select(form,'Периодичность',[['once','Один раз'],['daily','Каждый день'],['weekly','По дням недели']],item.frequency);
+    const date=field(form,'Дата и время первого запуска',item.local_time||'','datetime-local');
+    date.required=true;
+    const zone=field(form,'Часовой пояс',item.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC');
+    zone.required=true;
+    const days=node('fieldset',undefined,'agents-schedule-days');
+    days.append(node('legend','Дни недели'));
+    const dayFields=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].map((day,index)=>{
+      const id=(index+1)%7;
+      const checkbox=field(days,day,'','checkbox');
+      checkbox.checked=item.weekdays?.includes(id)||false;
+      return [id,checkbox];
+    });
+    const toggleDays=()=>{days.hidden=interval.value!=='weekly';};
+    interval.onchange=toggleDays;toggleDays();form.append(days);
+    const paused=field(form,'На паузе','','checkbox');
+    paused.checked=Boolean(item.paused);
+    const controls=node('div',undefined,'agents-actions');
+    const status=node('p',undefined,'agents-error');
+    status.setAttribute('role','alert');
+    if(item.id)controls.append(action('Удалить',()=>run(async()=>{
+      if(!window.confirm('Удалить задание из расписания?'))return;
+      await request('/schedules/'+item.id,{method:'DELETE'});
+      dialog.close();await show('schedules');
+    })));
+    const submit=node('button','Сохранить','agents-primary');
+    submit.type='submit';controls.append(submit);form.append(controls,status);
+    form.onsubmit=async event=>{
+      event.preventDefault();submit.disabled=true;status.textContent='';
+      try{
+        await request(item.id?'/schedules/'+item.id:'/schedules',{method:item.id?'PUT':'POST',body:JSON.stringify({
+          conversation_id:conversation.value,prompt:prompt.value,frequency:interval.value,local_time:date.value,timezone:zone.value.trim(),
+          weekdays:dayFields.filter(([,checkbox])=>checkbox.checked).map(([id])=>id),paused:paused.checked,
+        })});
+        dialog.close();await show('schedules');
+      }catch(err){status.textContent=err.data?.message||err.message;}finally{submit.disabled=false;}
+    };
+  }
   function modal(titleText){
     const dialog=node('dialog');dialog.dataset.agentsDialog='';dialog.className='agents-dialog';const form=node('form'),header=node('div',undefined,'agents-dialog-header'),close=action('',()=>dialog.close(),'agents-dialog-close');close.append(icon('close'));close.setAttribute('aria-label','Закрыть');header.append(node('h2',titleText),close);form.append(header);dialog.append(form);section.append(dialog);dialog.addEventListener('close',()=>dialog.remove());dialog.showModal();return {dialog,form};
   }
@@ -12748,7 +12879,7 @@ window.tmsChatWorkspace = (() => {
     const provider=select(form,'Модель',next.providers.map(p=>[p.id,p.name+' · '+p.model]),a.provider_id),instructions=field(form,'Инструкции агента',a.instructions,'textarea');instructions.maxLength=32000;
     const enabled=field(form,'Доступен пользователям домена','','checkbox');enabled.checked=a.enabled;
     form.append(node('p','Инструменты действуют от имени пользователя диалога. Выбранные разрешения задают доступ модели к данным.','agents-settings-note'));
-    const tools=[];for(const [id,label] of [['web_search','Поиск в интернете'],['mail_read','Поиск и чтение моей почты'],['mail_send','Подготовка писем с подтверждением'],['calendar_read','Чтение моих календарей'],['chat_read','Поиск и чтение доступных мне чатов'],['chat_send','Подготовка сообщений с подтверждением']]){const checkbox=field(form,label,'','checkbox');checkbox.checked=a.tools?.includes(id);tools.push([id,checkbox]);}
+    const tools=[];for(const [id,label] of [['web_search','Поиск в интернете'],['web_download','Загрузка публичных файлов по ссылке'],['file_create','Создание временных документов, презентаций и диаграмм'],['mail_read','Поиск и чтение моей почты'],['mail_send','Подготовка писем с подтверждением'],['calendar_read','Чтение моих календарей'],['chat_read','Поиск и чтение доступных мне чатов'],['chat_send','Подготовка сообщений с подтверждением']]){const checkbox=field(form,label,'','checkbox');checkbox.checked=a.tools?.includes(id);tools.push([id,checkbox]);}
     const skills=[];for(const skill of next.skills){const checkbox=field(form,skill.name,'','checkbox');checkbox.checked=a.skill_ids?.includes(skill.id);skills.push([skill.id,checkbox]);}
     finishEditor(dialog,form,async()=>{const updated={...a,name:name.value,description:description.value,provider_id:provider.value,instructions:instructions.value,enabled:enabled.checked,tools:tools.filter(([,el])=>el.checked).map(([key])=>key),skill_ids:skills.filter(([,el])=>el.checked).map(([key])=>key)};next.agents=next.agents.filter(v=>v.id!==a.id);next.agents.push(updated);await saveConfig(next);},original?async()=>{next.agents=next.agents.filter(v=>v.id!==a.id);await saveConfig(next);}:null);
   }

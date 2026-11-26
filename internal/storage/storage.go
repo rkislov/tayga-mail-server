@@ -385,6 +385,20 @@ type Driver interface {
 	GreylistTouch(ctx context.Context, clientIP, envelopeFrom, rcpt string, delay time.Duration) (allowed bool, err error)
 	DeleteExpiredGreylist(ctx context.Context, olderThan time.Time) (int64, error)
 
+	ListAgentSchedules(context.Context, string, string) ([]AgentSchedule, error)
+	DueAgentSchedules(context.Context, int64) ([]AgentSchedule, error)
+	CreateAgentSchedule(context.Context, AgentSchedule) error
+	UpdateAgentSchedule(context.Context, AgentSchedule) error
+	DeleteAgentSchedule(context.Context, string, string, string) error
+	DeleteAgentConversationSchedules(context.Context, string, string, string) error
+	ClaimAgentSchedule(context.Context, AgentSchedule, string, int64, int64) (bool, error)
+	AgentScheduleClaimActive(context.Context, string, string, int64) (bool, error)
+	FinishAgentSchedule(context.Context, string, string, string, int64, int64, int64) error
+
+	SaveAgentArtifacts(context.Context, []AgentArtifact) error
+	GetAgentArtifact(context.Context, string, string, string, int64) (AgentArtifact, error)
+	CleanupAgentArtifacts(context.Context, int64) error
+
 	GetSetting(ctx context.Context, key string) (value string, ok bool, err error)
 	ListSettings(ctx context.Context) (map[string]string, error)
 	PutSetting(ctx context.Context, key, value string) error

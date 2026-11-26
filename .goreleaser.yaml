@@ -51,6 +51,7 @@ archives:
       - deploy/ha/*
       - docs/*.md
       - scripts/mattermost/*.py
+      - scripts/mattermost/*.patch
       - scripts/agents/*.sh
       - docs/screenshots/*.png
       - docs/screenshots/*.md

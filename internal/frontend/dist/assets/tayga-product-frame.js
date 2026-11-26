@@ -1,4 +1,4 @@
-/* Locale bridge for the original Boards and Playbooks bundles. */
+/* Tayga host adaptations for the original Boards and Playbooks bundles. */
 (() => {
   'use strict';
   const scope = location.pathname.match(/^\/mm\/[a-z0-9]{26}/)?.[0];
@@ -26,6 +26,57 @@
   const base = scope + '/plugins/focalboard/api/v2';
   const fetchProduct = window.fetch.bind(window);
   const templates = new Map();
+  const profiles = new Map();
+  // Keep React's image node intact; a failed image must not leave a broken icon.
+  document.addEventListener('error', event => {
+    const image = event.target;
+    if (!(image instanceof HTMLImageElement)) return;
+    let url;
+    try { url = new URL(image.src, location.href); } catch { return; }
+    if (url.origin !== location.origin) return;
+    const match = url.pathname.match(new RegExp('^' + scope + '/api/v4/users/([a-z0-9]{26})/image$'));
+    if (!match) return;
+    const profile = profiles.get(match[1]);
+    const name = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ').trim()
+      || profile?.username || image.closest('.PlaybookRunProfile')?.querySelector('.name')?.textContent || '';
+    const words = name.split('@')[0].match(/[\p{L}\p{N}]+/gu) || [];
+    const initials = words.slice(0, 2).map(word => Array.from(word)[0]).join('').toLocaleUpperCase() || '?';
+    const escaped = initials.replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[char]));
+    image.alt = name;
+    image.src = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128"><circle cx="64" cy="64" r="64" fill="#dfe7d6"/><text x="64" y="66" text-anchor="middle" dominant-baseline="middle" font-family="Arial,sans-serif" font-size="47" font-weight="600" fill="#3f5a30">' + escaped + '</text></svg>');
+  }, true);
+
+  let statusEditorInstalled = false;
+
+  // The shipped Playbooks host uses a bare textarea for its Textbox bridge.
+  // Give the status editor a labelled input and use the host's own Markdown
+  // renderer in preview mode. Leave other Textbox consumers on the host bridge.
+  function installStatusEditor() {
+    const {React, Components, PostUtils} = window;
+    if (statusEditorInstalled || document.documentElement.dataset.taygaProduct !== 'playbooks' ||
+        !React?.createElement || !Components?.Textbox ||
+        !PostUtils?.formatText || !PostUtils?.messageHtmlToComponent) return;
+    const HostTextbox = Components.Textbox;
+    Components.Textbox = function StatusTextbox(props) {
+      if (props.id !== 'update_run_status_textbox') {
+        return React.createElement(HostTextbox, props);
+      }
+      const label = locale === 'en' ? 'Change since last update' : 'Изменения с последнего обновления';
+      const {value, id, onChange, disabled, rows} = props;
+      if (props.preview) {
+        const rendered = PostUtils.messageHtmlToComponent(PostUtils.formatText(value || ''));
+        return React.createElement('div', {
+          id, className: 'tayga-update-preview', role: 'region', tabIndex: 0,
+          'aria-label': locale === 'en' ? 'Update preview' : 'Предпросмотр обновления',
+        }, rendered);
+      }
+      return React.createElement('textarea', {
+        id, value, onChange, disabled, rows, className: 'form-control',
+        'aria-label': label,
+      });
+    };
+    statusEditorInstalled = true;
+  }
 
   function translateLabel(value) {
     return typeof value === 'string' && Object.hasOwn(boardStrings.labels, value)
@@ -142,7 +193,16 @@
     if (url.origin !== location.origin) return fetchProduct(request);
     if (url.pathname === scope + '/products/bootstrap') {
       url.searchParams.set('lang', locale);
-      return fetchProduct(new Request(url, request));
+      return fetchProduct(new Request(url, request)).then(async response => {
+        if (response.ok) {
+          installStatusEditor();
+          try {
+            const data = await response.clone().json();
+            for (const profile of data.users || []) profiles.set(profile.id, profile);
+          } catch { /* The host handles an invalid bootstrap response. */ }
+        }
+        return response;
+      });
     }
     if (boardStrings && document.documentElement.dataset.taygaProduct === 'boards' && url.pathname.startsWith(base + '/')) {
       return boardResponse(request, url.pathname.slice(base.length));

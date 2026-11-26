@@ -36,15 +36,22 @@ func (s *API) userMetadata(w http.ResponseWriter, r *http.Request, u *storage.Us
 			return true
 		}
 		image, err := avatar.Get(r.Context(), s.store, target.ID)
-		if err != nil || image.Data == "" {
-			s.failure(w, storage.ErrNotFound)
-			return true
-		}
-		raw, err := base64.StdEncoding.DecodeString(image.Data)
 		if err != nil {
 			s.failure(w, err)
 			return true
 		}
+		var raw []byte
+		if image.Data != "" {
+			raw, err = base64.StdEncoding.DecodeString(image.Data)
+		}
+		if image.Data == "" || err != nil {
+			raw, err = avatar.InitialsPNG(target.DisplayName, target.LocalPart)
+		}
+		if err != nil {
+			s.failure(w, err)
+			return true
+		}
+		w.Header().Set("Cache-Control", "private, max-age=60")
 		w.Header().Set("Content-Type", "image/png")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.WriteHeader(200)

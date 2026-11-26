@@ -63,6 +63,7 @@ type agentMessage struct {
 	Reasoning     string            `json:"reasoning_content,omitempty"`
 	PostID        string            `json:"post_id,omitempty"`
 	PendingID     string            `json:"pending_post_id,omitempty"`
+	Artifacts     []agentArtifact   `json:"artifacts,omitempty"`
 	Files         []chat.Attachment `json:"files,omitempty"`
 	ResponseItems []json.RawMessage `json:"-"`
 }
@@ -223,7 +224,7 @@ func (c *agentConfiguration) validate(old agentConfiguration) bool {
 			return false
 		}
 		for _, tool := range a.Tools {
-			if tool != "web_search" && tool != "mail_read" && tool != "mail_send" && tool != "chat_read" && tool != "chat_send" && tool != "calendar_read" {
+			if tool != "web_search" && tool != "web_download" && tool != "file_create" && tool != "mail_read" && tool != "mail_send" && tool != "chat_read" && tool != "chat_send" && tool != "calendar_read" {
 				return false
 			}
 		}
@@ -248,6 +249,14 @@ func (c *agentConfiguration) validate(old agentConfiguration) bool {
 func (s *API) agentsHTTP(w http.ResponseWriter, r *http.Request, u *storage.User, path string) {
 	if u.AuthSource == "bot" || u.AuthSource == "federated" {
 		s.failure(w, chat.ErrForbidden)
+		return
+	}
+	if strings.HasPrefix(path, "/artifacts/") {
+		s.serveAgentArtifact(w, r, u, strings.TrimPrefix(path, "/artifacts/"))
+		return
+	}
+	if path == "/schedules" || strings.HasPrefix(path, "/schedules/") {
+		s.agentScheduleHTTP(w, r, u, strings.TrimPrefix(path, "/schedules"))
 		return
 	}
 	admin := s.canManageScope(r, u, userScope(u))
@@ -438,6 +447,9 @@ func (s *API) agentsHTTP(w http.ResponseWriter, r *http.Request, u *storage.User
 			s.failure(w, err)
 			return
 		}
+		if err := s.store.DeleteAgentConversationSchedules(r.Context(), u.ID, userScope(u).Key(), c.ID); err != nil {
+			s.log.Warn("agent conversation schedule cleanup failed", "error", err)
+		}
 		s.agentAudit(u, "conversation_deleted", c.ID)
 		write(w, 200, map[string]string{"status": "OK"})
 		return
@@ -555,7 +567,10 @@ func (s *API) agentTurn(w http.ResponseWriter, r *http.Request, u *storage.User,
 			}
 		}
 	}
-	messages = append(messages, conv.Messages...)
+	_, scheduled := r.Context().Value(agentScheduledKey{}).(agentScheduledRun)
+	if !scheduled {
+		messages = append(messages, conv.Messages...)
+	}
 	h.Conversations[index].Pending = claim
 	h.Conversations[index].PendingAt = time.Now().UnixMilli()
 	err = s.agentSave(r.Context(), key, h)
@@ -577,20 +592,21 @@ func (s *API) agentTurn(w http.ResponseWriter, r *http.Request, u *storage.User,
 	userMessage := agentMessageFromPost("user", userPost)
 	alreadyPosted := false
 	for _, previous := range conv.Messages {
-		if alreadyPosted && previous.Role == "assistant" {
+		if alreadyPosted && previous.Role == "assistant" && (!scheduled || previous.PendingID == pendingID+"-reply") {
 			s.clearAgentClaim(r.Context(), u, id, claim)
 			write(w, 200, conv)
 			return
 		}
 		alreadyPosted = alreadyPosted || previous.PostID == userPost.ID
 	}
-	if !alreadyPosted {
+	if !alreadyPosted || scheduled {
 		messages = append(messages, userMessage)
 	}
 	s.agentAudit(u, "turn_started", id)
 	complete := func(w http.ResponseWriter, r *http.Request) {
 		modelMessages := s.agentMessagesWithFiles(r.Context(), u, messages)
-		answer, actions, providerErr := s.agentToolCompletion(r, u, c, *definition, conv, *provider, modelMessages)
+		files := &agentFiles{}
+		answer, actions, providerErr := s.agentToolCompletion(r, u, c, *definition, conv, *provider, modelMessages, files)
 		// Clear the persisted claim even when the request disconnects. No user text is
 		// committed on failure, so retries cannot leave duplicate unmatched messages.
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Second)
@@ -616,7 +632,7 @@ func (s *API) agentTurn(w http.ResponseWriter, r *http.Request, u *storage.User,
 				}
 			}
 			// A revoked login cannot commit a model response after logout.
-			_, authErr := s.authenticate(ctx, bearer(r))
+			_, authErr := s.agentRunActor(ctx, r)
 			if authErr != nil {
 				providerErr = errors.New("session revoked")
 			}
@@ -631,8 +647,26 @@ func (s *API) agentTurn(w http.ResponseWriter, r *http.Request, u *storage.User,
 			if providerErr == nil {
 				bot, botErr := s.agentBot(ctx, u, conv.AgentID)
 				var botPost chat.Post
+				if botErr == nil && len(files.outputs) > 0 {
+					items := make([]storage.AgentArtifact, 0, len(files.outputs))
+					for _, file := range files.outputs {
+						items = append(items, storage.AgentArtifact{ID: file.ID, UserID: u.ID, Scope: userScope(u).Key(), Name: file.Name, MIME: file.mime, Data: file.data, ExpiresAt: file.ExpiresAt})
+					}
+					botErr = s.store.SaveAgentArtifacts(ctx, items)
+				}
 				if botErr == nil {
-					botPost, botErr = s.chat.SendRich(ctx, bot, conv.ChannelID, conv.RootID, answer, "", agentActionProps(actions), "")
+					props := agentActionProps(actions)
+					if len(files.outputs) > 0 {
+						if props == nil {
+							props = make(map[string]any)
+						}
+						props["tayga_agent_artifacts"] = files.outputs
+					}
+					pendingAnswer := ""
+					if r.Context().Value(agentScheduledKey{}) != nil {
+						pendingAnswer = pendingID + "-reply"
+					}
+					botPost, botErr = s.chat.SendRich(ctx, bot, conv.ChannelID, conv.RootID, answer, pendingAnswer, props, "")
 				}
 				if botErr != nil {
 					providerErr = botErr
@@ -641,7 +675,7 @@ func (s *API) agentTurn(w http.ResponseWriter, r *http.Request, u *storage.User,
 					if !alreadyPosted {
 						v.Messages = append(v.Messages, userMessage)
 					}
-					v.Messages = append(v.Messages, agentMessage{Role: "assistant", Content: answer, PostID: botPost.ID})
+					v.Messages = append(v.Messages, agentMessageFromPost("assistant", botPost))
 					v.Updated = time.Now().UnixMilli()
 				}
 			}

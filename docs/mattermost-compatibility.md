@@ -56,3 +56,26 @@ Push требует отдельно настроенного шлюза. TMS п
 ## Межсерверные каналы
 
 Экспериментальные нативные связи TMS ↔ TMS и двусторонний REST-мост вынесены в [отдельное руководство](mattermost-federation.md). Нативная совместимость с оригинальным Connected Workspaces ещё требует лицензированного стенда; наличие API не означает полной совместимости.
+
+### Имя владельца сценария в мобильном Mattermost
+
+В upstream Mattermost Mobile (проверено на commit
+`0bbcd9d5cbe0046a77a980498337a2e57902876c`) список сценариев задаёт
+`teammateNameDisplay='username'` непосредственно в `PlaybookCard`. Поэтому
+он показывает логин даже при полном имени в карточке и серверной настройке.
+Изменение логина на ФИО на сервере нарушило бы поиск и упоминания.
+
+Для собственной сборки мобильного клиента подготовлен патч
+[`mobile-playbooks-owner-name.patch`](../scripts/mattermost/mobile-playbooks-owner-name.patch):
+он переключает список на `full_name` с штатным fallback на логин и обновляет
+соответствующие ожидания тестов. Применить из checkout Mattermost Mobile:
+
+```sh
+git apply --check /path/to/tayga/scripts/mattermost/mobile-playbooks-owner-name.patch
+git apply /path/to/tayga/scripts/mattermost/mobile-playbooks-owner-name.patch
+```
+
+Затем нужны тесты и подписанная сборка самого мобильного приложения.
+Обновление только Tayga Server не изменяет этот жёстко заданный параметр
+в установленном клиенте App Store. Серверные PNG-аватары с инициалами
+работают и в стандартном клиенте без его модификации.

@@ -1,5 +1,24 @@
 // Injected ONLY into a temporary smoke-test copy of the Experiment.
 async function taygaNativeTest(api, args) {
+  if (args.op === "legacyConversations") {
+    const record = Object.values(api.state.mail)[0];
+    const current = api.ensureConversations(record);
+    const { VirtualFolderHelper } = ChromeUtils.importESModule(
+      "resource:///modules/VirtualFolderWrapper.sys.mjs",
+    );
+    const sources = Array.from(VirtualFolderHelper.wrapVirtualFolder(current).searchFolders);
+    current.parent.propagateDelete(current, true);
+    const parent = MailServices.accounts.localFoldersServer.rootFolder;
+    const legacy = VirtualFolderHelper.createNewVirtualFolder(
+      "Tayga · Беседы · alice@example.com", parent, sources, "ALL", false,
+    ).virtualFolder;
+    legacy.setStringProperty("taygaConversationServer", record.serverKey);
+    legacy.msgDatabase.dBFolderInfo.sortOrder = Ci.nsMsgViewSortOrder.ascending;
+    legacy.msgDatabase.commit(Ci.nsMsgDBCommitType.kLargeCommit);
+    record.conversationsURI = legacy.URI;
+    api.save();
+    return { uri: legacy.URI };
+  }
   if (args.op === "conversations") {
     const record = Object.values(api.state.mail)[0];
     const folder = api.ensureConversations(record);
@@ -12,11 +31,25 @@ async function taygaNativeTest(api, args) {
       view.doCommand(Ci.nsMsgViewCommandType.expandAll);
       for (let i=0;i<view.rowCount;i++) {
         const header=view.getMsgHdrAt(i);
-        rows.push({id:header.messageId,folder:header.folder.URI,
+        rows.push({id:header.messageId,folder:header.folder.URI,key:header.messageKey,
           root:view.getThreadContainingMsgHdr(header)?.getRootHdr()?.messageId});
       }
     }
-    return {uri:folder?.URI, rows, flags:view?.viewFlags};
+    const root = api.managedIncoming(record).rootFolder;
+    const localRoot = MailServices.accounts.localFoldersServer.rootFolder;
+    return {
+      uri: folder?.URI,
+      underAccount: folder?.parent.URI === root.URI,
+      name: folder?.name,
+      ascending: folder?.msgDatabase.dBFolderInfo.sortOrder === Ci.nsMsgViewSortOrder.ascending,
+      localLegacyPresent: Array.from(localRoot.subFolders).some(f => f.URI === args.legacyURI),
+      accountViewCount: Array.from(root.subFolders).filter(f => f.flags & Ci.nsMsgFolderFlags.Virtual).length,
+      searching: pane?.gViewWrapper?.searching,
+      sourceCount: Array.from(root.descendants)
+        .filter(f => f.flags & (Ci.nsMsgFolderFlags.Inbox | Ci.nsMsgFolderFlags.SentMail))
+        .reduce((total, f) => total + f.getTotalMessages(false), 0),
+      rows,
+    };
   }
   if (args.op === "capabilities")
     return {

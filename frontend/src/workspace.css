@@ -6275,3 +6275,29 @@ html[data-color-mode=dark] :is(button,input,select,textarea):focus-visible {
 .product-create-dialog form{display:grid;gap:12px}
 .product-create-dialog .field-label{display:grid;gap:6px}
 .product-create-dialog .actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}
+
+/* Device operations have a bounded footprint; identifiers remain readable. */
+.admin-operation-content .device-table {min-width:960px;table-layout:auto;}
+.admin-operation-content .device-table td {vertical-align:middle;padding:14px 12px;overflow-wrap:normal;}
+.device-table .device-cell-main,.device-table .device-cell-detail {display:block;}
+.device-table .device-cell-detail {margin-top:4px;font-size:12px;line-height:1.45;color:var(--work-muted);}
+.device-table :is(.device-user,.device-address,.device-seen) {white-space:nowrap;}
+.device-table .device-client {min-width:200px;max-width:340px;}
+.device-table .device-client .device-cell-detail {overflow-wrap:anywhere;}
+.device-table .device-id {font-family:ui-monospace,monospace;font-size:11px;}
+.device-table .device-state {min-width:180px;max-width:240px;}
+.device-table .device-state .device-cell-main {font-weight:600;}
+.device-table .device-state[data-state=allowed] .device-cell-main {color:var(--tayga-success-fg,var(--work-accent));}
+.device-table .device-actions {width:176px;white-space:nowrap;}
+.device-action-buttons {display:flex;gap:6px;align-items:center;}
+.device-action-buttons .action-icon {width:34px;height:34px;min-width:34px;padding:7px;border-radius:9px;}
+.device-action-buttons .action-icon svg {width:18px;height:18px;}
+.device-action-buttons [data-action=wipe_account]:enabled {color:var(--tayga-error-fg,#a32f36);}
+
+.agents-schedule-list {display:grid;gap:12px;}
+.agents-card.agents-schedule {display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;}
+.agents-schedule-summary {flex:1 1 280px;min-width:0;overflow-wrap:anywhere;}
+.agents-schedule-summary strong {display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;white-space:pre-wrap;}
+.agents-schedule-summary p {margin:4px 0;}
+.agents-dialog .agents-schedule-days:not([hidden]) {display:flex;flex-wrap:wrap;gap:8px 16px;}
+.agents-dialog .agents-schedule-days .agents-checkbox {gap:4px;}

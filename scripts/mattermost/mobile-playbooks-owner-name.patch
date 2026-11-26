@@ -1,0 +1,23 @@
+diff --git a/app/products/playbooks/components/run_list/playbook_card/playbook_card.tsx b/app/products/playbooks/components/run_list/playbook_card/playbook_card.tsx
+--- a/app/products/playbooks/components/run_list/playbook_card/playbook_card.tsx
++++ b/app/products/playbooks/components/run_list/playbook_card/playbook_card.tsx
+@@ -129,7 +129,7 @@
+                     {owner && (
+                         <UserChip
+                             user={owner}
+-                            teammateNameDisplay='username'
++                            teammateNameDisplay='full_name'
+                             onPress={onUserChipPress}
+                         />
+                     )}
+diff --git a/app/products/playbooks/components/run_list/playbook_card/playbook_card.test.tsx b/app/products/playbooks/components/run_list/playbook_card/playbook_card.test.tsx
+--- a/app/products/playbooks/components/run_list/playbook_card/playbook_card.test.tsx
++++ b/app/products/playbooks/components/run_list/playbook_card/playbook_card.test.tsx
+@@ -67,2 +67,2 @@
+         expect(userChip.props.user).toBe(props.owner);
+-        expect(userChip.props.teammateNameDisplay).toBe('username');
++        expect(userChip.props.teammateNameDisplay).toBe('full_name');
+@@ -93,2 +93,2 @@
+         expect(userChip.props.user).toBe(props.owner);
+-        expect(userChip.props.teammateNameDisplay).toBe('username');
++        expect(userChip.props.teammateNameDisplay).toBe('full_name');
