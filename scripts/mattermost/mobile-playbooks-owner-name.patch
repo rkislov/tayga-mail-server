@@ -13,11 +13,15 @@ diff --git a/app/products/playbooks/components/run_list/playbook_card/playbook_c
 diff --git a/app/products/playbooks/components/run_list/playbook_card/playbook_card.test.tsx b/app/products/playbooks/components/run_list/playbook_card/playbook_card.test.tsx
 --- a/app/products/playbooks/components/run_list/playbook_card/playbook_card.test.tsx
 +++ b/app/products/playbooks/components/run_list/playbook_card/playbook_card.test.tsx
-@@ -67,2 +67,2 @@
+@@ -67,4 +67,4 @@
          expect(userChip.props.user).toBe(props.owner);
 -        expect(userChip.props.teammateNameDisplay).toBe('username');
 +        expect(userChip.props.teammateNameDisplay).toBe('full_name');
-@@ -93,2 +93,2 @@
+
+         const userAvatarsStack = getByTestId('user-avatars-stack');
+@@ -93,4 +93,4 @@
          expect(userChip.props.user).toBe(props.owner);
 -        expect(userChip.props.teammateNameDisplay).toBe('username');
 +        expect(userChip.props.teammateNameDisplay).toBe('full_name');
+
+         const userAvatarsStack = getByTestId('user-avatars-stack');
