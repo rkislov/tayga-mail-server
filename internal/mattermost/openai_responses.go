@@ -38,7 +38,7 @@ func openAIResponsesReply(ctx context.Context, p agentProvider, messages []agent
 		"max_output_tokens": 16384, "store": false,
 		"include": []string{"reasoning.encrypted_content"},
 	}
-	data, err := sendAgentProviderRequest(ctx, p, "https://api.openai.com/v1/responses", body, client)
+	data, err := sendAgentProviderRequest(ctx, p, "https://api.openai.com/v1/responses", body, client, agentModelResponseLimit)
 	if err != nil {
 		return agentMessage{}, err
 	}

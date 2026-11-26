@@ -122,7 +122,7 @@ To modify the interface, run `npm --prefix frontend ci` and `npm --prefix fronte
 - [User guide](docs/user-guide.md) — everyday workflows with screenshots.
 - [Administrator guide](docs/admin-guide.md) — configuration and operation.
 - [Interface gallery](docs/screenshots/README.md) — personal workspace and administration.
-- [Release 1.3.3 notes](docs/release-1.3.3.md) and [roadmap](docs/roadmap.md).
+- [Release 1.3.4 notes](docs/release-1.3.4.md) and [roadmap](docs/roadmap.md).
 - [Product comparison](docs/product-comparison.md) — a separate review with dates and sources.
 
 Most detailed guides are currently in Russian; the [architecture overview](docs/architecture.md) is in English. Screenshots show the running application with demonstration data. Roadmap items describe planned work, not features included in the current release.

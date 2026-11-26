@@ -27,9 +27,11 @@ type agentDownloadedFile struct {
 }
 
 type agentFiles struct {
-	downloads map[string]agentDownloadedFile
-	outputs   []agentArtifact
-	attempts  int
+	downloads     map[string]agentDownloadedFile
+	images        map[string]agentGeneratedImage
+	outputs       []agentArtifact
+	attempts      int
+	imageAttempts int
 }
 
 func (f *agentFiles) download(ctx context.Context, raw string) (any, error) {

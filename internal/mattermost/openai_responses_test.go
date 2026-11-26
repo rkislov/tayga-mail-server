@@ -17,7 +17,7 @@ func (f agentProviderTransportFunc) RoundTrip(r *http.Request) (*http.Response, 
 func TestOpenAIResponsesToolResultKeepsReasoningAndCallID(t *testing.T) {
 	provider := agentProvider{Kind: "openai", URL: "https://api.openai.com/v1", Model: "gpt-6.2-sol", APIKey: "test-key"}
 	messages := []agentMessage{{Role: "system", Content: "Diagnostic"}, {Role: "user", Content: "Call the test tool"}}
-	tools := agentToolSchemas(agentDefinition{Tools: []string{"chat_read"}}, false, agentSearchConfig{}, false)
+	tools := agentToolSchemas(agentDefinition{Tools: []string{"chat_read"}}, false, agentSearchConfig{}, false, false)
 	step := 0
 	client := &http.Client{Transport: agentProviderTransportFunc(func(r *http.Request) (*http.Response, error) {
 		step++

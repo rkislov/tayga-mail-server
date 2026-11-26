@@ -505,9 +505,50 @@
     const provider=select(form,'Модель',next.providers.map(p=>[p.id,p.name+' · '+p.model]),a.provider_id),instructions=field(form,'Инструкции агента',a.instructions,'textarea');instructions.maxLength=32000;
     const enabled=field(form,'Доступен пользователям домена','','checkbox');enabled.checked=a.enabled;
     form.append(node('p','Инструменты действуют от имени пользователя диалога. Выбранные разрешения задают доступ модели к данным.','agents-settings-note'));
-    const tools=[];for(const [id,label] of [['web_search','Поиск в интернете'],['web_download','Загрузка публичных файлов по ссылке'],['file_create','Создание временных документов, презентаций и диаграмм'],['mail_read','Поиск и чтение моей почты'],['mail_send','Подготовка писем с подтверждением'],['calendar_read','Чтение моих календарей'],['chat_read','Поиск и чтение доступных мне чатов'],['chat_send','Подготовка сообщений с подтверждением']]){const checkbox=field(form,label,'','checkbox');checkbox.checked=a.tools?.includes(id);tools.push([id,checkbox]);}
+    const tools=[];
+    for(const [id,label] of [
+      ['web_search','Поиск в интернете'],
+      ['web_download','Загрузка публичных файлов по ссылке'],
+      ['file_create','Создание временных документов, презентаций и диаграмм'],
+      ['image_generate','Генерация изображений'],
+      ['mail_read','Поиск и чтение моей почты'],
+      ['mail_send','Подготовка писем с подтверждением'],
+      ['calendar_read','Чтение моих календарей'],
+      ['chat_read','Поиск и чтение доступных мне чатов'],
+      ['chat_send','Подготовка сообщений с подтверждением'],
+    ]){
+      const checkbox=field(form,label,'','checkbox');
+      checkbox.checked=a.tools?.includes(id);
+      tools.push([id,checkbox]);
+    }
+    const imageToggle=tools.find(([id])=>id==='image_generate')[1];
+    const imageConnections=next.providers.filter(p=>['openai','openai-compatible'].includes(p.kind));
+    const imageSettings=node('div',undefined,'agents-image-settings');
+    imageToggle.closest('label').after(imageSettings);
+    const imageProvider=select(imageSettings,'Провайдер изображений',
+      [['','Выберите подключение'],...imageConnections.map(p=>[p.id,p.name])],
+      a.image_provider_id||imageConnections.find(p=>p.id===a.provider_id)?.id||'');
+    const imageModel=field(imageSettings,'Модель изображений',a.image_model||'');
+    imageModel.maxLength=200;imageModel.placeholder='gpt-image-2.6-flare';
+    imageProvider.required=true;
+    const showImageSettings=()=>{
+      imageSettings.hidden=!imageToggle.checked;
+      imageProvider.disabled=imageModel.disabled=!imageToggle.checked;
+    };
+    imageToggle.disabled=imageConnections.length===0;
+    if(imageToggle.disabled)imageToggle.closest('label').title='Добавьте подключение с OpenAI Images API';
+    imageToggle.onchange=showImageSettings;
+    showImageSettings();
     const skills=[];for(const skill of next.skills){const checkbox=field(form,skill.name,'','checkbox');checkbox.checked=a.skill_ids?.includes(skill.id);skills.push([skill.id,checkbox]);}
-    finishEditor(dialog,form,async()=>{const updated={...a,name:name.value,description:description.value,provider_id:provider.value,instructions:instructions.value,enabled:enabled.checked,tools:tools.filter(([,el])=>el.checked).map(([key])=>key),skill_ids:skills.filter(([,el])=>el.checked).map(([key])=>key)};next.agents=next.agents.filter(v=>v.id!==a.id);next.agents.push(updated);await saveConfig(next);},original?async()=>{next.agents=next.agents.filter(v=>v.id!==a.id);await saveConfig(next);}:null);
+    finishEditor(dialog,form,async()=>{
+      const updated={...a,name:name.value,description:description.value,provider_id:provider.value,
+        instructions:instructions.value,enabled:enabled.checked,
+        image_provider_id:imageToggle.checked?imageProvider.value:'',
+        image_model:imageToggle.checked?imageModel.value.trim():'',
+        tools:tools.filter(([,el])=>el.checked).map(([key])=>key),
+        skill_ids:skills.filter(([,el])=>el.checked).map(([key])=>key)};
+      next.agents=next.agents.filter(v=>v.id!==a.id);next.agents.push(updated);await saveConfig(next);
+    },original?async()=>{next.agents=next.agents.filter(v=>v.id!==a.id);await saveConfig(next);}:null);
   }
   async function editSkill(id){const next=await adminConfig(),original=next.skills.find(s=>s.id===id),skill=original||{id:crypto.randomUUID(),name:'',instructions:''};const {dialog,form}=modal('Навык');const name=field(form,'Название',skill.name),instructions=field(form,'Инструкции',skill.instructions,'textarea');name.required=true;name.maxLength=100;instructions.maxLength=16000;
     finishEditor(dialog,form,async()=>{next.skills=next.skills.filter(s=>s.id!==skill.id);next.skills.push({...skill,name:name.value,instructions:instructions.value});await saveConfig(next);},original?async()=>{next.skills=next.skills.filter(s=>s.id!==skill.id);next.agents.forEach(a=>{a.skill_ids=a.skill_ids.filter(k=>k!==skill.id);});await saveConfig(next);}:null);

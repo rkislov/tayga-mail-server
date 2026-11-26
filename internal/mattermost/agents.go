@@ -33,14 +33,16 @@ type agentProvider struct {
 	HasKey   bool   `json:"has_key"`
 }
 type agentDefinition struct {
-	ID           string   `json:"id"`
-	Name         string   `json:"name"`
-	Description  string   `json:"description"`
-	Instructions string   `json:"instructions"`
-	ProviderID   string   `json:"provider_id"`
-	Enabled      bool     `json:"enabled"`
-	SkillIDs     []string `json:"skill_ids"`
-	Tools        []string `json:"tools"`
+	ID              string   `json:"id"`
+	Name            string   `json:"name"`
+	Description     string   `json:"description"`
+	Instructions    string   `json:"instructions"`
+	ProviderID      string   `json:"provider_id"`
+	ImageProviderID string   `json:"image_provider_id,omitempty"`
+	ImageModel      string   `json:"image_model,omitempty"`
+	Enabled         bool     `json:"enabled"`
+	SkillIDs        []string `json:"skill_ids"`
+	Tools           []string `json:"tools"`
 }
 type agentSkill struct {
 	ID           string `json:"id"`
@@ -143,6 +145,8 @@ func (c agentConfiguration) public(admin bool) agentConfiguration {
 			if !admin {
 				a.Instructions = ""
 				a.ProviderID = ""
+				a.ImageProviderID = ""
+				a.ImageModel = ""
 			}
 			out.Agents = append(out.Agents, a)
 		}
@@ -224,9 +228,14 @@ func (c *agentConfiguration) validate(old agentConfiguration) bool {
 			return false
 		}
 		for _, tool := range a.Tools {
-			if tool != "web_search" && tool != "web_download" && tool != "file_create" && tool != "mail_read" && tool != "mail_send" && tool != "chat_read" && tool != "chat_send" && tool != "calendar_read" {
+			switch tool {
+			case "web_search", "web_download", "file_create", "image_generate", "mail_read", "mail_send", "chat_read", "chat_send", "calendar_read":
+			default:
 				return false
 			}
+		}
+		if len(a.ImageModel) > 200 || agentHasTool(a, "image_generate") && agentImageProvider(*c, a) == nil {
+			return false
 		}
 		agents[a.ID] = true
 		for _, id := range a.SkillIDs {
@@ -794,7 +803,7 @@ func agentModelReply(ctx context.Context, p agentProvider, messages []agentMessa
 			endpoint = base + "/api/chat"
 		}
 	}
-	data, err := sendAgentProviderRequest(ctx, p, endpoint, body, client)
+	data, err := sendAgentProviderRequest(ctx, p, endpoint, body, client, agentModelResponseLimit)
 	if err != nil {
 		return agentMessage{}, err
 	}
@@ -823,7 +832,9 @@ func agentModelReply(ctx context.Context, p agentProvider, messages []agentMessa
 	return reply, nil
 }
 
-func sendAgentProviderRequest(ctx context.Context, p agentProvider, endpoint string, body map[string]any, client *http.Client) ([]byte, error) {
+const agentModelResponseLimit = 2 << 20
+
+func sendAgentProviderRequest(ctx context.Context, p agentProvider, endpoint string, body map[string]any, client *http.Client, limit int64) ([]byte, error) {
 	payload, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
@@ -846,8 +857,8 @@ func sendAgentProviderRequest(ctx context.Context, p agentProvider, endpoint str
 	if res.StatusCode != 200 {
 		return nil, readAgentProviderError(res)
 	}
-	data, err := io.ReadAll(io.LimitReader(res.Body, (2<<20)+1))
-	if err != nil || len(data) > 2<<20 {
+	data, err := io.ReadAll(io.LimitReader(res.Body, limit+1))
+	if err != nil || int64(len(data)) > limit {
 		return nil, errors.New("provider response too large")
 	}
 	return data, nil

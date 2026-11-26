@@ -7,10 +7,10 @@ const settle=async()=>{for(let i=0;i<12;i++)await new Promise(r=>setImmediate(r)
 function fixture(t,admin=false,empty=false,tools=false){
  const dom=new JSDOM('<nav><button data-app="chat">Чат</button></nav><main><section id="app-chat"></section></main>',{url:'https://tms.test',runScripts:'outside-only'}),w=dom.window;
  w.state={email:'alice@test',tokens:{access_token:'alice'}};w.APPS=['chat'];w.showApp=name=>{for(const app of w.APPS)w.document.getElementById('app-'+app)?.classList.toggle('hidden',app!==name);};
- const requests=[];let reply='Ответ',deferred=null,history=[],chat={id:'c1',channel_id:'dm1',agent_id:'helper',title:'Личный тест',updated_at:1,messages:[],web_enabled:false,actions:tools?[{id:'a1',tool:'mail_draft',arguments:{to:'recipient@example.test',subject:'<img src=x>',text:'Exact proposed body'},state:'pending',expires_at:Date.now()+60000}]:[]};
+ const requests=[];let config={version:0,providers:[],agents:[],skills:[]},reply='Ответ',deferred=null,history=[],chat={id:'c1',channel_id:'dm1',agent_id:'helper',title:'Личный тест',updated_at:1,messages:[],web_enabled:false,actions:tools?[{id:'a1',tool:'mail_draft',arguments:{to:'recipient@example.test',subject:'<img src=x>',text:'Exact proposed body'},state:'pending',expires_at:Date.now()+60000}]:[]};
  w.api=async(url,options={})=>{requests.push({url,options});options._guard?.();
   if(deferred&&url==='/api/v4/tms/agents')return new Promise(r=>{deferred.finish=()=>r({can_manage:false,catalog:{agents:[{id:'private',name:'STALE OWNER',description:''}],skills:[]}});});
-  if(url.endsWith('/config'))return {version:0,providers:[],agents:[],skills:[]};
+  if(url.endsWith('/config'))return config;
   if(url.endsWith('/config/models'))return {models:['catalog-first','catalog-second']};
   if(url==='/api/v4/files')return {file_infos:options.body.getAll('files').map((file,i)=>({id:'file'+i,name:file.name,size:file.size}))};
   if(url==='/api/v4/tms/agents')return {can_manage:admin,search_available:true,catalog:{agents:empty?[]:[{id:'helper',name:'<img src=x onerror=alert(1)>',description:'Помощник',tools:tools?['web_search']:[]}],skills:[]}};
@@ -23,7 +23,7 @@ function fixture(t,admin=false,empty=false,tools=false){
  w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;this.dispatchEvent(new w.Event('close'));};
  w.eval(fs.readFileSync(require.resolve('markdown-it/browser'),'utf8'));
  w.eval(fs.readFileSync(require('node:path').join(__dirname,'../src/chat-markdown.js'),'utf8'));
- w.eval(fs.readFileSync(require('node:path').join(__dirname,'../src/chat-workspace.js'),'utf8'));w.eval(source);t.after(()=>w.close());return {w,requests,replyWith(content){reply=content;},defer(){deferred={};return()=>{deferred.finish();deferred=null;};}};
+ w.eval(fs.readFileSync(require('node:path').join(__dirname,'../src/chat-workspace.js'),'utf8'));w.eval(source);t.after(()=>w.close());return {w,requests,withConfig(next){config=next;},replyWith(content){reply=content;},defer(){deferred={};return()=>{deferred.finish();deferred=null;};}};
 }
 test('Agents opens catalog, creates a private conversation and sends message',async t=>{
  const {w,requests}=fixture(t);w.showApp('agents');await settle();
@@ -163,6 +163,34 @@ test('provider catalog is discoverable before saving and selects the exact retur
  dialog.querySelector('form').dispatchEvent(new w.Event('submit',{cancelable:true}));await settle();
  const saved=requests.find(req=>req.options.method==='PUT');
  assert.equal(JSON.parse(saved.options.body).providers[0].model,'catalog-second');
+});
+
+test('agent settings can select a separate image provider and model',async t=>{
+ const f=fixture(t,true),{w,requests}=f;
+ f.withConfig({version:0,providers:[
+  {id:'text',name:'Текст',kind:'deepseek',model:'deepseek-flash'},
+  {id:'images',name:'Изображения',kind:'openai',model:'gpt-6.2-sol'},
+ ],agents:[],skills:[]});
+ w.showApp('agents');await settle();
+ w.document.querySelector('[data-view="settings"]').click();await settle();
+ [...w.document.querySelectorAll('button')].find(button=>button.textContent==='+ Создать').click();await settle();
+ const dialog=w.document.querySelector('dialog');
+ const fields=[...dialog.querySelectorAll('label')];
+ const field=label=>fields.find(node=>node.firstChild.textContent===label)?.querySelector('input,select');
+ const imageToggle=field('Генерация изображений');
+ const imageProvider=field('Провайдер изображений');
+ assert.equal(imageProvider.disabled,true);
+ imageToggle.checked=true;imageToggle.dispatchEvent(new w.Event('change'));
+ assert.deepEqual([...imageProvider.options].map(option=>option.value),['','images']);
+ imageProvider.value='images';
+ field('Модель изображений').value='gpt-image-2';
+ field('Имя').value='Книжный клуб';
+ dialog.querySelector('form').dispatchEvent(new w.Event('submit',{cancelable:true}));await settle();
+ const agent=JSON.parse(requests.find(request=>request.options.method==='PUT').options.body).agents[0];
+ assert.equal(agent.provider_id,'text');
+ assert.equal(agent.image_provider_id,'images');
+ assert.equal(agent.image_model,'gpt-image-2');
+ assert.ok(agent.tools.includes('image_generate'));
 });
 
 test('agent composer uploads a file and recorded audio before posting to the private dialog',async t=>{

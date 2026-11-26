@@ -6319,3 +6319,4 @@ html[data-color-mode=dark] :is(button,input,select,textarea):focus-visible {
 .agents-schedule-summary p {margin:4px 0;}
 .agents-dialog .agents-schedule-days:not([hidden]) {display:flex;flex-wrap:wrap;gap:8px 16px;}
 .agents-dialog .agents-schedule-days .agents-checkbox {gap:4px;}
+.agents-image-settings:not([hidden]) {display:grid;gap:8px;margin-inline-start:20px;}

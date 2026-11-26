@@ -95,10 +95,10 @@ func TestAgentsWebStateAndSearchIsolation(t *testing.T) {
 	config.Search = agentSearchConfig{Kind: "searxng", URL: search.URL}
 	config.Agents[0].Tools = []string{"web_search"}
 	f.call(t, "PUT", "/tms/agents/config", f.tokens[0], config, 200)
-	if len(agentToolSchemas(config.Agents[0], false, config.Search, true)) != 0 {
+	if len(agentToolSchemas(config.Agents[0], false, config.Search, true, false)) != 0 {
 		t.Fatal("web allowed while off")
 	}
-	if len(agentToolSchemas(config.Agents[0], true, config.Search, true)) != 1 {
+	if len(agentToolSchemas(config.Agents[0], true, config.Search, true, false)) != 1 {
 		t.Fatal("missing web tool")
 	}
 	result, err := agentWebSearch(t.Context(), config.Search, "test")
@@ -119,7 +119,7 @@ func TestAgentsWebStateAndSearchIsolation(t *testing.T) {
 	}
 	// No tools or owner secrets are inherited by an unrelated domain.
 	foreign := agentDefinition{}
-	if len(agentToolSchemas(foreign, true, config.Search, true)) != 0 {
+	if len(agentToolSchemas(foreign, true, config.Search, true, false)) != 0 {
 		t.Fatal("tools inherited")
 	}
 	if _, err = f.api.agentReadTool(t.Context(), f.users[1], config.Search, "chat_search", map[string]string{"channel_id": conv["channel_id"].(string)}); err == nil {

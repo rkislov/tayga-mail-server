@@ -93,7 +93,7 @@ func agentHasTool(a agentDefinition, name string) bool {
 	}
 	return false
 }
-func agentToolSchemas(a agentDefinition, web bool, search agentSearchConfig, mailEnabled bool) []agentFunction {
+func agentToolSchemas(a agentDefinition, web bool, search agentSearchConfig, mailEnabled, imageEnabled bool) []agentFunction {
 	tools := []agentFunction{}
 	add := func(name, description string, fields ...string) {
 		properties := map[string]any{}
@@ -110,7 +110,10 @@ func agentToolSchemas(a agentDefinition, web bool, search agentSearchConfig, mai
 		add("web_file_read", "Прочитать следующую порцию скачанного текстового файла. offset — строка с числом next_offset из предыдущего ответа.", "file_id", "offset")
 	}
 	if agentHasTool(a, "file_create") {
-		add("file_create", `Создать файл для скачивания по запросу пользователя. Форматы txt, md, csv, docx (текст с абзацами), pptx (массив JSON [{"title":"Слайд","lines":["Строка"]}]), svg (статические фигуры и текст, без внешних ресурсов). До 24 КБ исходного текста. Не выдумывай ссылки на созданные файлы: интерфейс покажет их автоматически.`, "name", "format", "content")
+		add("file_create", `Создать файл для скачивания по запросу пользователя. Форматы txt, md, csv, docx (текст с абзацами), pptx (массив JSON [{"title":"Слайд","lines":["Строка"],"image_id":"идентификатор"}]), svg (статические фигуры и текст, без внешних ресурсов). Для PPTX поле image_id необязательное. Передай в нём точный идентификатор, полученный от image_generate в этом запросе. До 24 КБ исходного текста. Сообщай о готовом файле после успешного вызова. Интерфейс покажет файл автоматически.`, "name", "format", "content")
+	}
+	if imageEnabled {
+		add("image_generate", `Сгенерировать PNG. Используй для запрошенных изображений и уместных иллюстраций к ключевым слайдам презентации, если пользователь не просил текстовый вариант. Для слайда выбери use=pptx и передай image_id в file_create с format=pptx. Для отдельного файла выбери use=download. Размеры size: 1024x1024, 1536x1024, 1024x1536. До трёх изображений за запрос. Не используй одну и ту же иллюстрацию на разных слайдах без запроса пользователя.`, "name", "prompt", "use", "size")
 	}
 	if agentHasTool(a, "mail_read") && mailEnabled {
 		add("mail_search", "Найти письма в собственном почтовом ящике пользователя, максимум 10 результатов.", "query")
@@ -161,7 +164,8 @@ func agentCurrentInstructions(custom string, tools []agentFunction, scheduled bo
 func (s *API) agentToolCompletion(r *http.Request, u *storage.User, c agentConfiguration, a agentDefinition, conv agentConversation, p agentProvider, messages []agentMessage, files *agentFiles) (string, []agentAction, error) {
 	ctx, cancel := context.WithTimeout(r.Context(), 120*time.Second)
 	defer cancel()
-	tools := agentToolSchemas(a, conv.WebEnabled, c.Search, s.agentMailTool != nil)
+	imageProvider := agentImageProvider(c, a)
+	tools := agentToolSchemas(a, conv.WebEnabled, c.Search, s.agentMailTool != nil, imageProvider != nil)
 	_, scheduled := r.Context().Value(agentScheduledKey{}).(agentScheduledRun)
 	if scheduled {
 		tools = slices.DeleteFunc(tools, func(tool agentFunction) bool { return strings.HasSuffix(tool.Name, "_draft") })
@@ -238,10 +242,12 @@ func (s *API) agentToolCompletion(r *http.Request, u *storage.User, c agentConfi
 						result, e = files.read(args["file_id"], args["offset"])
 					case "file_create":
 						result, e = files.create(args["name"], args["format"], args["content"])
+					case "image_generate":
+						result, e = files.generateImage(ctx, *imageProvider, a.ImageModel, args)
 					default:
 						result, e = s.agentReadTool(ctx, u, c.Search, call.Function.Name, args)
 					}
-					if e != nil && (strings.HasPrefix(call.Function.Name, "web_file_") || call.Function.Name == "web_download" || call.Function.Name == "file_create") {
+					if e != nil && (strings.HasPrefix(call.Function.Name, "web_file_") || call.Function.Name == "web_download" || call.Function.Name == "file_create" || call.Function.Name == "image_generate") {
 						result, e = map[string]string{"error": e.Error()}, nil
 					}
 				}
