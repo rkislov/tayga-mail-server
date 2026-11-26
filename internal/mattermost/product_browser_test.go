@@ -54,6 +54,30 @@ func TestProductBrowserStand(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer admin.Close()
+	database := mmplugins.SharedProductDatabaseName(scope.Key())
+	if _, err = admin.Exec(`CREATE DATABASE "` + database + `" TEMPLATE template0`); err != nil {
+		t.Fatal(err)
+	}
+	dropRoles := []string{}
+	defer func() {
+		_, _ = admin.Exec(`DROP DATABASE "` + database + `" WITH (FORCE)`)
+		for _, role := range dropRoles {
+			_, _ = admin.Exec(`DROP ROLE "` + role + `"`)
+		}
+	}()
+	if _, err = admin.Exec(`REVOKE ALL ON DATABASE "` + database + `" FROM PUBLIC`); err != nil {
+		t.Fatal(err)
+	}
+	sharedDSN := *parsed
+	sharedDSN.Path = "/" + database
+	shared, err := sql.Open("postgres", sharedDSN.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer shared.Close()
+	if _, err = shared.Exec(`REVOKE ALL ON SCHEMA public FROM PUBLIC`); err != nil {
+		t.Fatal(err)
+	}
 	entries := []map[string]string{}
 	for _, id := range []string{"focalboard", "playbooks"} {
 		name := mmplugins.ProductDatabaseName(scope.Key(), id)
@@ -61,13 +85,18 @@ func TestProductBrowserStand(t *testing.T) {
 		if _, err = admin.Exec(`CREATE ROLE "` + name + `" LOGIN PASSWORD '` + password + `' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS`); err != nil {
 			t.Fatal(err)
 		}
-		defer func() { _, _ = admin.Exec(`DROP ROLE "` + name + `"`) }()
-		if _, err = admin.Exec(`CREATE DATABASE "` + name + `" OWNER "` + name + `"`); err != nil {
+		dropRoles = append(dropRoles, name)
+		schema := mmplugins.ProductDatabaseSchema(database, scope.Key(), id)
+		schemaDDL := `ALTER SCHEMA public OWNER TO "` + name + `"`
+		if schema == "boards" {
+			schemaDDL = `CREATE SCHEMA boards AUTHORIZATION "` + name + `"`
+		}
+		if _, err = shared.Exec(schemaDDL + `; GRANT CONNECT,TEMPORARY ON DATABASE "` + database + `" TO "` + name + `";
+			ALTER ROLE "` + name + `" IN DATABASE "` + database + `" SET search_path TO ` + schema); err != nil {
 			t.Fatal(err)
 		}
-		defer func() { _, _ = admin.Exec(`DROP DATABASE "` + name + `" WITH (FORCE)`) }()
 		target := *parsed
-		target.Path = "/" + name
+		target.Path = "/" + database
 		target.User = url.UserPassword(name, password)
 		entries = append(entries, map[string]string{"scope": scope.Key(), "plugin_id": id, "dsn": target.String()})
 	}

@@ -78,7 +78,13 @@ func snapshotProducts(ctx context.Context, root string, cfg *config.Config) (*Pr
 	result := &ProductBackup{Bindings: rel, Directory: dirRel}
 	for _, b := range bindings {
 		name := mmplugins.ProductDatabaseName(b.Scope, b.PluginID) + ".dump"
-		cmd := exec.CommandContext(ctx, "pg_dump", "--format=custom", "--no-owner", "--no-acl", "--file="+filepath.Join(dumpDir, name))
+		u, _ := url.Parse(b.DSN)
+		database := strings.TrimPrefix(u.Path, "/")
+		args := []string{"--format=custom", "--no-owner", "--no-acl", "--file=" + filepath.Join(dumpDir, name)}
+		if schema := mmplugins.ProductDatabaseSchema(database, b.Scope, b.PluginID); schema != "" {
+			args = append(args, "--schema="+schema)
+		}
+		cmd := exec.CommandContext(ctx, "pg_dump", args...)
 		// No credentials in argv,
 		// output, the manifest or error messages. Ignore inherited libpq overrides.
 		for _, e := range os.Environ() {
@@ -86,13 +92,12 @@ func snapshotProducts(ctx context.Context, root string, cfg *config.Config) (*Pr
 				cmd.Env = append(cmd.Env, e)
 			}
 		}
-		u, _ := url.Parse(b.DSN)
 		port := u.Port()
 		if port == "" {
 			port = "5432"
 		}
 		password, _ := u.User.Password()
-		cmd.Env = append(cmd.Env, "PGHOST="+u.Hostname(), "PGPORT="+port, "PGDATABASE="+strings.TrimPrefix(u.Path, "/"), "PGUSER="+u.User.Username(), "PGPASSWORD="+password, "PGCONNECT_TIMEOUT=10")
+		cmd.Env = append(cmd.Env, "PGHOST="+u.Hostname(), "PGPORT="+port, "PGDATABASE="+database, "PGUSER="+u.User.Username(), "PGPASSWORD="+password, "PGCONNECT_TIMEOUT=10")
 		for key, env := range map[string]string{"sslmode": "PGSSLMODE", "sslrootcert": "PGSSLROOTCERT", "sslcert": "PGSSLCERT", "sslkey": "PGSSLKEY"} {
 			if v := u.Query().Get(key); v != "" {
 				cmd.Env = append(cmd.Env, env+"="+v)

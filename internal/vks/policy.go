@@ -4,8 +4,32 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/url"
+	"regexp"
+	"strings"
+
 	"github.com/tayga/tms/internal/storage"
 )
+
+type Provider string
+
+const (
+	ProviderJitsi  Provider = "jitsi"
+	ProviderKontur Provider = "kontur_talk"
+)
+
+var konturSpaceHost = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.ktalk\.(ru|host)$`)
+
+// KonturSpace accepts a public Kontur Talk space, without credentials or room paths.
+func KonturSpace(raw string) (string, error) {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Scheme != "https" || u.User != nil || u.RawQuery != "" || u.ForceQuery ||
+		u.Fragment != "" || u.Opaque != "" || (u.EscapedPath() != "" && u.EscapedPath() != "/") ||
+		!konturSpaceHost.MatchString(strings.ToLower(u.Host)) {
+		return "", errors.New("use the HTTPS address of a Kontur Talk space, for example https://team.ktalk.ru")
+	}
+	return "https://" + strings.ToLower(u.Host), nil
+}
 
 type Scope struct {
 	TenantID string `json:"tenant_id"`
@@ -23,14 +47,18 @@ func (s Scope) key() string {
 }
 
 type Policy struct {
-	Enabled  *bool     `json:"enabled,omitempty"`
-	STUNURLs *[]string `json:"stun_urls,omitempty"`
-	TURNURLs *[]string `json:"turn_urls,omitempty"`
+	Provider  *Provider `json:"provider,omitempty"`
+	KonturURL *string   `json:"kontur_url,omitempty"`
+	Enabled   *bool     `json:"enabled,omitempty"`
+	STUNURLs  *[]string `json:"stun_urls,omitempty"`
+	TURNURLs  *[]string `json:"turn_urls,omitempty"`
 }
 type Effective struct {
-	Enabled  bool     `json:"enabled"`
-	STUNURLs []string `json:"stun_urls"`
-	TURNURLs []string `json:"turn_urls"`
+	Provider  Provider `json:"provider"`
+	KonturURL string   `json:"kontur_url,omitempty"`
+	Enabled   bool     `json:"enabled"`
+	STUNURLs  []string `json:"stun_urls"`
+	TURNURLs  []string `json:"turn_urls"`
 }
 type Policies struct {
 	Store    storage.Driver
@@ -73,6 +101,20 @@ func (p Policies) Save(ctx context.Context, s Scope, value Policy) error {
 	if err := p.Validate(ctx, s); err != nil {
 		return err
 	}
+	if value.Provider != nil && *value.Provider != ProviderJitsi && *value.Provider != ProviderKontur {
+		return errors.New("unknown conferencing provider")
+	}
+	if value.KonturURL != nil {
+		normalized := strings.TrimSpace(*value.KonturURL)
+		if normalized != "" {
+			var err error
+			normalized, err = KonturSpace(normalized)
+			if err != nil {
+				return err
+			}
+		}
+		value.KonturURL = &normalized
+	}
 	if value.STUNURLs != nil {
 		if err := ValidateURLs(*value.STUNURLs, false); err != nil {
 			return err
@@ -91,6 +133,9 @@ func (p Policies) Save(ctx context.Context, s Scope, value Policy) error {
 }
 func (p Policies) Resolve(ctx context.Context, s Scope) (Effective, error) {
 	out := p.Defaults
+	if out.Provider == "" {
+		out.Provider = ProviderJitsi
+	}
 	if err := p.Validate(ctx, s); err != nil {
 		return out, err
 	}
@@ -108,6 +153,12 @@ func (p Policies) Resolve(ctx context.Context, s Scope) (Effective, error) {
 		}
 		if v.Enabled != nil {
 			out.Enabled = *v.Enabled
+		}
+		if v.Provider != nil {
+			out.Provider = *v.Provider
+		}
+		if v.KonturURL != nil {
+			out.KonturURL = *v.KonturURL
 		}
 		if v.STUNURLs != nil {
 			out.STUNURLs = *v.STUNURLs

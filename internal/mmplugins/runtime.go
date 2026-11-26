@@ -196,6 +196,17 @@ func (r *Runtime) Enable(id string) (*model.Manifest, error) {
 	if !matches {
 		return nil, fmt.Errorf("plugin requires Mattermost %s; host API target is %s", m.MinServerVersion, Version)
 	}
+	if r.sql != nil && r.options.SQLDataSource != nil && (id == "focalboard" || id == "playbooks") {
+		// Original modules also receive a DSN through GetConfig. Validate
+		// the scope and grants before the executable can use that DSN.
+		conn, err := r.sql.ConnWithPluginID(false, id)
+		if err != nil {
+			return nil, err
+		}
+		if err = r.sql.ConnClose(conn); err != nil {
+			return nil, err
+		}
+	}
 	m, _, err = r.env.Activate(id)
 	if err != nil {
 		return nil, err

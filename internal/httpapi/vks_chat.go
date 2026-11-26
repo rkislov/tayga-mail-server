@@ -11,30 +11,32 @@ import (
 
 func (s *Server) mattermostChannelCallsAllowed(ctx context.Context, u *storage.User) (bool, error) {
 	policy, err := s.vksPolicies().Resolve(ctx, vks.Scope{TenantID: u.TenantID, DomainID: u.DomainID})
-	return policy.Enabled, err
+	return vksAvailable(policy, s.cfgLive().VKS.Enabled), err
 }
 
 func (s *Server) startMattermostChannelCall(ctx context.Context, u *storage.User, channelID string) (string, error) {
 	cfg := s.cfgLive()
-	allowed, err := s.mattermostChannelCallsAllowed(ctx, u)
+	policy, err := s.vksPolicies().Resolve(ctx, vks.Scope{TenantID: u.TenantID, DomainID: u.DomainID})
 	if err != nil {
 		return "", err
 	}
-	if !allowed {
+	if !vksAvailable(policy, cfg.VKS.Enabled) {
 		return "", chat.ErrForbidden
 	}
-	meetURL, err := url.Parse(cfg.VKS.PublicURL)
-	if err != nil || meetURL.Scheme != "https" || meetURL.Hostname() == "" || cfg.VKS.KeyID == "" {
-		return "", chat.ErrInvalid
-	}
-	if _, err := vks.LoadSigningKey(cfg.VKS.SigningKeyFile); err != nil {
-		return "", err
+	if policy.Provider == vks.ProviderJitsi {
+		meetURL, err := url.Parse(cfg.VKS.PublicURL)
+		if err != nil || meetURL.Scheme != "https" || meetURL.Hostname() == "" || cfg.VKS.KeyID == "" {
+			return "", chat.ErrInvalid
+		}
+		if _, err := vks.LoadSigningKey(cfg.VKS.SigningKeyFile); err != nil {
+			return "", err
+		}
 	}
 	link, err := url.Parse(cfg.HTTP.PublicURL)
 	if err != nil || link.Scheme != "https" || link.Hostname() == "" {
 		return "", chat.ErrInvalid
 	}
-	meeting, err := (vks.Meetings{Store: s.store}).CreateForChannel(ctx, u, channelID)
+	meeting, err := (vks.Meetings{Store: s.store, Policy: policy}).CreateForChannel(ctx, u, channelID)
 	if err != nil {
 		return "", err
 	}
@@ -49,9 +51,7 @@ func (s *Server) allowsVKSMeeting(ctx context.Context, meeting vks.Meeting, u *s
 	if !(vks.Meetings{Store: s.store}).CanJoin(ctx, meeting, u) {
 		return false
 	}
-	if meeting.DomainID == u.DomainID {
-		return true
-	} // The caller checks the user's domain.
 	policy, err := s.vksPolicies().Resolve(ctx, vks.Scope{TenantID: meeting.TenantID, DomainID: meeting.DomainID})
-	return err == nil && policy.Enabled
+	return err == nil && vksAvailable(policy, s.cfgLive().VKS.Enabled) && policy.Provider == meeting.Backend() &&
+		(meeting.Backend() != vks.ProviderKontur || policy.KonturURL == meeting.KonturURL)
 }

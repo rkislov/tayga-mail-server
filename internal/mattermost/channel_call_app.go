@@ -108,7 +108,7 @@ func (s *API) channelCallBindings(w http.ResponseWriter, r *http.Request, u *sto
 					"bindings": []any{map[string]any{
 						"app_id":   channelCallAppID,
 						"location": "tms-jitsi",
-						"label":    "Начать звонок Jitsi",
+						"label":    "Начать видеозвонок",
 						"icon":     "video-outline",
 						"submit":   map[string]string{"path": channelCallAppPath},
 					}},

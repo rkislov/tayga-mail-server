@@ -20,6 +20,8 @@ import (
 )
 
 type Meeting struct {
+	Provider     Provider  `json:"provider,omitempty"`
+	KonturURL    string    `json:"kontur_url,omitempty"`
 	ChannelID    string    `json:"channel_id,omitempty"`
 	Room         string    `json:"room"`
 	Title        string    `json:"title"`
@@ -29,7 +31,17 @@ type Meeting struct {
 	Participants []string  `json:"participants"`
 	CreatedAt    time.Time `json:"created_at"`
 }
-type Meetings struct{ Store storage.Driver }
+type Meetings struct {
+	Store  storage.Driver
+	Policy Effective
+}
+
+func (v Meeting) Backend() Provider {
+	if v.Provider == "" {
+		return ProviderJitsi
+	}
+	return v.Provider
+}
 
 func (m Meetings) Get(ctx context.Context, room string) (Meeting, error) {
 	var v Meeting
@@ -92,6 +104,14 @@ func (m Meetings) Create(ctx context.Context, u *storage.User, title string, par
 }
 
 func (m Meetings) save(ctx context.Context, meeting Meeting) (Meeting, error) {
+	meeting.Provider = m.Policy.Provider
+	if meeting.Provider == ProviderKontur {
+		space, err := KonturSpace(m.Policy.KonturURL)
+		if err != nil {
+			return Meeting{}, err
+		}
+		meeting.KonturURL = space
+	}
 	data := make([]byte, 16)
 	if _, err := rand.Read(data); err != nil {
 		return Meeting{}, err
@@ -191,7 +211,7 @@ func (m Meetings) JoinToken(ctx context.Context, key *rsa.PrivateKey, kid, subje
 }
 
 func signJoinToken(key *rsa.PrivateKey, kid, subject string, meeting Meeting, u *storage.User, now time.Time) (string, error) {
-	if kid == "" || subject == "" {
+	if meeting.Backend() != ProviderJitsi || kid == "" || subject == "" {
 		return "", errors.New("invalid conference signing configuration")
 	}
 	affiliation := "member"

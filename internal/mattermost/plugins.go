@@ -241,7 +241,7 @@ func (s *API) commands(w http.ResponseWriter, r *http.Request, u *storage.User, 
 			commands = append(commands, &command)
 		}
 		if s.startChannelCall != nil {
-			commands = append(commands, &model.Command{Trigger: "meet", AutoComplete: true, AutoCompleteDesc: "Начать групповой звонок Jitsi в канале", DisplayName: "Звонок Jitsi", TeamId: chat.ID(u.TenantID)})
+			commands = append(commands, &model.Command{Trigger: "meet", AutoComplete: true, AutoCompleteDesc: "Начать групповой видеозвонок в канале", DisplayName: "Видеозвонок", TeamId: chat.ID(u.TenantID)})
 		}
 		if runtime, err := s.pluginRuntimeForScope(r.Context(), userScope(u)); err == nil {
 			for _, command := range runtime.Commands(chat.ID(u.TenantID)) {

@@ -14,8 +14,8 @@ import (
 	"github.com/mattermost/mattermost/server/public/plugin"
 )
 
-// SQLDatabaseFactory must return a dedicated database for this plugin AND
-// Runtime scope. It must never return the TMS account/mail database. The bridge
+// SQLDatabaseFactory must return an isolated connection for this plugin and
+// runtime scope. It must never return the TMS account/mail database. The bridge
 // owns the returned pools and releases handles when a plugin is deactivated.
 type SQLDatabaseFactory func(pluginID string) (*sql.DB, error)
 

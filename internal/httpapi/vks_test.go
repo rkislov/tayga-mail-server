@@ -140,7 +140,7 @@ func TestVKSAuthenticatedRoomBrandingAndICE(t *testing.T) {
 	}
 	if err := json.Unmarshal(send("GET", bindings+"&user_id="+chat.ID(owner.ID), token, "", 200), &menu); err != nil ||
 		len(menu) != 1 || menu[0].Location != "/channel_header" || len(menu[0].Bindings) != 1 ||
-		menu[0].Bindings[0].Label != "Начать звонок Jitsi" {
+		menu[0].Bindings[0].Label != "Начать видеозвонок" {
 		t.Fatalf("invalid channel action: %+v (%v)", menu, err)
 	}
 	action := menu[0].Bindings[0]
@@ -179,4 +179,67 @@ func TestVKSAuthenticatedRoomBrandingAndICE(t *testing.T) {
 	request("POST", apps+"/call", token, callBody, 403)
 	request("GET", "/api/v1/vks/ice", token, "", 403)
 	request("POST", "/api/v1/vks/join/"+room, token, "", 403)
+
+	// Switch the tenant default to Kontur and clear the domain's explicit
+	// disable. A sibling can keep the server's Jitsi backend.
+	on := true
+	kontur := vks.ProviderKontur
+	jitsi := vks.ProviderJitsi
+	space := "https://EXAMPLE.ktalk.ru/"
+	root := vks.Scope{TenantID: tenant.ID}
+	own := vks.Scope{TenantID: tenant.ID, DomainID: domain.ID}
+	siblingScope := vks.Scope{TenantID: tenant.ID, DomainID: sibling.ID}
+	tenantAdmin, tenantAdminToken := makeUser("tenant-admin", domain)
+	if err := st.UpdateUserRoles(ctx, tenantAdmin.ID, storage.RoleTenantAdmin); err != nil {
+		t.Fatal(err)
+	}
+	domainAdmin, domainAdminToken := makeUser("domain-admin", domain)
+	if err := st.UpdateUserRoles(ctx, domainAdmin.ID, storage.RoleDomainAdmin); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetDomainAdminDomains(ctx, domainAdmin.ID, []string{domain.ID}); err != nil {
+		t.Fatal(err)
+	}
+	adminPath := "/api/v1/admin/vks?tenant_id=" + tenant.ID
+	request("PUT", adminPath, token, "{}", 403)
+	request("PUT", adminPath, domainAdminToken, "{}", 403)
+	request("PUT", adminPath+"&domain_id="+sibling.ID, domainAdminToken, "{}", 403)
+	for _, input := range []string{"http://example.ktalk.ru", "https://example.ktalk.ru.bad.test", "https://example.ktalk.ru:8443", "https://x@example.ktalk.ru", "https://example.ktalk.ru/room"} {
+		if err := policy.Save(ctx, root, vks.Policy{Provider: &kontur, KonturURL: &input}); err == nil {
+			t.Fatalf("accepted invalid space %q", input)
+		}
+	}
+	setTenant, _ := json.Marshal(vks.Policy{Enabled: &on, Provider: &kontur, KonturURL: &space})
+	request("PUT", adminPath, tenantAdminToken, string(setTenant), 200)
+	if err := policy.Save(ctx, own, vks.Policy{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := policy.Save(ctx, siblingScope, vks.Policy{Provider: &jitsi}); err != nil {
+		t.Fatal(err)
+	}
+	// Kontur can operate independently of the locally hosted Jitsi server.
+	cfg.VKS = config.VKSConfig{}
+	h = httpapi.New(cfg, slog.Default(), st, layer, nil, nil, nil).Handler()
+	request("GET", "/api/v1/vks/ice", foreign, "", 403)
+	request("GET", "/api/v1/vks/ice", token, "", 404)
+	request("POST", "/api/v1/vks/join/"+room, token, "", 404)
+	newMeeting := request("POST", "/api/v1/vks/meetings", token, string(body), 201)
+	path := "/api/v1/vks/join/" + newMeeting["room"].(string)
+	join := request("POST", path, member, "", 200)
+	if join["join_url"] != "https://example.ktalk.ru/"+newMeeting["room"].(string) || join["jwt"] != nil || join["provider"] != string(kontur) {
+		t.Fatal(join)
+	}
+	request("POST", path, outsider, "", 404)
+	request("POST", path, foreign, "", 403)
+	nativeCall := request("POST", apps+"/call", token, callBody, 200)
+	call, err := url.Parse(nativeCall["navigate_to_url"].(string))
+	if err != nil || call.Host != "mail.example.test" {
+		t.Fatalf("unexpected Kontur channel link: %v %v", call, err)
+	}
+	konturCallRoom := call.Query().Get("room")
+	if got := request("POST", "/api/v1/vks/join/"+konturCallRoom, token, "", 200); got["join_url"] != "https://example.ktalk.ru/"+konturCallRoom {
+		t.Fatal(got)
+	}
+	request("PUT", adminPath+"&domain_id="+domain.ID, domainAdminToken, `{"kontur_url":"https://other.ktalk.host"}`, 200)
+	request("POST", path, member, "", 404)
 }

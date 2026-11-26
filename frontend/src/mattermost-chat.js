@@ -80,7 +80,7 @@ const mmChat = (() => {
   async function refreshStatus() {try{const status=await request('/users/me/status');el('status').value=status.status;el('status').dataset.status=status.status}catch{} }
   function setupControls() {
     iconButton(el('thread').querySelector('[data-pane-back]'),'back','К списку чатов');
-    for(const [id,name,title] of [['refresh','refresh','Обновить'],['new','new','Новый диалог'],['create','channel','Создать канал'],['browse','browse','Открытые каналы'],['members','members','Участники'],['call','call','Звонок Jitsi'],['reply-cancel','close','Отменить ответ']])iconButton(el(id),name,title);
+    for(const [id,name,title] of [['refresh','refresh','Обновить'],['new','new','Новый диалог'],['create','channel','Создать канал'],['browse','browse','Открытые каналы'],['members','members','Участники'],['call','call','Видеозвонок'],['reply-cancel','close','Отменить ответ']])iconButton(el(id),name,title);
     const identity=el('self').parentElement, profile=document.createElement('div');profile.className='mm-profile-text';profile.append(el('self'),el('connection'));identity.append(profile);
     const status=document.createElement('select');status.id='mm-chat-status';status.className='mm-status';status.setAttribute('aria-label','Мой статус');
     for(const [value,title] of [['online','В сети'],['away','Отошёл'],['dnd','Не беспокоить'],['offline','Не в сети']])status.add(new Option(title,value));profile.append(status);
@@ -238,7 +238,7 @@ const mmChat = (() => {
       if (callURL) {
         const link = document.createElement('a');
         link.href = callURL;
-        link.textContent = 'Присоединиться к звонку Jitsi';
+        link.textContent = 'Присоединиться к видеозвонку';
         text.append(link);
       } else {
         text.textContent = post.message || '';text.hidden=!post.message;

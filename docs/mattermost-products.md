@@ -25,9 +25,12 @@ References: [Boards license](https://github.com/mattermost/mattermost-plugin-boa
 
 ## Tenant/domain isolation
 
-Each `domain:<internal tenant ID>:<internal domain ID>` receives its own plugin
-runtime, KV namespace, local file directory, PostgreSQL database and nonprivileged
-login. Plugin SQL never runs against the TMS mail/account database. The host mirrors
+Each `domain:<internal tenant ID>:<internal domain ID>` receives its own PostgreSQL
+database for collaboration. Boards uses the `boards` schema and Playbooks uses
+`public`, with a separate restricted login for each schema. A product login
+cannot read or create objects in the other product's schema. Runtime, KV
+namespace and local files are scoped independently of the database layout.
+Plugin SQL runs apart from the TMS mail/account database. The host mirrors
 only users, teams, channels, membership history and posts belonging to that domain.
 Disabled users and foreign-domain requests are rejected before entering a plugin.
 Database roles must have no memberships, superuser, create-role/database, replication
@@ -64,8 +67,9 @@ them under `/usr/share/tayga-mail/mattermost/`, with this guide under
      --plugin playbooks
    ```
 
-   Repeat with `--plugin focalboard`. The script creates a dedicated role/database
-   and writes private mode-0600 `.databases.json`; passwords never enter Git or
+   Repeat with `--plugin focalboard`. The second product reuses the domain's
+   collaboration database and gets its own schema and role. The script writes
+   private mode-0600 `.databases.json`; passwords never enter Git or
    command arguments. TMS must be able to read this file. Existing resources are
    never overwritten.
 4. Install the matching native plugin bundles with TMS plugin management, enable
@@ -74,9 +78,30 @@ them under `/usr/share/tayga-mail/mattermost/`, with this guide under
    to host both original interfaces. Build it with `scripts/build-tms.sh`; do not
    substitute a vendor Playbooks bundle without that host asset.
 
+### Merge product databases from an earlier installation
+
+The old layout remains readable. Use a rehearsal on a restored copy before
+switching the working server. Take a verified backup and stop Tayga and any
+other writers to the two plugin databases on the local PostgreSQL host.
+
+```sh
+python3 scripts/mattermost/provision-product-db.py \
+  --plugin-directory /var/lib/tayga/mattermost-plugins \
+  --tenant-id INTERNAL_TENANT_ID --domain-id INTERNAL_DOMAIN_ID \
+  --merge-existing
+```
+
+The tool creates a fresh database, restores the two schemas and publishes the
+domain's updated bindings together. It keeps the old databases and an original
+private binding named `.databases.pre-merge-*.json`. Test both modules before
+resuming writes. To roll back during maintenance, stop Tayga and restore that
+binding as `.databases.json` with the original owner and permissions. Once
+writes resume, account for newer records before switching back. Rehearse one
+domain at a time. Set `--postgres-port` if the local server uses a different port.
+
 ## Backup and restore
 
-`backup-full` now dumps all bound product databases using `pg_dump --format=custom`
+`backup-full` dumps each bound product schema using `pg_dump --format=custom`
 while the installation's exclusive offline maintenance lock fences plugin writers.
 Logical dumps are staged in a private directory, included in the encrypted archive,
 and removed on success/failure. Missing dump tools or inaccessible databases fail

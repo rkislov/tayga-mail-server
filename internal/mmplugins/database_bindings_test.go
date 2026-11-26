@@ -30,6 +30,21 @@ func TestPrivateProductDatabaseBindings(t *testing.T) {
 	if bindings.DataSource(scope, "playbooks") == "" || bindings.DataSource("domain:tenant:sibling", "playbooks") != "" || bindings.DataSource(scope, "focalboard") != "" {
 		t.Fatal("binding escaped its scope/plugin")
 	}
+	shared := SharedProductDatabaseName(scope)
+	boards := ProductDatabaseName(scope, "focalboard")
+	common := []databaseBinding{
+		{Scope: scope, PluginID: "playbooks", DSN: "postgres://" + name + "@127.0.0.1:5432/" + shared + "?sslmode=disable"},
+		{Scope: scope, PluginID: "focalboard", DSN: "postgres://" + boards + "@127.0.0.1:5432/" + shared + "?sslmode=disable"},
+	}
+	save(common, 0600)
+	if _, err := LoadDatabaseBindings(dir); err != nil {
+		t.Fatalf("shared database bindings rejected: %v", err)
+	}
+	common[1].DSN = "postgres://" + boards + "@127.0.0.1:5432/" + SharedProductDatabaseName("domain:tenant:sibling") + "?sslmode=disable"
+	save(common, 0600)
+	if _, err := LoadDatabaseBindings(dir); err == nil {
+		t.Fatal("binding to a sibling shared database accepted")
+	}
 	save(good, 0644)
 	if _, err := LoadDatabaseBindings(dir); err == nil {
 		t.Fatal("public credential file accepted")

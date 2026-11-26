@@ -19,14 +19,30 @@ func (s *Server) vksPolicies() vks.Policies {
 	c := s.cfgLive().VKS
 	return vks.Policies{Store: s.store, Defaults: vks.Effective{Enabled: c.Enabled, STUNURLs: c.STUNURLs, TURNURLs: c.TURNURLs}}
 }
+
+func vksAvailable(policy vks.Effective, jitsiEnabled bool) bool {
+	if !policy.Enabled {
+		return false
+	}
+	switch policy.Provider {
+	case vks.ProviderJitsi:
+		return jitsiEnabled
+	case vks.ProviderKontur:
+		_, err := vks.KonturSpace(policy.KonturURL)
+		return err == nil
+	default:
+		return false
+	}
+}
+
 func (s *Server) handleVKS(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	cfg := s.cfgLive().VKS
-	if !cfg.Enabled {
-		http.NotFound(w, r)
-		return
-	}
 	if strings.HasPrefix(r.URL.Path, "/.well-known/vks/keys/") {
+		if !cfg.Enabled {
+			http.NotFound(w, r)
+			return
+		}
 		if r.Method != http.MethodGet {
 			w.WriteHeader(405)
 			return
@@ -61,7 +77,7 @@ func (s *Server) handleVKS(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		policy, err := s.vksPolicies().Resolve(r.Context(), vks.Scope{TenantID: meeting.TenantID, DomainID: meeting.DomainID})
-		if err != nil || !policy.Enabled {
+		if err != nil || meeting.Backend() != vks.ProviderJitsi || policy.Provider != vks.ProviderJitsi || !vksAvailable(policy, cfg.Enabled) {
 			http.NotFound(w, r)
 			return
 		}
@@ -95,12 +111,17 @@ func (s *Server) handleVKS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	policy, err := s.vksPolicies().Resolve(r.Context(), vks.Scope{TenantID: user.TenantID, DomainID: user.DomainID})
-	if err != nil || !policy.Enabled {
+	if err != nil || !vksAvailable(policy, cfg.Enabled) {
 		writeJSON(w, 403, map[string]string{"error": "conferencing disabled for this domain"})
 		return
 	}
+	meetings.Policy = policy
 	switch r.URL.Path {
 	case "/api/v1/vks/ice":
+		if policy.Provider != vks.ProviderJitsi {
+			http.NotFound(w, r)
+			return
+		}
 		if r.Method != http.MethodGet {
 			w.WriteHeader(405)
 			return
@@ -171,6 +192,15 @@ func (s *Server) handleVKS(w http.ResponseWriter, r *http.Request) {
 			http.NotFound(w, r)
 			return
 		}
+		if meeting.Backend() == vks.ProviderKontur {
+			space, e := vks.KonturSpace(meeting.KonturURL)
+			if e != nil {
+				http.NotFound(w, r)
+				return
+			}
+			writeJSON(w, 200, map[string]any{"provider": vks.ProviderKontur, "room": room, "join_url": space + "/" + meeting.Room})
+			return
+		}
 		key, e := vks.LoadSigningKey(cfg.SigningKeyFile)
 		if e != nil {
 			writeJSON(w, 503, map[string]string{"error": "signing key unavailable"})
@@ -197,7 +227,7 @@ func (s *Server) handleVKS(w http.ResponseWriter, r *http.Request) {
 		if !brand.Enabled {
 			brand = brandingConfig{}
 		}
-		writeJSON(w, 200, map[string]any{"room": room, "public_url": cfg.PublicURL, "jwt": token, "expires_at": time.Now().Add(30 * time.Minute).Unix(), "branding": brand})
+		writeJSON(w, 200, map[string]any{"provider": vks.ProviderJitsi, "room": room, "public_url": cfg.PublicURL, "jwt": token, "expires_at": time.Now().Add(30 * time.Minute).Unix(), "branding": brand})
 	}
 }
 func decodeVKS(w http.ResponseWriter, r *http.Request, value any) bool {
@@ -247,7 +277,8 @@ func (s *Server) handleVKSSettings(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(500)
 		return
 	}
-	writeJSON(w, 200, map[string]any{"scope": scope, "overrides": value, "effective": effective, "host_enabled": s.cfgLive().VKS.Enabled})
+	hostEnabled := s.cfgLive().VKS.Enabled
+	writeJSON(w, 200, map[string]any{"scope": scope, "overrides": value, "effective": effective, "host_enabled": hostEnabled, "available": vksAvailable(effective, hostEnabled)})
 }
 
 // Native Jitsi's nginx listens only on loopback. TMS retains ports 80/443 and
@@ -297,7 +328,7 @@ func (s *Server) withVKSProxy(next http.Handler) http.Handler {
 					return
 				}
 				meeting, e := (vks.Meetings{Store: s.store}).Get(r.Context(), room)
-				if e != nil {
+				if e != nil || meeting.Backend() != vks.ProviderJitsi {
 					w.WriteHeader(403)
 					return
 				}
@@ -307,7 +338,7 @@ func (s *Server) withVKSProxy(next http.Handler) http.Handler {
 					return
 				}
 				policy, e := s.vksPolicies().Resolve(r.Context(), vks.Scope{TenantID: user.TenantID, DomainID: user.DomainID})
-				if e != nil || !policy.Enabled {
+				if e != nil || !vksAvailable(policy, cfg.Enabled) {
 					w.WriteHeader(403)
 					return
 				}

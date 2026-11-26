@@ -46,7 +46,7 @@ func syncProductMetadata(ctx context.Context, db *sql.DB, options Options) error
 		return err
 	}
 	defer tx.Rollback()
-	if _, err = tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(780077335)`); err != nil {
+	if _, err = tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(780077335, hashtext(current_schema()::text))`); err != nil {
 		return err
 	}
 	if _, err = tx.ExecContext(ctx, `DELETE FROM ChannelMemberHistory;DELETE FROM Posts;DELETE FROM ChannelMembers;DELETE FROM Channels;DELETE FROM TeamMembers;DELETE FROM Users;DELETE FROM Teams;DELETE FROM Bots;`); err != nil {

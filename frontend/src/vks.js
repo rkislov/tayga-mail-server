@@ -28,12 +28,35 @@ async function loadVKSScope(){
  const item=vksScopes[Number($('vks-scope').value)];if(!item)return;const epoch=++vksScopeEpoch,account=state.me?.id;
  const guard=()=>{if(epoch!==vksScopeEpoch||account!==state.me?.id)throw new Error('Область изменилась');};
  $('vks-policy-form').inert=true;
- try{const value=await api('/api/v1/admin/vks'+mmQuery(item.scope),{_guard:guard});const own=value.overrides||{};$('vks-enabled').value=mmBool(own.enabled);$('vks-stun').value=own.stun_urls===undefined?'':own.stun_urls.join('\n');$('vks-turn').value=own.turn_urls===undefined?'':own.turn_urls.join('\n');$('vks-stun-inherit').checked=own.stun_urls===undefined;$('vks-turn-inherit').checked=own.turn_urls===undefined;$('vks-policy-status').textContent=`ВКС ${value.effective.enabled?'включена':'выключена'} · STUN: ${(value.effective.stun_urls||[]).join(', ')||'не задан'} · TURN: ${(value.effective.turn_urls||[]).join(', ')||'не задан'}`;setMsg($('vks-policy-msg'),'');}catch(e){if(epoch===vksScopeEpoch)setMsg($('vks-policy-msg'),e.message,'err');}finally{if(epoch===vksScopeEpoch)$('vks-policy-form').inert=false;}
+ try {
+  const value=await api('/api/v1/admin/vks'+mmQuery(item.scope),{_guard:guard});
+  const own=value.overrides||{},effective=value.effective;
+  $('vks-enabled').value=mmBool(own.enabled);
+  $('vks-provider').value=own.provider||'inherit';
+  $('vks-kontur-inherit').checked=own.kontur_url===undefined;
+  $('vks-kontur-url').disabled=own.kontur_url===undefined;
+  $('vks-kontur-url').value=own.kontur_url??effective.kontur_url??'';
+  for(const kind of ['stun','turn']){
+   const urls=own[kind+'_urls'];
+   $('vks-'+kind).value=urls?.join('\n')||'';
+   $('vks-'+kind+'-inherit').checked=urls===undefined;
+  }
+  const status=value.available?'доступна':effective.enabled?'требует настройки':'выключена';
+  const provider=effective.provider==='kontur_talk'?'Контур.Толк':'Jitsi Meet';
+  $('vks-policy-status').textContent=`ВКС ${status} · ${provider}`;
+  setMsg($('vks-policy-msg'),'');
+ }catch(e){if(epoch===vksScopeEpoch)setMsg($('vks-policy-msg'),e.message,'err');}finally{if(epoch===vksScopeEpoch)$('vks-policy-form').inert=false;}
 }
 $('vks-scope')?.addEventListener('change',loadVKSScope);
+$('vks-kontur-inherit')?.addEventListener('change',event=>{
+ $('vks-kontur-url').disabled=event.currentTarget.checked;
+});
 $('vks-policy-form')?.addEventListener('submit',async event=>{
  event.preventDefault();const item=vksScopes[Number($('vks-scope').value)];if(!item)return;const epoch=vksScopeEpoch,account=state.me?.id,guard=()=>{if(epoch!==vksScopeEpoch||account!==state.me?.id)throw new Error('Область изменилась');};
  const body={};if($('vks-enabled').value!=='inherit')body.enabled=$('vks-enabled').value==='on';
+ const provider=$('vks-provider').value;
+ if(provider!=='inherit')body.provider=provider;
+ if(!$('vks-kontur-inherit').checked)body.kontur_url=$('vks-kontur-url').value.trim();
  for(const kind of ['stun','turn'])if(!$('vks-'+kind+'-inherit').checked)body[kind+'_urls']=$('vks-'+kind).value.split(/\s+/).filter(Boolean);
  try{await api('/api/v1/admin/vks'+mmQuery(item.scope),{method:'PUT',body:JSON.stringify(body),_guard:guard});await loadVKSScope();setMsg($('vks-policy-msg'),'Настройки области сохранены','ok');}catch(e){if(epoch===vksScopeEpoch)setMsg($('vks-policy-msg'),e.message,'err');}
 });
@@ -47,6 +70,18 @@ async function joinVKS(room){
  const epoch=vksEpoch,guard=vksGuard(epoch,state.me?.id);
  try{
   const out=await api('/api/v1/vks/join/'+encodeURIComponent(room),{method:'POST',_guard:guard});
+  if(out.provider==='kontur_talk'){
+   const destination=new URL(out.join_url);
+   if(destination.protocol!=='https:')throw new Error('Для ВКС требуется HTTPS');
+   guard();vksMeetingAPI?.dispose();vksMeetingAPI=null;
+   const open=document.createElement('a');
+   open.className='btn-spray';open.textContent='Открыть встречу в Контур.Толке';
+   open.href=destination.href;open.target='_blank';open.rel='noopener noreferrer';
+   $('vks-conference-title').textContent='Контур.Толк';
+   $('vks-conference').replaceChildren(open);
+   $('vks-leave').classList.remove('hidden');open.focus();
+   return;
+  }
   const host=new URL(out.public_url);if(host.protocol!=='https:')throw new Error('Для ВКС требуется HTTPS');
   if(!window.JitsiMeetExternalAPI){await new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=host.origin+'/external_api.js';script.onload=resolve;script.onerror=()=>reject(new Error('Не удалось загрузить Jitsi'));document.head.append(script);});}
   guard();vksMeetingAPI?.dispose();$('vks-conference').replaceChildren();$('vks-conference-title').textContent=out.branding?.name||'Видеоконференция';

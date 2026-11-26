@@ -124,9 +124,7 @@ func (s *Server) Handler() http.Handler {
 				}
 			}
 
-			if cfg.VKS.PublicURL != "" && cfg.VKS.SigningKeyFile != "" {
-				s.mattermostAPI.SetChannelCallStarter(s.startMattermostChannelCall, s.mattermostChannelCallsAllowed)
-			}
+			s.mattermostAPI.SetChannelCallStarter(s.startMattermostChannelCall, s.mattermostChannelCallsAllowed)
 
 			if cfg.Mattermost.PluginsEnabled {
 				directory := cfg.Mattermost.PluginDirectory

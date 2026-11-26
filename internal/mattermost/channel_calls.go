@@ -35,7 +35,7 @@ func (s *API) publishChannelCall(ctx context.Context, u *storage.User, channelID
 	if err != nil {
 		return "", err
 	}
-	message := "Групповой звонок Jitsi\n[Присоединиться к звонку](" + link + ")"
+	message := "Групповой видеозвонок\n[Присоединиться к звонку](" + link + ")"
 	if _, err := s.chat.SendRich(ctx, u, channelID, "", message, "", map[string]any{"tms_meeting_url": link}, ""); err != nil {
 		return "", err
 	}

@@ -58,7 +58,7 @@ A native TMS workspace provides a searchable agent catalog, private conversation
 
 ### Boards and Playbooks — experimental
 
-Original Boards and the Tayga Playbooks community fork run as separately installed modules. Each tenant/domain and product receives its own PostgreSQL database/login, files and settings. Boards/cards and playbook/run creation, task completion and run finish were validated without a paid license or development mode. Advanced automations, attachments and mobile UX still need acceptance. Modules are installed and enabled separately.
+Original Boards and the Tayga Playbooks community fork run as separately installed modules. Each tenant/domain uses one collaboration database with separate schemas and login roles for Boards and Playbooks. Files and settings are isolated by product. Boards and cards, playbook creation, status changes and run completion were validated with the community bundles. Advanced automations, attachments and mobile UX still need acceptance.
 
 [Setup and limitations](docs/mattermost-products.md) · [Playbooks fork and builds](https://github.com/rkislov/tms-playbooks/releases/tag/v2.9.7-tms.1)
 

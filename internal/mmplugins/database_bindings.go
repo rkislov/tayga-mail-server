@@ -15,7 +15,8 @@ import (
 )
 
 // DatabaseBindings is a private operator-managed map, never plugin configuration.
-// Each scope/plugin receives its own database and non-inheriting login role.
+// A scope's modules may share a database, with distinct non-inheriting login
+// roles and schema privileges. The legacy per-module format is still accepted.
 type DatabaseBindings struct{ entries map[string]string }
 type databaseBinding struct {
 	Scope    string `json:"scope"`
@@ -27,6 +28,23 @@ func ProductDatabaseName(scope, id string) string {
 	sum := sha256.Sum256([]byte(scope + "\x00" + id))
 	return "tmsplug_" + hex.EncodeToString(sum[:12])
 }
+
+func SharedProductDatabaseName(scope string) string {
+	sum := sha256.Sum256([]byte(scope))
+	return "tmsprod_" + hex.EncodeToString(sum[:12])
+}
+
+// ProductDatabaseSchema is empty for a legacy database containing one module.
+func ProductDatabaseSchema(database, scope, id string) string {
+	if database != SharedProductDatabaseName(scope) {
+		return ""
+	}
+	if id == "focalboard" {
+		return "boards"
+	}
+	return "public"
+}
+
 func LoadDatabaseBindings(directory string) (*DatabaseBindings, error) {
 	path := filepath.Join(directory, ".databases.json")
 	info, err := os.Lstat(path)
@@ -67,7 +85,8 @@ func LoadDatabaseBindings(directory string) (*DatabaseBindings, error) {
 			}
 		}
 		expected := ProductDatabaseName(row.Scope, row.PluginID)
-		if strings.TrimPrefix(parsed.Path, "/") != expected || parsed.User.Username() != expected {
+		database := strings.TrimPrefix(parsed.Path, "/")
+		if (database != expected && database != SharedProductDatabaseName(row.Scope)) || parsed.User.Username() != expected {
 			return nil, errors.New("plugin database and login must match their scope binding")
 		}
 		if parsed.Hostname() != "localhost" && parsed.Hostname() != "127.0.0.1" && parsed.Hostname() != "::1" && parsed.Query().Get("sslmode") != "verify-full" {
@@ -104,10 +123,19 @@ func (b *DatabaseBindings) Configure(options *Options) {
 		db.SetMaxIdleConns(4)
 		ctx, cancel := sqlTimeout()
 		defer cancel()
-		var database, user string
-		var privileged bool
-		err = db.QueryRowContext(ctx, `SELECT current_database(),current_user,rolsuper OR rolcreaterole OR rolcreatedb OR rolreplication OR rolbypassrls OR EXISTS(SELECT 1 FROM pg_auth_members WHERE member=pg_roles.oid) FROM pg_roles WHERE rolname=current_user`).Scan(&database, &user, &privileged)
-		if err != nil || privileged || database != ProductDatabaseName(scope, id) || user != database {
+		parsed, _ := url.Parse(dsn) // LoadDatabaseBindings has validated this URL.
+		expected := strings.TrimPrefix(parsed.Path, "/")
+		schema := ProductDatabaseSchema(expected, scope, id)
+		var database, user, currentSchema, searchPath string
+		var privileged, crossedSchema bool
+		err = db.QueryRowContext(ctx, `SELECT current_database(),current_user,coalesce(current_schema(),''),current_setting('search_path'),
+			rolsuper OR rolcreaterole OR rolcreatedb OR rolreplication OR rolbypassrls OR EXISTS(SELECT 1 FROM pg_auth_members WHERE member=pg_roles.oid),
+			CASE WHEN $1 = '' THEN false ELSE has_database_privilege(current_database(),'CREATE') OR
+			EXISTS(SELECT 1 FROM pg_namespace WHERE nspname IN ('public','boards') AND nspname <> $1
+				AND (has_schema_privilege(oid,'USAGE') OR has_schema_privilege(oid,'CREATE'))) END
+			FROM pg_roles WHERE rolname=current_user`, schema).Scan(&database, &user, &currentSchema, &searchPath, &privileged, &crossedSchema)
+		if err != nil || privileged || crossedSchema || database != expected || user != ProductDatabaseName(scope, id) ||
+			(schema != "" && (currentSchema != schema || searchPath != schema)) {
 			db.Close()
 			return nil, errors.New("plugin database role validation failed")
 		}
